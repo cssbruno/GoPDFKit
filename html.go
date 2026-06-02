@@ -1,0 +1,799 @@
+/****************************************************************************
+ * Software: GoPDFKit                                                         *
+ * License:  MIT License                                                    *
+ *                                                                          *
+ * Copyright (c) 2026 cssBruno                                              *
+ ****************************************************************************/
+
+package gopdfkit
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"math"
+	"net/url"
+	"strconv"
+	"strings"
+)
+
+// HTML is used for rendering a controlled subset of HTML fragments. It
+// supports common text tags, links, paragraphs, headings, lists, tables, images,
+// inline SVG, alignment, font color, font size, and CSS declarations that map
+// directly to gopdfkit text and drawing operations.
+//
+// HTML is not a browser engine. It does not implement the full HTML
+// parsing algorithm, CSS cascade, layout model, flexbox, grid, floats,
+// positioning, paged media, or browser-grade typography. For predictable
+// output, generate simple content that stays within the documented subset.
+// DebugLog receives best-effort diagnostics for HTML or CSS that the
+// renderer recognizes as unsupported. Leave nil to keep rendering quiet.
+
+type HTML struct {
+	pdf  *Fpdf
+	Link struct {
+		ClrR, ClrG, ClrB         int
+		Bold, Italic, Underscore bool
+	}
+	AllowLocalImages     bool
+	MaxDataImageBytes    int
+	MaxHTMLBytes         int
+	MaxElementDepth      int
+	MaxGeneratedPages    int
+	MaxTableRows         int
+	DebugLog             func(message string)
+	renderStartPageCount int
+	dataImageCache       map[string]htmlImageSource
+}
+
+type htmlImageSource struct {
+	name    string
+	options ImageOptions
+}
+
+const (
+	htmlDefaultMaxDataImageBytes = 16 * 1024 * 1024
+	htmlDefaultMaxHTMLBytes      = 4 * 1024 * 1024
+	htmlDefaultMaxElementDepth   = 512
+	htmlDefaultMaxTableRows      = 10000
+	htmlDefaultMaxGeneratedPages = 1000
+	htmlMaxCSSBytes              = 1 * 1024 * 1024
+	htmlMaxCSSRules              = 2048
+	htmlMaxCSSSelectors          = 4096
+)
+
+// HTMLNew returns an instance that facilitates writing HTML in the specified
+// PDF file.
+
+func (f *Fpdf) HTMLNew() (html HTML) {
+	html.pdf = f
+	html.Link.ClrR, html.Link.ClrG, html.Link.ClrB = 0, 0, 128
+	html.Link.Bold, html.Link.Italic, html.Link.Underscore = false, false, true
+	html.MaxDataImageBytes = htmlDefaultMaxDataImageBytes
+	html.MaxHTMLBytes = htmlDefaultMaxHTMLBytes
+	html.MaxElementDepth = htmlDefaultMaxElementDepth
+	html.MaxTableRows = htmlDefaultMaxTableRows
+	html.MaxGeneratedPages = htmlDefaultMaxGeneratedPages
+	return
+}
+
+func (html *HTML) Write(lineHt float64, htmlStr string) {
+	if len(htmlStr) > html.maxHTMLBytes() {
+		html.pdf.SetErrorf("HTML input exceeds maximum size")
+		return
+	}
+	previousStartPageCount := html.renderStartPageCount
+	previousDataImageCache := html.dataImageCache
+	html.renderStartPageCount = html.pdf.PageCount()
+	html.dataImageCache = make(map[string]htmlImageSource)
+	defer func() {
+		pageCount := html.generatedPageCount()
+		maxPages := html.maxGeneratedPages()
+		if pageCount > maxPages {
+			html.pdf.SetErrorf("HTML rendering exceeded maximum generated pages: %d > %d", pageCount, maxPages)
+		}
+		html.renderStartPageCount = previousStartPageCount
+		html.dataImageCache = previousDataImageCache
+	}()
+	textR, textG, textB := html.pdf.GetTextColor()
+	fontPt, _ := html.pdf.GetFontSize()
+	defaultColor := CSSColorType{R: textR, G: textG, B: textB, Set: true}
+	base := htmlTextStyle{align: "L", fontSize: fontPt, lineHeight: lineHt}
+	stack := []htmlTextStyle{ // Write prints text from the current position using the currently selected
+		// font. See HTMLNew() to create a receiver that is associated with the PDF
+		// document instance. The text can use common HTML text tags and inline style
+		// declarations. When the right margin is reached a line break occurs and text
+		// continues from the left margin. Upon method exit, the current position is
+		// left at the end of the text.
+		//
+		// lineHt indicates the line height in the unit of measure specified in New().
+		base}
+	tagStack := []string{""}
+	elementStack := []HTMLSegmentType{}
+	listStack := []htmlListState{}
+	current := func() htmlTextStyle {
+		return stack[len(stack)-1]
+	}
+	apply := func(st htmlTextStyle) {
+		html.applyTextStyle(st, defaultColor)
+	}
+	push := func(tag string, st htmlTextStyle) {
+		stack = append(stack, st)
+		tagStack = append(tagStack, tag)
+	}
+	pop := func(tag string) {
+		for len(stack) > 1 {
+			top := tagStack[len(tagStack)-1]
+			stack = stack[:len(stack)-1]
+			tagStack = tagStack[:len(tagStack)-1]
+			if top == tag {
+				return
+			}
+		}
+	}
+	popElement := func(tag string) {
+		for len(elementStack) > 0 {
+			top := elementStack[len(elementStack)-1]
+			elementStack = elementStack[:len(elementStack)-1]
+			if top.Str == tag {
+				return
+			}
+		}
+	}
+	writeText := func(text string) {
+		if text == "" {
+			return
+		}
+		st := current()
+		textLineHt := htmlEffectiveLineHeight(st, lineHt)
+		writeCurrent := func(linkStr string) {
+			if st.script != 0 {
+				html.pdf.SubWrite(textLineHt, text, st.fontSize*0.75, float64(st.script)*st.fontSize*0.35, 0, linkStr)
+				return
+			}
+			if linkStr != "" {
+				html.pdf.WriteLinkString(textLineHt, text, linkStr)
+				return
+			}
+			if st.align == "C" || st.align == "R" {
+				html.pdf.WriteAligned(0, textLineHt, text, st.align)
+			} else {
+				html.pdf.Write(textLineHt, text)
+			}
+		}
+		apply(st)
+		if st.href != "" {
+			linkBold, linkItalic, linkUnderline := st.bold, st.italic, st.underline
+			if html.Link.Bold {
+				linkBold = true
+			}
+			if html.Link.Italic {
+				linkItalic = true
+			}
+			if html.Link.Underscore {
+				linkUnderline = true
+			}
+			apply(htmlTextStyle{bold: linkBold, italic: linkItalic, underline: linkUnderline, strike: st.strike, preserveWhitespace: st.preserveWhitespace, fontFamily: st.fontFamily, fontSize: st.fontSize, lineHeight: st.lineHeight, verticalAlign: st.verticalAlign, color: CSSColorType{R: html.Link.ClrR, G: html.Link.ClrG, B: html.Link.ClrB, Set: true}, script: st.script})
+			writeCurrent(st.href)
+			apply(st)
+			return
+		}
+		writeCurrent("")
+	}
+	lineBreak := func() {
+		html.pdf.Ln(htmlEffectiveLineHeight(current(), lineHt))
+	}
+	blockBreak := func() {
+		if html.pdf.GetX() != html.pdf.lMargin {
+			lineBreak()
+		}
+	}
+	writeImage := func(attrs map[string]string, st htmlTextStyle) {
+		src := strings.TrimSpace(attrs["src"])
+		if src == "" {
+			writeText(attrs["alt"])
+			return
+		}
+		blockBreak()
+		availableWd := html.pdf.w - html.pdf.rMargin - html.pdf.GetX()
+		pageHt := html.pdf.h - html.pdf.bMargin - html.pdf.GetY()
+		wd, _ := parseHTMLBoxLength(firstNonEmpty(htmlStyleValue(attrs, "width"), attrs["width"]), html.pdf, availableWd)
+		ht, _ := parseHTMLBoxLength(firstNonEmpty(htmlStyleValue(attrs, "height"), attrs["height"]), html.pdf, pageHt)
+		boxWd, boxHt := wd, ht
+		maxWd, hasMaxWd := parseHTMLBoxLength(htmlStyleValue(attrs, "max-width"), html.pdf, availableWd)
+		maxHt, hasMaxHt := parseHTMLBoxLength(htmlStyleValue(attrs, "max-height"), html.pdf, pageHt)
+		name, options, err := html.htmlImageSource(src)
+		if err != nil {
+			html.pdf.SetError(err)
+			return
+		}
+		info := html.pdf.RegisterImageOptions(name, options)
+		if html.pdf.err != nil {
+			return
+		}
+		wd, ht = htmlResolvedImageSize(info, html.pdf, wd, ht)
+		if boxWd <= 0 {
+			boxWd = wd
+		}
+		if boxHt <= 0 {
+			boxHt = ht
+		}
+		if hasMaxWd && maxWd > 0 && wd > maxWd {
+			ratio := maxWd / wd
+			wd *= ratio
+			ht *= ratio
+			boxWd = minFloat(boxWd, maxWd)
+			boxHt *= ratio
+		}
+		if hasMaxHt && maxHt > 0 && ht > maxHt {
+			ratio := maxHt / ht
+			wd *= ratio
+			ht *= ratio
+			boxHt = minFloat(boxHt, maxHt)
+			boxWd *= ratio
+		}
+		fit := htmlImageObjectFit(attrs)
+		drawX, drawY, drawWd, drawHt, flowWd, flowHt := htmlImageFitBox(info, html.pdf, wd, ht, boxWd, boxHt, fit)
+		x := html.pdf.GetX()
+		switch htmlImageAlign(attrs, st.align) {
+		case "C":
+			x += htmlMaxFloat((availableWd-flowWd)/2, 0)
+		case "R":
+			x += htmlMaxFloat(availableWd-flowWd, 0)
+		}
+		if fit == "cover" {
+			y := html.pdf.GetY()
+			if y+flowHt > html.pdf.pageBreakTrigger && !html.pdf.inHeader && !html.pdf.inFooter && html.pdf.acceptPageBreak() {
+				x2 := html.pdf.GetX()
+				if !html.addPageFormat() {
+					return
+				}
+				html.pdf.x = x2
+				y = html.pdf.GetY()
+			}
+			html.pdf.ClipRect(x, y, flowWd, flowHt, false)
+			html.pdf.imageOut(info, x+drawX, y+drawY, drawWd, drawHt, options.AllowNegativePosition, false, 0, st.href)
+			html.pdf.ClipEnd()
+			if st.href != "" {
+				html.pdf.newLink(x, y, flowWd, flowHt, 0, st.href)
+			}
+			html.pdf.SetY(y + flowHt)
+			html.pdf.SetX(x)
+			return
+		}
+		if fit == "contain" {
+			y := html.pdf.GetY()
+			if y+flowHt > html.pdf.pageBreakTrigger && !html.pdf.inHeader && !html.pdf.inFooter && html.pdf.acceptPageBreak() {
+				x2 := html.pdf.GetX()
+				if !html.addPageFormat() {
+					return
+				}
+				html.pdf.x = x2
+				y = html.pdf.GetY()
+			}
+			html.pdf.imageOut(info, x+drawX, y+drawY, drawWd, drawHt, options.AllowNegativePosition, false, 0, st.href)
+			if st.href != "" {
+				html.pdf.newLink(x, y, flowWd, flowHt, 0, st.href)
+			}
+			html.pdf.SetY(y + flowHt)
+			html.pdf.SetX(x)
+			return
+		}
+		html.pdf.imageOut(info, x+drawX, 0, drawWd, drawHt, options.AllowNegativePosition, true, 0, st.href)
+	}
+	tokens := HTMLTokenize(htmlStr)
+	if message := htmlElementDepthMessage(tokens, html.maxElementDepth()); message != "" {
+		html.pdf.SetError(errors.New(message))
+		return
+	}
+	html.logUnsupportedHTML(tokens)
+	cssRules := htmlCollectCSSRules(tokens)
+	for i := 0; i < len(tokens); i++ {
+		el := tokens[i]
+		switch el.Cat {
+		case 'T':
+			if current().preserveWhitespace {
+				writeText(el.Str)
+			} else {
+				writeText(collapseHTMLWhitespace(el.Str))
+			}
+		case 'O':
+			st := current()
+			pushStyle := true
+			var openedList *HTMLSegmentType
+			switch el.Str {
+			case "b", "strong":
+				st.bold = true
+			case "i", "em":
+				st.italic = true
+			case "u", "ins":
+				st.underline = true
+			case "s", "strike", "del":
+				st.strike = true
+			case "sup":
+				st.script = 1
+			case "sub":
+				st.script = -1
+			case "code", "kbd", "samp":
+				st.fontFamily = "Courier"
+			case "pre":
+				blockBreak()
+				st.fontFamily = "Courier"
+				st.preserveWhitespace = true
+			case "a":
+				href, err := htmlLinkTarget(el.Attr["href"])
+				if err != nil {
+					html.pdf.SetError(err)
+					pushStyle = false
+				} else {
+					st.href = href
+				}
+			case "br":
+				lineBreak()
+				pushStyle = false
+			case "img":
+				writeImage(el.Attr, st)
+				pushStyle = false
+			case "table":
+				i = html.writeTable(tokens, i, lineHt, st, defaultColor, cssRules, elementStack)
+				pushStyle = false
+			case "svg":
+				i = html.writeInlineSVG(tokens, i, lineHt, st)
+				pushStyle = false
+			case "hr":
+				html.writeHorizontalRule(el, cssRules, lineHt, elementStack)
+				pushStyle = false
+			case "style", "script", "head":
+				i = htmlSkipElement(tokens, i, el.Str)
+				pushStyle = false
+			case "p", "div", "section", "article", "header", "footer", "figure":
+				if el.Str == "figure" {
+					if figureHt := html.figureHeight(tokens, i, lineHt, st, defaultColor); figureHt > 0 {
+						pageContentHt := html.pdf.pageBreakTrigger - html.pdf.tMargin
+						if figureHt <= pageContentHt && html.pdf.y+figureHt > html.pdf.pageBreakTrigger && !html.pdf.inHeader && !html.pdf.inFooter && html.pdf.acceptPageBreak() {
+							if !html.addPageFormat() {
+								return
+							}
+						}
+					}
+				}
+				if htmlBlockHasBoxStyle(el, cssRules, elementStack...) {
+					i = html.writeBlockBox(tokens, i, lineHt, st, defaultColor, cssRules, elementStack)
+					pushStyle = false
+				} else {
+					blockBreak()
+				}
+			case "figcaption":
+				blockBreak()
+				st.italic = true
+				if st.align == "" || st.align == "L" {
+					st.align = "C"
+				}
+				if st.fontSize > 1 {
+					st.fontSize *= 0.9
+				}
+			case "dl":
+				blockBreak()
+			case "dt":
+				blockBreak()
+				st.bold = true
+			case "dd":
+				blockBreak()
+				html.pdf.SetX(html.pdf.lMargin + lineHt*1.5)
+			case "center":
+				blockBreak()
+				st.align = "C"
+			case "right":
+				blockBreak()
+				st.align = "R"
+			case "left":
+				blockBreak()
+				st.align = "L"
+			case "h1", "h2", "h3", "h4", "h5", "h6":
+				html.keepHeadingWithNext(tokens, i, lineHt, st, defaultColor, cssRules, elementStack)
+				blockBreak()
+				st.bold = true
+				st.fontSize = htmlHeadingFontSize(base.fontSize, el.Str)
+			case "ul":
+				blockBreak()
+				st.list = "ul"
+				openedList = &el
+			case "ol":
+				blockBreak()
+				st.list = "ol"
+				openedList = &el
+			case "li":
+				blockBreak()
+				if len(listStack) > 0 {
+					list := &listStack[len(listStack)-1]
+					list.counter++
+					html.pdf.SetX(html.pdf.lMargin + float64(len(listStack)-1)*list.indent)
+					writeText(list.marker())
+				}
+			}
+			applyHTMLCSSRules(&st, el, cssRules, base.fontSize, base.lineHeight, html.pdf, elementStack...)
+			applyHTMLAttrs(&st, el.Attr, base.fontSize, base.lineHeight, html.pdf)
+			if openedList != nil {
+				listStack = append(listStack, htmlListStateFromElement(st, openedList.Attr, lineHt))
+			}
+			if pushStyle {
+				push(el.Str, st)
+				elementStack = append(elementStack, el)
+			}
+		case 'C':
+			if htmlClosePops(el.Str) {
+				pop(el.Str)
+				popElement(el.Str)
+			}
+			switch el.Str {
+			case "p", "div", "section", "article", "header", "footer", "figure", "figcaption", "pre", "h1", "h2", "h3", "h4", "h5", "h6", "li", "dt", "dd":
+				lineBreak()
+			case "ul", "ol":
+				if len(listStack) > 0 {
+					listStack = listStack[:len(listStack)-1]
+				}
+				lineBreak()
+			case "dl":
+				lineBreak()
+			}
+			apply(current())
+		}
+	}
+	apply(base)
+}
+
+func (html *HTML) applyTextStyle(st htmlTextStyle, fallback CSSColorType) {
+	styleStr := ""
+	if st.bold {
+		styleStr += "B"
+	}
+	if st.italic {
+		styleStr += "I"
+	}
+	if st.underline {
+		styleStr += "U"
+	}
+	if st.strike {
+		styleStr += "S"
+	}
+	html.pdf.SetFont(st.fontFamily, styleStr, st.fontSize)
+	if st.color.Set {
+		html.pdf.SetTextColor(st.color.R, st.color.G, st.color.B)
+	} else {
+		html.pdf.SetTextColor(fallback.R, fallback.G, fallback.B)
+	}
+}
+
+func htmlListStateFromElement(st htmlTextStyle, attrs map[string]string, lineHt float64) htmlListState {
+	state := htmlListState{kind: st.list, styleType: st.listStyleType, counter: htmlListStart(attrs) - 1, indent: lineHt * 1.5}
+	if state.styleType == "" {
+		state.styleType = htmlListTypeAttr(attrs, state.kind)
+	}
+	if state.styleType == "" {
+		if state.kind == "ol" {
+			state.styleType = "decimal"
+		} else {
+			state.styleType = "disc"
+		}
+	}
+	return state
+}
+
+func htmlListStart(attrs map[string]string) int {
+	start, err := strconv.Atoi(strings.TrimSpace(attrs["start"]))
+	if err != nil || start < 1 {
+		return 1
+	}
+	return start
+}
+
+func htmlListTypeAttr(attrs map[string]string, kind string) string {
+	raw := strings.TrimSpace(attrs["type"])
+	value := strings.ToLower(raw)
+	switch raw {
+	case "1":
+		return "decimal"
+	case "a":
+		return "lower-alpha"
+	case "A":
+		return "upper-alpha"
+	case "i":
+		return "lower-roman"
+	case "I":
+		return "upper-roman"
+	}
+	switch value {
+	case "disc", "circle", "square":
+		if kind == "ul" {
+			return value
+		}
+	}
+	return ""
+}
+
+func (state htmlListState) marker() string {
+	if state.styleType == "none" {
+		return ""
+	}
+	if state.kind != "ol" {
+		switch state.styleType {
+		case "circle":
+			return "o "
+		case "square":
+			return "* "
+		default:
+			return "- "
+		}
+	}
+	switch state.styleType {
+	case "lower-alpha":
+		return strings.ToLower(htmlAlphaCounter(state.counter)) + ". "
+	case "upper-alpha":
+		return htmlAlphaCounter(state.counter) + ". "
+	case "lower-roman":
+		return strings.ToLower(htmlRomanCounter(state.counter)) + ". "
+	case "upper-roman":
+		return htmlRomanCounter(state.counter) + ". "
+	default:
+		return strconv.Itoa(state.counter) + ". "
+	}
+}
+
+func htmlAlphaCounter(n int) string {
+	if n <= 0 {
+		return strconv.Itoa(n)
+	}
+	var chars []byte
+	for n > 0 {
+		n--
+		chars = append([]byte{byte('A' + n%26)}, chars...)
+		n /= 26
+	}
+	return string(chars)
+}
+
+func htmlRomanCounter(n int) string {
+	if n <= 0 || n > 3999 {
+		return strconv.Itoa(n)
+	}
+	values := []struct {
+		value int
+		text  string
+	}{{1000, "M"}, {900, "CM"}, {500, "D"}, {400, "CD"}, {100, "C"}, {90, "XC"}, {50, "L"}, {40, "XL"}, {10, "X"}, {9, "IX"}, {5, "V"}, {4, "IV"}, {1, "I"}}
+	var out strings.Builder
+	for _, item := range values {
+		for n >= item.value {
+			out.WriteString(item.text)
+			n -= item.value
+		}
+	}
+	return out.String()
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func appendHTMLAncestors(ancestors []HTMLSegmentType, elements ...HTMLSegmentType) []HTMLSegmentType {
+	out := make([]HTMLSegmentType, 0, len(ancestors)+len(elements))
+	out = append(out, ancestors...)
+	out = append(out, elements...)
+	return out
+}
+
+func htmlEffectiveLineHeight(st htmlTextStyle, fallback float64) float64 {
+	if st.lineHeight > 0 {
+		return st.lineHeight
+	}
+	return fallback
+}
+
+func htmlStyleValue(attrs map[string]string, name string) string {
+	if attrs == nil {
+		return ""
+	}
+	return parseStyleDeclarations(attrs["style"])[strings.ToLower(name)]
+}
+
+func htmlHasBoxEdgeDeclaration(decl map[string]string, name string) bool {
+	if strings.TrimSpace(decl[name]) != "" {
+		return true
+	}
+	for _, side := range []string{"top", "right", "bottom", "left"} {
+		if strings.TrimSpace(decl[name+"-"+side]) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func htmlHasBreakDeclaration(decl map[string]string) bool {
+	for _, name := range []string{"break-before", "page-break-before", "break-after", "page-break-after", "break-inside", "page-break-inside"} {
+		if strings.TrimSpace(decl[name]) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func htmlBreakForcesPage(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "always", "page", "left", "right":
+		return true
+	default:
+		return false
+	}
+}
+
+func htmlBreakAvoidsInside(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "avoid", "avoid-page":
+		return true
+	default:
+		return false
+	}
+}
+
+func htmlBoxEdgesFromDeclarations(decl map[string]string, name string, pdf *Fpdf, relative float64) htmlBoxEdges {
+	var edges htmlBoxEdges
+	if values := strings.Fields(decl[name]); len(values) > 0 && len(values) <= 4 {
+		if parsed, ok := parseHTMLBoxEdgeValues(values, pdf, relative); ok {
+			edges = parsed
+		}
+	}
+	for _, side := range []struct {
+		name string
+		set  func(float64)
+	}{{"top", func(v float64) {
+		edges.top = v
+	}}, {"right", func(v float64) {
+		edges.right = v
+	}}, {"bottom", func(v float64) {
+		edges.bottom = v
+	}}, {"left", func(v float64) {
+		edges.left = v
+	}}} {
+		if value, ok := parseHTMLBoxLength(decl[name+"-"+side.name], pdf, relative); ok {
+			side.set(value)
+		}
+	}
+	return edges
+}
+
+func parseHTMLBoxEdgeValues(values []string, pdf *Fpdf, relative float64) (htmlBoxEdges, bool) {
+	parsed := make([]float64, len(values))
+	for i, value := range values {
+		n, ok := parseHTMLBoxLength(value, pdf, relative)
+		if !ok {
+			return htmlBoxEdges{}, false
+		}
+		parsed[i] = n
+	}
+	switch len(parsed) {
+	case 1:
+		return htmlBoxEdges{top: parsed[0], right: parsed[0], bottom: parsed[0], left: parsed[0]}, true
+	case 2:
+		return htmlBoxEdges{top: parsed[0], right: parsed[1], bottom: parsed[0], left: parsed[1]}, true
+	case 3:
+		return htmlBoxEdges{top: parsed[0], right: parsed[1], bottom: parsed[2], left: parsed[1]}, true
+	case 4:
+		return htmlBoxEdges{top: parsed[0], right: parsed[1], bottom: parsed[2], left: parsed[3]}, true
+	default:
+		return htmlBoxEdges{}, false
+	}
+}
+
+func parseHTMLBoxLength(value string, pdf *Fpdf, relative float64) (float64, bool) {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" || value == "auto" {
+		return 0, false
+	}
+	if strings.HasSuffix(value, "%") {
+		n, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(value, "%")), 64)
+		if err != nil || !isFiniteFloat(n) || n < 0 {
+			return 0, false
+		}
+		result := relative * n / 100
+		return result, isFiniteFloat(result)
+	}
+	unit := "px"
+	for _, suffix := range []string{"px", "pt", "mm", "cm", "in"} {
+		if strings.HasSuffix(value, suffix) {
+			unit = suffix
+			value = strings.TrimSpace(strings.TrimSuffix(value, suffix))
+			break
+		}
+	}
+	n, err := strconv.ParseFloat(value, 64)
+	if err != nil || !isFiniteFloat(n) || n < 0 {
+		return 0, false
+	}
+	switch unit {
+	case "pt":
+		return n / pdf.k, true
+	case "mm":
+		return n * 72 / 25.4 / pdf.k, true
+	case "cm":
+		return n * 72 / 2.54 / pdf.k, true
+	case "in":
+		return n * 72 / pdf.k, true
+	default:
+		return n * 72 / 96 / pdf.k, true
+	}
+}
+
+func isFiniteFloat(n float64) bool {
+	return !math.IsNaN(n) && !math.IsInf(n, 0)
+}
+
+func (html *HTML) htmlImageSource(src string) (string, ImageOptions, error) {
+	options := ImageOptions{ReadDpi: true}
+	if !strings.HasPrefix(strings.ToLower(src), "data:") {
+		if u, err := url.Parse(src); err == nil && u.Scheme != "" {
+			switch strings.ToLower(u.Scheme) {
+			case "http", "https":
+				return "", options, fmt.Errorf("remote HTML images are disabled")
+			case "file":
+				return "", options, fmt.Errorf("file URL HTML images are disabled")
+			}
+		}
+		if !html.AllowLocalImages {
+			return "", options, fmt.Errorf("local HTML images are disabled")
+		}
+		return src, options, nil
+	}
+	if cached, ok := html.dataImageCache[src]; ok {
+		return cached.name, cached.options, nil
+	}
+	media, data, ok := strings.Cut(src[5:], ",")
+	if !ok {
+		return "", options, fmt.Errorf("invalid HTML image data URI")
+	}
+	parts := strings.Split(media, ";")
+	mimeType := strings.ToLower(strings.TrimSpace(parts[0]))
+	base64Encoded := false
+	for _, part := range parts[1:] {
+		if strings.EqualFold(strings.TrimSpace(part), "base64") {
+			base64Encoded = true
+		}
+	}
+	if !base64Encoded {
+		return "", options, fmt.Errorf("HTML image data URI must be base64 encoded")
+	}
+	imageType := htmlImageTypeFromMime(mimeType)
+	if imageType == "" {
+		return "", options, fmt.Errorf("unsupported HTML image type: %s", mimeType)
+	}
+	limit := html.MaxDataImageBytes
+	if limit <= 0 {
+		limit = htmlDefaultMaxDataImageBytes
+	}
+	if base64.StdEncoding.DecodedLen(len(data)) > limit {
+		return "", options, fmt.Errorf("HTML image data URI exceeds maximum size")
+	}
+	buf, err := base64.StdEncoding.DecodeString(data)
+	if err != nil {
+		return "", options, fmt.Errorf("invalid HTML image data URI: %w", err)
+	}
+	if len(buf) > limit {
+		return "", options, fmt.Errorf("HTML image data URI exceeds maximum size")
+	}
+	sum := sha256.Sum256(buf)
+	name := fmt.Sprintf("html-data-image-%x", sum)
+	options.ImageType = imageType
+	html.pdf.RegisterImageOptionsReader(name, options, bytes.NewReader(buf))
+	if html.pdf.err != nil {
+		return "", options, html.pdf.err
+	}
+	if html.dataImageCache != nil {
+		html.dataImageCache[src] = htmlImageSource{name: name, options: options}
+	}
+	return name, options, nil
+}

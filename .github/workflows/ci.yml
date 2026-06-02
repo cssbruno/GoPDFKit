@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/go.mod
+          cache: true
+
+      - name: Check
+        run: make check
+
+      - name: Race test
+        run: go test -race ./...
+
+      - name: Vulnerability check
+        run: make govulncheck
+
+  benchmarks:
+    name: Generation Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/go.mod
+          cache: true
+
+      - name: Run generation benchmarks
+        run: make bench-ci
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: generation-benchmarks
+          path: artifacts/benchmarks.txt

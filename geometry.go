@@ -1,0 +1,64 @@
+/****************************************************************************
+ * Software: GoPDFKit                                                         *
+ * License:  MIT License                                                    *
+ *                                                                          *
+ *                         *
+ * Copyright (c) 2026 cssBruno                                              *
+ ****************************************************************************/
+
+package gopdfkit
+
+// PointConvert returns the value of pt, expressed in points (1/72 inch), as a
+// value expressed in the unit of measure specified in New(). Since font
+// management in Fpdf uses points, this method can help with line height
+// calculations and other methods that require user units.
+func (f *Fpdf) PointConvert(pt float64) (u float64) {
+	return pt / f.k
+}
+
+// PointToUnitConvert is an alias for PointConvert.
+func (f *Fpdf) PointToUnitConvert(pt float64) (u float64) {
+	return pt / f.k
+}
+
+// UnitToPointConvert returns the value of u, expressed in the unit of measure
+// specified in New(), as a value expressed in points (1/72 inch). Since font
+// management in Fpdf uses points, this method can help with setting font sizes
+// based on the sizes of other non-font page elements.
+func (f *Fpdf) UnitToPointConvert(u float64) (pt float64) {
+	return u * f.k
+}
+
+// Transform moves a point by given X, Y offset
+func (p *Point) Transform(x, y float64) Point {
+	return Point{p.X + x, p.Y + y}
+}
+
+// Orientation returns the orientation of a given size:
+// "P" for portrait, "L" for landscape
+func (s *Size) Orientation() string {
+	if s == nil || s.Ht == s.Wd {
+		return ""
+	}
+	if s.Wd > s.Ht {
+		return "L"
+	}
+	return "P"
+}
+
+// ScaleBy expands a size by a certain factor
+func (s *Size) ScaleBy(factor float64) Size {
+	return Size{s.Wd * factor, s.Ht * factor}
+}
+
+// ScaleToWidth adjusts the height of a size to match the given width
+func (s *Size) ScaleToWidth(width float64) Size {
+	height := s.Ht * width / s.Wd
+	return Size{width, height}
+}
+
+// ScaleToHeight adjusts the width of a size to match the given height
+func (s *Size) ScaleToHeight(height float64) Size {
+	width := s.Wd * height / s.Ht
+	return Size{width, height}
+}

@@ -1,0 +1,5 @@
+Topic|Detail
+Margins|Changing margins affects the available width for SplitLines, MultiCell, and WriteAligned.
+Unicode|UTF-8 text requires an embedded TrueType font when glyphs are outside the core PDF font encodings.
+Links|WriteLinkString can mix normal text with clickable external destinations in the same paragraph.
+RTL|Right-to-left text should be rendered in explicit sections so left-to-right content can continue normally.

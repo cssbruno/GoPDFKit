@@ -1,0 +1,26 @@
+*.0
+coverage
+assets/static/font/CalligrapherRegular.json
+assets/static/font/CalligrapherRegular.z
+assets/static/font/Ubuntu-*
+look
+makefont/makefont
+open
+**/*.out
+assets/generated/pdf/*.pdf
+pdf.txt
+private
+*.sublime*
+*.swp
+**/*.test
+tools/bin/
+.idea/
+doc/body.html
+doc/body.md
+doc/index.html
+doc/index.html.ok
+coverage.html
+
+# macOS
+.DS_Store
+PDF_HTML_RENDERING_GAPS.md

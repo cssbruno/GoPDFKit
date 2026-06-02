@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing semver tag to release, for example v0.1.0
+        required: true
+        default: v0.1.0
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/go.mod
+          cache: true
+
+      - name: Resolve version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME}"
+          fi
+          echo "VERSION=${version}" >> "${GITHUB_ENV}"
+
+      - name: Ensure tag exists
+        shell: bash
+        run: git rev-parse -q --verify "refs/tags/${VERSION}"
+
+      - name: Checkout release tag
+        shell: bash
+        run: git checkout --detach "refs/tags/${VERSION}"
+
+      - name: Release check
+        run: make release-check VERSION="${VERSION}"
+
+      - name: Build release notes
+        run: make release-notes VERSION="${VERSION}" > release-notes.md
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view "${VERSION}" >/dev/null 2>&1; then
+            gh release edit "${VERSION}" --title "${VERSION}" --notes-file release-notes.md
+          else
+            gh release create "${VERSION}" --title "${VERSION}" --notes-file release-notes.md
+          fi

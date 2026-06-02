@@ -1,0 +1,9 @@
+Normal words should wrap predictably inside narrow text boxes while preserving readable line lengths.
+
+Tabs	and multiple   spaces should not produce empty wrapped lines.
+
+supercalifragilisticexpialidocious_without_spaces_is_a_long_token_that_forces_the_splitter_to_advance
+
+Manual line breaks
+must remain visible
+when the text is split or rendered.

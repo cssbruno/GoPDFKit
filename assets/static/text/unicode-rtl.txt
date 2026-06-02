@@ -1,0 +1,11 @@
+Portuguese:
+Continuar o atendimento com contexto preservado deixa a comunicação mais clara.
+
+Greek:
+Η συνεχιζόμενη φροντίδα διατηρεί το ιστορικό organizado e acessível.
+
+Hebrew:
+שלום עולם, הטקסט הזה נכתב מימין לשמאל.
+
+Arabic:
+مرحبا بالعالم، هذا النص يكتب من اليمين إلى اليسار.

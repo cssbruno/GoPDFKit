@@ -1,0 +1,25 @@
+Composed and decomposed accents:
+Café
+Café
+á̧̈
+Ångström and Ångström
+
+Arabic and Hebrew with numbers:
+مرحبا 1234 + ٤٥٦
+שלום 1234 + ABC
+
+Devanagari conjuncts and matras:
+नमस्ते दुनिया
+कर्म योग क्ष त्र ज्ञ
+
+Symbols and emoji sequences:
+☕ ⚕ ⚙ ♻ ⌘ ∞
+👩‍⚕️ 🧑‍💻 🏳️‍🌈
+
+Spacing:
+word with no-break spaces
+thin space hair space zero‍width join
+Tabs	and multiple    spaces
+
+Very long token:
+antidisestablishmentarianism_and_devanagari_नमस्ते_without_breaks_1234567890

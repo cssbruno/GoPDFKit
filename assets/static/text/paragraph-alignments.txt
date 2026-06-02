@@ -1,0 +1,5 @@
+Short paragraphs are useful for checking text wrapping without creating a large fixture. This paragraph should wrap across several lines when it is placed in a narrow box.
+
+The same source text can be rendered with left, centered, right, or justified alignment. Keeping the content stable makes visual comparison easier when the text engine changes.
+
+Margins, line height, and width all affect the final layout. These examples keep the measurements explicit so regressions are easier to spot in the generated PDF.
