@@ -1,11 +1,7 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
-package thumb_test
+package gopdfkit_test
 
 import (
 	"bytes"
@@ -17,8 +13,7 @@ import (
 	"testing"
 
 	"github.com/cssbruno/gopdfkit"
-	"github.com/cssbruno/gopdfkit/internal/example"
-	"github.com/cssbruno/gopdfkit/thumb"
+	"github.com/cssbruno/gopdfkit/testsupport/example"
 )
 
 func TestGenerateFitsWithinBounds(t *testing.T) {
@@ -26,13 +21,13 @@ func TestGenerateFitsWithinBounds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open source image: %s", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
-	data, format, err := thumb.Generate(file, thumb.Options{MaxWidth: 32, MaxHeight: 16, Format: thumb.FormatPNG})
+	data, format, err := gopdfkit.GenerateThumbnail(file, gopdfkit.ThumbnailOptions{MaxWidth: 32, MaxHeight: 16, Format: gopdfkit.ThumbnailFormatPNG})
 	if err != nil {
 		t.Fatalf("generate thumbnail: %s", err)
 	}
-	if format != thumb.FormatPNG {
+	if format != gopdfkit.ThumbnailFormatPNG {
 		t.Fatalf("expected png format, got %q", format)
 	}
 
@@ -53,7 +48,7 @@ func TestGenerateDoesNotUpscaleByDefault(t *testing.T) {
 		t.Fatalf("encode source image: %s", err)
 	}
 
-	data, _, err := thumb.Generate(bytes.NewReader(buf.Bytes()), thumb.Options{MaxWidth: 40, MaxHeight: 40})
+	data, _, err := gopdfkit.GenerateThumbnail(bytes.NewReader(buf.Bytes()), gopdfkit.ThumbnailOptions{MaxWidth: 40, MaxHeight: 40})
 	if err != nil {
 		t.Fatalf("generate thumbnail: %s", err)
 	}
@@ -68,7 +63,7 @@ func TestGenerateDoesNotUpscaleByDefault(t *testing.T) {
 
 func TestGenerateUpscalesWhenRequested(t *testing.T) {
 	src := image.NewRGBA(image.Rect(0, 0, 4, 2))
-	data, _, err := thumb.GenerateImage(src, "png", thumb.Options{MaxWidth: 40, MaxHeight: 40, Upscale: true})
+	data, _, err := gopdfkit.GenerateThumbnailImage(src, "png", gopdfkit.ThumbnailOptions{MaxWidth: 40, MaxHeight: 40, Upscale: true})
 	if err != nil {
 		t.Fatalf("generate thumbnail: %s", err)
 	}
@@ -86,10 +81,10 @@ func TestRegisterAddsThumbnailImage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open source image: %s", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	pdf := gopdfkit.New("P", "mm", "A4", "")
-	info, err := thumb.Register(pdf, "logo-thumb", file, thumb.Options{MaxWidth: 48, MaxHeight: 48})
+	info, err := pdf.RegisterThumbnail("logo-thumb", file, gopdfkit.ThumbnailOptions{MaxWidth: 48, MaxHeight: 48})
 	if err != nil {
 		t.Fatalf("register thumbnail: %s", err)
 	}
@@ -101,15 +96,15 @@ func TestRegisterAddsThumbnailImage(t *testing.T) {
 	}
 }
 
-func ExampleGenerate() {
+func ExampleGenerateThumbnail() {
 	file, err := os.Open(example.ImageFile("logo.png"))
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
-	data, format, err := thumb.Generate(file, thumb.Options{MaxWidth: 64, MaxHeight: 64})
+	data, format, err := gopdfkit.GenerateThumbnail(file, gopdfkit.ThumbnailOptions{MaxWidth: 64, MaxHeight: 64})
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -124,14 +119,14 @@ func ExampleGenerate() {
 	// png true true
 }
 
-func ExampleRegister() {
+func ExampleFpdf_RegisterThumbnail() {
 	pdf := gopdfkit.New("P", "mm", "A4", "")
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.AddPage()
 
 	file, err := os.Open(example.ImageFile("logo.png"))
 	if err == nil {
-		_, err = thumb.Register(pdf, "logo-thumb", file, thumb.Options{MaxWidth: 96, MaxHeight: 96})
+		_, err = pdf.RegisterThumbnail("logo-thumb", file, gopdfkit.ThumbnailOptions{MaxWidth: 96, MaxHeight: 96})
 		_ = file.Close()
 	}
 	if err == nil {
@@ -146,5 +141,5 @@ func ExampleRegister() {
 	}
 	example.Summary(err, fileStr)
 	// Output:
-	// Successfully generated ../assets/generated/pdf/thumb_Register.pdf
+	// Successfully generated assets/generated/pdf/thumb_Register.pdf
 }

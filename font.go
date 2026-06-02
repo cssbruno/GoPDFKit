@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -12,8 +8,7 @@ import (
 	"strings"
 )
 
-// getFontKey is used by AddFontFromReader and GetFontDesc
-
+// getFontKey normalizes the font key used by AddFontFromReader and GetFontDesc.
 func getFontKey(familyStr, styleStr string) string {
 	familyStr = strings.ToLower(familyStr)
 	styleStr = strings.ToUpper(styleStr)
@@ -23,12 +18,11 @@ func getFontKey(familyStr, styleStr string) string {
 	return familyStr + styleStr
 }
 
-// GetFontDesc returns the font descriptor, which can be used for
-// example to find the baseline of a font. If familyStr is empty
-// current font descriptor will be returned.
+// GetFontDesc returns the font descriptor, which can be used, for example, to
+// find the baseline of a font. If familyStr is empty, the current font
+// descriptor is returned.
 // See FontDescriptor for documentation about the font descriptor.
 // See AddFont for details about familyStr and styleStr.
-
 func (f *Fpdf) GetFontDesc(familyStr, styleStr string) FontDescriptor {
 	if familyStr == "" {
 		return f.currentFont.Desc
@@ -40,9 +34,9 @@ func (f *Fpdf) GetFontDesc(familyStr, styleStr string) FontDescriptor {
 // call this method at least once before printing text or the resulting
 // document will not be valid.
 //
-// The font can be either a standard one or a font added via the AddFont()
-// method or AddFontFromReader() method. Standard fonts use the Windows
-// encoding cp1252 (Western Europe).
+// The font can be either a standard one or a font added with AddFont() or
+// AddFontFromReader(). Standard fonts use Windows code page 1252 (Western
+// Europe).
 //
 // The method can be called before the first page is created and the font is
 // kept from page to page. If you just wish to change the current font size, it
@@ -61,9 +55,8 @@ func (f *Fpdf) GetFontDesc(familyStr, styleStr string) FontDescriptor {
 // regular. Bold and italic styles do not apply to Symbol and ZapfDingbats.
 //
 // size is the font size measured in points. The default value is the current
-// size. If no size has been specified since the beginning of the document, the
-// value taken is 12.
-
+// size. If no size has been specified since the beginning of the document, this
+// uses 12.
 func (f *Fpdf) SetFont(familyStr, styleStr string, size float64) {
 	if f.err != nil {
 		return
@@ -78,11 +71,11 @@ func (f *Fpdf) SetFont(familyStr, styleStr string, size float64) {
 	styleStr = strings.ToUpper(styleStr)
 	f.underline = strings.Contains(styleStr, "U")
 	if f.underline {
-		styleStr = strings.Replace(styleStr, "U", "", -1)
+		styleStr = strings.ReplaceAll(styleStr, "U", "")
 	}
 	f.strikeout = strings.Contains(styleStr, "S")
 	if f.strikeout {
-		styleStr = strings.Replace(styleStr, "S", "", -1)
+		styleStr = strings.ReplaceAll(styleStr, "S", "")
 	}
 	if styleStr == "IB" {
 		styleStr = "BI"
@@ -133,18 +126,15 @@ func (f *Fpdf) SetFont(familyStr, styleStr string, size float64) {
 	if f.page > 0 {
 		f.outf("BT /F%s %.2f Tf ET", f.currentFont.i, f.fontSizePt)
 	}
-	return
 }
 
-// SetFontStyle sets the style of the current font. See also SetFont()
-
+// SetFontStyle sets the style of the current font. See also SetFont().
 func (f *Fpdf) SetFontStyle(styleStr string) {
 	f.SetFont(f.fontFamily, styleStr, f.fontSizePt)
 }
 
 // SetFontSize defines the size of the current font. Size is specified in
-// points (1/ 72 inch). See also SetFontUnitSize().
-
+// points (1/72 inch). See also SetFontUnitSize().
 func (f *Fpdf) SetFontSize(size float64) {
 	f.fontSizePt = size
 	f.fontSize = size / f.k
@@ -155,7 +145,6 @@ func (f *Fpdf) SetFontSize(size float64) {
 
 // SetFontUnitSize defines the size of the current font. Size is specified in
 // the unit of measure specified in New(). See also SetFontSize().
-
 func (f *Fpdf) SetFontUnitSize(size float64) {
 	f.fontSizePt = size * f.k
 	f.fontSize = size
@@ -167,7 +156,6 @@ func (f *Fpdf) SetFontUnitSize(size float64) {
 // GetFontSize returns the size of the current font in points followed by the
 // size in the unit of measure specified in New(). The second value can be used
 // as a line height value in drawing operations.
-
 func (f *Fpdf) GetFontSize() (ptSize, unitSize float64) {
 	return f.fontSizePt, f.fontSize
 }

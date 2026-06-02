@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -14,14 +10,14 @@ import (
 
 // SetDisplayMode sets advisory display directives for the document viewer.
 // Pages can be displayed entirely on screen, occupy the full width of the
-// window, use real size, be scaled by a specific zooming factor or use viewer
-// default (configured in the Preferences menu of Adobe Reader). The page
+// window, use real size, be scaled by a specific zoom factor, or use the
+// viewer default (configured in the Preferences menu of Adobe Reader). The page
 // layout can be specified so that pages are displayed individually or in
 // pairs.
 //
 // zoomStr can be "fullpage" to display the entire page on screen, "fullwidth"
-// to use maximum width of window, "real" to use real size (equivalent to 100%
-// zoom) or "default" to use viewer default mode.
+// to use the maximum window width, "real" to use real size (equivalent to 100%
+// zoom), or "default" to use the viewer default mode.
 //
 // layoutStr can be "single" (or "SinglePage") to display one page at once,
 // "continuous" (or "OneColumn") to display pages continuously, "two" (or
@@ -29,9 +25,8 @@ import (
 // on the left, or "TwoColumnRight" to display two pages on two columns with
 // odd-numbered pages on the right, or "TwoPageLeft" to display pages two at a
 // time with odd-numbered pages on the left, or "TwoPageRight" to display pages
-// two at a time with odd-numbered pages on the right, or "default" to use
+// two at a time with odd-numbered pages on the right, or "default" to use the
 // viewer default mode.
-
 func (f *Fpdf) SetDisplayMode(zoomStr, layoutStr string) {
 	if f.err != nil {
 		return
@@ -56,9 +51,8 @@ func (f *Fpdf) SetDisplayMode(zoomStr, layoutStr string) {
 }
 
 // SetDefaultCompression controls the default setting of the internal
-// compression flag. See SetCompression() for more details. Compression is on
-// by default.
-
+// compression flag. See SetCompression for more details. Compression is on by
+// default.
 func SetDefaultCompression(compress bool) {
 	gl.noCompress = !compress
 }
@@ -67,7 +61,6 @@ func SetDefaultCompression(compress bool) {
 // activated, the internal representation of each page is compressed, which
 // leads to a compression ratio of about 2 for the resulting document.
 // Compression is on by default.
-
 func (f *Fpdf) SetCompression(compress bool) {
 	if compress && f.compressLevel == zlib.NoCompression {
 		f.compressLevel = zlib.BestSpeed
@@ -111,8 +104,7 @@ func (f *Fpdf) compressBytes(data []byte) []byte {
 // substituted as the document is closed. An empty string is replaced with the
 // string "{nb}".
 //
-// See the example for AddPage() for a demonstration of this method.
-
+// See the example for AddPage for a demonstration of this method.
 func (f *Fpdf) AliasNbPages(aliasStr string) {
 	if aliasStr == "" {
 		aliasStr = "{nb}"
@@ -120,29 +112,25 @@ func (f *Fpdf) AliasNbPages(aliasStr string) {
 	f.aliasNbPagesStr = aliasStr
 }
 
-// RTL enables right-to-left mode
-
+// RTL enables right-to-left text layout mode.
 func (f *Fpdf) RTL() {
 	f.isRTL = true
 }
 
-// LTR disables right-to-left mode
-
+// LTR disables right-to-left text layout mode.
 func (f *Fpdf) LTR() {
 	f.isRTL = false
 }
 
-// open begins a document
-
+// open starts a PDF document.
 func (f *Fpdf) open() {
 	f.state = 1
 }
 
 // Close terminates the PDF document. It is not necessary to call this method
-// explicitly because Output(), OutputAndClose() and OutputFileAndClose() do it
-// automatically. If the document contains no page, AddPage() is called to
+// explicitly because Output, OutputAndClose, and OutputFileAndClose do it
+// automatically. If the document contains no page, AddPage is called to
 // prevent the generation of an invalid document.
-
 func (f *Fpdf) Close() {
 	if f.err == nil {
 		if f.clipNest > 0 {
@@ -172,5 +160,4 @@ func (f *Fpdf) Close() {
 	f.inFooter = false
 	f.endpage()
 	f.enddoc()
-	return
 }

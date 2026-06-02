@@ -1,10 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- *                  *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -31,7 +26,7 @@ func (f *Fpdf) GetStringSymbolWidth(s string) int {
 	}
 	w := 0
 	if f.isCurrentUTF8 {
-		for _, char := range []rune(s) {
+		for _, char := range s {
 			w += f.currentFontRuneWidth(char)
 		}
 	} else {
@@ -65,7 +60,6 @@ func (f *Fpdf) currentFontRuneWidth(char rune) int {
 // SetLineWidth defines the line width. By default, the value equals 0.2 mm.
 // The method can be called before the first page is created. The value is
 // retained from page to page.
-
 func (f *Fpdf) SetLineWidth(width float64) {
 	f.setLineWidth(width)
 }
@@ -78,7 +72,6 @@ func (f *Fpdf) setLineWidth(width float64) {
 }
 
 // GetLineWidth returns the current line thickness.
-
 func (f *Fpdf) GetLineWidth() float64 {
 	return f.lineWidth
 }
@@ -87,7 +80,6 @@ func (f *Fpdf) GetLineWidth() float64 {
 // "round" or "square". A square style projects from the end of the line. The
 // method can be called before the first page is created. The value is
 // retained from page to page.
-
 func (f *Fpdf) SetLineCapStyle(styleStr string) {
 	var capStyle int
 	switch styleStr {
@@ -104,10 +96,9 @@ func (f *Fpdf) SetLineCapStyle(styleStr string) {
 	}
 }
 
-// SetLineJoinStyle defines the line cap style. styleStr should be "miter",
-// "round" or "bevel". The method can be called before the first page
-// is created. The value is retained from page to page.
-
+// SetLineJoinStyle defines the line join style. styleStr should be "miter",
+// "round" or "bevel". The method can be called before the first page is
+// created. The value is retained from page to page.
 func (f *Fpdf) SetLineJoinStyle(styleStr string) {
 	var joinStyle int
 	switch styleStr {

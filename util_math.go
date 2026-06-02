@@ -1,10 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- *                         *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -36,20 +31,7 @@ func finiteNumbers(values ...float64) bool {
 	return true
 }
 
-// slicesEqual returns true if the two specified float slices are equal
-func slicesEqual(a, b []float64) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-// intIf returns a if cnd is true, otherwise b
+// intIf returns a if cnd is true, otherwise b.
 func intIf(cnd bool, a, b int) int {
 	if cnd {
 		return a
@@ -57,7 +39,7 @@ func intIf(cnd bool, a, b int) int {
 	return b
 }
 
-// strIf returns aStr if cnd is true, otherwise bStr
+// strIf returns aStr if cnd is true, otherwise bStr.
 func strIf(cnd bool, aStr, bStr string) string {
 	if cnd {
 		return aStr
@@ -80,7 +62,7 @@ func remove(arr []int, key int) []int {
 }
 
 func isChinese(rune2 rune) bool {
-	// chinese unicode: 4e00-9fa5
+	// Chinese Unicode range: 4e00-9fa5.
 	if rune2 >= rune(0x4e00) && rune2 <= rune(0x9fa5) {
 		return true
 	}

@@ -1,15 +1,10 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
-// SetProducer defines the producer of the document. isUTF8 indicates if the string
-// is encoded in ISO-8859-1 (false) or UTF-8 (true).
-
+// SetProducer sets the document producer. isUTF8 indicates whether producerStr
+// is encoded as ISO-8859-1 (false) or UTF-8 (true).
 func (f *Fpdf) SetProducer(producerStr string, isUTF8 bool) {
 	if isUTF8 {
 		producerStr = utf8toutf16(producerStr)
@@ -17,9 +12,8 @@ func (f *Fpdf) SetProducer(producerStr string, isUTF8 bool) {
 	f.producer = producerStr
 }
 
-// SetTitle defines the title of the document. isUTF8 indicates if the string
-// is encoded in ISO-8859-1 (false) or UTF-8 (true).
-
+// SetTitle sets the document title. isUTF8 indicates whether titleStr is
+// encoded as ISO-8859-1 (false) or UTF-8 (true).
 func (f *Fpdf) SetTitle(titleStr string, isUTF8 bool) {
 	if isUTF8 {
 		titleStr = utf8toutf16(titleStr)
@@ -27,9 +21,8 @@ func (f *Fpdf) SetTitle(titleStr string, isUTF8 bool) {
 	f.title = titleStr
 }
 
-// SetSubject defines the subject of the document. isUTF8 indicates if the
-// string is encoded in ISO-8859-1 (false) or UTF-8 (true).
-
+// SetSubject sets the document subject. isUTF8 indicates whether subjectStr is
+// encoded as ISO-8859-1 (false) or UTF-8 (true).
 func (f *Fpdf) SetSubject(subjectStr string, isUTF8 bool) {
 	if isUTF8 {
 		subjectStr = utf8toutf16(subjectStr)
@@ -37,9 +30,8 @@ func (f *Fpdf) SetSubject(subjectStr string, isUTF8 bool) {
 	f.subject = subjectStr
 }
 
-// SetAuthor defines the author of the document. isUTF8 indicates if the string
-// is encoded in ISO-8859-1 (false) or UTF-8 (true).
-
+// SetAuthor sets the document author. isUTF8 indicates whether authorStr is
+// encoded as ISO-8859-1 (false) or UTF-8 (true).
 func (f *Fpdf) SetAuthor(authorStr string, isUTF8 bool) {
 	if isUTF8 {
 		authorStr = utf8toutf16(authorStr)
@@ -47,10 +39,9 @@ func (f *Fpdf) SetAuthor(authorStr string, isUTF8 bool) {
 	f.author = authorStr
 }
 
-// SetKeywords defines the keywords of the document. keywordStr is a
-// space-delimited string, for example "invoice August". isUTF8 indicates if
-// the string is encoded
-
+// SetKeywords sets the document keywords. keywordsStr is a space-delimited
+// string, for example "invoice August". isUTF8 indicates whether keywordsStr
+// is encoded as ISO-8859-1 (false) or UTF-8 (true).
 func (f *Fpdf) SetKeywords(keywordsStr string, isUTF8 bool) {
 	if isUTF8 {
 		keywordsStr = utf8toutf16(keywordsStr)
@@ -58,9 +49,8 @@ func (f *Fpdf) SetKeywords(keywordsStr string, isUTF8 bool) {
 	f.keywords = keywordsStr
 }
 
-// SetCreator defines the creator of the document. isUTF8 indicates if the
-// string is encoded in ISO-8859-1 (false) or UTF-8 (true).
-
+// SetCreator sets the document creator. isUTF8 indicates whether creatorStr is
+// encoded as ISO-8859-1 (false) or UTF-8 (true).
 func (f *Fpdf) SetCreator(creatorStr string, isUTF8 bool) {
 	if isUTF8 {
 		creatorStr = utf8toutf16(creatorStr)

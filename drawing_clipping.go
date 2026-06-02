@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
+
 package gopdfkit
 
 import (
@@ -5,30 +8,28 @@ import (
 	"math"
 )
 
-// ClipRect begins a rectangular clipping operation. The rectangle is of width
-// w and height h. Its upper left corner is positioned at point (x, y). outline
+// ClipRect begins a rectangular clipping operation. The rectangle has width w
+// and height h. Its upper-left corner is positioned at (x, y). outline
 // is true to draw a border with the current draw color and line width centered
 // on the rectangle's perimeter. Only the outer half of the border will be
 // shown. After calling this method, all rendering operations (for example,
-// ImageOptions(), LinearGradient(), etc) will be clipped by the specified rectangle.
-// Call ClipEnd() to restore unclipped operations.
+// ImageOptions(), LinearGradient(), etc.) will be clipped by the specified
+// rectangle. Call ClipEnd() to restore unclipped operations.
 //
 // This ClipText() example demonstrates this method.
-
 func (f *Fpdf) ClipRect(x, y, w, h float64, outline bool) {
 	f.clipNest++
 	f.outf("q %.2f %.2f %.2f %.2f re W %s", x*f.k, (f.h-y)*f.k, w*f.k, -h*f.k, strIf(outline, "S", "n"))
 }
 
 // ClipText begins a clipping operation in which rendering is confined to the
-// character string specified by txtStr. The origin (x, y) is on the left of
-// the first character at the baseline. The current font is used. outline is
+// character string specified by txtStr. The origin (x, y) is at the left side
+// of the first character's baseline. The current font is used. outline is
 // true to draw a border with the current draw color and line width centered on
 // the perimeters of the text characters. Only the outer half of the border
 // will be shown. After calling this method, all rendering operations (for
-// example, ImageOptions(), LinearGradient(), etc) will be clipped. Call ClipEnd() to
-// restore unclipped operations.
-
+// example, ImageOptions(), LinearGradient(), etc.) will be clipped. Call
+// ClipEnd() to restore unclipped operations.
 func (f *Fpdf) ClipText(x, y float64, txtStr string, outline bool) {
 	f.clipNest++
 	f.outf("q BT %.5f %.5f Td %d Tr (%s) Tj ET", x*f.k, (f.h-y)*f.k, intIf(outline, 5, 7), f.escape(txtStr))
@@ -39,36 +40,33 @@ func (f *Fpdf) clipArc(x1, y1, x2, y2, x3, y3 float64) {
 	f.outf("%.5f %.5f %.5f %.5f %.5f %.5f c ", x1*f.k, (h-y1)*f.k, x2*f.k, (h-y2)*f.k, x3*f.k, (h-y3)*f.k)
 }
 
-// ClipRoundedRect begins a rectangular clipping operation. The rectangle is of
-// width w and height h. Its upper left corner is positioned at point (x, y).
+// ClipRoundedRect begins a rectangular clipping operation. The rectangle has
+// width w and height h. Its upper-left corner is positioned at (x, y).
 // The rounded corners of the rectangle are specified by radius r. outline is
 // true to draw a border with the current draw color and line width centered on
 // the rectangle's perimeter. Only the outer half of the border will be shown.
-// After calling this method, all rendering operations (for example, ImageOptions(),
-// LinearGradient(), etc) will be clipped by the specified rectangle. Call
+// After calling this method, all rendering operations (for example,
+// ImageOptions(), LinearGradient(), etc.) will be clipped by the specified
+// rectangle. Call
 // ClipEnd() to restore unclipped operations.
 //
 // This ClipText() example demonstrates this method.
-
 func (f *Fpdf) ClipRoundedRect(x, y, w, h, r float64, outline bool) {
 	f.ClipRoundedRectExt(x, y, w, h, r, r, r, r, outline)
 }
 
 // ClipRoundedRectExt behaves the same as ClipRoundedRect() but supports a
-// different radius for each corner, given by rTL (top-left), rTR (top-right)
+// different radius for each corner, given by rTL (top-left), rTR (top-right),
 // rBR (bottom-right), rBL (bottom-left). See ClipRoundedRect() for more
 // details. This method is demonstrated in the ClipText() example.
-
 func (f *Fpdf) ClipRoundedRectExt(x, y, w, h, rTL, rTR, rBR, rBL float64, outline bool) {
 	f.clipNest++
 	f.roundedRectPath(x, y, w, h, rTL, rTR, rBR, rBL)
 	f.outf(" W %s", strIf(outline, "S", "n"))
 }
 
-// add a rectangle path with rounded corners.
-// routine shared by RoundedRect() and ClipRoundedRect(), which add the
-// drawing operation
-
+// roundedRectPath adds a rounded rectangle path. RoundedRect() and
+// ClipRoundedRect() share this helper and add their own drawing operation.
 func (f *Fpdf) roundedRectPath(x, y, w, h, rTL, rTR, rBR, rBL float64) {
 	k := f.k
 	hp := f.h
@@ -105,11 +103,10 @@ func (f *Fpdf) roundedRectPath(x, y, w, h, rTL, rTR, rBR, rBL float64) {
 // outline is true to draw a border with the current draw color and line width
 // centered on the ellipse's perimeter. Only the outer half of the border will
 // be shown. After calling this method, all rendering operations (for example,
-// ImageOptions(), LinearGradient(), etc) will be clipped by the specified ellipse.
-// Call ClipEnd() to restore unclipped operations.
+// ImageOptions(), LinearGradient(), etc.) will be clipped by the specified
+// ellipse. Call ClipEnd() to restore unclipped operations.
 //
 // This ClipText() example demonstrates this method.
-
 func (f *Fpdf) ClipEllipse(x, y, rx, ry float64, outline bool) {
 	f.clipNest++
 	lx := (4.0 / 3.0) * rx * (math.Sqrt2 - 1)
@@ -126,11 +123,11 @@ func (f *Fpdf) ClipEllipse(x, y, rx, ry float64, outline bool) {
 // (x, y) and has radius r. outline is true to draw a border with the current
 // draw color and line width centered on the circle's perimeter. Only the outer
 // half of the border will be shown. After calling this method, all rendering
-// operations (for example, ImageOptions(), LinearGradient(), etc) will be clipped by
-// the specified circle. Call ClipEnd() to restore unclipped operations.
+// operations (for example, ImageOptions(), LinearGradient(), etc.) will be
+// clipped by the specified circle. Call ClipEnd() to restore unclipped
+// operations.
 //
 // The ClipText() example demonstrates this method.
-
 func (f *Fpdf) ClipCircle(x, y, r float64, outline bool) {
 	f.ClipEllipse(x, y, r, r, outline)
 }
@@ -142,7 +139,7 @@ func (f *Fpdf) ClipCircle(x, y, r float64, outline bool) {
 // to draw a border with the current draw color and line width centered on the
 // polygon's perimeter. Only the outer half of the border will be shown. After
 // calling this method, all rendering operations (for example, ImageOptions(),
-// LinearGradient(), etc) will be clipped by the specified polygon. Call
+// LinearGradient(), etc.) will be clipped by the specified polygon. Call
 // ClipEnd() to restore unclipped operations.
 //
 // The ClipText() example demonstrates this method.
@@ -162,10 +159,9 @@ func (f *Fpdf) ClipPolygon(points []Point, outline bool) {
 // ClipEnd ends a clipping operation that was started with a call to
 // ClipRect(), ClipRoundedRect(), ClipText(), ClipEllipse(), ClipCircle() or
 // ClipPolygon(). Clipping operations can be nested. The document cannot be
-// successfully output while a clipping operation is active.
+// output successfully while a clipping operation is active.
 //
 // The ClipText() example demonstrates this method.
-
 func (f *Fpdf) ClipEnd() {
 	if f.err == nil {
 		if f.clipNest > 0 {

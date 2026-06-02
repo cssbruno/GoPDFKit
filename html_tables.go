@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -267,25 +263,6 @@ func htmlTableRowsWithFooterLast(rows []htmlTableRow) []htmlTableRow {
 	return ordered
 }
 
-func htmlTableHeaderRows(rows []htmlTableRow) []htmlTableRow {
-	var headers []htmlTableRow
-	for _, row := range rows {
-		if row.header {
-			headers = append(headers, row)
-		}
-	}
-	if len(headers) > 0 {
-		return headers
-	}
-	for _, row := range rows {
-		if !htmlTableRowHasOnlyHeaderCells(row) {
-			break
-		}
-		headers = append(headers, row)
-	}
-	return headers
-}
-
 func htmlTableRowHasOnlyHeaderCells(row htmlTableRow) bool {
 	if len(row.cells) == 0 {
 		return false
@@ -296,25 +273,6 @@ func htmlTableRowHasOnlyHeaderCells(row htmlTableRow) bool {
 		}
 	}
 	return true
-}
-
-func htmlTableHeaderLayoutRows(rows []htmlTableLayoutRow) []htmlTableLayoutRow {
-	var headers []htmlTableLayoutRow
-	for _, row := range rows {
-		if row.row.header {
-			headers = append(headers, row)
-		}
-	}
-	if len(headers) > 0 {
-		return headers
-	}
-	for _, row := range rows {
-		if !htmlTableRowHasOnlyHeaderCells(row.row) {
-			break
-		}
-		headers = append(headers, row)
-	}
-	return headers
 }
 
 func htmlTableHeaderMeasuredRows(rows []htmlTableMeasuredRow) []htmlTableMeasuredRow {
@@ -699,17 +657,6 @@ func (html *HTML) renderTableCaption(table htmlTableType, x, tableWd, lineHt flo
 	html.pdf.Ln(htmlEffectiveLineHeight(style, lineHt) * 0.5)
 }
 
-func (html *HTML) tableLayoutRowHeight(row htmlTableLayoutRow, widths []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, tableAncestors []HTMLSegmentType) float64 {
-	rowHt := lineHt + 2*padding
-	for _, cell := range row.cells {
-		cellHt := html.tableCellHeight(row, cell, widths, padding, lineHt, inherited, fallback, cssRules, tableAncestors)
-		if cellHt > rowHt {
-			rowHt = cellHt
-		}
-	}
-	return rowHt
-}
-
 func (html *HTML) tableCellHeight(row htmlTableLayoutRow, placement htmlTableCellPlacement, widths []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, tableAncestors []HTMLSegmentType) float64 {
 	cell := placement.cell
 	style := inherited
@@ -890,11 +837,6 @@ func htmlTableCellPadding(attrs map[string]string, pdf *Fpdf, fallback, relative
 	return edges
 }
 
-func htmlTableBorder(attrs map[string]string) bool {
-	border := strings.TrimSpace(strings.ToLower(firstNonEmpty(htmlStyleValue(attrs, "border"), attrs["border"])))
-	return border != "" && border != "0" && border != "none"
-}
-
 func htmlCellAlign(attrs map[string]string, fallback string) string {
 	align := strings.ToLower(firstNonEmpty(htmlStyleValue(attrs, "text-align"), attrs["align"]))
 	switch align {
@@ -980,17 +922,4 @@ func htmlTableBackground(color CSSColorType) CSSColorType {
 		return color
 	}
 	return CSSColorType{}
-}
-
-func htmlCellRectStyle(border, fill bool) string {
-	switch {
-	case border && fill:
-		return "FD"
-	case border:
-		return "D"
-	case fill:
-		return "F"
-	default:
-		return ""
-	}
 }

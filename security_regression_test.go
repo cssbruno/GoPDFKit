@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -393,7 +389,7 @@ func TestSecurityTemplateTypedNilChildReturnsError(t *testing.T) {
 		}
 	}()
 	_ = tpl.childrenImages()
-	_ = tpl.childrensTemplates()
+	_ = tpl.childrenTemplates()
 	if err := tpl.validate(); err == nil {
 		t.Fatal("validate accepted typed-nil child template")
 	}

@@ -1,10 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- *                  *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -19,7 +14,7 @@ type fontBoxType struct {
 	Xmin, Ymin, Xmax, Ymax int
 }
 
-// Font flags for FontDescriptor.Flags as defined in the pdf specification.
+// Font flags for FontDescriptor.Flags as defined in the PDF specification.
 const (
 	// FontFlagFixedPitch is set if all glyphs have the same width (as
 	// opposed to proportional or variable-pitch fonts, which have
@@ -29,23 +24,23 @@ const (
 	// strokes drawn at an angle on the top and bottom of glyph stems.
 	// (Sans serif fonts do not have serifs.)
 	FontFlagSerif = 1 << 1
-	// FontFlagSymbolic is set if font contains glyphs outside the
+	// FontFlagSymbolic is set if the font contains glyphs outside the
 	// Adobe standard Latin character set. This flag and the
 	// Nonsymbolic flag shall not both be set or both be clear.
 	FontFlagSymbolic = 1 << 2
 	// FontFlagScript is set if glyphs resemble cursive handwriting.
 	FontFlagScript = 1 << 3
-	// FontFlagNonsymbolic is set if font uses the Adobe standard
+	// FontFlagNonsymbolic is set if the font uses the Adobe standard
 	// Latin character set or a subset of it.
 	FontFlagNonsymbolic = 1 << 5
 	// FontFlagItalic is set if glyphs have dominant vertical strokes
 	// that are slanted.
 	FontFlagItalic = 1 << 6
-	// FontFlagAllCap is set if font contains no lowercase letters;
+	// FontFlagAllCap is set if the font contains no lowercase letters;
 	// typically used for display purposes, such as for titles or
 	// headlines.
 	FontFlagAllCap = 1 << 16
-	// SmallCap is set if font contains both uppercase and lowercase
+	// SmallCap is set if the font contains both uppercase and lowercase
 	// letters. The uppercase letters are similar to those in the
 	// regular version of the same typeface family. The glyphs for the
 	// lowercase letters have the same shapes as the corresponding
@@ -60,9 +55,8 @@ const (
 	ForceBold = 1 << 18
 )
 
-// FontDescriptor (font descriptor) specifies metrics and other
-// attributes of a font, as distinct from the metrics of individual
-// glyphs (as defined in the pdf specification).
+// FontDescriptor specifies metrics and other attributes of a font, as distinct
+// from the metrics of individual glyphs, as defined in the PDF specification.
 type FontDescriptor struct {
 	// The maximum height above the baseline reached by glyphs in this
 	// font (for example for "S"). The height of glyphs for accented
@@ -119,9 +113,9 @@ type fontDefinition struct {
 	usedRunes    map[int]int    // Array of used runes
 }
 
-// generateFontID generates a font Id from the font definition
+// generateFontID generates a font ID from the font definition.
 func generateFontID(fdt fontDefinition) (string, error) {
-	// file can be different if generated in different instance
+	// File can differ when the same font is generated in a different instance.
 	fdt.File = ""
 	h := sha1.New()
 	w := hashJSONNoFinalNewline{hash: h}

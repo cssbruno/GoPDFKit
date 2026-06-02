@@ -1,12 +1,7 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
-// PDF protection is adapted from the work of Klemen VODOPIVEC for the fpdf
-// product.
+// PDF protection is adapted from work by Klemen VODOPIVEC for FPDF.
 
 package gopdfkit
 
@@ -17,7 +12,7 @@ import (
 	"encoding/binary"
 )
 
-// Advisory bitflag constants that control document activities
+// Advisory bit flag constants that control document activities.
 const (
 	CnProtectPrint      = 4
 	CnProtectModify     = 8
@@ -34,7 +29,7 @@ type protectType struct {
 	encryptionKey []byte
 	objNum        int
 	rc4cipher     *rc4.Cipher
-	rc4n          uint32 // Object number associated with rc4 cipher
+	rc4n          uint32 // Object number associated with the RC4 cipher.
 }
 
 func (p *protectType) rc4(n uint32, buf *[]byte) {
@@ -47,7 +42,7 @@ func (p *protectType) rc4(n uint32, buf *[]byte) {
 
 func (p *protectType) objectKey(n uint32) []byte {
 	var nbuf, b []byte
-	nbuf = make([]byte, 8, 8)
+	nbuf = make([]byte, 8)
 	binary.LittleEndian.PutUint32(nbuf, n)
 	b = append(b, p.encryptionKey...)
 	b = append(b, nbuf[0], nbuf[1], nbuf[2], 0, 0)
@@ -60,7 +55,7 @@ func oValueGen(userPass, ownerPass []byte) (v []byte) {
 	tmp := md5.Sum(ownerPass)
 	c, _ = rc4.NewCipher(tmp[0:5])
 	size := len(userPass)
-	v = make([]byte, size, size)
+	v = make([]byte, size)
 	c.XORKeyStream(v, userPass)
 	return
 }
@@ -69,7 +64,7 @@ func (p *protectType) uValueGen() (v []byte) {
 	var c *rc4.Cipher
 	c, _ = rc4.NewCipher(p.encryptionKey)
 	size := len(p.padding)
-	v = make([]byte, size, size)
+	v = make([]byte, size)
 	c.XORKeyStream(v, p.padding)
 	return
 }
@@ -108,12 +103,12 @@ func (p *protectType) setProtection(privFlag byte, userPassStr, ownerPassStr str
 
 // SetProtection applies certain constraints on the finished PDF document.
 //
-// actionFlag is a bitflag that controls various document operations.
+// actionFlag is a bit flag that controls various document operations.
 // CnProtectPrint allows the document to be printed. CnProtectModify allows a
 // document to be modified by a PDF editor. CnProtectCopy allows text and
 // images to be copied into the system clipboard. CnProtectAnnotForms allows
 // annotations and forms to be added by a PDF editor. These values can be
-// combined by or-ing them together, for example,
+// combined by ORing them together, for example,
 // CnProtectCopy|CnProtectModify. This flag is advisory; not all PDF readers
 // implement the constraints that this argument attempts to control.
 //
@@ -122,8 +117,8 @@ func (p *protectType) setProtection(privFlag byte, userPassStr, ownerPassStr str
 //
 // ownerPassStr specifies the password that will need to be provided to gain
 // full access to the document regardless of the actionFlag value. An empty
-// string for this argument will be replaced with a random value, effectively
-// prohibiting full access to the document.
+// string for this argument is replaced with a random value, effectively
+// preventing owner-level access without the generated password.
 func (f *Fpdf) SetProtection(actionFlag byte, userPassStr, ownerPassStr string) {
 	if f.err != nil {
 		return

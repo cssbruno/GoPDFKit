@@ -1,10 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- *                         *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -21,40 +16,46 @@ const maxOpenTypeTableBytes = 256 * 1024 * 1024
 
 // OpenTypeType contains metrics and embedded font data from an OpenType font.
 type OpenTypeType struct {
-	Embeddable             bool
-	PostScriptOutlines     bool
-	CFFData                []byte
-	UnitsPerEm             uint16
-	PostScriptName         string
-	Bold                   bool
-	ItalicAngle            int16
-	IsFixedPitch           bool
-	TypoAscender           int16
-	TypoDescender          int16
-	UnderlinePosition      int16
-	UnderlineThickness     int16
-	Xmin, Ymin, Xmax, Ymax int16
-	CapHeight              int16
-	Widths                 []uint16
-	Chars                  map[uint16]uint16
+	Embeddable         bool              // Whether the font permits embedding.
+	PostScriptOutlines bool              // Whether the font uses CFF/PostScript outlines.
+	CFFData            []byte            // Raw CFF table data.
+	UnitsPerEm         uint16            // Font units per em.
+	PostScriptName     string            // PostScript font name.
+	Bold               bool              // Whether the font is bold.
+	ItalicAngle        int16             // Italic angle from the font metadata.
+	IsFixedPitch       bool              // Whether the font is fixed pitch.
+	TypoAscender       int16             // Typographic ascender.
+	TypoDescender      int16             // Typographic descender.
+	UnderlinePosition  int16             // Underline position.
+	UnderlineThickness int16             // Underline thickness.
+	Xmin               int16             // Minimum glyph bounding-box X coordinate.
+	Ymin               int16             // Minimum glyph bounding-box Y coordinate.
+	Xmax               int16             // Maximum glyph bounding-box X coordinate.
+	Ymax               int16             // Maximum glyph bounding-box Y coordinate.
+	CapHeight          int16             // Capital-letter height.
+	Widths             []uint16          // Glyph widths.
+	Chars              map[uint16]uint16 // Character-to-glyph map.
 }
 
 // TtfType contains metrics of a TrueType font.
 type TtfType struct {
-	Embeddable             bool
-	UnitsPerEm             uint16
-	PostScriptName         string
-	Bold                   bool
-	ItalicAngle            int16
-	IsFixedPitch           bool
-	TypoAscender           int16
-	TypoDescender          int16
-	UnderlinePosition      int16
-	UnderlineThickness     int16
-	Xmin, Ymin, Xmax, Ymax int16
-	CapHeight              int16
-	Widths                 []uint16
-	Chars                  map[uint16]uint16
+	Embeddable         bool              // Whether the font permits embedding.
+	UnitsPerEm         uint16            // Font units per em.
+	PostScriptName     string            // PostScript font name.
+	Bold               bool              // Whether the font is bold.
+	ItalicAngle        int16             // Italic angle from the font metadata.
+	IsFixedPitch       bool              // Whether the font is fixed pitch.
+	TypoAscender       int16             // Typographic ascender.
+	TypoDescender      int16             // Typographic descender.
+	UnderlinePosition  int16             // Underline position.
+	UnderlineThickness int16             // Underline thickness.
+	Xmin               int16             // Minimum glyph bounding-box X coordinate.
+	Ymin               int16             // Minimum glyph bounding-box Y coordinate.
+	Xmax               int16             // Maximum glyph bounding-box X coordinate.
+	Ymax               int16             // Maximum glyph bounding-box Y coordinate.
+	CapHeight          int16             // Capital-letter height.
+	Widths             []uint16          // Glyph widths.
+	Chars              map[uint16]uint16 // Character-to-glyph map.
 }
 
 type ttfParser struct {
@@ -301,7 +302,9 @@ func (t *ttfParser) ParseCmap() (err error) {
 	idDelta := make([]int16, 0, 8)
 	idRangeOffset := make([]uint16, 0, 8)
 	t.rec.Chars = make(map[uint16]uint16)
-	t.f.Seek(int64(t.tables["cmap"])+offset31, io.SeekStart)
+	if _, err = t.f.Seek(int64(t.tables["cmap"])+offset31, io.SeekStart); err != nil {
+		return
+	}
 	format := t.ReadUShort()
 	if format != 4 {
 		err = fmt.Errorf("unexpected subtable format: %d", format)
@@ -330,7 +333,9 @@ func (t *ttfParser) ParseCmap() (err error) {
 		d := idDelta[j]
 		ro := idRangeOffset[j]
 		if ro > 0 {
-			t.f.Seek(offset+2*int64(j)+int64(ro), io.SeekStart)
+			if _, err = t.f.Seek(offset+2*int64(j)+int64(ro), io.SeekStart); err != nil {
+				return
+			}
 		}
 		for c := c1; c <= c2; c++ {
 			if c == 0xFFFF {
@@ -371,15 +376,17 @@ func (t *ttfParser) ParseName() (err error) {
 			offset := t.ReadUShort()
 			if nameID == 6 {
 				// PostScript name
-				t.f.Seek(int64(tableOffset)+int64(stringOffset)+int64(offset), io.SeekStart)
+				if _, err = t.f.Seek(int64(tableOffset)+int64(stringOffset)+int64(offset), io.SeekStart); err != nil {
+					return
+				}
 				var s string
 				s, err = t.ReadStr(int(length))
 				if err != nil {
 					return
 				}
-				s = strings.Replace(s, "\x00", "", -1)
+				s = strings.ReplaceAll(s, "\x00", "")
 				var re *regexp.Regexp
-				if re, err = regexp.Compile("[(){}<> /%[\\]]"); err != nil {
+				if re, err = regexp.Compile(`[(){}<> /%[\]]`); err != nil {
 					return
 				}
 				t.rec.PostScriptName = re.ReplaceAllString(s, "")

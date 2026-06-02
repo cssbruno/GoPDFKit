@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -15,7 +11,7 @@ package gopdfkit
 // subOffset is the vertical offset of the text in points; a positive value
 // indicates a superscript, a negative value indicates a subscript. link is the
 // identifier returned by AddLink() or 0 for no internal link. linkStr is a
-// target URL or empty for no external link. A non--zero value for link takes
+// target URL or empty for no external link. A non-zero value for link takes
 // precedence over linkStr.
 //
 // The SubWrite example demonstrates this method.
@@ -27,20 +23,20 @@ func (f *Fpdf) SubWrite(ht float64, str string, subFontSize, subOffset float64, 
 		f.SetErrorf("invalid SubWrite numeric value")
 		return
 	}
-	// resize font
+	// Resize the font.
 	subFontSizeOld := f.fontSizePt
 	f.SetFontSize(subFontSize)
-	// reposition y
+	// Reposition y.
 	subOffset = (((subFontSize - subFontSizeOld) / f.k) * 0.3) + (subOffset / f.k)
 	subX := f.x
 	subY := f.y
 	f.SetXY(subX, subY-subOffset)
-	//Output text
+	// Output text.
 	f.write(ht, str, link, linkStr)
-	// restore y position
+	// Restore the y position.
 	subX = f.x
 	subY = f.y
 	f.SetXY(subX, subY+subOffset)
-	// restore font size
+	// Restore the font size.
 	f.SetFontSize(subFontSizeOld)
 }

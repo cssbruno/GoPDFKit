@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -28,21 +24,37 @@ import (
 // parsing algorithm, CSS cascade, layout model, flexbox, grid, floats,
 // positioning, paged media, or browser-grade typography. For predictable
 // output, generate simple content that stays within the documented subset.
-// DebugLog receives best-effort diagnostics for HTML or CSS that the
-// renderer recognizes as unsupported. Leave nil to keep rendering quiet.
-
 type HTML struct {
-	pdf  *Fpdf
+	pdf *Fpdf
+	// Link controls the style applied to rendered anchor text.
 	Link struct {
-		ClrR, ClrG, ClrB         int
-		Bold, Italic, Underscore bool
+		// ClrR defines the red component of rendered link text.
+		ClrR int
+		// ClrG defines the green component of rendered link text.
+		ClrG int
+		// ClrB defines the blue component of rendered link text.
+		ClrB int
+		// Bold renders link text with a bold font style.
+		Bold bool
+		// Italic renders link text with an italic font style.
+		Italic bool
+		// Underscore underlines rendered link text.
+		Underscore bool
 	}
-	AllowLocalImages     bool
-	MaxDataImageBytes    int
-	MaxHTMLBytes         int
-	MaxElementDepth      int
-	MaxGeneratedPages    int
-	MaxTableRows         int
+	// AllowLocalImages permits img src values that reference local file paths.
+	AllowLocalImages bool
+	// MaxDataImageBytes limits the decoded size of data URI images.
+	MaxDataImageBytes int
+	// MaxHTMLBytes limits the size of one HTML fragment.
+	MaxHTMLBytes int
+	// MaxElementDepth limits nested HTML element depth.
+	MaxElementDepth int
+	// MaxGeneratedPages limits the number of pages one Write call may create.
+	MaxGeneratedPages int
+	// MaxTableRows limits the number of rows in one rendered HTML table.
+	MaxTableRows int
+	// DebugLog receives best-effort diagnostics for unsupported HTML or CSS.
+	// Leave nil to keep rendering quiet.
 	DebugLog             func(message string)
 	renderStartPageCount int
 	dataImageCache       map[string]htmlImageSource
@@ -64,9 +76,7 @@ const (
 	htmlMaxCSSSelectors          = 4096
 )
 
-// HTMLNew returns an instance that facilitates writing HTML in the specified
-// PDF file.
-
+// HTMLNew returns an instance that writes HTML into the current PDF document.
 func (f *Fpdf) HTMLNew() (html HTML) {
 	html.pdf = f
 	html.Link.ClrR, html.Link.ClrG, html.Link.ClrB = 0, 0, 128
@@ -79,6 +89,14 @@ func (f *Fpdf) HTMLNew() (html HTML) {
 	return
 }
 
+// Write prints text from the current position using the currently selected
+// font. See HTMLNew to create a receiver associated with the PDF document
+// instance. The text can use common HTML text tags and inline style
+// declarations. When the right margin is reached, a line break occurs and text
+// continues from the left margin. Upon method exit, the current position is
+// left at the end of the text.
+//
+// lineHt indicates the line height in the unit of measure specified in New.
 func (html *HTML) Write(lineHt float64, htmlStr string) {
 	if len(htmlStr) > html.maxHTMLBytes() {
 		html.pdf.SetErrorf("HTML input exceeds maximum size")
@@ -101,15 +119,7 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 	fontPt, _ := html.pdf.GetFontSize()
 	defaultColor := CSSColorType{R: textR, G: textG, B: textB, Set: true}
 	base := htmlTextStyle{align: "L", fontSize: fontPt, lineHeight: lineHt}
-	stack := []htmlTextStyle{ // Write prints text from the current position using the currently selected
-		// font. See HTMLNew() to create a receiver that is associated with the PDF
-		// document instance. The text can use common HTML text tags and inline style
-		// declarations. When the right margin is reached a line break occurs and text
-		// continues from the left margin. Upon method exit, the current position is
-		// left at the end of the text.
-		//
-		// lineHt indicates the line height in the unit of measure specified in New().
-		base}
+	stack := []htmlTextStyle{base}
 	tagStack := []string{""}
 	elementStack := []HTMLSegmentType{}
 	listStack := []htmlListState{}

@@ -1,10 +1,5 @@
-/****************************************************************************
-* Software: GoPDFKit                                                         *
-* License:  MIT License                                                    *
-*                                                                          *
-              *
-* Copyright (c) 2026 cssBruno                                              *
-****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -17,9 +12,9 @@ import (
 // SetAcceptPageBreakFunc allows the application to control where page breaks
 // occur.
 //
-// fnc is an application function (typically a closure) that is called by the
-// library whenever a page break condition is met. The break is issued if true
-// is returned. The default implementation returns a value according to the
+// fnc is an application function (typically a closure) called by the library
+// whenever a page break condition is met. The break is issued if fnc returns
+// true. The default implementation returns a value according to the
 // mode selected by SetAutoPageBreak. The function provided should not be
 // called by the application.
 //
@@ -39,7 +34,7 @@ func (f *Fpdf) SetAcceptPageBreakFunc(fnc func() bool) {
 // before this method is called.
 //
 // If automatic page breaking is enabled and the cell goes beyond the limit, a
-// page break is done before outputting.
+// page break is performed before output.
 //
 // w and h specify the width and height of the cell. If w is 0, the cell
 // extends up to the right margin. Specifying 0 for h will result in no output,
@@ -54,7 +49,7 @@ func (f *Fpdf) SetAcceptPageBreakFunc(fnc func() bool) {
 //
 // ln indicates where the current position should go after the call. Possible
 // values are 0 (to the right), 1 (to the beginning of the next line), and 2
-// (below). Putting 1 is equivalent to putting 0 and calling Ln() just after.
+// (below). Using 1 is equivalent to using 0 and calling Ln() immediately after.
 //
 // alignStr specifies how the text is to be positioned within the cell.
 // Horizontal alignment is controlled by including "L", "C" or "R" (left,
@@ -167,7 +162,7 @@ func (f *Fpdf) CellFormat(w, h float64, txtStr, borderStr string, ln int, alignS
 				txtStr = reverseText(txtStr)
 			}
 			wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
-			for _, uni := range []rune(txtStr) {
+			for _, uni := range txtStr {
 				f.currentFont.usedRunes[int(uni)] = int(uni)
 			}
 			space := f.escape(utf8toutf16(" ", false))
@@ -192,13 +187,13 @@ func (f *Fpdf) CellFormat(w, h float64, txtStr, borderStr string, ln int, alignS
 					txtStr = reverseText(txtStr)
 				}
 				txt2 = f.escape(utf8toutf16(txtStr, false))
-				for _, uni := range []rune(txtStr) {
+				for _, uni := range txtStr {
 					f.currentFont.usedRunes[int(uni)] = int(uni)
 				}
 			} else {
-				txt2 = strings.Replace(txtStr, "\\", "\\\\", -1)
-				txt2 = strings.Replace(txt2, "(", "\\(", -1)
-				txt2 = strings.Replace(txt2, ")", "\\)", -1)
+				txt2 = strings.ReplaceAll(txtStr, "\\", "\\\\")
+				txt2 = strings.ReplaceAll(txt2, "(", "\\(")
+				txt2 = strings.ReplaceAll(txt2, ")", "\\)")
 			}
 			bt := (f.x + dx) * k
 			td := (f.h - (f.y + dy + .5*h + .3*f.fontSize)) * k
@@ -230,11 +225,10 @@ func (f *Fpdf) CellFormat(w, h float64, txtStr, borderStr string, ln int, alignS
 	} else {
 		f.x += w
 	}
-	return
 }
 
 func reverseText(text string) string {
-	oldText := []rune( // Revert string to use in RTL languages
+	oldText := []rune( // Reverse string to use in RTL languages.
 		text)
 	newText := make([]rune, len(oldText))
 	length := len(oldText) - 1
@@ -246,7 +240,6 @@ func reverseText(text string) string {
 
 // Cell is a simpler version of CellFormat with no fill, border, links or
 // special alignment. The Cell_strikeout() example demonstrates this method.
-
 func (f *Fpdf) Cell(w, h float64, txtStr string) {
 	f.CellFormat(w, h, txtStr, "", 0, "L", false, 0, "")
 }
@@ -254,7 +247,6 @@ func (f *Fpdf) Cell(w, h float64, txtStr string) {
 // Cellf is a simpler printf-style version of CellFormat with no fill, border,
 // links or special alignment. See documentation for the fmt package for
 // details on fmtStr and args.
-
 func (f *Fpdf) Cellf(w, h float64, fmtStr string, args ...any) {
 	f.CellFormat(w, h, sprintf(fmtStr, args...), "", 0, "L", false, 0, "")
 }

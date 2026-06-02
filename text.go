@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -12,10 +8,10 @@ import (
 	"strings"
 )
 
-// Text prints a character string. The origin (x, y) is on the left of the
-// first character at the baseline. This method permits a string to be placed
+// Text prints a character string. The origin (x, y) is at the left edge of the
+// first character's baseline. This method allows a string to be placed
 // precisely on the page, but it is usually easier to use Cell(), MultiCell()
-// or Write() which are the standard methods to print text.
+// or Write(), which are the standard methods for printing text.
 func (f *Fpdf) Text(x, y float64, txtStr string) {
 	var txt2 string
 	if f.isCurrentUTF8 {
@@ -24,7 +20,7 @@ func (f *Fpdf) Text(x, y float64, txtStr string) {
 			x -= f.GetStringWidth(txtStr)
 		}
 		txt2 = f.escape(utf8toutf16(txtStr, false))
-		for _, uni := range []rune(txtStr) {
+		for _, uni := range txtStr {
 			f.currentFont.usedRunes[int(uni)] = int(uni)
 		}
 	} else {
@@ -57,23 +53,20 @@ func (f *Fpdf) SetWordSpacing(space float64) {
 // 3: Neither fill nor stroke text (invisible)
 // 4: Fill text and add to path for clipping
 // 5: Stroke text and add to path for clipping
-// 6: Fills then stroke text and add to path for clipping
+// 6: Fill, then stroke text and add to path for clipping
 // 7: Add text to path for clipping
 // This method is demonstrated in the SetTextRenderingMode example.
-
 func (f *Fpdf) SetTextRenderingMode(mode int) {
 	if mode >= 0 && mode <= 7 {
 		f.out(sprintf("%d Tr", mode))
 	}
 }
 
-// Get next character
-
 func (f *Fpdf) write(h float64, txtStr string, link int, linkStr string) {
 	cw := f.currentFont.Cw
 	w := f.w - f.rMargin - f.x
 	wmax := (w - 2*f.cMargin) * 1000 / f.fontSize
-	s := strings.Replace(txtStr, "\r", "", -1)
+	s := strings.ReplaceAll(txtStr, "\r", "")
 	srune := []rune{ // write outputs text in flowing mode
 	}
 	var nb int
@@ -179,28 +172,25 @@ func (f *Fpdf) write(h float64, txtStr string, link int, linkStr string) {
 }
 
 // Write prints text from the current position. When the right margin is
-// reached (or the \n character is met) a line break occurs and text continues
-// from the left margin. Upon method exit, the current position is left just at
-// the end of the text.
+// reached (or the \n character is encountered), a line break occurs and text
+// continues from the left margin. When the method returns, the current position
+// is just after the end of the text.
 //
 // It is possible to put a link on the text.
 //
 // h indicates the line height in the unit of measure specified in New().
-
 func (f *Fpdf) Write(h float64, txtStr string) {
 	f.write(h, txtStr, 0, "")
 }
 
 // Writef is like Write but uses printf-style formatting. See the documentation
 // for package fmt for more details on fmtStr and args.
-
 func (f *Fpdf) Writef(h float64, fmtStr string, args ...any) {
 	f.write(h, sprintf(fmtStr, args...), 0, "")
 }
 
 // WriteLinkString writes text that when clicked launches an external URL. See
 // Write() for argument details.
-
 func (f *Fpdf) WriteLinkString(h float64, displayStr, targetStr string) {
 	f.write(h, displayStr, 0, targetStr)
 }
@@ -208,7 +198,6 @@ func (f *Fpdf) WriteLinkString(h float64, displayStr, targetStr string) {
 // WriteLinkID writes text that when clicked jumps to another location in the
 // PDF. linkID is an identifier returned by AddLink(). See Write() for argument
 // details.
-
 func (f *Fpdf) WriteLinkID(h float64, displayStr string, linkID int) {
 	f.write(h, displayStr, linkID, "")
 }
@@ -218,7 +207,7 @@ func (f *Fpdf) WriteLinkID(h float64, displayStr string, linkID int) {
 //
 // width indicates the width of the box the text will be drawn in. This is in
 // the unit of measure specified in New(). If it is set to 0, the bounding box
-// of the page will be taken (pageWidth - leftMargin - rightMargin).
+// of the page is used (pageWidth - leftMargin - rightMargin).
 //
 // lineHeight indicates the line height in the unit of measure specified in
 // New().
@@ -264,7 +253,6 @@ func (f *Fpdf) WriteAligned(width, lineHeight float64, textStr, alignStr string)
 // value of h indicates the height of the last printed cell.
 //
 // This method is demonstrated in the example for MultiCell.
-
 func (f *Fpdf) Ln(h float64) {
 	f.x = f.lMargin
 	if h < 0 {
@@ -275,12 +263,11 @@ func (f *Fpdf) Ln(h float64) {
 }
 
 // Escape special characters in strings
-
 func (f *Fpdf) escape(s string) string {
-	s = strings.Replace(s, "\\", "\\\\", -1)
-	s = strings.Replace(s, "(", "\\(", -1)
-	s = strings.Replace(s, ")", "\\)", -1)
-	s = strings.Replace(s, "\r", "\\r", -1)
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "(", "\\(")
+	s = strings.ReplaceAll(s, ")", "\\)")
+	s = strings.ReplaceAll(s, "\r", "\\r")
 	return s
 }
 
@@ -306,13 +293,11 @@ func blankCount(str string) (count int) {
 
 // SetUnderlineThickness accepts a multiplier for adjusting the text underline
 // thickness, defaulting to 1. See SetUnderlineThickness example.
-
 func (f *Fpdf) SetUnderlineThickness(thickness float64) {
 	f.userUnderlineThickness = thickness
 }
 
 // Underline text
-
 func (f *Fpdf) dounderline(x, y float64, txt string) string {
 	up := float64(f.currentFont.Up)
 	ut := float64(f.currentFont.Ut) * f.userUnderlineThickness

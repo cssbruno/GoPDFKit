@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -17,30 +13,40 @@ import (
 type DocumentKind string
 
 const (
-	DocumentKindGeneric       DocumentKind = "generic"
-	DocumentKindReport        DocumentKind = "report"
-	DocumentKindForm          DocumentKind = "form"
-	DocumentKindLetter        DocumentKind = "letter"
+	// DocumentKindGeneric is the fallback kind for documents without a more
+	// specific category.
+	DocumentKindGeneric DocumentKind = "generic"
+	// DocumentKindReport identifies report-style documents.
+	DocumentKindReport DocumentKind = "report"
+	// DocumentKindForm identifies forms and questionnaires.
+	DocumentKindForm DocumentKind = "form"
+	// DocumentKindLetter identifies letter-style correspondence.
+	DocumentKindLetter DocumentKind = "letter"
+	// DocumentKindTransactional identifies invoices, receipts, and similar
+	// transactional documents.
 	DocumentKindTransactional DocumentKind = "transactional"
-	DocumentKindAttestation   DocumentKind = "attestation"
-	DocumentKindStatement     DocumentKind = "statement"
-	DocumentKindLongForm      DocumentKind = "long-form"
+	// DocumentKindAttestation identifies certificates and attestations.
+	DocumentKindAttestation DocumentKind = "attestation"
+	// DocumentKindStatement identifies account or status statements.
+	DocumentKindStatement DocumentKind = "statement"
+	// DocumentKindLongForm identifies contract-like long-form documents.
+	DocumentKindLongForm DocumentKind = "long-form"
 )
 
 // Document is the shared model that document builders and HTML parsers can
 // produce before PDF layout and drawing.
 type Document struct {
-	Kind        DocumentKind
-	Title       string
-	Language    string
-	Metadata    DocumentMetadata
-	Chrome      *PageChrome
-	Header      *HeaderBlock
-	Footer      *FooterBlock
-	Body        []Block
-	Signature   *SignatureBlock
-	QR          *QRBlock
-	Attachments []AttachmentBlock
+	Kind        DocumentKind      // High-level document category.
+	Title       string            // Human-readable document title.
+	Language    string            // Optional BCP 47 language tag.
+	Metadata    DocumentMetadata  // Document metadata and summary fields.
+	Chrome      *PageChrome       // Page-level header, footer, and margin settings.
+	Header      *HeaderBlock      // Legacy/default header content.
+	Footer      *FooterBlock      // Legacy/default footer content.
+	Body        []Block           // Main document body blocks in render order.
+	Signature   *SignatureBlock   // Optional signature block.
+	QR          *QRBlock          // Optional standalone QR block.
+	Attachments []AttachmentBlock // Files embedded during document output.
 }
 
 // NewDocument creates a document model with a generic kind when kind is empty.
@@ -80,51 +86,63 @@ func (d *Document) PageChrome() PageChrome {
 // DocumentMetadata holds common metadata used by headers, footers,
 // verification blocks, PDF metadata, and structured document summaries.
 type DocumentMetadata struct {
-	Subject         string
-	Author          string
-	Organization    string
-	DocumentID      string
-	ExternalID      string
-	VerificationURL string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	Parties         []DocumentParty
-	Fields          []MetadataField
+	Subject         string          // Short document subject.
+	Author          string          // Document author name.
+	Organization    string          // Issuing or owning organization.
+	DocumentID      string          // Internal document identifier.
+	ExternalID      string          // External system identifier.
+	VerificationURL string          // URL used to verify the document.
+	CreatedAt       time.Time       // Document creation timestamp.
+	UpdatedAt       time.Time       // Last document update timestamp.
+	Parties         []DocumentParty // People, companies, or roles in the document.
+	Fields          []MetadataField // Additional label/value metadata.
 }
 
 // DocumentParty describes a named person, company, or role shown in metadata.
 type DocumentParty struct {
-	Role       string
-	Name       string
-	Identifier string
-	Email      string
-	Phone      string
-	Address    string
-	Fields     []MetadataField
+	Role       string          // Party role, such as issuer or recipient.
+	Name       string          // Party display name.
+	Identifier string          // Tax, account, or other party identifier.
+	Email      string          // Party email address.
+	Phone      string          // Party phone number.
+	Address    string          // Party postal address.
+	Fields     []MetadataField // Additional party metadata.
 }
 
 // MetadataField is a label/value pair used by metadata grids and summaries.
 type MetadataField struct {
-	Label string
-	Value string
+	Label string // Field label.
+	Value string // Field value.
 }
 
 // BlockKind identifies a shared layout block.
 type BlockKind string
 
 const (
-	BlockKindParagraph      BlockKind = "paragraph"
-	BlockKindHeading        BlockKind = "heading"
-	BlockKindList           BlockKind = "list"
-	BlockKindTable          BlockKind = "table"
-	BlockKindImage          BlockKind = "image"
-	BlockKindSignatureRow   BlockKind = "signature-row"
-	BlockKindMetadataGrid   BlockKind = "metadata-grid"
+	// BlockKindParagraph identifies paragraph blocks.
+	BlockKindParagraph BlockKind = "paragraph"
+	// BlockKindHeading identifies heading blocks.
+	BlockKindHeading BlockKind = "heading"
+	// BlockKindList identifies list blocks.
+	BlockKindList BlockKind = "list"
+	// BlockKindTable identifies table blocks.
+	BlockKindTable BlockKind = "table"
+	// BlockKindImage identifies image blocks.
+	BlockKindImage BlockKind = "image"
+	// BlockKindSignatureRow identifies signature-row blocks.
+	BlockKindSignatureRow BlockKind = "signature-row"
+	// BlockKindMetadataGrid identifies metadata-grid blocks.
+	BlockKindMetadataGrid BlockKind = "metadata-grid"
+	// BlockKindQRVerification identifies QR-verification blocks.
 	BlockKindQRVerification BlockKind = "qr-verification"
-	BlockKindNoteBox        BlockKind = "note-box"
-	BlockKindSection        BlockKind = "section"
-	BlockKindClause         BlockKind = "clause"
-	BlockKindPageBreak      BlockKind = "page-break"
+	// BlockKindNoteBox identifies note-box blocks.
+	BlockKindNoteBox BlockKind = "note-box"
+	// BlockKindSection identifies section blocks.
+	BlockKindSection BlockKind = "section"
+	// BlockKindClause identifies clause blocks.
+	BlockKindClause BlockKind = "clause"
+	// BlockKindPageBreak identifies explicit page-break blocks.
+	BlockKindPageBreak BlockKind = "page-break"
 )
 
 // Block is implemented by every shared document block.
@@ -134,177 +152,185 @@ type Block interface {
 
 // DocumentColor stores an optional RGB color.
 type DocumentColor struct {
-	R   int
-	G   int
-	B   int
-	Set bool
+	R   int  // Red component, 0-255.
+	G   int  // Green component, 0-255.
+	B   int  // Blue component, 0-255.
+	Set bool // Whether this color should be applied.
 }
 
 // TextStyle describes common text styling independent of a renderer.
 type TextStyle struct {
-	FontFamily    string
-	FontSize      float64
-	Bold          bool
-	Italic        bool
-	Underline     bool
-	StrikeThrough bool
-	Color         DocumentColor
-	Align         string
-	LineHeight    float64
+	FontFamily    string        // Font family name.
+	FontSize      float64       // Font size in points.
+	Bold          bool          // Whether text is bold.
+	Italic        bool          // Whether text is italic.
+	Underline     bool          // Whether text is underlined.
+	StrikeThrough bool          // Whether text has a strike-through line.
+	Color         DocumentColor // Optional text color.
+	Align         string        // Horizontal alignment, such as L, C, R, or J.
+	LineHeight    float64       // Line height in document units.
 }
 
 // BoxStyle describes common block styling independent of a renderer.
 type BoxStyle struct {
-	Margin          Spacing
-	Padding         Spacing
-	Border          BorderStyle
-	BackgroundColor DocumentColor
-	KeepTogether    bool
-	KeepWithNext    bool
+	Margin          Spacing       // Space outside the block.
+	Padding         Spacing       // Space inside the block.
+	Border          BorderStyle   // Per-side border settings.
+	BackgroundColor DocumentColor // Optional background color.
+	KeepTogether    bool          // Prefer not to split this block across pages.
+	KeepWithNext    bool          // Prefer to keep this block with the next one.
 }
 
 // Spacing stores top, right, bottom, and left measurements in document units.
 type Spacing struct {
-	Top    float64
-	Right  float64
-	Bottom float64
-	Left   float64
+	Top    float64 // Top spacing.
+	Right  float64 // Right spacing.
+	Bottom float64 // Bottom spacing.
+	Left   float64 // Left spacing.
 }
 
 // BorderStyle stores a simple per-side border model.
 type BorderStyle struct {
-	Top    BorderSide
-	Right  BorderSide
-	Bottom BorderSide
-	Left   BorderSide
+	Top    BorderSide // Top border.
+	Right  BorderSide // Right border.
+	Bottom BorderSide // Bottom border.
+	Left   BorderSide // Left border.
 }
 
 // BorderSide describes one border edge.
 type BorderSide struct {
-	Width float64
-	Style string
-	Color DocumentColor
+	Width float64       // Border width in document units.
+	Style string        // Border style name.
+	Color DocumentColor // Optional border color.
 }
 
 // TextSegment is a styled text run.
 type TextSegment struct {
-	Text  string
-	Style TextStyle
-	Link  string
+	Text  string    // Segment text.
+	Style TextStyle // Style applied to this segment.
+	Link  string    // Optional link target.
 }
 
 // ParagraphBlock represents a paragraph of styled text.
 type ParagraphBlock struct {
-	Segments []TextSegment
-	Style    TextStyle
-	Box      BoxStyle
+	Segments []TextSegment // Paragraph text segments.
+	Style    TextStyle     // Paragraph text style.
+	Box      BoxStyle      // Paragraph box style.
 }
 
+// DocumentBlockKind returns BlockKindParagraph.
 func (ParagraphBlock) DocumentBlockKind() BlockKind { return BlockKindParagraph }
 
 // HeadingBlock represents a section heading.
 type HeadingBlock struct {
-	Level    int
-	Segments []TextSegment
-	Style    TextStyle
-	Box      BoxStyle
+	Level    int           // Heading level, where 1 is the highest.
+	Segments []TextSegment // Heading text segments.
+	Style    TextStyle     // Heading text style.
+	Box      BoxStyle      // Heading box style.
 }
 
+// DocumentBlockKind returns BlockKindHeading.
 func (HeadingBlock) DocumentBlockKind() BlockKind { return BlockKindHeading }
 
 // ListBlock represents an ordered or unordered list.
 type ListBlock struct {
-	Ordered     bool
-	MarkerStyle string
-	Items       []ListItem
-	Style       TextStyle
-	Box         BoxStyle
+	Ordered     bool       // Whether the list is ordered.
+	MarkerStyle string     // Marker style, such as decimal or bullet.
+	Items       []ListItem // List items.
+	Style       TextStyle  // List text style.
+	Box         BoxStyle   // List box style.
 }
 
+// DocumentBlockKind returns BlockKindList.
 func (ListBlock) DocumentBlockKind() BlockKind { return BlockKindList }
 
 // ListItem stores the blocks that belong to one list item.
 type ListItem struct {
-	Blocks []Block
+	Blocks []Block // Blocks that make up the list item.
 }
 
 // TableBlock represents a table split into header, body, and footer rows.
 type TableBlock struct {
-	Caption string
-	Columns []TableColumn
-	Header  []TableRow
-	Body    []TableRow
-	Footer  []TableRow
-	Style   TableStyle
-	Box     BoxStyle
+	Caption string        // Optional table caption.
+	Columns []TableColumn // Column width constraints.
+	Header  []TableRow    // Header rows.
+	Body    []TableRow    // Body rows.
+	Footer  []TableRow    // Footer rows.
+	Style   TableStyle    // Table layout options.
+	Box     BoxStyle      // Table box style.
 }
 
+// DocumentBlockKind returns BlockKindTable.
 func (TableBlock) DocumentBlockKind() BlockKind { return BlockKindTable }
 
 // TableColumn describes a table column width constraint.
 type TableColumn struct {
-	Width    float64
-	MinWidth float64
-	MaxWidth float64
+	Width    float64 // Preferred column width.
+	MinWidth float64 // Minimum column width.
+	MaxWidth float64 // Maximum column width.
 }
 
 // TableStyle stores renderer-independent table layout options.
 type TableStyle struct {
-	BorderCollapse bool
-	RepeatHeader   bool
-	KeepRows       bool
+	BorderCollapse bool // Whether adjacent cell borders collapse.
+	RepeatHeader   bool // Whether header rows repeat after page breaks.
+	KeepRows       bool // Whether rows should stay together when possible.
 }
 
 // TableRow stores table cells and row-level pagination hints.
 type TableRow struct {
-	Cells        []TableCell
-	KeepTogether bool
+	Cells        []TableCell // Cells in this row.
+	KeepTogether bool        // Whether the row should stay on one page.
 }
 
 // TableCell stores table cell content and layout attributes.
 type TableCell struct {
-	Blocks        []Block
-	ColSpan       int
-	RowSpan       int
-	Align         string
-	VerticalAlign string
-	Style         TextStyle
-	Box           BoxStyle
+	Blocks        []Block   // Cell content blocks.
+	ColSpan       int       // Number of columns spanned by the cell.
+	RowSpan       int       // Number of rows spanned by the cell.
+	Align         string    // Horizontal cell alignment.
+	VerticalAlign string    // Vertical cell alignment.
+	Style         TextStyle // Cell text style.
+	Box           BoxStyle  // Cell box style.
 }
 
 // ImageFitMode identifies how an image is fitted into its target box.
 type ImageFitMode string
 
 const (
-	ImageFitAuto    ImageFitMode = ""
+	// ImageFitAuto preserves the renderer's default image fitting behavior.
+	ImageFitAuto ImageFitMode = ""
+	// ImageFitContain scales the image to fit entirely inside the target box.
 	ImageFitContain ImageFitMode = "contain"
-	ImageFitCover   ImageFitMode = "cover"
+	// ImageFitCover scales the image to cover the target box, cropping if needed.
+	ImageFitCover ImageFitMode = "cover"
 )
 
 // ImageBlock represents an image and optional caption.
 type ImageBlock struct {
-	Source    string
-	Data      []byte
-	Format    string
-	Alt       string
-	Caption   []TextSegment
-	Width     float64
-	Height    float64
-	MaxWidth  float64
-	MaxHeight float64
-	Fit       ImageFitMode
-	Align     string
-	DPI       float64
-	Box       BoxStyle
+	Source    string        // Image file path or registered image name.
+	Data      []byte        // Inline image bytes.
+	Format    string        // Image format, such as png or jpg.
+	Alt       string        // Alternative text used by fallback rendering.
+	Caption   []TextSegment // Optional caption text.
+	Width     float64       // Requested image width.
+	Height    float64       // Requested image height.
+	MaxWidth  float64       // Maximum rendered width.
+	MaxHeight float64       // Maximum rendered height.
+	Fit       ImageFitMode  // How the image fits inside its target box.
+	Align     string        // Horizontal alignment.
+	DPI       float64       // Optional image DPI override.
+	Box       BoxStyle      // Image box style.
 }
 
+// DocumentBlockKind returns BlockKindImage.
 func (ImageBlock) DocumentBlockKind() BlockKind { return BlockKindImage }
 
 // SignatureBlock groups one or more signature rows.
 type SignatureBlock struct {
-	Rows                 []SignatureRowBlock
-	KeepTogether         bool
-	PlaceholderReference string
+	Rows                 []SignatureRowBlock // Signature rows.
+	KeepTogether         bool                // Whether rows should stay together.
+	PlaceholderReference string              // Preferred PAdES signature field name.
 }
 
 // PAdESFieldName returns the signature field name to use with PAdES signing.
@@ -318,54 +344,56 @@ func (s SignatureBlock) PAdESFieldName() string {
 
 // SignatureRowBlock represents one row of signature columns.
 type SignatureRowBlock struct {
-	Columns      []SignatureColumn
-	KeepTogether bool
-	Box          BoxStyle
+	Columns      []SignatureColumn // Signature columns.
+	KeepTogether bool              // Whether the row should stay on one page.
+	Box          BoxStyle          // Row box style.
 }
 
+// DocumentBlockKind returns BlockKindSignatureRow.
 func (SignatureRowBlock) DocumentBlockKind() BlockKind { return BlockKindSignatureRow }
 
 // SignatureColumn describes a single signature line and its metadata.
 type SignatureColumn struct {
-	Label    string
-	Name     string
-	Role     string
-	Metadata []MetadataField
-	Width    float64
+	Label    string          // Display label for the signature line.
+	Name     string          // Signer name.
+	Role     string          // Signer role or title.
+	Metadata []MetadataField // Additional signer metadata.
+	Width    float64         // Requested column width.
 }
 
 // MetadataGridBlock represents label/value metadata in a grid.
 type MetadataGridBlock struct {
-	Fields  []MetadataField
-	Columns int
-	Style   TextStyle
-	Box     BoxStyle
+	Fields  []MetadataField // Metadata fields to render.
+	Columns int             // Number of grid columns.
+	Style   TextStyle       // Grid text style.
+	Box     BoxStyle        // Grid box style.
 }
 
+// DocumentBlockKind returns BlockKindMetadataGrid.
 func (MetadataGridBlock) DocumentBlockKind() BlockKind { return BlockKindMetadataGrid }
 
 // QRBlock describes a standalone QR code.
 type QRBlock struct {
-	Value        string
-	Label        string
-	URL          string
-	Size         float64
-	Align        string
-	KeepTogether bool
+	Value        string  // Encoded QR value.
+	Label        string  // Optional label shown with the QR code.
+	URL          string  // Optional verification URL.
+	Size         float64 // Requested QR size.
+	Align        string  // Horizontal alignment.
+	KeepTogether bool    // Whether the QR block should stay on one page.
 }
 
 // PageChrome describes reusable page-level header, footer, and margin options.
 type PageChrome struct {
-	Header                *HeaderBlock
-	Footer                *FooterBlock
-	FirstPageHeader       *HeaderBlock
-	FirstPageFooter       *FooterBlock
-	AlternateFooter       *FooterBlock
-	Margins               Spacing
-	PageNumberFormat      string
-	TotalPageAlias        string
-	ReserveFooterHeight   float64
-	AlternateFooterHeight float64
+	Header                *HeaderBlock // Default page header.
+	Footer                *FooterBlock // Default page footer.
+	FirstPageHeader       *HeaderBlock // Header used only on page one.
+	FirstPageFooter       *FooterBlock // Footer used only on page one.
+	AlternateFooter       *FooterBlock // Footer used on even pages.
+	Margins               Spacing      // Page margins.
+	PageNumberFormat      string       // fmt.Sprintf format for page numbers.
+	TotalPageAlias        string       // Alias replaced with total page count.
+	ReserveFooterHeight   float64      // Body space reserved for the default footer.
+	AlternateFooterHeight float64      // Body space reserved for alternate footers.
 }
 
 // FooterReservedHeight returns the body-layout space reserved for the footer.
@@ -430,76 +458,81 @@ func (pc PageChrome) pageTotalAlias() string {
 
 // QRVerificationBlock combines a QR code with verification text.
 type QRVerificationBlock struct {
-	QR    QRBlock
-	Text  []TextSegment
-	Style TextStyle
-	Box   BoxStyle
+	QR    QRBlock       // QR code configuration.
+	Text  []TextSegment // Verification text.
+	Style TextStyle     // Verification text style.
+	Box   BoxStyle      // Verification box style.
 }
 
+// DocumentBlockKind returns BlockKindQRVerification.
 func (QRVerificationBlock) DocumentBlockKind() BlockKind { return BlockKindQRVerification }
 
 // NoteBoxBlock represents a callout, warning, or highlighted note.
 type NoteBoxBlock struct {
-	Title string
-	Body  []Block
-	Style TextStyle
-	Box   BoxStyle
+	Title string    // Note title.
+	Body  []Block   // Note body blocks.
+	Style TextStyle // Note text style.
+	Box   BoxStyle  // Note box style.
 }
 
+// DocumentBlockKind returns BlockKindNoteBox.
 func (NoteBoxBlock) DocumentBlockKind() BlockKind { return BlockKindNoteBox }
 
 // SectionBlock groups related blocks under an optional title.
 type SectionBlock struct {
-	Title             string
-	Blocks            []Block
-	KeepTitleWithBody bool
-	Box               BoxStyle
+	Title             string   // Optional section title.
+	Blocks            []Block  // Section body blocks.
+	KeepTitleWithBody bool     // Prefer to keep title and first body block together.
+	Box               BoxStyle // Section box style.
 }
 
+// DocumentBlockKind returns BlockKindSection.
 func (SectionBlock) DocumentBlockKind() BlockKind { return BlockKindSection }
 
 // ClauseBlock represents a numbered or named clause in long-form documents.
 type ClauseBlock struct {
-	Number       string
-	Title        string
-	Blocks       []Block
-	BreakBefore  bool
-	BreakAfter   bool
-	KeepTogether bool
-	Box          BoxStyle
+	Number       string   // Clause number or label.
+	Title        string   // Clause title.
+	Blocks       []Block  // Clause body blocks.
+	BreakBefore  bool     // Insert a page break before the clause.
+	BreakAfter   bool     // Insert a page break after the clause.
+	KeepTogether bool     // Prefer to keep the clause on one page.
+	Box          BoxStyle // Clause box style.
 }
 
+// DocumentBlockKind returns BlockKindClause.
 func (ClauseBlock) DocumentBlockKind() BlockKind { return BlockKindClause }
 
 // PageBreakBlock represents an explicit page break.
 type PageBreakBlock struct {
-	Before bool
-	After  bool
+	Before bool // Insert a page break before following content.
+	After  bool // Insert a page break after preceding content.
 }
 
+// DocumentBlockKind returns BlockKindPageBreak.
 func (PageBreakBlock) DocumentBlockKind() BlockKind { return BlockKindPageBreak }
 
 // HeaderBlock stores reusable header content.
 type HeaderBlock struct {
-	Blocks []Block
-	Height float64
-	Box    BoxStyle
+	Blocks []Block  // Header content blocks.
+	Height float64  // Reserved header height.
+	Box    BoxStyle // Header box style.
 }
 
 // FooterBlock stores reusable footer content.
 type FooterBlock struct {
-	Blocks          []Block
-	Height          float64
-	ShowPageNumber  bool
-	TotalPageAlias  string
-	ReservePageArea bool
-	Box             BoxStyle
+	Blocks          []Block  // Footer content blocks.
+	Height          float64  // Reserved footer height.
+	ShowPageNumber  bool     // Whether to show automatic page numbers.
+	TotalPageAlias  string   // Alias replaced with total page count.
+	ReservePageArea bool     // Whether body layout reserves footer height.
+	Box             BoxStyle // Footer box style.
 }
 
 // AttachmentBlock describes a PDF attachment that can be added during output.
 type AttachmentBlock struct {
-	Name        string
-	MIMEType    string
-	Description string
-	Data        []byte
+	Name        string // Attachment filename.
+	MIMEType    string // Attachment MIME type.
+	Description string // Attachment description.
+	Data        []byte // Attachment bytes.
 }

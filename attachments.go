@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -14,31 +10,31 @@ import (
 	"strings"
 )
 
-// Attachment defines a content to be included in the pdf, in one
-// of the following ways :
-//   - associated with the document as a whole : see SetAttachments()
-//   - accessible via a link localized on a page : see AddAttachmentAnnotation()
+// Attachment defines content to include in the PDF in one of the following ways:
+//   - associated with the document as a whole; see SetAttachments()
+//   - accessible through a link anchored on a page; see AddAttachmentAnnotation()
 type Attachment struct {
+	// Content contains the bytes embedded in the PDF.
 	Content []byte
 
-	// Filename is the displayed name of the attachment
+	// Filename is the displayed name of the attachment.
 	Filename string
 
 	// Description is only displayed when using AddAttachmentAnnotation(),
-	// and might be modified by the pdf reader.
+	// and might be modified by the PDF reader.
 	Description string
 
-	objectNumber int // filled when content is included
+	objectNumber int // Filled when the content is embedded.
 }
 
-// return the hex encoded checksum of `data`
+// checksum returns the hex-encoded checksum of data.
 func checksum(data []byte) string {
 	tmp := md5.Sum(data)
 	return hex.EncodeToString(tmp[:])
 }
 
-// Writes a compressed /EmbeddedFile object. Compressing is
-// done with deflate. Includes length, compressed length and MD5 checksum.
+// writeCompressedFileObject writes a deflate-compressed /EmbeddedFile object
+// with length, compressed length, and MD5 checksum metadata.
 func (f *Fpdf) writeCompressedFileObject(content []byte) {
 	lenUncompressed := len(content)
 	sum := checksum(content)
@@ -54,13 +50,13 @@ func (f *Fpdf) writeCompressedFileObject(content []byte) {
 	f.out("endobj")
 }
 
-// Embed includes the content of `a`, and update its internal reference.
+// embed includes the attachment content and updates its internal reference.
 func (f *Fpdf) embed(a *Attachment) {
-	if a.objectNumber != 0 { // already embedded (objectNumber start at 2)
+	if a.objectNumber != 0 { // Already embedded; object numbers start at 2.
 		return
 	}
 	oldState := f.state
-	f.state = 1 // we write file content in the main buffer
+	f.state = 1 // Write file content to the main buffer.
 	f.writeCompressedFileObject(a.Content)
 	streamID := f.n
 	f.newobj()
@@ -73,18 +69,18 @@ func (f *Fpdf) embed(a *Attachment) {
 	f.state = oldState
 }
 
-// SetAttachments writes attachments as embedded files (document attachment).
-// These attachments are global, see AddAttachmentAnnotation() for a link
-// anchored in a page. Note that only the last call of SetAttachments is
-// useful, previous calls are discarded. Be aware that not all PDF readers
+// SetAttachments writes attachments as embedded files attached to the document.
+// These attachments are global; see AddAttachmentAnnotation() for links
+// anchored on a page. Only the last call to SetAttachments is used; previous
+// calls are discarded. Be aware that not all PDF readers
 // support document attachments. See the SetAttachment example for a
 // demonstration of this method.
 func (f *Fpdf) SetAttachments(as []Attachment) {
 	f.attachments = as
 }
 
-// embed current attachments. store object numbers
-// for later use by getEmbeddedFiles()
+// putAttachments embeds the current attachments and stores their object numbers
+// for later use by getEmbeddedFiles().
 func (f *Fpdf) putAttachments() {
 	for i, a := range f.attachments {
 		f.embed(&a)
@@ -92,7 +88,7 @@ func (f *Fpdf) putAttachments() {
 	}
 }
 
-// return /EmbeddedFiles tree name catalog entry.
+// getEmbeddedFiles returns the /EmbeddedFiles name-tree catalog entry.
 func (f Fpdf) getEmbeddedFiles() string {
 	names := make([]string, len(f.attachments))
 	for i, as := range f.attachments {
@@ -103,21 +99,19 @@ func (f Fpdf) getEmbeddedFiles() string {
 }
 
 // ---------------------------------- Annotations ----------------------------------
-
 type annotationAttach struct {
 	*Attachment
 
-	x, y, w, h float64 // fpdf coordinates (y diff and scaling done)
+	x, y, w, h float64 // FPDF coordinates; y has been adjusted and scaled.
 }
 
-// AddAttachmentAnnotation puts a link on the current page, on the rectangle
-// defined by `x`, `y`, `w`, `h`. This link points towards the content defined
-// in `a`, which is embedded in the document. Note than no drawing is done by
-// this method : a method like `Cell()` or `Rect()` should be called to
-// indicate to the reader that there is a link here. Requiring a pointer to an
-// Attachment avoids useless copies in the resulting pdf: attachment pointing
-// to the same data will have their content only be included once, and be
-// shared amongst all links. Be aware that not all PDF readers support
+// AddAttachmentAnnotation puts a link on the current page over the rectangle
+// defined by x, y, w, and h. This link points to the content defined in a,
+// which is embedded in the document. This method does not draw anything; call a
+// method such as Cell() or Rect() to indicate that a link is present. Requiring
+// a pointer to an Attachment avoids unnecessary copies in the resulting PDF:
+// attachments that point to the same data are included only once and shared
+// among all links. Be aware that not all PDF readers support
 // annotated attachments. See the AddAttachmentAnnotation example for a
 // demonstration of this method.
 func (f *Fpdf) AddAttachmentAnnotation(a *Attachment, x, y, w, h float64) {
@@ -134,15 +128,15 @@ func (f *Fpdf) AddAttachmentAnnotation(a *Attachment, x, y, w, h float64) {
 	})
 }
 
-// embed current annotations attachments. store object numbers
-// for later use by putAttachmentAnnotationLinks(), which is
-// called for each page.
+// putAnnotationsAttachments embeds attachments used by annotations and stores
+// their object numbers for putAttachmentAnnotationLinks(), which is called for
+// each page.
 func (f *Fpdf) putAnnotationsAttachments() {
-	// avoid duplication
+	// Avoid duplicate embedded attachments.
 	m := map[*Attachment]bool{}
 	for _, l := range f.pageAttachments {
 		for _, an := range l {
-			if m[an.Attachment] { // already embedded
+			if m[an.Attachment] { // Already embedded.
 				continue
 			}
 			f.embed(an.Attachment)

@@ -1,11 +1,7 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
-package thumb
+package gopdfkit
 
 import (
 	"bytes"
@@ -13,28 +9,26 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	_ "image/gif"
+	_ "image/gif" // Register GIF decoding with image.Decode.
 	"image/jpeg"
 	"image/png"
 	"io"
 	"math"
 	"strings"
-
-	"github.com/cssbruno/gopdfkit"
 )
 
 const (
-	// FormatPNG encodes thumbnails as PNG.
-	FormatPNG = "png"
-	// FormatJPEG encodes thumbnails as JPEG.
-	FormatJPEG = "jpg"
+	// ThumbnailFormatPNG encodes thumbnails as PNG.
+	ThumbnailFormatPNG = "png"
+	// ThumbnailFormatJPEG encodes thumbnails as JPEG.
+	ThumbnailFormatJPEG = "jpg"
 
 	defaultMaxSize     = 256
 	defaultJPEGQuality = 85
 )
 
-// Options controls thumbnail generation.
-type Options struct {
+// ThumbnailOptions configures thumbnail generation.
+type ThumbnailOptions struct {
 	// MaxWidth is the maximum thumbnail width in pixels. If both MaxWidth and
 	// MaxHeight are zero, both default to 256.
 	MaxWidth int
@@ -42,7 +36,7 @@ type Options struct {
 	// MaxHeight are zero, both default to 256.
 	MaxHeight int
 	// Format may be "png", "jpg", "jpeg", or empty/"auto". Auto keeps JPEG
-	// inputs as JPEG and encodes all other inputs as PNG.
+	// sources as JPEG and encodes all other sources as PNG.
 	Format string
 	// JPEGQuality controls JPEG output quality. Zero uses the default quality 85.
 	JPEGQuality int
@@ -51,13 +45,13 @@ type Options struct {
 }
 
 type pdfImageRegistrar interface {
-	RegisterImageOptionsReader(imgName string, options gopdfkit.ImageOptions, r io.Reader) *gopdfkit.ImageInfo
+	RegisterImageOptionsReader(imgName string, options ImageOptions, r io.Reader) *ImageInfo
 	SetError(err error)
 }
 
-// Generate decodes an image from r and returns encoded thumbnail bytes plus the
-// image type string expected by gopdfkit.
-func Generate(r io.Reader, options Options) ([]byte, string, error) {
+// GenerateThumbnail decodes an image from r and returns encoded thumbnail bytes
+// plus the gopdfkit image type string.
+func GenerateThumbnail(r io.Reader, options ThumbnailOptions) ([]byte, string, error) {
 	if r == nil {
 		return nil, "", fmt.Errorf("thumbnail source reader is nil")
 	}
@@ -65,12 +59,12 @@ func Generate(r io.Reader, options Options) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", fmt.Errorf("decode thumbnail source: %w", err)
 	}
-	return GenerateImage(src, sourceFormat, options)
+	return GenerateThumbnailImage(src, sourceFormat, options)
 }
 
-// GenerateImage returns encoded thumbnail bytes for src plus the image type
-// string expected by gopdfkit.
-func GenerateImage(src image.Image, sourceFormat string, options Options) ([]byte, string, error) {
+// GenerateThumbnailImage returns encoded thumbnail bytes for src plus the
+// gopdfkit image type string.
+func GenerateThumbnailImage(src image.Image, sourceFormat string, options ThumbnailOptions) ([]byte, string, error) {
 	if src == nil {
 		return nil, "", fmt.Errorf("thumbnail source image is nil")
 	}
@@ -85,9 +79,9 @@ func GenerateImage(src image.Image, sourceFormat string, options Options) ([]byt
 
 	var buf bytes.Buffer
 	switch format {
-	case FormatPNG:
+	case ThumbnailFormatPNG:
 		err = png.Encode(&buf, resized)
-	case FormatJPEG:
+	case ThumbnailFormatJPEG:
 		err = jpeg.Encode(&buf, flattenToRGB(resized), &jpeg.Options{Quality: quality})
 	default:
 		err = fmt.Errorf("unsupported thumbnail format: %s", format)
@@ -98,8 +92,9 @@ func GenerateImage(src image.Image, sourceFormat string, options Options) ([]byt
 	return buf.Bytes(), format, nil
 }
 
-// Register creates a thumbnail from r and registers it in pdf under name.
-func Register(pdf pdfImageRegistrar, name string, r io.Reader, options Options) (*gopdfkit.ImageInfo, error) {
+// RegisterThumbnail creates a thumbnail from r and registers it with pdf under
+// name.
+func RegisterThumbnail(pdf pdfImageRegistrar, name string, r io.Reader, options ThumbnailOptions) (*ImageInfo, error) {
 	if pdf == nil {
 		return nil, fmt.Errorf("pdf registrar is nil")
 	}
@@ -108,15 +103,21 @@ func Register(pdf pdfImageRegistrar, name string, r io.Reader, options Options) 
 		pdf.SetError(err)
 		return nil, err
 	}
-	data, format, err := Generate(r, options)
+	data, format, err := GenerateThumbnail(r, options)
 	if err != nil {
 		pdf.SetError(err)
 		return nil, err
 	}
-	return pdf.RegisterImageOptionsReader(name, gopdfkit.ImageOptions{ImageType: format}, bytes.NewReader(data)), nil
+	return pdf.RegisterImageOptionsReader(name, ImageOptions{ImageType: format}, bytes.NewReader(data)), nil
 }
 
-func resize(src image.Image, options Options) (image.Image, error) {
+// RegisterThumbnail creates a thumbnail from r and registers it on this PDF
+// document under name.
+func (f *Fpdf) RegisterThumbnail(name string, r io.Reader, options ThumbnailOptions) (*ImageInfo, error) {
+	return RegisterThumbnail(f, name, r, options)
+}
+
+func resize(src image.Image, options ThumbnailOptions) (image.Image, error) {
 	if src == nil {
 		return nil, fmt.Errorf("thumbnail source image is nil")
 	}
@@ -127,7 +128,7 @@ func resize(src image.Image, options Options) (image.Image, error) {
 	return resizeBilinear(src, width, height), nil
 }
 
-func normalizeEncodeOptions(sourceFormat string, options Options) (format string, jpegQuality int, err error) {
+func normalizeEncodeOptions(sourceFormat string, options ThumbnailOptions) (format string, jpegQuality int, err error) {
 	if options.JPEGQuality < 0 || options.JPEGQuality > 100 {
 		return "", 0, fmt.Errorf("thumbnail JPEG quality must be between 0 and 100")
 	}
@@ -142,21 +143,21 @@ func normalizeEncodeOptions(sourceFormat string, options Options) (format string
 	case "", "auto":
 		switch strings.ToLower(sourceFormat) {
 		case "jpg", "jpeg":
-			format = FormatJPEG
+			format = ThumbnailFormatJPEG
 		default:
-			format = FormatPNG
+			format = ThumbnailFormatPNG
 		}
 	case "jpg", "jpeg":
-		format = FormatJPEG
+		format = ThumbnailFormatJPEG
 	case "png":
-		format = FormatPNG
+		format = ThumbnailFormatPNG
 	default:
 		return "", 0, fmt.Errorf("unsupported thumbnail format: %s", options.Format)
 	}
 	return format, jpegQuality, nil
 }
 
-func targetSize(bounds image.Rectangle, options Options) (width, height int, err error) {
+func targetSize(bounds image.Rectangle, options ThumbnailOptions) (width, height int, err error) {
 	if options.MaxWidth < 0 || options.MaxHeight < 0 {
 		return 0, 0, fmt.Errorf("thumbnail dimensions must be non-negative")
 	}

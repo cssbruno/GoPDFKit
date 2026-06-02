@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -12,9 +8,10 @@ import (
 	"time"
 )
 
+// Fpdf represents a single PDF document under construction.
 type Fpdf struct {
-	isCurrentUTF8    bool                       // is current font used in utf-8 mode
-	isRTL            bool                       // is is right to left mode enabled
+	isCurrentUTF8    bool                       // whether the current font uses UTF-8 mode
+	isRTL            bool                       // whether right-to-left mode is enabled
 	page             int                        // current page number
 	n                int                        // current object number
 	offsets          []int                      // array of object offsets
@@ -36,7 +33,7 @@ type Fpdf struct {
 	curOrientation   string                     // current orientation
 	stdPageSizes     map[string]Size            // standard page sizes
 	defPageSize      Size                       // default page size
-	defPageBoxes     map[string]PageBox         // default page size
+	defPageBoxes     map[string]PageBox         // default page boxes
 	curPageSize      Size                       // current page size
 	curRotation      int                        // current page rotation
 	pageSizes        map[int]Size               // used for pages with non default sizes or orientations
@@ -53,37 +50,37 @@ type Fpdf struct {
 	x, y             float64                    // current position in user unit
 	lasth            float64                    // height of last printed cell
 	lineWidth        float64                    // line width in user unit
-	fontpath         string                     // path containing fonts
+	fontpath         string                     // path containing font resources
 	fontLoader       FontLoader                 // used to load font files from arbitrary locations
-	coreFonts        map[string]bool            // array of core font names
-	fonts            map[string]fontDefinition  // array of used fonts
-	fontFiles        map[string]fontFile        // array of font files
-	diffs            []string                   // array of encoding differences
+	coreFonts        map[string]bool            // set of core font names
+	fonts            map[string]fontDefinition  // map of used fonts
+	fontFiles        map[string]fontFile        // map of font files
+	diffs            []string                   // list of encoding differences
 	fontFamily       string                     // current font family
 	fontStyle        string                     // current font style
 	underline        bool                       // underlining flag
-	strikeout        bool                       // strike out flag
+	strikeout        bool                       // strikeout flag
 	currentFont      fontDefinition             // current font info
 	fontSizePt       float64                    // current font size in points
 	fontSize         float64                    // current font size in user unit
 	ws               float64                    // word spacing
-	images           map[string]*ImageInfo      // array of used images
+	images           map[string]*ImageInfo      // map of used images
 	aliasMap         map[string]string          // map of alias->replacement
 	pageLinks        [][]pageLink               // pageLinks[page][link], both 1-based
 	links            []internalLink             // array of internal links
 	attachments      []Attachment               // slice of content to embed globally
-	pageAttachments  [][]annotationAttach       // 1-based array of annotation for file attachments (per page)
-	outlines         []outlineEntry             // array of outlines
+	pageAttachments  [][]annotationAttach       // 1-based list of file attachment annotations per page
+	outlines         []outlineEntry             // list of outlines
 	outlineRoot      int                        // root of outlines
 	autoPageBreak    bool                       // automatic page breaking
 	acceptPageBreak  func() bool                // returns true to accept page break
 	pageBreakTrigger float64                    // threshold used to trigger page breaks
 	inHeader         bool                       // flag set when processing header
-	headerFnc        func()                     // function provided by app and called to write header
+	headerFnc        func()                     // function provided by app to write header
 	headerHomeMode   bool                       // set position to home after headerFnc is called
 	inFooter         bool                       // flag set when processing footer
-	footerFnc        func()                     // function provided by app and called to write footer
-	footerFncLpi     func(bool)                 // function provided by app and called to write footer with last page flag
+	footerFnc        func()                     // function provided by app to write footer
+	footerFncLpi     func(bool)                 // function provided by app to write footer with last page flag
 	zoomMode         string                     // zoom display mode
 	layoutMode       string                     // layout display mode
 	xmp              []byte                     // XMP metadata
@@ -105,11 +102,11 @@ type Fpdf struct {
 	blendList        []blendModeType            // slice[idx] of alpha transparency modes, 1-based
 	blendMap         map[string]int             // map into blendList
 	blendMode        string                     // current blend mode
-	alpha            float64                    // current transpacency
+	alpha            float64                    // current transparency
 	gradientList     []gradientType             // slice[idx] of gradient records
-	clipNest         int                        // Number of active clipping contexts
-	transformNest    int                        // Number of active transformation contexts
-	err              error                      // Set if error occurs during life cycle of instance
+	clipNest         int                        // number of active clipping contexts
+	transformNest    int                        // number of active transformation contexts
+	err              error                      // set if an error occurs during the instance lifecycle
 	protect          protectType                // document protection structure
 	layer            layerRecType               // manages optional layers in document
 	catalogSort      bool                       // sort resource catalogs in document
@@ -120,6 +117,6 @@ type Fpdf struct {
 		// Composite values of colors
 		draw, fill, text pdfColor
 	}
-	spotColorMap           map[string]spotColorType // Map of named ink-based colors
-	userUnderlineThickness float64                  // A custom user underline thickness multiplier.
+	spotColorMap           map[string]spotColorType // map of named ink-based colors
+	userUnderlineThickness float64                  // custom underline thickness multiplier
 }

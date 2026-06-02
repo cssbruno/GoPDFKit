@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -13,12 +9,17 @@ import (
 	"unicode"
 )
 
-// HTMLSegmentType defines a segment of literal text in which the current
-// attributes do not vary, or an open tag or a close tag.
+// HTMLSegmentType identifies one token from a supported HTML fragment: literal
+// text, an opening tag, or a closing tag.
 type HTMLSegmentType struct {
-	Cat  byte
-	Str  string
-	Attr map[string]string // Attribute keys are lower case.
+	// Cat identifies the token category: 'T' for text, 'O' for opening tags,
+	// or 'C' for closing tags.
+	Cat byte
+	// Str contains text content for 'T' tokens, or the lower-case tag name for
+	// 'O' and 'C' tokens.
+	Str string
+	// Attr contains lower-case attribute keys for opening tags.
+	Attr map[string]string
 }
 
 // HTMLTokenize returns a list of supported HTML tags and literal text elements.

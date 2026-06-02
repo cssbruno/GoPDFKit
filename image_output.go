@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -69,6 +65,10 @@ func (f *Fpdf) drawImageXObject(imageID string, x, y, w, h float64) {
 }
 
 func (f *Fpdf) imageOut(info *ImageInfo, x, y, w, h float64, allowNegativeX, flow bool, link int, linkStr string) {
+	if info == nil {
+		f.err = fmt.Errorf("missing image info")
+		return
+	}
 	placement, ok := f.resolveImagePlacement(info, x, y, w, h, allowNegativeX, flow)
 	if !ok {
 		return
@@ -181,6 +181,9 @@ func (f *Fpdf) putimages() {
 	insertedImages := make(map[string]int, len(f.images))
 	for _, key = range keyList {
 		image := f.images[key]
+		if image == nil {
+			continue
+		}
 		insertedImageObjN, isFound := insertedImages[image.i]
 		if isFound {
 			image.n = insertedImageObjN
@@ -266,6 +269,9 @@ func (f *Fpdf) putxobjectdict() {
 		}
 		for _, key = range keyList {
 			image = f.images[key]
+			if image == nil {
+				continue
+			}
 			f.outf("/I%s %d 0 R", image.i, image.n)
 		}
 	}
@@ -276,6 +282,9 @@ func (f *Fpdf) putxobjectdict() {
 		keyList = templateKeyList(f.templates, f.catalogSort)
 		for _, key = range keyList {
 			tpl = f.templates[key]
+			if tpl == nil || invalidTemplate(tpl) {
+				continue
+			}
 			id := tpl.ID()
 			if objID, ok := f.templateObjects[id]; ok {
 				f.outf("/TPL%s %d 0 R", id, objID)

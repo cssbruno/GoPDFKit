@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -12,6 +8,7 @@ import (
 	"time"
 )
 
+// Pdf describes the document-generation methods exposed by Fpdf.
 type Pdf interface {
 	AddFont(familyStr, styleStr, fileStr string)
 	AddFontFromBytes(familyStr, styleStr string, jsonFileBytes, zFileBytes []byte)
@@ -30,6 +27,8 @@ type Pdf interface {
 	BeginLayer(id int)
 	Beziergon(points []Point, styleStr string)
 	Bookmark(txtStr string, level int, y float64)
+	Barcode(code string, x, y, w, h float64, flow bool)
+	BarcodeUnscalable(code string, x, y float64, w, h *float64, flow bool)
 	CellFormat(w, h float64, txtStr, borderStr string, ln int, alignStr string, fill bool, link int, linkStr string)
 	Cellf(w, h float64, fmtStr string, args ...any)
 	Cell(w, h float64, txtStr string)
@@ -77,6 +76,7 @@ type Pdf interface {
 	GetStringWidth(s string) float64
 	GetTextColor() (int, int, int)
 	GetTextSpotColor() (name string, c, m, y, k byte)
+	GetUnscaledBarcodeDimensions(code string) (w, h float64)
 	GetX() float64
 	GetXY() (float64, float64)
 	GetY() float64
@@ -99,6 +99,8 @@ type Pdf interface {
 	OpenLayerPane()
 	OutputAndClose(w io.WriteCloser) error
 	OutputFileAndClose(fileStr string) error
+	OutputSigned(w io.Writer, options SignOptions) error
+	OutputSignedFile(fileStr string, options SignOptions) error
 	Output(w io.Writer) error
 	PageCount() int
 	PageNo() int
@@ -111,6 +113,15 @@ type Pdf interface {
 	RawWriteStr(str string)
 	Rect(x, y, w, h float64, styleStr string)
 	RegisterAlias(alias, replacement string)
+	RegisterAztecBarcode(code string, minECCPercent int, userSpecifiedLayers int) string
+	RegisterCodabarBarcode(code string) string
+	RegisterCode128Barcode(code string) string
+	RegisterCode39Barcode(code string, includeChecksum, fullASCIIMode bool) string
+	RegisterDataMatrixBarcode(code string) string
+	RegisterEANBarcode(code string) string
+	RegisterPDF417Barcode(code string, columns int, securityLevel int) string
+	RegisterQRBarcode(code string, ecl QRBarcodeErrorCorrectionLevel, mode QRBarcodeEncoding) string
+	RegisterTwoOfFiveBarcode(code string, interleaved bool) string
 	RegisterImageOptions(fileStr string, options ImageOptions) (info *ImageInfo)
 	RegisterImageOptionsReader(imgName string, options ImageOptions, r io.Reader) (info *ImageInfo)
 	SetAcceptPageBreakFunc(fnc func() bool)

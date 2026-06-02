@@ -1,14 +1,10 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 /*
 Package gopdfkit implements a Go-native PDF document generator. It supports
-text, drawing, images, templates, SVG, HTML fragments, barcodes through an
-extension package, PDF signing helpers, and deterministic test output.
+text, drawing, images, templates, SVG, HTML fragments, integrated barcodes,
+PDF signing helpers, and deterministic test output.
 
 This repository is the github.com/cssbruno/gopdfkit module. The 0.1 line is a
 breaking cleanup focused on a clearer package layout and shorter, feature-based
@@ -16,25 +12,63 @@ source files.
 
 ## Features
 
-* UTF-8 TrueType font support
-* Standard PDF fonts: Courier, Helvetica, Times, Symbol, and ZapfDingbats
-* Page sizing, margins, headers, footers, page boxes, and page breaks
-* Cells, multicells, aligned writing, links, bookmarks, and aliases
-* JPEG, PNG, GIF, WebP, and SVG image support
-* Lines, rectangles, rounded rectangles, arcs, Bézier curves, polygons, and paths
-* Clipping, transforms, transparency, gradients, spot colors, and layers
-* Templates and imported template objects
-* Document protection, attachments, metadata, JavaScript, and XMP metadata
-* Controlled HTML/CSS fragment rendering
-* Shared document model and renderer for structured reports/forms
-* Barcode helpers in barcode/
-* Thumbnail helpers in thumb/
-* PDF signing and verification helpers in pdfsigning/
-* CLI tools under cmd/
+  - UTF-8 TrueType font support
+  - Standard PDF fonts: Courier, Helvetica, Times, Symbol, and ZapfDingbats
+  - Page sizing, margins, headers, footers, page boxes, and page breaks
+  - Cells, multi-cells, aligned writing, links, bookmarks, and aliases
+  - JPEG, PNG, GIF, WebP, and SVG image support
+  - Lines, rectangles, rounded rectangles, arcs, Bézier curves, polygons, and paths
+  - Clipping, transforms, transparency, gradients, spot colors, and layers
+  - Templates and imported template objects
+  - Document protection, attachments, metadata, JavaScript, and XMP metadata
+  - Controlled HTML/CSS fragment rendering
+  - Shared document model and renderer for structured reports/forms
+  - Integrated barcode helpers
+  - Integrated thumbnail helpers
+  - Integrated PDF signing and verification helpers
+  - CLI tools under cmd/
 
-The root gopdfkit package only uses the Go standard library. Optional packages
-can have their own dependencies; for example, barcode/ depends on
-github.com/boombuler/barcode.
+The root gopdfkit package contains the primary document, image, barcode, and
+signing APIs.
+
+## Support Matrix
+
+This table compares the features this codebase explicitly supports with common
+alternatives. Other projects can differ by version and configuration, so their
+columns describe typical support rather than a guarantee for every library.
+
+	Capability                                             GoPDFKit support       Browser HTML-to-PDF support                  Other FPDF-style code support
+	Go-native PDF generation                             Yes                    No, usually requires a browser/runtime bridge Varies
+	Standard PDF fonts                                   Yes                    Varies                                       Usually yes
+	UTF-8 TrueType fonts                                 Yes                    Yes                                          Varies
+	Text cells, multicells, links, bookmarks, and aliases Yes                    Varies                                       Usually yes
+	Drawing primitives and paths                         Yes                    Varies                                       Usually yes
+	Clipping, transforms, transparency, gradients, spot colors, and layers
+	                                                       Yes                    Varies                                       Varies
+	JPEG, PNG, GIF, WebP, and SVG images                 Yes                    Usually yes                                  Varies
+	Controlled HTML/CSS fragment rendering               Yes                    Yes, with broader browser layout              Varies
+	Browser-grade HTML/CSS layout                        No                     Usually yes                                  Usually no
+	Tables with thead, tbody, tfoot, colspan, and rowspan Yes                    Usually yes                                  Varies
+	Configurable HTML validation and render limits        Yes                    Varies                                       Varies
+	Templates and imported template objects              Yes                    Varies                                       Varies
+	Document protection, attachments, metadata, JavaScript, and XMP metadata
+	                                                       Yes                    Varies                                       Varies
+	PDF signing and verification helpers                 Yes, integrated in the root API Varies                                Varies
+	Barcode helpers                                      Yes, integrated in the root API Varies                                Varies
+
+## Integrated Barcode and Signing
+
+Barcode generation is available directly from *Fpdf:
+
+	key := pdf.RegisterQRBarcode("https://example.test/verify", gopdfkit.QRBarcodeHigh, gopdfkit.QRBarcodeUnicode)
+	pdf.Barcode(key, 10, 10, 24, 24, false)
+
+PDF signing is also available from the root package:
+
+	err := pdf.OutputSignedFile("signed.pdf", gopdfkit.SignOptions{
+	    Signer:      signer,
+	    Certificate: cert,
+	})
 
 ## Installation
 
@@ -42,11 +76,11 @@ go get github.com/cssbruno/gopdfkit@latest
 
 ## Quick Start
 
-pdf := gopdfkit.New("P", "mm", "A4", "")
-pdf.AddPage()
-pdf.SetFont("Helvetica", "B", 16)
-pdf.Cell(40, 10, "Hello, world")
-err := pdf.OutputFileAndClose("hello.pdf")
+	pdf := gopdfkit.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "B", 16)
+	pdf.Cell(40, 10, "Hello, world")
+	err := pdf.OutputFileAndClose("hello.pdf")
 
 Most runnable usage examples live as Go tests, especially in fpdf_test.go.
 Running the tests writes generated PDFs under assets/generated/pdf.
@@ -57,24 +91,13 @@ The repository intentionally does not have a top-level examples/ directory.
 Examples are tests and shared test helpers, so they stay close to the behavior
 they validate.
 
-cmd/
-
-	list/              font/map listing utility
-	fontmaker/          font definition generator
-
-assets/
-
-	static/            checked-in fonts, images, and text fixtures
-	generated/pdf/     generated PDFs and reference PDFs
-
-internal/example/    test/example support helpers
-
-barcode/             optional barcode integration package
-thumb/               optional thumbnail/image helper package
-pdfsigning/          PDF signing, verification, CMS, DER, and parser helpers
-
-doc/                 Markdown and generated documentation inputs/templates
-tools/               tool-only module for quality/security commands
+  - cmd/list/: font/map listing utility
+  - cmd/fontmaker/: font definition generator
+  - assets/static/: checked-in fonts, images, and text fixtures
+  - assets/generated/pdf/: generated PDFs and reference PDFs
+  - testsupport/example/: test/example support helpers
+  - doc/: Markdown and generated documentation inputs/templates
+  - tools/: tool-only module for quality/security commands
 
 The root package is split by feature area:
 
@@ -93,13 +116,13 @@ See doc/pdf-html-subset.md for the full renderer contract.
 
 Supported HTML includes:
 
-* inline tags: b, strong, i, em, u, s, code, sub, sup
-* links, paragraphs, headings, div, section, blockquotes, and preformatted text
-* ordered, unordered, and definition lists
-* tables with captions, thead, tbody, tfoot, colspan, and rowspan
-* horizontal rules
-* images, figures, captions, data URLs, and opt-in local images
-* inline SVG
+  - inline tags: b, strong, i, em, u, s, code, sub, sup
+  - links, paragraphs, headings, div, section, blockquotes, and preformatted text
+  - ordered, unordered, and definition lists
+  - tables with captions, thead, tbody, tfoot, colspan, and rowspan
+  - horizontal rules
+  - images, figures, captions, data URLs, and opt-in local images
+  - inline SVG
 
 Supported CSS is deliberately small: text styling, line height, alignment,
 vertical alignment, whitespace handling, simple colors, backgrounds, borders,
@@ -107,7 +130,7 @@ padding, margins, table/image dimensions, image fit modes, list marker style,
 and basic page-break controls.
 
 Selectors are limited to tag, class, ID, tag-qualified class or ID, descendant,
-and direct-child selectors. Attribute selectors, pseudo selectors, media rules,
+and direct-child selectors. Attribute selectors, pseudo-selectors, media rules,
 floats, flexbox, grid, absolute positioning, shadows, browser table layout, and
 full browser font shaping are not implemented.
 
@@ -123,7 +146,7 @@ MaxDataImageBytes.
 
 Nothing special is required for standard PDF fonts:
 
-pdf.SetFont("Helvetica", "", 12)
+	pdf.SetFont("Helvetica", "", 12)
 
 Use AddUTF8Font() or AddUTF8FontFromBytes() for UTF-8 TrueType fonts,
 including OpenType files with TrueType outlines. Use RTL() and LTR() to
@@ -132,8 +155,8 @@ switch right-to-left rendering mode.
 For non-UTF-8 TrueType, OpenType/CFF, or Type1 fonts, generate a JSON font
 definition file with MakeFont or the cmd/fontmaker command.
 
-cd cmd/fontmaker
-go build
+	cd cmd/fontmaker
+	go build
 
 	./fontmaker --embed \
 	  --enc=../../assets/static/font/cp1252.map \
@@ -147,7 +170,7 @@ Then call AddFont() and SetFont() from your PDF generation code.
 Running go test ./... generates PDFs in assets/generated/pdf. Reference PDFs
 are stored in assets/generated/pdf/reference.
 
-internal/example contains helpers used by tests to name generated files and,
+testsupport/example contains helpers used by tests to name generated files and,
 when enabled, compare generated PDFs against reference copies. Comparisons need
 deterministic object ordering and timestamps; tests use SetCatalogSort() and
 SetCreationDate() for that.
@@ -156,15 +179,15 @@ SetCreationDate() for that.
 
 Common commands:
 
-go test ./...
-go vet ./...
-go list ./...
-make check
+	go test ./...
+	go vet ./...
+	go list ./...
+	make check
 
 Benchmarks:
 
-make bench
-make bench-ci
+	make bench
+	make bench-ci
 
 Tooling commands are defined in the Makefile. The tools/ module keeps
 tool-only dependencies separate from the main library module.

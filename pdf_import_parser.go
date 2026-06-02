@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -394,6 +390,9 @@ func (doc *pdfImportDocument) objectBody(ref pdfObjRef) ([]byte, error) {
 		return nil, fmt.Errorf("PDF object %d %d R is missing obj marker", ref.num, ref.gen)
 	}
 	body := bytes.TrimSpace(objectBytes[objPos+len("obj"):])
+	if body == nil {
+		body = []byte{}
+	}
 	doc.cache[ref] = body
 	return body, nil
 }
@@ -411,6 +410,9 @@ func parsePDFObjectDict(body []byte) (pdfDict, error) {
 }
 
 func (doc *pdfImportDocument) parseStream(body []byte) (pdfDict, []byte, error) {
+	if body == nil {
+		body = []byte{}
+	}
 	streamPos := bytes.Index(body, []byte("stream"))
 	if streamPos < 0 {
 		return nil, nil, fmt.Errorf("stream marker not found")
@@ -693,9 +695,10 @@ func (p *pdfValueParser) parseLiteralString() (pdfValue, error) {
 			p.pos++
 			continue
 		}
-		if ch == '(' {
+		switch ch {
+		case '(':
 			depth++
-		} else if ch == ')' {
+		case ')':
 			depth--
 			if depth == 0 {
 				return pdfValue{kind: pdfValueRaw}, nil
@@ -822,6 +825,9 @@ func findPDFIndirectRefs(data []byte) []foundPDFRef {
 }
 
 func pdfObjectReferenceSection(body []byte) []byte {
+	if body == nil {
+		return []byte{}
+	}
 	streamPos := bytes.Index(body, []byte("stream"))
 	if streamPos < 0 {
 		return body
@@ -911,9 +917,10 @@ func skipPDFLiteralString(data []byte, pos int) int {
 			pos++
 			continue
 		}
-		if ch == '(' {
+		switch ch {
+		case '(':
 			depth++
-		} else if ch == ')' {
+		case ')':
 			depth--
 			if depth == 0 {
 				return pos

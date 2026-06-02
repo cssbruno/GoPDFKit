@@ -1,17 +1,13 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
-package pdfsigning
+package gopdfkit
 
 import (
 	"bytes"
 	"crypto"
-	_ "crypto/sha256"
-	_ "crypto/sha512"
+	_ "crypto/sha256" // Register SHA-256 algorithms with crypto.Hash.
+	_ "crypto/sha512" // Register SHA-512 algorithms with crypto.Hash.
 	"crypto/x509"
 	"encoding/hex"
 	"errors"
@@ -31,25 +27,40 @@ const (
 )
 
 var (
-	ErrMissingInput       = errors.New("pdfsigning: input is required")
-	ErrMissingOutput      = errors.New("pdfsigning: output is required")
-	ErrMissingSigner      = errors.New("pdfsigning: signer is required")
+	// ErrMissingInput is returned when a PDF input path or byte slice is empty.
+	ErrMissingInput = errors.New("pdfsigning: input is required")
+	// ErrMissingOutput is returned when the signed PDF output path is empty.
+	ErrMissingOutput = errors.New("pdfsigning: output is required")
+	// ErrMissingSigner is returned when no signing key is configured.
+	ErrMissingSigner = errors.New("pdfsigning: signer is required")
+	// ErrMissingCertificate is returned when no signing certificate is configured.
 	ErrMissingCertificate = errors.New("pdfsigning: certificate is required")
 )
 
 // SignOptions configures a PDF signature.
 type SignOptions struct {
-	Signer           crypto.Signer
-	Certificate      *x509.Certificate
+	// Signer signs the CMS payload for the PDF signature.
+	Signer crypto.Signer
+	// Certificate is the signing certificate and must match Signer.
+	Certificate *x509.Certificate
+	// CertificateChain contains optional intermediate certificates to include.
 	CertificateChain []*x509.Certificate
-	DigestAlgorithm  crypto.Hash
-	Name             string
-	Location         string
-	Reason           string
-	ContactInfo      string
-	FieldName        string
-	SigningTime      time.Time
-	SignatureSize    int
+	// DigestAlgorithm selects the message digest. A zero value uses SHA-256.
+	DigestAlgorithm crypto.Hash
+	// Name is the signer name stored in the PDF signature dictionary.
+	Name string
+	// Location is the signing location stored in the PDF signature dictionary.
+	Location string
+	// Reason is the signing reason stored in the PDF signature dictionary.
+	Reason string
+	// ContactInfo is signer contact information stored in the signature dictionary.
+	ContactInfo string
+	// FieldName is the PDF signature field name. A zero value uses "Signature1".
+	FieldName string
+	// SigningTime sets the signature timestamp. A zero value uses now.
+	SigningTime time.Time
+	// SignatureSize is the reserved CMS signature size in bytes.
+	SignatureSize int
 }
 
 // SignPDFBytes signs a PDF byte slice and returns a new signed PDF.
@@ -68,7 +79,6 @@ func SignPDFBytes(input []byte, options SignOptions) ([]byte, error) {
 }
 
 // SignPDFFile signs inputPath and writes the signed PDF to outputPath.
-
 func SignPDFFile(inputPath, outputPath string, options SignOptions) error {
 	if inputPath == "" {
 		return ErrMissingInput
@@ -271,13 +281,13 @@ func writeFilePrivate(outputPath string, data []byte) error {
 		return err
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
+	defer func() { _ = os.Remove(tmpName) }()
 	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return err
 	}
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return err
 	}
 	if err := tmp.Close(); err != nil {

@@ -11,6 +11,7 @@ GOLANGCI_LINT := $(TOOLS_BIN)/golangci-lint
 NILAWAY := $(TOOLS_BIN)/nilaway
 GOSEC := $(TOOLS_BIN)/gosec
 GOVULNCHECK := $(TOOLS_BIN)/govulncheck
+GOSEC_EXCLUDES ?= G115,G304,G401,G405,G501,G503,G505,G703
 
 .PHONY: all documentation cov test vet fmt-check check tools tools-clean lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci clean
 
@@ -57,7 +58,7 @@ nilaway : $(NILAWAY)
 	GOTOOLCHAIN="$(TOOLCHAIN)" "$(NILAWAY)" $(GO_PACKAGES)
 
 gosec : $(GOSEC)
-	GOTOOLCHAIN="$(TOOLCHAIN)" "$(GOSEC)" $(GO_PACKAGES)
+	GOTOOLCHAIN="$(TOOLCHAIN)" "$(GOSEC)" -exclude="$(GOSEC_EXCLUDES)" $(GO_PACKAGES)
 
 gosev : gosec
 

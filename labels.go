@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -71,10 +67,11 @@ func TickmarkPrecision(div float64) int {
 	return int(math.Max(-math.Floor(math.Log10(div)), 0))
 }
 
-// Tickmarks returns a slice of tickmarks appropriate for a chart axis and an
-// appropriate precision for formatting purposes. The values min and max will
-// be contained within the tickmark range.
+// Tickmarks returns tickmarks appropriate for a chart axis and a precision for
+// formatting labels. The values min and max will be contained within the
+// tickmark range.
 func Tickmarks(min, max float64) (list []float64, precision int) {
+	list = make([]float64, 0)
 	if max > min {
 		spread := niceNum(max-min, false)
 		d := niceNum((spread / 4), true)

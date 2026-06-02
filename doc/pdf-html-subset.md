@@ -4,6 +4,60 @@ This document defines the HTML/CSS subset rendered by `HTMLNew()` into PDF
 drawing operations. It is a PDF-focused rich-text renderer, not a browser
 engine. Inputs should be normalized to this contract before rendering.
 
+## HTML Render Support Table
+
+Use this table as the quick checklist for HTML passed to `HTMLNew().Write()`.
+Supported commands render into PDF drawing/text operations. Unsupported commands
+are ignored, skipped, or reported by `HTML.ValidateHTML` / `HTML.DebugLog`
+depending on where they appear.
+
+| HTML command or feature | Works? | Render behavior |
+| --- | --- | --- |
+| `a href="..."` | Yes | Renders linked inline text. |
+| `b`, `strong` | Yes | Renders bold text when the current font family supports bold. |
+| `i`, `em` | Yes | Renders italic text when the current font family supports italic. |
+| `u`, `ins` | Yes | Renders underlined text. |
+| `s`, `strike`, `del` | Yes | Renders strikethrough text. |
+| `sub`, `sup` | Yes | Renders smaller baseline-shifted text. |
+| `code`, `kbd`, `samp` | Yes | Renders inline code-style text. |
+| `br` | Yes | Inserts a line break. |
+| `p`, `div`, `section`, `article`, `header`, `footer` | Yes | Renders block text with supported box styling. |
+| `h1` through `h6` | Yes | Renders headings and keeps them with the next block when possible. |
+| `pre` | Yes | Preserves whitespace according to supported whitespace handling. |
+| `hr` | Yes | Renders a horizontal rule. |
+| `center`, `left`, `right` | Yes | Applies simple block alignment. |
+| `ul`, `ol`, `li` | Yes | Renders unordered and ordered lists. |
+| `dl`, `dt`, `dd` | Yes | Renders definition lists. |
+| `table`, `caption`, `thead`, `tbody`, `tfoot`, `tr`, `th`, `td` | Yes | Renders tables with the documented table behavior below. |
+| `colspan`, `rowspan` | Yes | Applies cell spanning in supported tables. |
+| `img` | Yes | Renders PNG, JPEG, and GIF data URLs; local images require `AllowLocalImages`. |
+| `figure`, `figcaption` | Yes | Keeps image and caption together when they fit on one page. |
+| Inline `svg` | Yes | Renders supported SVG content into PDF drawing operations. |
+| `style` | Partial | CSS rules are collected; the tag body is not rendered as text. |
+| `script`, `head` | Skipped | Content is skipped during body rendering. JavaScript is not executed. |
+| Unknown custom tags | No | Unsupported tags are not part of the render contract and should be normalized before rendering. |
+| Forms: `form`, `input`, `textarea`, `select`, `button` | No | Interactive form controls are not rendered as browser controls. Use text, tables, or the document model instead. |
+| Embedded media: `video`, `audio`, `canvas`, `iframe`, `object`, `embed` | No | Embedded browser/runtime content is not rendered. |
+| Browser layout tags used as layout engines | No | Tags may be skipped or flattened; flex/grid/browser layout behavior is not implemented. |
+
+| Attribute or CSS command | Works? | Render behavior |
+| --- | --- | --- |
+| `id`, `class`, `style` | Yes | Used for supported CSS selection and inline declarations. |
+| `href` on `a` | Yes | Creates a link target. |
+| `src`, `alt`, `width`, `height`, `max-width`, `max-height`, `object-fit` on `img` | Yes | Controls supported image rendering and sizing. |
+| `start`, `type` on lists | Yes | Controls supported list numbering/marker behavior. |
+| `width`, `height`, `align`, `valign`, `bgcolor`, `border`, `bordercolor`, `colspan`, `rowspan` on table cells | Yes | Controls supported table/cell rendering. |
+| Tag, class, ID, descendant, direct-child, and comma-separated selectors | Yes | Applies supported CSS declarations. |
+| Text CSS: `color`, `font-family`, `font-size`, `font-style`, `font-weight`, `line-height`, `text-align`, `text-decoration`, `vertical-align`, `white-space` | Yes | Applies supported text styling. |
+| Box CSS: `background`, `background-color`, borders, margins, and padding | Yes | Applies supported PDF box drawing. |
+| Sizing CSS: `width`, `height`, `max-width`, `max-height` | Yes | Applies supported block, table, and image sizing. |
+| Pagination CSS: `break-before`, `break-after`, `break-inside`, `page-break-before`, `page-break-after`, `page-break-inside` | Partial | Applies basic page-break behavior, not full paged-media layout. |
+| Sibling selectors, attribute selectors, pseudo-classes, pseudo-elements | No | Unsupported selector forms are ignored/reported. |
+| `@media`, `@page`, and other at-rules | No | Browser stylesheet at-rules are not implemented. |
+| `display:flex`, `display:grid`, floats, positioning, `z-index`, `overflow` | No | Browser layout engines are not implemented. |
+| CSS transforms, shadows, `border-radius` | No | Decorative browser effects are not implemented. |
+| Remote CSS and remote images | No | Remote loading is rejected or unsupported for deterministic PDF generation. |
+
 ## Supported HTML Tags
 
 Text and inline tags:

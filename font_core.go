@@ -1,13 +1,9 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- *                        *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
-// Embedded standard fonts
+// Embedded standard font metrics and encoding maps.
 
 import (
 	"strings"

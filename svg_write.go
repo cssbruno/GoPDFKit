@@ -1,8 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -15,10 +12,9 @@ import (
 
 const svgMaxPatternTiles = 4096
 
-// SVGWrite renders the paths encoded in the SVG image specified by
-// sb. The scale value is used to convert SVG coordinates to the unit of
-// measure specified in New(). The current position (as set with a call to
-// SetXY()) is used as the origin of the image.
+// SVGWrite renders the SVG image described by sb. The scale value converts SVG
+// coordinates to the unit of measure specified in New(). The current position,
+// as set with SetXY(), is used as the image origin.
 func (f *Fpdf) SVGWrite(sb *SVG, scale float64) {
 	originX, originY := f.GetXY()
 	drawR, drawG, drawB := f.GetDrawColor()

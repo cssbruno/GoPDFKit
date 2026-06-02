@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit_test
 
@@ -838,7 +834,7 @@ func TestSVGWriteElementOrder(t *testing.T) {
 	if before < 0 || image < 0 || after < 0 {
 		t.Fatalf("missing output markers: Before=%d image=%d After=%d", before, image, after)
 	}
-	if !(before < image && image < after) {
+	if before >= image || image >= after {
 		t.Fatalf("PDF paint order indexes: Before=%d image=%d After=%d, want text/image/text", before, image, after)
 	}
 }

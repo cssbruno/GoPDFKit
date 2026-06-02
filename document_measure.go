@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -11,10 +7,10 @@ import "strings"
 
 // MeasureContext contains the renderer state needed to estimate block layout.
 type MeasureContext struct {
-	PDF          *Fpdf
-	Width        float64
-	DefaultStyle TextStyle
-	CellPadding  float64
+	PDF          *Fpdf     // PDF state used for font and unit measurements.
+	Width        float64   // Available content width.
+	DefaultStyle TextStyle // Default text style for measurement.
+	CellPadding  float64   // Default table cell padding.
 }
 
 // NewMeasureContext creates a measurement context for the given content width.
@@ -52,16 +48,16 @@ func NewMeasureContext(pdf *Fpdf, width float64) MeasureContext {
 
 // BlockMeasurement is the estimated layout footprint of a block.
 type BlockMeasurement struct {
-	Kind          BlockKind
-	Width         float64
-	Height        float64
-	MinHeight     float64
-	Splittable    bool
-	KeepTogether  bool
-	KeepWithNext  bool
-	BreakBefore   bool
-	BreakAfter    bool
-	ChildMeasures []BlockMeasurement
+	Kind          BlockKind          // Block kind measured.
+	Width         float64            // Estimated block width.
+	Height        float64            // Estimated full block height.
+	MinHeight     float64            // Minimum height required to start rendering.
+	Splittable    bool               // Whether the block can split across pages.
+	KeepTogether  bool               // Whether the block prefers one page.
+	KeepWithNext  bool               // Whether the block should stay with the next one.
+	BreakBefore   bool               // Whether rendering requires a prior page break.
+	BreakAfter    bool               // Whether rendering requires a following page break.
+	ChildMeasures []BlockMeasurement // Measurements for nested child blocks.
 }
 
 // Fits reports whether the whole block fits in the available height.

@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit_test
 
@@ -14,7 +10,7 @@ import (
 	"time"
 
 	"github.com/cssbruno/gopdfkit"
-	"github.com/cssbruno/gopdfkit/internal/example"
+	"github.com/cssbruno/gopdfkit/testsupport/example"
 )
 
 func TestFontCacheMatchesUTF8FontFromBytes(t *testing.T) {

@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -35,10 +31,9 @@ func rgbColorValue(r, g, b int, grayStr, fullStr string) (clr pdfColor) {
 }
 
 // SetDrawColor defines the color used for all drawing operations (lines,
-// rectangles and cell borders). It is expressed in RGB components (0 - 255).
+// rectangles and cell borders). It is expressed in RGB components (0-255).
 // The method can be called before the first page is created. The value is
 // retained from page to page.
-
 func (f *Fpdf) SetDrawColor(r, g, b int) {
 	f.setDrawColor(r, g, b)
 }
@@ -50,19 +45,17 @@ func (f *Fpdf) setDrawColor(r, g, b int) {
 	}
 }
 
-// GetDrawColor returns the most recently set draw color as RGB components (0 -
-// 255). This will not be the current value if a draw color of some other type
+// GetDrawColor returns the most recently set draw color as RGB components
+// (0-255). This will not be the current value if a draw color of some other type
 // (for example, spot) has been more recently set.
-
 func (f *Fpdf) GetDrawColor() (int, int, int) {
 	return f.color.draw.ir, f.color.draw.ig, f.color.draw.ib
 }
 
 // SetFillColor defines the color used for all filling operations (filled
-// rectangles and cell backgrounds). It is expressed in RGB components (0
-// -255). The method can be called before the first page is created and the
+// rectangles and cell backgrounds). It is expressed in RGB components (0-255).
+// The method can be called before the first page is created and the
 // value is retained from page to page.
-
 func (f *Fpdf) SetFillColor(r, g, b int) {
 	f.setFillColor(r, g, b)
 }
@@ -75,18 +68,16 @@ func (f *Fpdf) setFillColor(r, g, b int) {
 	}
 }
 
-// GetFillColor returns the most recently set fill color as RGB components (0 -
-// 255). This will not be the current value if a fill color of some other type
+// GetFillColor returns the most recently set fill color as RGB components
+// (0-255). This will not be the current value if a fill color of some other type
 // (for example, spot) has been more recently set.
-
 func (f *Fpdf) GetFillColor() (int, int, int) {
 	return f.color.fill.ir, f.color.fill.ig, f.color.fill.ib
 }
 
 // SetTextColor defines the color used for text. It is expressed in RGB
-// components (0 - 255). The method can be called before the first page is
+// components (0-255). The method can be called before the first page is
 // created. The value is retained from page to page.
-
 func (f *Fpdf) SetTextColor(r, g, b int) {
 	f.setTextColor(r, g, b)
 }
@@ -96,10 +87,9 @@ func (f *Fpdf) setTextColor(r, g, b int) {
 	f.colorFlag = f.color.fill.str != f.color.text.str
 }
 
-// GetTextColor returns the most recently set text color as RGB components (0 -
-// 255). This will not be the current value if a text color of some other type
+// GetTextColor returns the most recently set text color as RGB components
+// (0-255). This will not be the current value if a text color of some other type
 // (for example, spot) has been more recently set.
-
 func (f *Fpdf) GetTextColor() (int, int, int) {
 	return f.color.text.ir, f.color.text.ig, f.color.text.ib
 }

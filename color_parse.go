@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -14,9 +10,11 @@ import (
 
 // CSSColorType describes a parsed CSS color or paint value.
 type CSSColorType struct {
-	R, G, B int
-	Set     bool
-	None    bool
+	R    int  // Red component, 0-255.
+	G    int  // Green component, 0-255.
+	B    int  // Blue component, 0-255.
+	Set  bool // Whether a color value was explicitly parsed.
+	None bool // Whether the parsed paint value is "none".
 }
 
 func parseCSSColor(value string) (CSSColorType, bool) {

@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit_test
 
@@ -19,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cssbruno/gopdfkit"
-	"github.com/cssbruno/gopdfkit/internal/example"
+	"github.com/cssbruno/gopdfkit/testsupport/example"
 )
 
 func TestCompressionLevelControlsPageCompression(t *testing.T) {
@@ -94,7 +90,7 @@ func testMaskForImage(t *testing.T, imagePath string) string {
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	cfg, _, err := image.DecodeConfig(file)
 	if err != nil {
 		t.Fatalf("DecodeConfig() error = %v", err)

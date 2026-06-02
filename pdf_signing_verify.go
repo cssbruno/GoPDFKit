@@ -1,11 +1,7 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
-package pdfsigning
+package gopdfkit
 
 import (
 	"crypto/x509"
@@ -16,8 +12,10 @@ import (
 
 // PDFSignature contains a verified PDF signature summary.
 type PDFSignature struct {
+	// ByteRange is the signed byte range declared by the PDF signature.
 	ByteRange []int
-	CMS       *PKCS7VerifyResult
+	// CMS contains the verified CMS/PKCS7 signature details.
+	CMS *PKCS7VerifyResult
 }
 
 // VerifyPDFBytes verifies the first CMS/PKCS7 signature found in a signed PDF.

@@ -1,10 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- *                         *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -34,7 +29,7 @@ func loadMap(encodingFileStr string) (encList encListType, err error) {
 	var f *os.File
 	f, err = os.Open(encodingFileStr)
 	if err == nil {
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		for j := range encList {
 			encList[j].uv = -1
 			encList[j].name = ".notdef"
@@ -166,7 +161,7 @@ func fillInfoFromOpenTypeMetrics(info *fontInfoType, otf OpenTypeType, msgWriter
 			if ok && int(pos) < len(otf.Widths) {
 				wd = round(k * float64(otf.Widths[pos]))
 			} else {
-				fmt.Fprintf(msgWriter, "Character %s is missing\n", encList[j].name)
+				_, _ = fmt.Fprintf(msgWriter, "Character %s is missing\n", encList[j].name)
 			}
 		}
 		info.Widths[j] = wd
@@ -206,7 +201,7 @@ func segmentRead(r io.Reader) (s segmentType, err error) {
 // -rw-r--r-- 1 root root  9532 2010-04-22 11:27 /usr/share/fonts/type1/mathml/Symbol.afm
 // -rw-r--r-- 1 root root 37744 2010-04-22 11:27 /usr/share/fonts/type1/mathml/Symbol.pfb
 
-// getInfoFromType1 return information from a Type1 font
+// getInfoFromType1 returns information from a Type1 font.
 func getInfoFromType1(fileStr string, msgWriter io.Writer, embed bool, encList encListType) (info fontInfoType, err error) {
 	info.Widths = make([]int, 256)
 	if embed {
@@ -215,7 +210,7 @@ func getInfoFromType1(fileStr string, msgWriter io.Writer, embed bool, encList e
 		if err != nil {
 			return
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		// Read first segment
 		var s1, s2 segmentType
 		s1, err = segmentRead(f)
@@ -245,7 +240,7 @@ func getInfoFromType1(fileStr string, msgWriter io.Writer, embed bool, encList e
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	scanner := bufio.NewScanner(f)
 	var fields []string
 	var wd int
@@ -328,7 +323,7 @@ func getInfoFromType1(fileStr string, msgWriter io.Writer, embed bool, encList e
 			if ok {
 				info.Widths[j] = wd
 			} else {
-				fmt.Fprintf(msgWriter, "Character %s is missing\n", name)
+				_, _ = fmt.Fprintf(msgWriter, "Character %s is missing\n", name)
 			}
 		}
 	}
@@ -355,7 +350,7 @@ func makeFontDescriptor(info *fontInfoType) {
 	}
 }
 
-// makeFontEncoding builds differences from reference encoding
+// makeFontEncoding builds differences from the reference encoding.
 func makeFontEncoding(encList encListType, refEncFileStr string) (diffStr string, err error) {
 	var refList encListType
 	if refList, err = loadMap(refEncFileStr); err != nil {
@@ -405,7 +400,7 @@ func makeDefinitionFile(fileStr, tpStr, encodingFileStr string, embed bool, encL
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, err = f.Write(buf)
 	if err != nil {
 		return err
@@ -421,12 +416,12 @@ func makeDefinitionFile(fileStr, tpStr, encodingFileStr string, embed bool, encL
 // MakeFont generates a font definition file in JSON format. A definition file
 // of this type is required to use non-core fonts in the PDF documents that
 // gopdfkit generates. See the fontmaker command in the gopdfkit package for a
-// command line interface to this function.
+// command-line interface to this function.
 //
 // fontFileStr is the name of the TrueType file (extension .ttf), OpenType file
 // (extension .otf) or binary Type1 file (extension .pfb) from which to
-// generate a definition file. If an OpenType file is specified, it must be one
-// that is based on TrueType outlines, not PostScript outlines; this cannot be
+// generate a definition file. OpenType files with TrueType outlines and
+// CFF/PostScript outlines are both supported; the outline type cannot be
 // determined from the file extension alone. If a Type1 file is specified, a
 // metric file with the same pathname except with the extension .afm must be
 // present.
@@ -437,7 +432,7 @@ func makeDefinitionFile(fileStr, tpStr, encodingFileStr string, embed bool, encL
 // dstDirStr is the name of the directory in which to save the definition file
 // and, if embed is true, the compressed font file.
 //
-// msgWriter is the writer that is called to display messages throughout the
+// msgWriter is the writer that receives messages throughout the
 // process. Use nil to turn off messages.
 //
 // embed is true if the font is to be embedded in the PDF files.
@@ -470,17 +465,18 @@ func MakeFont(fontFileStr, encodingFileStr, dstDirStr string, msgWriter io.Write
 	if err != nil {
 		return err
 	}
-	if tpStr == "TrueType" {
+	switch tpStr {
+	case "TrueType":
 		info, err = getInfoFromTrueType(fontFileStr, msgWriter, embed, encList)
 		if err != nil {
 			return err
 		}
-	} else if tpStr == "OpenTypeCFF" {
+	case "OpenTypeCFF":
 		info, err = getInfoFromOpenTypeCFF(fontFileStr, msgWriter, embed, encList)
 		if err != nil {
 			return err
 		}
-	} else {
+	default:
 		info, err = getInfoFromType1(fontFileStr, msgWriter, embed, encList)
 		if err != nil {
 			return err
@@ -495,7 +491,7 @@ func MakeFont(fontFileStr, encodingFileStr, dstDirStr string, msgWriter io.Write
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		cmp := zlib.NewWriter(f)
 		_, err = cmp.Write(info.Data)
 		if err != nil {
@@ -505,14 +501,14 @@ func MakeFont(fontFileStr, encodingFileStr, dstDirStr string, msgWriter io.Write
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(msgWriter, "Font file compressed: %s\n", zFileStr)
+		_, _ = fmt.Fprintf(msgWriter, "Font file compressed: %s\n", zFileStr)
 	}
 	defFileStr := filepath.Join(dstDirStr, baseStr+".json")
 	err = makeDefinitionFile(defFileStr, tpStr, encodingFileStr, embed, encList, info)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(msgWriter, "Font definition file successfully generated: %s\n", defFileStr)
+	_, _ = fmt.Fprintf(msgWriter, "Font definition file successfully generated: %s\n", defFileStr)
 	return nil
 }
 
@@ -522,7 +518,7 @@ func openTypeFontType(fileStr string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, err = io.ReadFull(f, header[:])
 	if err != nil {
 		return "", err

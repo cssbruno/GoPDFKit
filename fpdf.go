@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -67,7 +63,7 @@ func fpdfNew(orientationStr, unitStr, sizeStr, fontDirStr string, size Size) (f 
 	f.importedPages = make(map[int]*importedPDFPage)
 	f.images = make(map[string]*ImageInfo)
 	f.pageLinks = make([][]pageLink, 0, 8)
-	f.pageLinks = append(f.pageLinks, make([]pageLink, 0, 0)) // pageLinks[0] is unused (1-based)
+	f.pageLinks = append(f.pageLinks, make([]pageLink, 0)) // pageLinks[0] is unused (1-based)
 	f.links = make([]internalLink, 0, 8)
 	f.links = append(f.links, internalLink{}) // links[0] is unused (1-based)
 	f.pageAttachments = make([][]annotationAttach, 0, 8)
@@ -154,7 +150,7 @@ func fpdfNew(orientationStr, unitStr, sizeStr, fontDirStr string, size Size) (f 
 	f.cMargin = margin / 10
 	// Line width (0.2 mm)
 	f.lineWidth = 0.567 / f.k
-	// 	Automatic page break
+	// Automatic page break
 	f.SetAutoPageBreak(true, 2*margin)
 	// Default display mode
 	f.SetDisplayMode("default", "default")
@@ -186,16 +182,16 @@ func fpdfNew(orientationStr, unitStr, sizeStr, fontDirStr string, size Size) (f 
 	return
 }
 
-// NewCustom returns a pointer to a new Fpdf instance. Its methods are
-// subsequently called to produce a single PDF document. NewCustom() is an
-// alternative to New() that provides additional customization. The PageSize()
-// example demonstrates this method.
+// NewCustom returns a new Fpdf instance. Its methods are subsequently called
+// to produce a single PDF document. NewCustom is an alternative to New that
+// provides additional customization. The PageSize example demonstrates this
+// method.
 func NewCustom(init *InitType) (f *Fpdf) {
 	return fpdfNew(init.OrientationStr, init.UnitStr, init.SizeStr, init.FontDirStr, init.Size)
 }
 
-// New returns a pointer to a new Fpdf instance. Its methods are subsequently
-// called to produce a single PDF document.
+// New returns a new Fpdf instance. Its methods are subsequently called to
+// produce a single PDF document.
 //
 // orientationStr specifies the default page orientation. For portrait mode,
 // specify "P" or "Portrait". For landscape mode, specify "L" or "Landscape".
@@ -211,9 +207,9 @@ func NewCustom(init *InitType) (f *Fpdf) {
 //
 // fontDirStr specifies the file system location in which font resources will
 // be found. An empty string is replaced with ".". This argument only needs to
-// reference an actual directory if a font other than one of the core
-// fonts is used. The core fonts are "courier", "helvetica" (also called
-// "arial"), "times", and "zapfdingbats" (also called "symbol").
+// reference an actual directory if a font other than one of the core fonts is
+// used. The core fonts are "courier", "helvetica" (also called "arial"),
+// "times", and "zapfdingbats" (also called "symbol").
 func New(orientationStr, unitStr, sizeStr, fontDirStr string) (f *Fpdf) {
 	return fpdfNew(orientationStr, unitStr, sizeStr, fontDirStr, Size{0, 0})
 }
@@ -237,7 +233,7 @@ func (f *Fpdf) ClearError() {
 }
 
 // SetErrorf sets the internal Fpdf error with formatted text to halt PDF
-// generation; this may facilitate error handling by application. If an error
+// generation; this may facilitate error handling by an application. If an error
 // condition is already set, this call is ignored.
 //
 // See the documentation for printing in the standard fmt package for details
@@ -255,14 +251,15 @@ func (f *Fpdf) String() string {
 }
 
 // SetError sets an error to halt PDF generation. This may facilitate error
-// handling by application. See also Ok(), Err() and Error().
+// handling by an application. See also Ok(), Err(), and Error().
 func (f *Fpdf) SetError(err error) {
 	if f.err == nil && err != nil {
 		f.err = err
 	}
 }
 
-// Error returns the internal Fpdf error; this will be nil if no error has occurred.
+// Error returns the internal Fpdf error; this will be nil if no error has
+// occurred.
 func (f *Fpdf) Error() error {
 	return f.err
 }

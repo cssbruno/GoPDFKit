@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -17,7 +13,6 @@ import (
 // GetPageSize returns the current page's width and height. This is the paper's
 // size. To compute the size of the area being used, subtract the margins (see
 // GetMargins()).
-
 func (f *Fpdf) GetPageSize() (width, height float64) {
 	width = f.w
 	height = f.h
@@ -26,14 +21,12 @@ func (f *Fpdf) GetPageSize() (width, height float64) {
 
 // GetPageWidth returns the current page width in the units established in
 // New().
-
 func (f *Fpdf) GetPageWidth() float64 {
 	return f.w
 }
 
 // GetPageHeight returns the current page height in the units established in
 // New().
-
 func (f *Fpdf) GetPageHeight() float64 {
 	return f.h
 }
@@ -41,7 +34,6 @@ func (f *Fpdf) GetPageHeight() float64 {
 // GetMargins returns the left, top, right, and bottom margins. The first three
 // are set with the SetMargins() method. The bottom margin is set with the
 // SetAutoPageBreak() method.
-
 func (f *Fpdf) GetMargins() (left, top, right, bottom float64) {
 	left = f.lMargin
 	top = f.tMargin
@@ -53,7 +45,6 @@ func (f *Fpdf) GetMargins() (left, top, right, bottom float64) {
 // SetMargins defines the left, top and right margins. By default, they equal 1
 // cm. Call this method to change them. If the value of the right margin is
 // less than zero, it is set to the same as the left margin.
-
 func (f *Fpdf) SetMargins(left, top, right float64) {
 	f.lMargin = left
 	f.tMargin = top
@@ -66,7 +57,6 @@ func (f *Fpdf) SetMargins(left, top, right float64) {
 // SetLeftMargin defines the left margin. The method can be called before
 // creating the first page. If the current abscissa gets out of page, it is
 // brought back to the margin.
-
 func (f *Fpdf) SetLeftMargin(margin float64) {
 	f.lMargin = margin
 	if f.page > 0 && f.x < margin {
@@ -77,7 +67,6 @@ func (f *Fpdf) SetLeftMargin(margin float64) {
 // GetCellMargin returns the cell margin. This is the amount of space before
 // and after the text within a cell that's left blank, and is in units passed
 // to New(). It defaults to 1mm.
-
 func (f *Fpdf) GetCellMargin() float64 {
 	return f.cMargin
 }
@@ -85,14 +74,12 @@ func (f *Fpdf) GetCellMargin() float64 {
 // SetCellMargin sets the cell margin. This is the amount of space before and
 // after the text within a cell that's left blank, and is in units passed to
 // New().
-
 func (f *Fpdf) SetCellMargin(margin float64) {
 	f.cMargin = margin
 }
 
 // SetPage sets the current page to that of a valid page in the PDF document.
 // pageNum is one-based. The SetPage() example demonstrates this method.
-
 func (f *Fpdf) SetPage(pageNum int) {
 	if (pageNum > 0) && (pageNum < len(f.pages)) {
 		f.page = pageNum
@@ -102,7 +89,6 @@ func (f *Fpdf) SetPage(pageNum int) {
 // PageCount returns the number of pages currently in the document. Since page
 // numbers in gopdfkit are one-based, the page count is the same as the page
 // number of the current last page.
-
 func (f *Fpdf) PageCount() int {
 	return len(f.pages) - 1
 }
@@ -111,7 +97,6 @@ func (f *Fpdf) PageCount() int {
 // page header. See SetHeaderFunc() for more details. The value for homeMode
 // should be set to true to have the current position set to the left and top
 // margin after the header function is called.
-
 func (f *Fpdf) SetHeaderFuncMode(fnc func(), homeMode bool) {
 	f.headerFnc = fnc
 	f.headerHomeMode = homeMode
@@ -130,7 +115,6 @@ func (f *Fpdf) SetHeaderFuncMode(fnc func(), homeMode bool) {
 // watermark on each page is demonstrated in the example for TransformRotate.
 //
 // This method is demonstrated in the example for AddPage().
-
 func (f *Fpdf) SetHeaderFunc(fnc func()) {
 	f.headerFnc = fnc
 }
@@ -144,7 +128,6 @@ func (f *Fpdf) SetHeaderFunc(fnc func()) {
 // SetFooterFuncLpi for a similar function that passes a last page indicator.
 //
 // This method is demonstrated in the example for AddPage().
-
 func (f *Fpdf) SetFooterFunc(fnc func()) {
 	f.footerFnc = fnc
 	f.footerFncLpi = nil
@@ -157,7 +140,6 @@ func (f *Fpdf) SetFooterFunc(fnc func()) {
 // implementation in Fpdf is empty, so you have to provide an appropriate
 // function if you want page footers. fnc will typically be a closure that has
 // access to the Fpdf instance and other document generation variables.
-
 func (f *Fpdf) SetFooterFuncLpi(fnc func(lastPage bool)) {
 	f.footerFncLpi = fnc
 	f.footerFnc = nil
@@ -165,14 +147,12 @@ func (f *Fpdf) SetFooterFuncLpi(fnc func(lastPage bool)) {
 
 // SetTopMargin defines the top margin. The method can be called before
 // creating the first page.
-
 func (f *Fpdf) SetTopMargin(margin float64) {
 	f.tMargin = margin
 }
 
 // SetRightMargin defines the right margin. The method can be called before
 // creating the first page.
-
 func (f *Fpdf) SetRightMargin(margin float64) {
 	f.rMargin = margin
 }
@@ -180,7 +160,6 @@ func (f *Fpdf) SetRightMargin(margin float64) {
 // GetAutoPageBreak returns true if automatic pages breaks are enabled, false
 // otherwise. This is followed by the triggering limit from the bottom of the
 // page. This value applies only if automatic page breaks are enabled.
-
 func (f *Fpdf) GetAutoPageBreak() (auto bool, margin float64) {
 	auto = f.autoPageBreak
 	margin = f.bMargin
@@ -191,7 +170,6 @@ func (f *Fpdf) GetAutoPageBreak() (auto bool, margin float64) {
 // enabling, the second parameter is the distance from the bottom of the page
 // that defines the triggering limit. By default, the mode is on and the margin
 // is 2 cm.
-
 func (f *Fpdf) SetAutoPageBreak(auto bool, margin float64) {
 	f.autoPageBreak = auto
 	f.bMargin = margin
@@ -203,7 +181,6 @@ func (f *Fpdf) SetAutoPageBreak(auto bool, margin float64) {
 // measure itself. If pageNum is zero or otherwise out of bounds, it returns
 // the default page size, that is, the size of the page that would be added by
 // AddPage().
-
 func (f *Fpdf) PageSize(pageNum int) (wd, ht float64, unitStr string) {
 	sz, ok := f.pageSizes[pageNum]
 	if ok {
@@ -222,14 +199,12 @@ func (f *Fpdf) PageSize(pageNum int) (wd, ht float64, unitStr string) {
 // size specifies the size of the new page in the units established in New().
 //
 // The PageSize() example demonstrates this method.
-
 func (f *Fpdf) AddPageFormat(orientationStr string, size Size) {
 	f.addPageFormatRotation(orientationStr, size, 0)
 }
 
 // AddPageFormatRotation adds a new page with non-default orientation, size, or
 // page dictionary rotation. The rotation must be a multiple of 90 degrees.
-
 func (f *Fpdf) AddPageFormatRotation(orientationStr string, size Size, rotation int) {
 	f.addPageFormatRotation(orientationStr, size, rotation)
 }
@@ -340,7 +315,6 @@ func (f *Fpdf) addPageFormatRotation(orientationStr string, size Size, rotation 
 //
 // See AddPageFormat() for a version of this method that allows the page size
 // and orientation to be different than the default.
-
 func (f *Fpdf) AddPage() {
 	if f.err != nil {
 		return
@@ -351,7 +325,6 @@ func (f *Fpdf) AddPage() {
 // AddPageRotation adds a new page with the default orientation and size and
 // sets its page dictionary rotation. The rotation must be a multiple of 90
 // degrees.
-
 func (f *Fpdf) AddPageRotation(rotation int) {
 	if f.err != nil {
 		return
@@ -362,14 +335,12 @@ func (f *Fpdf) AddPageRotation(rotation int) {
 // PageNo returns the current page number.
 //
 // See the example for AddPage() for a demonstration of this method.
-
 func (f *Fpdf) PageNo() int {
 	return f.page
 }
 
 // GetConversionRatio returns the conversion ratio based on the unit given when
 // creating the PDF.
-
 func (f *Fpdf) GetConversionRatio() float64 {
 	return f.k
 }
@@ -380,7 +351,6 @@ func (f *Fpdf) GetConversionRatio() float64 {
 // cell margin. To account for this, you may need to either add the value
 // returned by GetCellMargin() to it or call SetCellMargin(0) to remove the
 // cell margin.
-
 func (f *Fpdf) GetXY() (float64, float64) {
 	return f.x, f.y
 }
@@ -390,14 +360,12 @@ func (f *Fpdf) GetXY() (float64, float64) {
 // Note: the value returned will be affected by the current cell margin. To
 // account for this, you may need to either add the value returned by
 // GetCellMargin() to it or call SetCellMargin(0) to remove the cell margin.
-
 func (f *Fpdf) GetX() float64 {
 	return f.x
 }
 
 // SetX defines the abscissa of the current position. If the passed value is
 // negative, it is relative to the right of the page.
-
 func (f *Fpdf) SetX(x float64) {
 	if x >= 0 {
 		f.x = x
@@ -407,7 +375,6 @@ func (f *Fpdf) SetX(x float64) {
 }
 
 // GetY returns the ordinate of the current position.
-
 func (f *Fpdf) GetY() float64 {
 	return f.y
 }
@@ -415,7 +382,6 @@ func (f *Fpdf) GetY() float64 {
 // SetY moves the current abscissa back to the left margin and sets the
 // ordinate. If the passed value is negative, it is relative to the bottom of
 // the page.
-
 func (f *Fpdf) SetY(y float64) {
 	f.SetYWithResetX(y, true)
 }
@@ -423,7 +389,6 @@ func (f *Fpdf) SetY(y float64) {
 // SetYWithResetX sets the ordinate and optionally moves the current abscissa
 // back to the left margin. This is the Go-friendly equivalent of FPDF 1.8+'s
 // SetY($y, $resetX) parameter.
-
 func (f *Fpdf) SetYWithResetX(y float64, resetX bool) {
 	if y >= 0 {
 		f.y = y
@@ -437,7 +402,6 @@ func (f *Fpdf) SetYWithResetX(y float64, resetX bool) {
 
 // SetHomeXY is a convenience method that sets the current position to the left
 // and top margins.
-
 func (f *Fpdf) SetHomeXY() {
 	f.SetY(f.tMargin)
 	f.SetX(f.lMargin)
@@ -446,7 +410,6 @@ func (f *Fpdf) SetHomeXY() {
 // SetXY defines the abscissa and ordinate of the current position. If the
 // passed values are negative, they are relative respectively to the right and
 // bottom of the page.
-
 func (f *Fpdf) SetXY(x, y float64) {
 	f.SetX(x)
 	f.SetYWithResetX(y, false)
@@ -469,16 +432,8 @@ func (f *Fpdf) getpagesizestr(sizeStr string) (size Size) {
 }
 
 // GetPageSizeStr returns the Size for the given sizeStr (that is A4, A3, etc..)
-
 func (f *Fpdf) GetPageSizeStr(sizeStr string) (size Size) {
 	return f.getpagesizestr(sizeStr)
-}
-
-func (f *Fpdf) _getpagesize(size Size) Size {
-	if size.Wd > size.Ht {
-		size.Wd, size.Ht = size.Ht, size.Wd
-	}
-	return size
 }
 
 func (f *Fpdf) beginpage(orientationStr string, size Size, rotation int) {
@@ -489,7 +444,7 @@ func (f *Fpdf) beginpage(orientationStr string, size Size, rotation int) {
 	f.pageBoxes[f.page] = make(map[string]PageBox)
 	maps.Copy(f.pageBoxes[f.page], f.defPageBoxes)
 	f.pages = append(f.pages, bytes.NewBufferString(""))
-	f.pageLinks = append(f.pageLinks, make([]pageLink, 0, 0))
+	f.pageLinks = append(f.pageLinks, make([]pageLink, 0))
 	f.pageAttachments = append(f.pageAttachments, []annotationAttach{})
 	f.state = 2
 	f.x = f.lMargin

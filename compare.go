@@ -1,10 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -13,30 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 )
-
-type sortType struct {
-	length int
-	less   func(int, int) bool
-	swap   func(int, int)
-}
-
-func (s *sortType) Len() int {
-	return s.length
-}
-
-func (s *sortType) Less(i, j int) bool {
-	return s.less(i, j)
-}
-
-func (s *sortType) Swap(i, j int) {
-	s.swap(i, j)
-}
-
-func gensort(Len int, Less func(int, int) bool, Swap func(int, int)) {
-	sort.Sort(&sortType{length: Len, less: Less, swap: Swap})
-}
 
 func writeBytes(leadStr string, startPos int, sl []byte) {
 	var pos, max int
@@ -77,7 +49,8 @@ func checkBytes(pos int, sl1, sl2 []byte, printDiff bool) (eq bool) {
 }
 
 // CompareBytes compares the bytes referred to by sl1 with those referred to by
-// sl2. Nil is returned if the buffers are equal, otherwise an error.
+// sl2. nil is returned if the buffers are equal; otherwise an error is
+// returned.
 func CompareBytes(sl1, sl2 []byte, printDiff bool) (err error) {
 	var posStart, posEnd, len1, len2, length int
 	var diffs bool
@@ -102,8 +75,8 @@ func CompareBytes(sl1, sl2 []byte, printDiff bool) (err error) {
 }
 
 // ComparePDFs reads and compares the full contents of the two specified
-// readers byte-for-byte. Nil is returned if the buffers are equal, otherwise
-// an error.
+// readers byte-for-byte. nil is returned if the buffers are equal; otherwise
+// an error is returned.
 func ComparePDFs(rdr1, rdr2 io.Reader, printDiff bool) (err error) {
 	b1 := new(bytes.Buffer)
 	b2 := new(bytes.Buffer)
@@ -118,8 +91,8 @@ func ComparePDFs(rdr1, rdr2 io.Reader, printDiff bool) (err error) {
 }
 
 // ComparePDFFiles reads and compares the full contents of the two specified
-// files byte-for-byte. Nil is returned if the file contents are equal, or if
-// the second file is missing, otherwise an error.
+// files byte-for-byte. nil is returned if the file contents are equal or if
+// the second file cannot be read; otherwise an error is returned.
 func ComparePDFFiles(file1Str, file2Str string, printDiff bool) (err error) {
 	var sl1, sl2 []byte
 	sl1, err = os.ReadFile(file1Str)
@@ -128,7 +101,7 @@ func ComparePDFFiles(file1Str, file2Str string, printDiff bool) (err error) {
 		if err == nil {
 			err = CompareBytes(sl1, sl2, printDiff)
 		} else {
-			// Second file is missing; treat this as success
+			// Treat an unreadable second file as success.
 			err = nil
 		}
 	}

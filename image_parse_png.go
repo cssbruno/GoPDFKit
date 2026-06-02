@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -32,12 +28,12 @@ func (f *Fpdf) pngColorSpace(ct byte) (colspace string, colorVal int) {
 
 func (f *Fpdf) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageInfo) {
 	info = f.newImageInfo()
-	// 	Check signature
+	// Check the PNG signature.
 	if string(buf.Next(8)) != "\x89PNG\x0d\x0a\x1a\x0a" {
 		f.err = fmt.Errorf("not a PNG buffer")
 		return
 	}
-	// Read header chunk
+	// Read the header chunk.
 	_ = buf.Next(4)
 	if string(buf.Next(4)) != "IHDR" {
 		f.err = fmt.Errorf("incorrect PNG buffer")
@@ -74,7 +70,7 @@ func (f *Fpdf) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageInfo)
 	}
 	_ = buf.Next(4)
 	dp := sprintf("/Predictor 15 /Colors %d /BitsPerComponent %d /Columns %d", colorVal, bpc, w)
-	// Scan chunks looking for palette, transparency and image data
+	// Scan chunks looking for palette, transparency, and image data.
 	pal := make([]byte, 0, 32)
 	var trns []int
 	data := make([]byte, 0, 32)
@@ -94,10 +90,10 @@ func (f *Fpdf) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageInfo)
 		_ = buf.Next(4)
 		switch chunkType {
 		case "PLTE":
-			// Read palette
+			// Read the palette.
 			pal = chunkData
 		case "tRNS":
-			// Read transparency info
+			// Read transparency information.
 			switch ct {
 			case 0:
 				if len(chunkData) < 2 {
@@ -118,15 +114,13 @@ func (f *Fpdf) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageInfo)
 				}
 			}
 		case "IDAT":
-			// Read image data block
+			// Read an image data block.
 			data = append(data, chunkData...)
 		case "IEND":
 			loop = false
 		case "pHYs":
-			// png files theoretically support different x/y dpi
-			// but we ignore files like this
-			// but if they're the same then we can stamp our info
-			// object with it
+			// PNG files can theoretically specify different x/y DPI values.
+			// Ignore those files, but record the DPI when both values match.
 			if len(chunkData) < 9 {
 				f.err = fmt.Errorf("incorrect PNG pHYs chunk length")
 				return
@@ -135,12 +129,12 @@ func (f *Fpdf) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageInfo)
 			x := int(f.readBeInt32(chunkBuf))
 			y := int(f.readBeInt32(chunkBuf))
 			units := chunkBuf.Next(1)[0]
-			// only modify the info block if the user wants us to
+			// Only modify the info block when the caller requested DPI metadata.
 			if x == y && readdpi {
 				switch units {
-				// if units is 1 then measurement is px/meter
+				// Unit value 1 means pixels per meter.
 				case 1:
-					info.dpi = float64(x) / 39.3701 // inches per meter
+					info.dpi = float64(x) / 39.3701 // Pixels per inch.
 				default:
 					info.dpi = float64(x)
 				}
@@ -162,7 +156,7 @@ func (f *Fpdf) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageInfo)
 	info.pal = pal
 	info.trns = trns
 	if ct >= 4 {
-		// Separate alpha and color channels
+		// Separate alpha and color channels.
 		bytesPerPixel := int64(2)
 		if ct == 6 {
 			bytesPerPixel = 4
@@ -185,7 +179,7 @@ func (f *Fpdf) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageInfo)
 		}
 		var color, alpha []byte
 		if ct == 4 {
-			// Gray image
+			// Gray image.
 			width := int(w)
 			height := int(h)
 			length := 2 * width
@@ -208,7 +202,7 @@ func (f *Fpdf) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageInfo)
 				}
 			}
 		} else {
-			// RGB image
+			// RGB image.
 			width := int(w)
 			height := int(h)
 			length := 4 * width

@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -28,7 +24,7 @@ func pathFields(pathStr string) []string {
 }
 
 func svgNumberFields(numStr string) []string {
-	strList := strings.Fields(strings.Replace(numStr, ",", " ", -1))
+	strList := strings.Fields(strings.ReplaceAll(numStr, ",", " "))
 	fields := make([]string, 0, len(strList))
 	for _, str := range strList {
 		start := 0
@@ -338,11 +334,12 @@ func pathParse(pathStr string) (segs []SVGSegment, err error) {
 			copy(rawArgs, args)
 			raw = append(raw, svgPathRawSegment{cmd: cmd, args: rawArgs})
 			args = args[:0]
-			if cmd == 'M' {
+			switch cmd {
+			case 'M':
 				cmd = 'L'
-			} else if cmd == 'm' {
+			case 'm':
 				cmd = 'l'
-			} else {
+			default:
 				argCount, _ = svgPathCommandArgCount(cmd)
 			}
 		}
@@ -523,11 +520,9 @@ func svgResolvePattern(id string, refs map[string]svgNode, gradients map[string]
 }
 
 func svgPatternElements(node svgNode, pattern SVGPattern, refs map[string]svgNode, gradients map[string]SVGGradient, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) ([]SVGElement, error) {
-	transform := svgIdentityMatrix()
-	if viewTransform, err := svgViewBoxTransform(node.attr("viewBox"), node.attr("preserveAspectRatio"), pattern.Wd, pattern.Ht); err != nil {
+	transform, err := svgViewBoxTransform(node.attr("viewBox"), node.attr("preserveAspectRatio"), pattern.Wd, pattern.Ht)
+	if err != nil {
 		return nil, err
-	} else {
-		transform = viewTransform
 	}
 	style := svgNodeStyle(node, SVGStyle{}, rules, ancestors)
 	sig := SVG{}
@@ -788,7 +783,7 @@ func svgCollectDepth(node svgNode, style SVGStyle, transform svgMatrix, sig *SVG
 	return nil
 }
 
-// SVGParse parses a scalable vector graphics (SVG) buffer into a descriptor.
+// SVGParse parses a Scalable Vector Graphics (SVG) buffer into a descriptor.
 // Paths, lines, rectangles, circles, ellipses, polylines, polygons, text, and
 // inherited presentation attributes are converted to data that SVGWrite can
 // render.
@@ -811,6 +806,7 @@ func SVGParse(buf []byte) (sig SVG, err error) {
 	return
 }
 
+// SVGFileParse parses an SVG file into a descriptor that SVGWrite can render.
 func SVGFileParse(svgFileStr string) (sig SVG, err error) {
 	var buf []byte
 	buf, err = os.ReadFile(svgFileStr)

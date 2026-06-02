@@ -1,11 +1,7 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
-package pdfsigning
+package gopdfkit
 
 import (
 	"bytes"
@@ -25,8 +21,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/cssbruno/gopdfkit"
 )
 
 func TestSignPDFBytesRequiresSigner(t *testing.T) {
@@ -380,6 +374,9 @@ func TestSignatureAlgorithmIDUsesRSAWithDigestOID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("readDERChildren() error = %v", err)
 	}
+	if len(children) == 0 {
+		t.Fatal("readDERChildren() returned no children")
+	}
 	oid, err := decodeOID(children[0])
 	if err != nil {
 		t.Fatalf("decodeOID() error = %v", err)
@@ -491,14 +488,27 @@ func TestAnalyzePDFFollowsIncrementalPrevChain(t *testing.T) {
 
 func testPDFBytes(t *testing.T) []byte {
 	t.Helper()
-	pdf := gopdfkit.New("P", "mm", "A4", "")
-	pdf.AddPage()
-	pdf.SetFont("Arial", "", 12)
-	pdf.Cell(40, 10, "Test PDF")
+	return minimalPDFBytes()
+}
+
+func minimalPDFBytes() []byte {
 	var output bytes.Buffer
-	if err := pdf.Output(&output); err != nil {
-		t.Fatalf("Output() error = %v", err)
+	output.WriteString("%PDF-1.4\n")
+	offsets := []int{0}
+	addObject := func(body string) {
+		offsets = append(offsets, output.Len())
+		fmt.Fprintf(&output, "%d 0 obj\n%s\nendobj\n", len(offsets)-1, body)
 	}
+	addObject("<< /Type /Catalog /Pages 2 0 R >>")
+	addObject("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+	addObject("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>")
+	xrefOffset := output.Len()
+	fmt.Fprintf(&output, "xref\n0 %d\n", len(offsets))
+	output.WriteString("0000000000 65535 f \n")
+	for _, offset := range offsets[1:] {
+		fmt.Fprintf(&output, "%010d 00000 n \n", offset)
+	}
+	fmt.Fprintf(&output, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(offsets), xrefOffset)
 	return output.Bytes()
 }
 

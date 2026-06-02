@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -41,7 +37,7 @@ func (f *Fpdf) ImportPage(sourceFile string, pageNo int, box string) int {
 }
 
 // ImportPageStream imports one page from a PDF stream and returns its imported
-// page ID. The stream is read into memory so callers may pass any io.Reader.
+// page ID. The stream is read into memory, so callers may pass any io.Reader.
 func (f *Fpdf) ImportPageStream(source io.Reader, pageNo int, box string) int {
 	data, err := io.ReadAll(source)
 	if err != nil {
@@ -51,8 +47,8 @@ func (f *Fpdf) ImportPageStream(source io.Reader, pageNo int, box string) int {
 	return f.importPageFromBytes(data, pageNo, box)
 }
 
-// ImportPagesFromSource imports every page from source and returns their page
-// IDs. source may be a file path string, []byte, or io.Reader.
+// ImportPagesFromSource imports every page from source and returns the imported
+// page IDs. source may be a file path string, []byte, or io.Reader.
 func (f *Fpdf) ImportPagesFromSource(source any, box string) []int {
 	data, err := pdfImportSourceBytes(source)
 	if err != nil {
@@ -77,7 +73,8 @@ func (f *Fpdf) ImportPagesFromSource(source any, box string) []int {
 }
 
 // GetPageSizes returns the available page box sizes for a PDF source. Sizes are
-// reported in PDF points. source may be a file path string, []byte, or io.Reader.
+// reported in PDF points. source may be a file path string, []byte, or
+// io.Reader.
 func GetPageSizes(source any) (map[int]map[string]Size, error) {
 	data, err := pdfImportSourceBytes(source)
 	if err != nil {
@@ -177,6 +174,9 @@ func sortedPDFObjRefs(objects map[pdfObjRef][]byte) []pdfObjRef {
 }
 
 func rewritePDFIndirectRefs(data []byte, refMap map[pdfObjRef]int) []byte {
+	if data == nil {
+		return []byte{}
+	}
 	streamPos := bytes.Index(data, []byte("stream"))
 	if streamPos < 0 {
 		return rewritePDFIndirectRefsInSection(data, refMap)
@@ -187,6 +187,9 @@ func rewritePDFIndirectRefs(data []byte, refMap map[pdfObjRef]int) []byte {
 }
 
 func rewritePDFIndirectRefsInSection(data []byte, refMap map[pdfObjRef]int) []byte {
+	if data == nil {
+		return []byte{}
+	}
 	refs := findPDFIndirectRefs(data)
 	if len(refs) == 0 {
 		return append([]byte(nil), data...)

@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -19,9 +15,8 @@ import (
 	"strings"
 )
 
-// SetFontLocation sets the location in the file system of the font and font
+// SetFontLocation sets the filesystem location of the font and font
 // definition files.
-
 func (f *Fpdf) SetFontLocation(fontDirStr string) {
 	f.fontpath = fontDirStr
 }
@@ -31,14 +26,13 @@ func (f *Fpdf) SetFontLocation(fontDirStr string) {
 // the named font resources when AddFont() is called. If this operation fails,
 // an attempt is made to load the resources from the configured font directory
 // (see SetFontLocation()).
-
 func (f *Fpdf) SetFontLoader(loader FontLoader) {
 	f.fontLoader = loader
 }
 
 // AddFont imports a TrueType, OpenType or Type1 font and makes it available.
 // It is necessary to generate a font definition file first with the fontmaker
-// utility. It is not necessary to call this function for the core PDF fonts
+// utility. You do not need to call this function for the core PDF fonts
 // (courier, helvetica, times, zapfdingbats).
 //
 // The JSON definition file (and the font file itself when embedding) must be
@@ -56,14 +50,13 @@ func (f *Fpdf) SetFontLoader(loader FontLoader) {
 // fileStr specifies the base name with ".json" extension of the font
 // definition file to be added. The file will be loaded from the font directory
 // specified in the call to New() or SetFontLocation().
-
 func (f *Fpdf) AddFont(familyStr, styleStr, fileStr string) {
 	f.addFont(fontFamilyEscape(familyStr), styleStr, fileStr, false)
 }
 
-// AddUTF8Font imports a TrueType font with utf-8 symbols and makes it available.
+// AddUTF8Font imports a TrueType font with UTF-8 symbols and makes it available.
 // It is necessary to generate a font definition file first with the fontmaker
-// utility. It is not necessary to call this function for the core PDF fonts
+// utility. You do not need to call this function for the core PDF fonts
 // (courier, helvetica, times, zapfdingbats).
 //
 // The JSON definition file (and the font file itself when embedding) must be
@@ -82,7 +75,6 @@ func (f *Fpdf) AddFont(familyStr, styleStr, fileStr string) {
 // file to be added. OpenType files with TrueType outlines are supported. CFF
 // OpenType files are supported by MakeFont()/AddFont() for single-byte
 // encodings, not by this UTF-8 subsetting path.
-
 func (f *Fpdf) AddUTF8Font(familyStr, styleStr, fileStr string) {
 	f.addFont(fontFamilyEscape(familyStr), styleStr, fileStr, true)
 }
@@ -90,9 +82,9 @@ func (f *Fpdf) AddUTF8Font(familyStr, styleStr, fileStr string) {
 func (f *Fpdf) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 	if fileStr == "" {
 		if isUTF8 {
-			fileStr = strings.Replace(familyStr, " ", "", -1) + strings.ToLower(styleStr) + ".ttf"
+			fileStr = strings.ReplaceAll(familyStr, " ", "") + strings.ToLower(styleStr) + ".ttf"
 		} else {
-			fileStr = strings.Replace(familyStr, " ", "", -1) + strings.ToLower(styleStr) + ".json"
+			fileStr = strings.ReplaceAll(familyStr, " ", "") + strings.ToLower(styleStr) + ".json"
 		}
 	}
 	if f.fontpath != "" && !validFontFilePath(fileStr) {
@@ -121,7 +113,10 @@ func (f *Fpdf) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 				err = nil
 			}
 		}
-		if err != nil {
+		if err != nil || ttfStat == nil {
+			if err == nil {
+				err = fmt.Errorf("font file not found: %s", fileStr)
+			}
 			f.SetError(err)
 			return
 		}
@@ -150,7 +145,7 @@ func (f *Fpdf) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 			if err == nil {
 				f.AddFontFromReader(familyStr, styleStr, reader)
 				if closer, ok := reader.(io.Closer); ok {
-					closer.Close()
+					_ = closer.Close()
 				}
 				return
 			}
@@ -161,7 +156,7 @@ func (f *Fpdf) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 			f.err = err
 			return
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 		f.AddFontFromReader(familyStr, styleStr, file)
 	}
 }
@@ -296,14 +291,14 @@ func defaultUTF8UsedRunes(alias string) map[int]int {
 // empty string for regular style, "B" for bold, "I" for italic, or "BI" or
 // "IB" for bold and italic combined.
 //
-// jsonFileBytes contain all bytes of JSON file.
+// jsonFileBytes contains all bytes of the JSON definition file.
 //
-// zFileBytes contain all bytes of Z file.
+// zFileBytes contains all bytes of the zlib-compressed font file.
 func (f *Fpdf) AddFontFromBytes(familyStr, styleStr string, jsonFileBytes, zFileBytes []byte) {
 	f.addFontFromBytes(fontFamilyEscape(familyStr), styleStr, jsonFileBytes, zFileBytes, nil)
 }
 
-// AddUTF8FontFromBytes imports a TrueType font with utf-8 symbols from static
+// AddUTF8FontFromBytes imports a TrueType font with UTF-8 symbols from static
 // bytes within the executable and makes it available for use in the generated
 // document.
 //
@@ -360,7 +355,7 @@ func (f *Fpdf) addFontFromBytes(familyStr, styleStr string, jsonFileBytes, zFile
 			return
 		}
 		if len(info.Diff) > 0 {
-			// Load font definitions.
+			// Register the encoding differences.
 			n := -1
 			for j, str := range f.diffs {
 				if str == info.Diff {
@@ -389,7 +384,7 @@ func (f *Fpdf) addFontFromBytes(familyStr, styleStr string, jsonFileBytes, zFile
 }
 
 // AddFontFromReader imports a TrueType, OpenType or Type1 font and makes it
-// available using a reader that satisfies the io.Reader interface. See AddFont
+// available using a reader that satisfies the io.Reader interface. See AddFont()
 // for details about familyStr and styleStr.
 func (f *Fpdf) AddFontFromReader(familyStr, styleStr string, r io.Reader) {
 	if f.err != nil {
@@ -402,8 +397,7 @@ func (f *Fpdf) AddFontFromReader(familyStr, styleStr string, r io.Reader) {
 	if ok {
 		return
 	}
-	var info fontDefinition
-	info = f.loadfont(r)
+	info := f.loadfont(r)
 	if f.err != nil {
 		return
 	}
@@ -436,11 +430,9 @@ func (f *Fpdf) AddFontFromReader(familyStr, styleStr string, r io.Reader) {
 		}
 	}
 	f.fonts[fontkey] = info
-	return
 }
 
-// Load a font definition file from the given Reader
-
+// loadfont loads a font definition file from the given reader.
 func (f *Fpdf) loadfont(r io.Reader) (def fontDefinition) {
 	if f.err != nil {
 		return
@@ -579,11 +571,11 @@ func (f *Fpdf) putfonts() {
 				f.out("endobj")
 				f.newobj()
 				var s fmtBuffer
-				s.WriteString("[")
+				_, _ = s.WriteString("[")
 				for j := 32; j < 256; j++ {
 					s.printf("%d ", font.Cw[j])
 				}
-				s.WriteString("]")
+				_, _ = s.WriteString("]")
 				f.out(s.String())
 				f.out("endobj")
 				f.newobj()
@@ -686,10 +678,20 @@ func (f *Fpdf) putfonts() {
 			}
 		}
 	}
-	return
 }
 
 func (f *Fpdf) generateCIDFontMap(font *fontDefinition, LastRune int) {
+	if font == nil {
+		f.err = fmt.Errorf("missing font definition")
+		return
+	}
+	if LastRune >= len(font.Cw) {
+		LastRune = len(font.Cw) - 1
+	}
+	if LastRune < 1 {
+		f.out("/W []")
+		return
+	}
 	rangeID := 0
 	cidArray := make(map[int]*phpOrderedIntMap)
 	cidArrayKeys := make([]int, 0)
@@ -752,6 +754,10 @@ func (f *Fpdf) generateCIDFontMap(font *fontDefinition, LastRune int) {
 	isInterval := false
 	for g := 0; g < len(cidArrayKeys); {
 		key := cidArrayKeys[g]
+		if cidArray[key] == nil {
+			g++
+			continue
+		}
 		ws := *cidArray[key]
 		cws := len(ws.keySet)
 		if (key == nextKey) && (!isInterval) && (ws.getIndex("interval") < 0 || cws < 4) {
@@ -780,6 +786,9 @@ func (f *Fpdf) generateCIDFontMap(font *fontDefinition, LastRune int) {
 	var w fmtBuffer
 	for _, k := range cidArrayKeys {
 		ws := cidArray[k]
+		if ws == nil {
+			continue
+		}
 		if len(arrayCountValues(ws.valueSet)) == 1 {
 			w.printf(" %d %d %d", k, k+len(ws.valueSet)-1, ws.get(0))
 		} else {
@@ -793,7 +802,7 @@ func implode(sep string, arr []int) string {
 	var s fmtBuffer
 	for i := 0; i < len(arr)-1; i++ {
 		s.printf("%v", arr[i])
-		s.WriteString(sep)
+		_, _ = s.WriteString(sep)
 	}
 	if len(arr) > 0 {
 		s.printf("%v", arr[len(arr)-1])
@@ -801,7 +810,7 @@ func implode(sep string, arr []int) string {
 	return s.String()
 }
 
-// arrayCountValues counts the occurrences of each item in the $mp array.
+// arrayCountValues counts the occurrences of each item in mp.
 func arrayCountValues(mp []int) map[int]int {
 	answer := make(map[int]int)
 	for _, v := range mp {
@@ -819,7 +828,7 @@ func (f *Fpdf) loadFontFile(name string) ([]byte, error) {
 		if err == nil {
 			data, err := io.ReadAll(reader)
 			if closer, ok := reader.(io.Closer); ok {
-				closer.Close()
+				_ = closer.Close()
 			}
 			return data, err
 		}

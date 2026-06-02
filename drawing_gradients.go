@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -16,7 +12,6 @@ import (
 // GetAlpha returns the alpha blending channel, which consists of the
 // alpha transparency value and the blend mode. See SetAlpha for more
 // details.
-
 func (f *Fpdf) GetAlpha() (alpha float64, blendModeStr string) {
 	return f.alpha, f.blendMode
 }
@@ -24,17 +19,16 @@ func (f *Fpdf) GetAlpha() (alpha float64, blendModeStr string) {
 // SetAlpha sets the alpha blending channel. The blending effect applies to
 // text, drawings and images.
 //
-// alpha must be a value between 0.0 (fully transparent) to 1.0 (fully opaque).
+// alpha must be a value from 0.0 (fully transparent) to 1.0 (fully opaque).
 // Values outside of this range result in an error.
 //
 // blendModeStr must be one of "Normal", "Multiply", "Screen", "Overlay",
-// "Darken", "Lighten", "ColorDodge", "ColorBurn","HardLight", "SoftLight",
+// "Darken", "Lighten", "ColorDodge", "ColorBurn", "HardLight", "SoftLight",
 // "Difference", "Exclusion", "Hue", "Saturation", "Color", or "Luminosity". An
 // empty string is replaced with "Normal".
 //
 // To reset normal rendering after applying a blending mode, call this method
 // with alpha set to 1.0 and blendModeStr set to "Normal".
-
 func (f *Fpdf) SetAlpha(alpha float64, blendModeStr string) {
 	if f.err != nil {
 		return
@@ -109,40 +103,39 @@ func (f *Fpdf) gradientWithStops(tp int, stops []gradientStopType, x1, y1, x2, y
 	f.outf("/Sh%d sh", pos)
 }
 
-// LinearGradient draws a rectangular area with a blending of one color to
-// another. The rectangle is of width w and height h. Its upper left corner is
-// positioned at point (x, y).
+// LinearGradient draws a rectangular area with a blend from one color to
+// another. The rectangle has width w and height h. Its upper-left corner is
+// positioned at (x, y).
 //
 // Each color is specified with three component values, one each for red, green
 // and blue. The values range from 0 to 255. The first color is specified by
 // (r1, g1, b1) and the second color by (r2, g2, b2).
 //
 // The blending is controlled with a gradient vector that uses normalized
-// coordinates in which the lower left corner is position (0, 0) and the upper
-// right corner is (1, 1). The vector's origin and destination are specified by
+// coordinates in which the lower-left corner is at position (0, 0) and the
+// upper-right corner is (1, 1). The vector's origin and destination are specified by
 // the points (x1, y1) and (x2, y2). In a linear gradient, blending occurs
 // perpendicularly to the vector. The vector does not necessarily need to be
 // anchored on the rectangle edge. Color 1 is used up to the origin of the
 // vector and color 2 is used beyond the vector's end point. Between the points
 // the colors are gradually blended.
-
 func (f *Fpdf) LinearGradient(x, y, w, h float64, r1, g1, b1, r2, g2, b2 int, x1, y1, x2, y2 float64) {
 	f.gradientClipStart(x, y, w, h)
 	f.gradient(2, r1, g1, b1, r2, g2, b2, x1, y1, x2, y2, 0)
 	f.gradientClipEnd()
 }
 
-// RadialGradient draws a rectangular area with a blending of one color to
-// another. The rectangle is of width w and height h. Its upper left corner is
-// positioned at point (x, y).
+// RadialGradient draws a rectangular area with a blend from one color to
+// another. The rectangle has width w and height h. Its upper-left corner is
+// positioned at (x, y).
 //
 // Each color is specified with three component values, one each for red, green
 // and blue. The values range from 0 to 255. The first color is specified by
 // (r1, g1, b1) and the second color by (r2, g2, b2).
 //
 // The blending is controlled with a point and a circle, both specified with
-// normalized coordinates in which the lower left corner of the rendered
-// rectangle is position (0, 0) and the upper right corner is (1, 1). Color 1
+// normalized coordinates in which the lower-left corner of the rendered
+// rectangle is at position (0, 0) and the upper-right corner is (1, 1). Color 1
 // begins at the origin point specified by (x1, y1). Color 2 begins at the
 // circle specified by the center point (x2, y2) and radius r. Colors are
 // gradually blended from the origin to the circle. The origin and the circle's
@@ -150,7 +143,6 @@ func (f *Fpdf) LinearGradient(x, y, w, h float64, r1, g1, b1, r2, g2, b2 int, x1
 // the circle to avoid rendering problems.
 //
 // The LinearGradient() example demonstrates this method.
-
 func (f *Fpdf) RadialGradient(x, y, w, h float64, r1, g1, b1, r2, g2, b2 int, x1, y1, x2, y2, r float64) {
 	f.gradientClipStart(x, y, w, h)
 	f.gradient(3, r1, g1, b1, r2, g2, b2, x1, y1, x2, y2, r)
@@ -178,9 +170,10 @@ func (f *Fpdf) putGradients() {
 		}
 		f.newobj()
 		f.outf("<</ShadingType %d /ColorSpace /DeviceRGB", gr.tp)
-		if gr.tp == 2 {
+		switch gr.tp {
+		case 2:
 			f.outf("/Coords [%.5f %.5f %.5f %.5f] /Function %d 0 R /Extend [true true]>>", gr.x1, gr.y1, gr.x2, gr.y2, f1)
-		} else if gr.tp == 3 {
+		case 3:
 			f.outf("/Coords [%.5f %.5f 0 %.5f %.5f %.5f] /Function %d 0 R /Extend [true true]>>", gr.x1, gr.y1, gr.x2, gr.y2, gr.r, f1)
 		}
 		f.out("endobj")

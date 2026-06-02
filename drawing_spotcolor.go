@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -20,10 +16,10 @@ func clampSpotColorPercent(percent byte) byte {
 	return percent
 }
 
-// AddSpotColor adds an ink-based CMYK color to the gopdfkit instance and
-// associates it with the specified name. The individual components specify
-// percentages ranging from 0 to 100. Values above this are quietly capped to
-// 100. An error occurs if the specified name is already associated with a
+// AddSpotColor adds an ink-based CMYK color to the document and associates it
+// with the specified name. The individual components specify percentages
+// ranging from 0 to 100. Values above this range are quietly capped to 100.
+// An error occurs if the specified name is already associated with a
 // color.
 func (f *Fpdf) AddSpotColor(name string, cyan, magenta, yellow, black byte) {
 	if f.err != nil {
@@ -59,7 +55,7 @@ func (f *Fpdf) lookupSpotColor(name string) (spotColorType, bool) {
 // SetDrawSpotColor sets the current draw color to the spot color associated
 // with name. An error occurs if the name is not associated with a color.
 // The value for tint ranges from 0 (no intensity) to 100 (full intensity). It
-// is quietly bounded to this range.
+// is quietly capped to this range.
 func (f *Fpdf) SetDrawSpotColor(name string, tint byte) {
 	spotColor, ok := f.lookupSpotColor(name)
 	if !ok {
@@ -76,7 +72,7 @@ func (f *Fpdf) SetDrawSpotColor(name string, tint byte) {
 // SetFillSpotColor sets the current fill color to the spot color associated
 // with name. An error occurs if the name is not associated with a color.
 // The value for tint ranges from 0 (no intensity) to 100 (full intensity). It
-// is quietly bounded to this range.
+// is quietly capped to this range.
 func (f *Fpdf) SetFillSpotColor(name string, tint byte) {
 	spotColor, ok := f.lookupSpotColor(name)
 	if !ok {
@@ -94,7 +90,7 @@ func (f *Fpdf) SetFillSpotColor(name string, tint byte) {
 // SetTextSpotColor sets the current text color to the spot color associated
 // with name. An error occurs if the name is not associated with a color.
 // The value for tint ranges from 0 (no intensity) to 100 (full intensity). It
-// is quietly bounded to this range.
+// is quietly capped to this range.
 func (f *Fpdf) SetTextSpotColor(name string, tint byte) {
 	spotColor, ok := f.lookupSpotColor(name)
 	if !ok {
@@ -157,7 +153,7 @@ func (f *Fpdf) GetFillSpotColor() (name string, c, m, y, k byte) {
 func (f *Fpdf) putSpotColors() {
 	for name, spotColor := range f.spotColorMap {
 		f.newobj()
-		f.outf("[/Separation /%s", strings.Replace(name, " ", "#20", -1))
+		f.outf("[/Separation /%s", strings.ReplaceAll(name, " ", "#20"))
 		f.out("/DeviceCMYK <<")
 		f.out("/Range [0 1 0 1 0 1 0 1] /C0 [0 0 0 0] ")
 		f.outf("/C1 [%.3f %.3f %.3f %.3f] ", float64(spotColor.cmyk.c)/100, float64(spotColor.cmyk.m)/100,

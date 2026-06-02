@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -12,23 +8,24 @@ import (
 	"strconv"
 )
 
-func unused(args ...any) {
-}
-
-// RGBType holds fields for red, green and blue color components (0..255)
+// RGBType holds red, green, and blue color components in the range 0..255.
 type RGBType struct {
-	R, G, B int
+	R int // Red component, 0-255.
+	G int // Green component, 0-255.
+	B int // Blue component, 0-255.
 }
 
-// RGBAType holds fields for red, green and blue color components (0..255) and
-// an alpha transparency value (0..1)
+// RGBAType holds red, green, and blue color components in the range 0..255 and
+// an alpha transparency value in the range 0..1.
 type RGBAType struct {
-	R, G, B int
-	Alpha   float64
+	R     int     // Red component, 0-255.
+	G     int     // Green component, 0-255.
+	B     int     // Blue component, 0-255.
+	Alpha float64 // Alpha value, 0-1.
 }
 
-// StateType holds various commonly used drawing values for convenient
-// retrieval (StateGet()) and restore (Put) methods.
+// StateType holds common drawing values for convenient retrieval with StateGet
+// and restoration with Put.
 type StateType struct {
 	clrDraw, clrText, clrFill RGBType
 	lineWd                    float64
@@ -38,7 +35,7 @@ type StateType struct {
 	cellMargin                float64
 }
 
-// StateGet returns a variable that contains common state values.
+// StateGet returns common state values from pdf.
 func StateGet(pdf *Fpdf) (st StateType) {
 	st.clrDraw.R, st.clrDraw.G, st.clrDraw.B = pdf.GetDrawColor()
 	st.clrFill.R, st.clrFill.G, st.clrFill.B = pdf.GetFillColor()
@@ -50,8 +47,7 @@ func StateGet(pdf *Fpdf) (st StateType) {
 	return
 }
 
-// Put sets the common state values contained in the state structure
-// specified by st.
+// Put restores the common state values contained in st.
 func (st StateType) Put(pdf *Fpdf) {
 	pdf.SetDrawColor(st.clrDraw.R, st.clrDraw.G, st.clrDraw.B)
 	pdf.SetFillColor(st.clrFill.R, st.clrFill.G, st.clrFill.B)
@@ -74,28 +70,29 @@ func defaultFormatter(val float64, precision int) string {
 // work with logical data coordinates rather than page coordinates and assists
 // with the drawing of a background grid.
 type GridType struct {
-	// Chart coordinates in page units
+	// Chart coordinates in page units.
 	x, y, w, h float64
 	// X, Y, Wd, Ht float64
-	// Slopes and intercepts scale data points to graph coordinates linearly
+	// Slopes and intercepts scale data points to graph coordinates linearly.
 	xm, xb, ym, yb float64
-	// Tickmarks
+	// Tickmarks.
 	xTicks, yTicks []float64
-	// Labels are inside of graph boundary
-	XLabelIn, YLabelIn bool
-	// Labels on X-axis should be rotated
+	XLabelIn       bool // Whether X-axis labels are drawn inside the graph boundary.
+	YLabelIn       bool // Whether Y-axis labels are drawn inside the graph boundary.
+	// Whether X-axis labels are rotated.
 	XLabelRotate bool
-	// Formatters; use nil to eliminate labels
-	XTickStr, YTickStr TickFormatFncType
-	// Subdivisions between tickmarks
-	XDiv, YDiv int
-	// Formatting precision
+	XTickStr     TickFormatFncType // X-axis tick label formatter; nil omits labels.
+	YTickStr     TickFormatFncType // Y-axis tick label formatter; nil omits labels.
+	XDiv         int               // X-axis subdivisions between tickmarks.
+	YDiv         int               // Y-axis subdivisions between tickmarks.
+	// Formatting precision.
 	xPrecision, yPrecision int
-	// Line and label colors
-	ClrText, ClrMain, ClrSub RGBAType
-	// Line thickness
-	WdMain, WdSub float64
-	// Label height in points
+	ClrText                RGBAType // Label color.
+	ClrMain                RGBAType // Main grid line color.
+	ClrSub                 RGBAType // Subdivision grid line color.
+	WdMain                 float64  // Main grid line width.
+	WdSub                  float64  // Subdivision grid line width.
+	// Label height in points.
 	TextSize float64
 }
 
@@ -133,7 +130,7 @@ func linearTickmark(tm []float64, lo, hi float64) (slope, intercept float64) {
 // methods TickmarksContainX() and TickmarksContainY(). These methods bound the
 // data range with appropriate boundaries and divisions. Alternatively, if the
 // exact extent and divisions of the tickmark layout are known, the methods
-// TickmarksExtentX() and TickmarksExtentY may be called instead.
+// TickmarksExtentX() and TickmarksExtentY() may be called instead.
 func NewGrid(x, y, w, h float64) (grid GridType) {
 	grid.x = x
 	grid.y = y
@@ -227,24 +224,24 @@ func (g GridType) YRange() (min, max float64) {
 	return
 }
 
-// TickmarksContainX sets the tickmarks to be shown by Grid() in the horizontal
-// dimension. The argument min and max specify the minimum and maximum values
+// TickmarksContainX sets the tickmarks to be shown by Grid in the horizontal
+// dimension. The arguments min and max specify the minimum and maximum values
 // to be contained within the grid. The tickmark values that are generated are
-// suitable for general purpose graphs.
+// suitable for general-purpose graphs.
 //
-// See TickmarkExtentX() for an alternative to this method to be used when the
+// See TickmarksExtentX for an alternative to this method when the
 // exact values of the tickmarks are to be set by the application.
 func (g *GridType) TickmarksContainX(min, max float64) {
 	g.xTicks, g.xPrecision = Tickmarks(min, max)
 	g.xm, g.xb = linearTickmark(g.xTicks, g.x, g.x+g.w)
 }
 
-// TickmarksContainY sets the tickmarks to be shown by Grid() in the vertical
-// dimension. The argument min and max specify the minimum and maximum values
+// TickmarksContainY sets the tickmarks to be shown by Grid in the vertical
+// dimension. The arguments min and max specify the minimum and maximum values
 // to be contained within the grid. The tickmark values that are generated are
-// suitable for general purpose graphs.
+// suitable for general-purpose graphs.
 //
-// See TickmarkExtentY() for an alternative to this method to be used when the
+// See TickmarksExtentY for an alternative to this method when the
 // exact values of the tickmarks are to be set by the application.
 func (g *GridType) TickmarksContainY(min, max float64) {
 	g.yTicks, g.yPrecision = Tickmarks(min, max)
@@ -266,12 +263,12 @@ func extent(min, div float64, count int) (tm []float64, precision int, ok bool) 
 	return tm, precision, true
 }
 
-// TickmarksExtentX sets the tickmarks to be shown by Grid() in the horizontal
-// dimension. count specifies number of major tickmark subdivisions to be
+// TickmarksExtentX sets the tickmarks to be shown by Grid in the horizontal
+// dimension. count specifies the number of major tickmark subdivisions to be
 // graphed. min specifies the leftmost data value. div specifies, in data
 // units, the extent of each major tickmark subdivision.
 //
-// See TickmarkContainX() for an alternative to this method to be used when
+// See TickmarksContainX for an alternative to this method when
 // viewer-friendly tickmarks are to be determined automatically.
 func (g *GridType) TickmarksExtentX(min, div float64, count int) {
 	var ok bool
@@ -284,12 +281,12 @@ func (g *GridType) TickmarksExtentX(min, div float64, count int) {
 	g.xm, g.xb = linearTickmark(g.xTicks, g.x, g.x+g.w)
 }
 
-// TickmarksExtentY sets the tickmarks to be shown by Grid() in the vertical
-// dimension. count specifies number of major tickmark subdivisions to be
+// TickmarksExtentY sets the tickmarks to be shown by Grid in the vertical
+// dimension. count specifies the number of major tickmark subdivisions to be
 // graphed. min specifies the bottommost data value. div specifies, in data
 // units, the extent of each major tickmark subdivision.
 //
-// See TickmarkContainY() for an alternative to this method to be used when
+// See TickmarksContainY for an alternative to this method when
 // viewer-friendly tickmarks are to be determined automatically.
 func (g *GridType) TickmarksExtentY(min, div float64, count int) {
 	var ok bool
@@ -306,17 +303,16 @@ func (g *GridType) TickmarksExtentY(min, div float64, count int) {
 // 	g.xm, g.xb = linear(dataLf, paperLf, dataRt, paperRt)
 // }
 
-// func (g *GridType) SetYExtent(dataTp, paperTp, dataBt, paperBt float64) {
-// 	g.ym, g.yb = linear(dataTp, paperTp, dataBt, paperBt)
-// }
-
+//	func (g *GridType) SetYExtent(dataTp, paperTp, dataBt, paperBt float64) {
+//		g.ym, g.yb = linear(dataTp, paperTp, dataBt, paperBt)
+//	}
 func lineAttr(pdf *Fpdf, clr RGBAType, lineWd float64) {
 	pdf.SetLineWidth(lineWd)
 	pdf.SetAlpha(clr.Alpha, "Normal")
 	pdf.SetDrawColor(clr.R, clr.G, clr.B)
 }
 
-// Grid generates a graph-paperlike set of grid lines on the current page.
+// Grid generates a graph-paper-like set of grid lines on the current page.
 func (g GridType) Grid(pdf *Fpdf) {
 	var st StateType
 	var yLen, xLen int
@@ -446,7 +442,7 @@ func (g GridType) Grid(pdf *Fpdf) {
 }
 
 // Plot plots a series of count line segments from xMin to xMax. It repeatedly
-// calls fnc(x) to retrieve the y value associate with x. The currently
+// calls fnc(x) to retrieve the y value associated with x. The currently
 // selected line drawing attributes are used.
 func (g GridType) Plot(pdf *Fpdf, xMin, xMax float64, count int, fnc func(x float64) (y float64)) {
 	if count > 0 {

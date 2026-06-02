@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/cssbruno/gopdfkit"
-	"github.com/cssbruno/gopdfkit/internal/example"
+	"github.com/cssbruno/gopdfkit/testsupport/example"
 )
 
 type closeErrorWriter struct {
@@ -46,7 +46,7 @@ func cleanup() {
 			}
 			if info.Mode().IsRegular() {
 				dir, _ := filepath.Split(path)
-				if "reference" != filepath.Base(dir) {
+				if filepath.Base(dir) != "reference" {
 					if len(path) > 3 {
 						if path[len(path)-4:] == ".pdf" {
 							_ = os.Remove(path)
@@ -493,12 +493,10 @@ func TestSVGParseUseSymbolViewBox(t *testing.T) {
 // TestIssue0209SplitLinesEqualMultiCell addresses issue 209
 // make SplitLines and MultiCell split at the same place
 func TestIssue0209SplitLinesEqualMultiCell(t *testing.T) {
-	var pdf *gopdfkit.Fpdf
-
-	pdf = gopdfkit.New("P", "mm", "A4", "")
+	pdf := gopdfkit.New("P", "mm", "A4", "")
 	pdf.AddPage()
 	pdf.SetFont("Arial", "", 8)
-	// this sentence should not be splited
+	// This sentence should not be split.
 	str := "Guochin Amandine"
 	lines := pdf.SplitLines([]byte(str), 26)
 	_, FontSize := pdf.GetFontSize()
@@ -513,7 +511,7 @@ func TestIssue0209SplitLinesEqualMultiCell(t *testing.T) {
 		t.Fatalf("expect MultiCell split in one line %.2f != %.2f", y_end-y_start, FontSize)
 	}
 
-	// this sentence should be splited in two lines
+	// This sentence should be split in two lines.
 	str = "Guiochini Amandine"
 	lines = pdf.SplitLines([]byte(str), 26)
 	y_start = pdf.GetY()
@@ -1145,7 +1143,7 @@ func ExampleFpdf_CellFormat_tables() {
 					err = fmt.Errorf("error tokenizing %s", lineStr)
 				}
 			}
-			fl.Close()
+			_ = fl.Close()
 			if len(countryList) == 0 {
 				err = fmt.Errorf("error loading data from %s", fileStr)
 			}
@@ -1550,7 +1548,7 @@ func ExampleFpdf_RegisterImageOptionsReader() {
 		opt.ImageType = "png"
 		opt.AllowNegativePosition = true
 		_ = pdf.RegisterImageOptionsReader("logo", opt, fl)
-		fl.Close()
+		_ = fl.Close()
 		for x := -20.0; x <= 40.0; x += 5 {
 			pdf.ImageOptions("logo", x, x+30, 0, 0, false, opt, 0, "")
 		}
@@ -1605,9 +1603,10 @@ func ExampleFpdf_SetAcceptPageBreakFunc() {
 	pdf.AddPage()
 	pdf.SetFont("Times", "", 12)
 	for j := range 20 {
-		if j == 1 {
+		switch j {
+		case 1:
 			pdf.ImageOptions(example.ImageFile("fpdf.png"), -1, 0, colWd, 0, true, gopdfkit.ImageOptions{}, 0, "")
-		} else if j == 5 {
+		case 5:
 			pdf.ImageOptions(example.ImageFile("golang-gopher.png"),
 				-1, 0, colWd, 0, true, gopdfkit.ImageOptions{}, 0, "")
 		}
@@ -2165,7 +2164,6 @@ func ExampleFpdf_SVGWrite() {
 	const (
 		fontPtSize = 16.0
 		wd         = 100.0
-		sigFileStr = "signature.svg"
 	)
 	var (
 		sig gopdfkit.SVG
@@ -2185,7 +2183,9 @@ func ExampleFpdf_SVGWrite() {
 		`web control is supported and is used in this example.`
 	html := pdf.HTMLNew()
 	html.Write(lineHt, htmlStr)
-	sig, err = gopdfkit.SVGFileParse(example.ImageFile(sigFileStr))
+	sig, err = gopdfkit.SVGParse([]byte(`<svg width="240" height="80" viewBox="0 0 240 80">
+		<path d="M8 50 C34 18 51 18 61 45 S89 72 112 40 C128 18 143 21 153 44 C162 64 176 62 189 42 C201 23 215 22 232 36" fill="none"/>
+	</svg>`))
 	if err == nil {
 		scale := 100 / sig.Wd
 		scaleY := 30 / sig.Ht
@@ -2465,7 +2465,7 @@ func ExampleFpdf_RegisterImageOptionsReader_flow() {
 	pdf.MultiCell(wd-margin-margin, ln, msgStr, "", "L", false)
 	fl, err = os.Open(example.ImageFile("gopdfkit.png"))
 	if err == nil {
-		defer fl.Close()
+		defer func() { _ = fl.Close() }()
 		infoPtr := pdf.RegisterImageOptionsReader(imageStr, gopdfkit.ImageOptions{ImageType: "png"}, fl)
 		if pdf.Ok() {
 			imgWd, imgHt := infoPtr.Extent()
@@ -3150,7 +3150,7 @@ func ExampleFpdf_SetPage() {
 	pdf := gopdfkit.New("L", "cm", "A4", "")
 	pdf.SetFont("Times", "", 12)
 
-	var time []float64
+	time := []float64{}
 	temperaturesFromSensors := make([][]float64, 5)
 	maxs := []float64{25, 41, 89, 62, 11}
 	for i := range temperaturesFromSensors {
@@ -3165,8 +3165,8 @@ func ExampleFpdf_SetPage() {
 			temperaturesFromSensors[j] = sensor
 		}
 	}
-	var graphs []gopdfkit.GridType
-	var pageNums []int
+	graphs := []gopdfkit.GridType{}
+	pageNums := []int{}
 	xMax := time[len(time)-1]
 	for i := range temperaturesFromSensors {
 		//Create a new page and graph for each sensor we want to graph.
@@ -3359,7 +3359,7 @@ func ExampleUTF8CutFont() {
 			writeSize(fullFontFileStr)
 			writeSize(subFontFileStr)
 			err = pdf.OutputFileAndClose(pdfFileStr)
-			os.Remove(subFontFileStr)
+			_ = os.Remove(subFontFileStr)
 		}
 	}
 	example.Summary(err, pdfFileStr)

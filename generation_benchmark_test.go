@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/cssbruno/gopdfkit"
-	"github.com/cssbruno/gopdfkit/internal/example"
+	"github.com/cssbruno/gopdfkit/testsupport/example"
 )
 
 func benchmarkGeneratedPDF(b *testing.B, build func(*gopdfkit.Fpdf)) {
@@ -265,9 +265,13 @@ func BenchmarkGenerationImages(b *testing.B) {
 }
 
 func BenchmarkGenerationSVG(b *testing.B) {
-	svg, err := gopdfkit.SVGFileParse(example.ImageFile("doc.svg"))
+	svg, err := gopdfkit.SVGParse([]byte(`<svg width="240" height="160" viewBox="0 0 240 160">
+		<rect x="12" y="10" width="216" height="140" rx="8" fill="none" stroke="#3c5a8c" stroke-width="4"/>
+		<path d="M42 46h156M42 76h156M42 106h108" fill="none" stroke="#3c5a8c" stroke-width="8" stroke-linecap="round"/>
+		<circle cx="188" cy="112" r="18" fill="none" stroke="#3c5a8c" stroke-width="6"/>
+	</svg>`))
 	if err != nil {
-		b.Fatalf("SVGFileParse() error = %v", err)
+		b.Fatalf("SVGParse() error = %v", err)
 	}
 
 	benchmarkGeneratedPDF(b, func(pdf *gopdfkit.Fpdf) {

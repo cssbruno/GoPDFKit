@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -14,17 +10,17 @@ import (
 
 // CreateTemplate defines a new template using the current page size.
 func (f *Fpdf) CreateTemplate(fn func(*Tpl)) Template {
-	return newTpl(Point{0, 0}, f.curPageSize, f.defOrientation, f.unitStr, f.fontDirStr, fn, f)
+	return createTemplate(Point{0, 0}, f.curPageSize, f.defOrientation, f.unitStr, f.fontDirStr, fn, f)
 }
 
 // CreateTemplateCustom starts a template, using the given bounds.
 func (f *Fpdf) CreateTemplateCustom(corner Point, size Size, fn func(*Tpl)) Template {
-	return newTpl(corner, size, f.defOrientation, f.unitStr, f.fontDirStr, fn, f)
+	return createTemplate(corner, size, f.defOrientation, f.unitStr, f.fontDirStr, fn, f)
 }
 
-// CreateTpl creates a template not attached to any document
+// CreateTpl creates a template not attached to any document.
 func CreateTpl(corner Point, size Size, orientationStr, unitStr, fontDirStr string, fn func(*Tpl)) Template {
-	return newTpl(corner, size, orientationStr, unitStr, fontDirStr, fn, nil)
+	return createTemplate(corner, size, orientationStr, unitStr, fontDirStr, fn, nil)
 }
 
 // UseTemplate adds a template to the current page or another template,
@@ -46,46 +42,86 @@ func (f *Fpdf) UseTemplateScaled(t Template, corner Point, size Size) {
 		return
 	}
 
-	// You have to add at least a page first
+	// A page must exist before a template can be used.
 	if f.page <= 0 {
 		f.SetErrorf("cannot use a template without first adding a page")
 		return
 	}
 
-	// make a note of the fact that we actually use this template, as well as any other templates,
-	// images or fonts it uses
-	f.templates[t.ID()] = t
-	for _, tt := range t.Templates() {
-		f.templates[tt.ID()] = tt
+	f.registerTemplate(t)
+	f.registerTemplateImages(t)
+	if f.err != nil {
+		return
 	}
 
-	// Create a list of existing image SHA-1 hashes.
-	existingImages := map[string]bool{}
-	for _, image := range f.images {
-		existingImages[image.i] = true
-	}
-
-	// Add each template image to $f, unless already present.
-	for name, ti := range t.Images() {
-		if _, found := existingImages[ti.i]; found {
-			continue
-		}
-		name = sprintf("t%s-%s", t.ID(), name)
-		f.images[name] = ti
-	}
-
-	// template data
 	_, templateSize := t.Size()
+	if templateSize.Wd == 0 || templateSize.Ht == 0 {
+		f.SetErrorf("template has invalid size")
+		return
+	}
+
 	scaleX := size.Wd / templateSize.Wd
 	scaleY := size.Ht / templateSize.Ht
 	tx := corner.X * f.k
 	ty := (f.curPageSize.Ht - corner.Y - size.Ht) * f.k
 
-	f.outf("q %.4f 0 0 %.4f %.4f %.4f cm", scaleX, scaleY, tx, ty) // Translate
+	f.outf("q %.4f 0 0 %.4f %.4f %.4f cm", scaleX, scaleY, tx, ty)
 	f.outf("/TPL%s Do Q", t.ID())
 }
 
-// Template is an object that can be written to, then used and re-used any number of times within a document.
+func (f *Fpdf) registerTemplate(t Template) {
+	for _, tpl := range collectTemplates(t) {
+		f.templates[tpl.ID()] = tpl
+	}
+}
+
+func collectTemplates(root Template) []Template {
+	templates := make([]Template, 0)
+	seen := make(map[string]bool)
+
+	var visit func(Template)
+	visit = func(t Template) {
+		if invalidTemplate(t) {
+			return
+		}
+		id := t.ID()
+		if seen[id] {
+			return
+		}
+		seen[id] = true
+		templates = append(templates, t)
+
+		for _, child := range t.Templates() {
+			visit(child)
+		}
+	}
+
+	visit(root)
+	return templates
+}
+
+func (f *Fpdf) registerTemplateImages(t Template) {
+	existingImages := make(map[string]bool, len(f.images))
+	for _, image := range f.images {
+		if image != nil {
+			existingImages[image.i] = true
+		}
+	}
+
+	for name, image := range t.Images() {
+		if image == nil {
+			f.SetErrorf("invalid template image %s: image info is nil", name)
+			return
+		}
+		if existingImages[image.i] {
+			continue
+		}
+		f.images[sprintf("t%s-%s", t.ID(), name)] = image
+	}
+}
+
+// Template is an object that can be written to, then reused any number of times
+// within a document.
 type Template interface {
 	ID() string
 	Size() (Point, Size)
@@ -118,7 +154,7 @@ func (f *Fpdf) templateFontCatalog() {
 	f.out(">>")
 }
 
-// putTemplates writes the templates to the PDF
+// putTemplates writes the templates to the PDF.
 func (f *Fpdf) putTemplates() {
 	filter := ""
 	if f.compress {
@@ -126,8 +162,7 @@ func (f *Fpdf) putTemplates() {
 	}
 
 	templates := sortTemplates(f.templates, f.catalogSort)
-	var t Template
-	for _, t = range templates {
+	for _, t := range templates {
 		corner, size := t.Size()
 
 		f.newobj()
@@ -145,38 +180,10 @@ func (f *Fpdf) putTemplates() {
 		f.out("<</ProcSet [/PDF /Text /ImageB /ImageC /ImageI]")
 
 		f.templateFontCatalog()
-
-		tImages := t.Images()
-		tTemplates := t.Templates()
-		if len(tImages) > 0 || len(tTemplates) > 0 {
-			f.out("/XObject <<")
-			{
-				var key string
-				var keyList []string
-				var ti *ImageInfo
-				for key = range tImages {
-					keyList = append(keyList, key)
-				}
-				if gl.catalogSort {
-					sort.Strings(keyList)
-				}
-				for _, key = range keyList {
-					ti = tImages[key]
-					f.outf("/I%s %d 0 R", ti.i, ti.n)
-				}
-			}
-			for _, tt := range tTemplates {
-				id := tt.ID()
-				if objID, ok := f.templateObjects[id]; ok {
-					f.outf("/TPL%s %d 0 R", id, objID)
-				}
-			}
-			f.out(">>")
-		}
+		f.templateXObjectCatalog(t)
 
 		f.out(">>")
 
-		//  Write the template's byte stream
 		buffer := t.Bytes()
 		if f.compress {
 			buffer = f.compressBytes(buffer)
@@ -190,70 +197,116 @@ func (f *Fpdf) putTemplates() {
 	}
 }
 
-func templateKeyList(mp map[string]Template, sort bool) (keyList []string) {
-	var key string
-	for key = range mp {
+func (f *Fpdf) templateXObjectCatalog(t Template) {
+	images := t.Images()
+	templates := t.Templates()
+	if len(images) == 0 && len(templates) == 0 {
+		return
+	}
+
+	f.out("/XObject <<")
+	f.templateImageCatalog(images)
+	f.templateDependencyCatalog(templates)
+	f.out(">>")
+}
+
+func (f *Fpdf) templateImageCatalog(images map[string]*ImageInfo) {
+	keyList := make([]string, 0, len(images))
+	for key := range images {
 		keyList = append(keyList, key)
 	}
-	if sort {
-		gensort(len(keyList),
-			func(a, b int) bool {
-				return keyList[a] < keyList[b]
-			},
-			func(a, b int) {
-				keyList[a], keyList[b] = keyList[b], keyList[a]
-			})
+	if f.catalogSort {
+		sort.Strings(keyList)
+	}
+
+	for _, key := range keyList {
+		image := images[key]
+		if image != nil {
+			f.outf("/I%s %d 0 R", image.i, image.n)
+		}
+	}
+}
+
+func (f *Fpdf) templateDependencyCatalog(templates []Template) {
+	for _, t := range templates {
+		if invalidTemplate(t) {
+			continue
+		}
+		if objID, ok := f.templateObjects[t.ID()]; ok {
+			f.outf("/TPL%s %d 0 R", t.ID(), objID)
+		}
+	}
+}
+
+func templateKeyList(mp map[string]Template, sorted bool) (keyList []string) {
+	for key := range mp {
+		keyList = append(keyList, key)
+	}
+	if sorted {
+		sort.Strings(keyList)
 	}
 	return
 }
 
-// sortTemplates puts templates in a suitable order based on dependices
+// sortTemplates orders templates so dependencies are written before the
+// templates that use them.
 func sortTemplates(templates map[string]Template, catalogSort bool) []Template {
-	chain := make([]Template, 0, len(templates)*2)
-
-	// build a full set of dependency chains
-	var keyList []string
-	var key string
-	var t Template
-	keyList = templateKeyList(templates, catalogSort)
-	for _, key = range keyList {
-		t = templates[key]
-		tlist := templateChainDependencies(t)
-		for _, tt := range tlist {
-			if tt != nil {
-				chain = append(chain, tt)
-			}
-		}
-	}
-
-	// reduce that to make a simple list
 	sorted := make([]Template, 0, len(templates))
-chain:
-	for _, t := range chain {
-		for _, already := range sorted {
-			if t == already {
-				continue chain
-			}
+	visited := make(map[string]bool, len(templates))
+	visiting := make(map[string]bool, len(templates))
+
+	for _, key := range templateKeyList(templates, catalogSort) {
+		template := templates[key]
+		if template == nil {
+			continue
 		}
-		sorted = append(sorted, t)
+		appendTemplateDependencies(template, catalogSort, visited, visiting, &sorted)
 	}
 
 	return sorted
 }
 
-// templateChainDependencies is a recursive function for determining the full chain of template dependencies
-func templateChainDependencies(template Template) []Template {
-	requires := template.Templates()
-	chain := make([]Template, len(requires)*2)
-	for _, req := range requires {
-		chain = append(chain, templateChainDependencies(req)...)
+func appendTemplateDependencies(
+	t Template,
+	catalogSort bool,
+	visited map[string]bool,
+	visiting map[string]bool,
+	sorted *[]Template,
+) {
+	if t == nil || invalidTemplate(t) {
+		return
 	}
-	chain = append(chain, template)
-	return chain
+
+	id := t.ID()
+	if visited[id] || visiting[id] {
+		return
+	}
+
+	visiting[id] = true
+	for _, child := range sortedTemplateDependencies(t, catalogSort) {
+		appendTemplateDependencies(child, catalogSort, visited, visiting, sorted)
+	}
+	visiting[id] = false
+
+	visited[id] = true
+	*sorted = append(*sorted, t)
 }
 
-// < 0002640  31 20 31 32 20 30 20 52  0a 2f 54 50 4c 32 20 31  |1 12 0 R./TPL2 1|
-// < 0002650  35 20 30 20 52 0a 2f 54  50 4c 31 20 31 34 20 30  |5 0 R./TPL1 14 0|
-
-// > 0002640  31 20 31 32 20 30 20 52  0a 2f 54 50 4c 31 20 31  |1 12 0 R./TPL1 1|
-// > 0002650  34 20 30 20 52 0a 2f 54  50 4c 32 20 31 35 20 30  |4 0 R./TPL2 15 0|
+func sortedTemplateDependencies(t Template, catalogSort bool) []Template {
+	if t == nil || invalidTemplate(t) {
+		return nil
+	}
+	dependencies := append([]Template(nil), t.Templates()...)
+	if catalogSort {
+		sort.SliceStable(dependencies, func(i, j int) bool {
+			if invalidTemplate(dependencies[i]) {
+				return false
+			}
+			if invalidTemplate(dependencies[j]) {
+				return true
+			}
+			return dependencies[i].ID() < dependencies[j].ID()
+		})
+	}
+	return dependencies
+}

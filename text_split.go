@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -21,13 +17,13 @@ import (
 // This method is useful for codepage-based fonts only. For UTF-8 encoded text,
 // use SplitText().
 //
-// You can use MultiCell if you want to print a text on several lines in a
+// You can use MultiCell if you want to print text on several lines in a
 // simple way.
 func (f *Fpdf) SplitLines(txt []byte, w float64) [][]byte {
 	lines := [][]byte{}
 	cw := f.currentFont.Cw
 	wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
-	s := bytes.Replace(txt, []byte("\r"), []byte{}, -1)
+	s := bytes.ReplaceAll(txt, []byte("\r"), []byte{})
 	nb := len(s)
 	for nb > 0 && s[nb-1] == '\n' {
 		nb--

@@ -7,8 +7,8 @@
 ![][logo]
 
 Package `gopdfkit` implements a Go-native PDF document generator. It supports
-text, drawing, images, templates, SVG, HTML fragments, barcodes through an
-extension package, PDF signing helpers, and deterministic test output.
+text, drawing, images, templates, SVG, HTML fragments, integrated barcodes,
+PDF signing helpers, and deterministic test output.
 
 This repository is the `github.com/cssbruno/gopdfkit` module. The `0.1` line is a
 breaking cleanup focused on a clearer package layout and shorter, feature-based
@@ -27,14 +27,55 @@ source files.
 * Document protection, attachments, metadata, JavaScript, and XMP metadata
 * Controlled HTML/CSS fragment rendering
 * Shared document model and renderer for structured reports/forms
-* Barcode helpers in `barcode/`
-* Thumbnail helpers in `thumb/`
-* PDF signing and verification helpers in `pdfsigning/`
+* Integrated barcode helpers
+* Integrated thumbnail helpers
+* Integrated PDF signing and verification helpers
 * CLI tools under `cmd/`
 
-The root `gopdfkit` package only uses the Go standard library. Optional packages
-can have their own dependencies; for example, `barcode/` depends on
-`github.com/boombuler/barcode`.
+The root `gopdfkit` package contains the primary document, image, barcode, and
+signing APIs.
+
+## Support Matrix
+
+This table compares the features this codebase explicitly supports with common
+alternatives. Other projects can differ by version and configuration, so their
+columns describe typical support rather than a guarantee for every library.
+
+| Capability | GoPDFKit support | Browser HTML-to-PDF support | Other FPDF-style code support |
+| --- | --- | --- | --- |
+| Go-native PDF generation | Yes | No, usually requires a browser/runtime bridge | Varies |
+| Standard PDF fonts | Yes | Varies | Usually yes |
+| UTF-8 TrueType fonts | Yes | Yes | Varies |
+| Text cells, multicells, links, bookmarks, and aliases | Yes | Varies | Usually yes |
+| Drawing primitives and paths | Yes | Varies | Usually yes |
+| Clipping, transforms, transparency, gradients, spot colors, and layers | Yes | Varies | Varies |
+| JPEG, PNG, GIF, WebP, and SVG images | Yes | Usually yes | Varies |
+| Controlled HTML/CSS fragment rendering | Yes | Yes, with broader browser layout | Varies |
+| Browser-grade HTML/CSS layout | No | Usually yes | Usually no |
+| Tables with `thead`, `tbody`, `tfoot`, `colspan`, and `rowspan` | Yes | Usually yes | Varies |
+| Configurable HTML validation and render limits | Yes | Varies | Varies |
+| Templates and imported template objects | Yes | Varies | Varies |
+| Document protection, attachments, metadata, JavaScript, and XMP metadata | Yes | Varies | Varies |
+| PDF signing and verification helpers | Yes, integrated in the root API | Varies | Varies |
+| Barcode helpers | Yes, integrated in the root API | Varies | Varies |
+
+## Integrated Barcode and Signing
+
+Barcode generation is available directly from `*Fpdf`:
+
+```go
+key := pdf.RegisterQRBarcode("https://example.test/verify", gopdfkit.QRBarcodeHigh, gopdfkit.QRBarcodeUnicode)
+pdf.Barcode(key, 10, 10, 24, 24, false)
+```
+
+PDF signing is also available from the root package:
+
+```go
+err := pdf.OutputSignedFile("signed.pdf", gopdfkit.SignOptions{
+    Signer:      signer,
+    Certificate: cert,
+})
+```
 
 ## Installation
 
@@ -71,11 +112,7 @@ assets/
   static/            checked-in fonts, images, and text fixtures
   generated/pdf/     generated PDFs and reference PDFs
 
-internal/example/    test/example support helpers
-
-barcode/             optional barcode integration package
-thumb/               optional thumbnail/image helper package
-pdfsigning/          PDF signing, verification, CMS, DER, and parser helpers
+testsupport/example/    test/example support helpers
 
 doc/                 Markdown and generated documentation inputs/templates
 tools/               tool-only module for quality/security commands
@@ -155,7 +192,7 @@ Then call `AddFont()` and `SetFont()` from your PDF generation code.
 Running `go test ./...` generates PDFs in `assets/generated/pdf`. Reference PDFs
 are stored in `assets/generated/pdf/reference`.
 
-`internal/example` contains helpers used by tests to name generated files and,
+`testsupport/example` contains helpers used by tests to name generated files and,
 when enabled, compare generated PDFs against reference copies. Comparisons need
 deterministic object ordering and timestamps; tests use `SetCatalogSort()` and
 `SetCreationDate()` for that.

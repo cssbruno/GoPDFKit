@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -188,6 +184,10 @@ func (html *HTML) figureHeight(tokens []HTMLSegmentType, start int, lineHt float
 			total += ht
 		case "figcaption":
 			captionTokens, end := htmlCollectElementTokens(figureTokens, i, "figcaption")
+			if len(captionTokens) < 2 {
+				i = end
+				continue
+			}
 			style := inherited
 			style.italic = true
 			if style.align == "" || style.align == "L" {

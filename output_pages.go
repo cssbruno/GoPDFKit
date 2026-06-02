@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -35,7 +31,7 @@ func (f *Fpdf) replaceAliases() {
 		replaced = utf16Replacer.Replace(replaced)
 		if replaced != s {
 			f.pages[n].Truncate(0)
-			f.pages[n].WriteString(replaced)
+			_, _ = f.pages[n].WriteString(replaced)
 		}
 	}
 }

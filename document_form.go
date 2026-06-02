@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package gopdfkit
@@ -10,31 +11,31 @@ import (
 // FormDocument describes a generic form that can be rendered as supported HTML
 // or converted into shared document blocks.
 type FormDocument struct {
-	Title    string
-	Sections []FormSection
+	Title    string        // Form title.
+	Sections []FormSection // Form sections in display order.
 }
 
 // FormSection groups related form questions.
 type FormSection struct {
-	Title        string
-	Questions    []FormQuestion
-	BreakBefore  bool
-	BreakAfter   bool
-	KeepTogether bool
+	Title        string         // Section title.
+	Questions    []FormQuestion // Questions in this section.
+	BreakBefore  bool           // Insert a page break before this section.
+	BreakAfter   bool           // Insert a page break after this section.
+	KeepTogether bool           // Prefer to keep the section on one page.
 }
 
 // FormQuestion stores one question and its answer.
 type FormQuestion struct {
-	Label    string
-	Answer   FormAnswer
-	Required bool
+	Label    string     // Question label.
+	Answer   FormAnswer // Question answer.
+	Required bool       // Whether the question is required.
 }
 
 // FormAnswer stores a plain, list, or table answer.
 type FormAnswer struct {
-	Text  string
-	Items []string
-	Table [][]string
+	Text  string     // Plain text answer.
+	Items []string   // List answer items.
+	Table [][]string // Table answer rows.
 }
 
 // FormDocumentHTML returns the canonical supported-HTML representation of a

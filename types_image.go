@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -18,9 +14,11 @@ import (
 	"strings"
 )
 
+// ImageInfo stores parsed image data and PDF object metadata for a registered
+// image.
 type ImageInfo struct {
 	data  []byte  // Raw image data
-	smask []byte  // Soft Mask, an 8bit per-pixel transparency mask
+	smask []byte  // Soft mask, an 8-bit per-pixel transparency mask
 	n     int     // Image object number
 	w     float64 // Width
 	h     float64 // Height
@@ -31,8 +29,8 @@ type ImageInfo struct {
 	dp    string  // DecodeParms
 	trns  []int   // Transparency mask
 	scale float64 // Document scale factor
-	dpi   float64 // Dots-per-inch found from image file (png only)
-	i     string  // SHA-1 checksum of the above values.
+	dpi   float64 // dots per inch found from the image file (PNG only)
+	i     string  // SHA-1 checksum of the above values
 }
 
 func generateImageID(info *ImageInfo) (string, error) {
@@ -151,18 +149,24 @@ func (info *ImageInfo) Extent() (wd, ht float64) {
 
 // Width returns the width of the image in the units of the Fpdf object.
 func (info *ImageInfo) Width() float64 {
+	if info == nil {
+		return 0
+	}
 	return info.w / (info.scale * info.dpi / 72)
 }
 
 // Height returns the height of the image in the units of the Fpdf object.
 func (info *ImageInfo) Height() float64 {
+	if info == nil {
+		return 0
+	}
 	return info.h / (info.scale * info.dpi / 72)
 }
 
-// SetDpi sets the dots per inch for an image. PNG images MAY have their dpi
-// set automatically, if the image specifies it. DPI information is not
-// currently available automatically for JPG, GIF and WebP images, so if it's
-// important to you, you can set it here. It defaults to 72 dpi.
+// SetDpi sets the dots per inch for an image. PNG images may have their DPI set
+// automatically if the image specifies it. DPI information is not currently
+// available automatically for JPEG, GIF, and WebP images, so callers can set it
+// here when it matters. It defaults to 72 DPI.
 func (info *ImageInfo) SetDpi(dpi float64) {
 	info.dpi = dpi
 }

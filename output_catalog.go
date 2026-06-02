@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -15,7 +11,6 @@ import (
 // SetDefaultCatalogSort sets the default value of the catalog sort flag that
 // will be used when initializing a new Fpdf instance. See SetCatalogSort() for
 // more details.
-
 func SetDefaultCatalogSort(flag bool) {
 	gl.catalogSort = flag
 }
@@ -23,7 +18,6 @@ func SetDefaultCatalogSort(flag bool) {
 // SetCatalogSort sets a flag that will be used, if true, to consistently order
 // the document's internal resource catalogs. This method is typically only
 // used for test purposes to facilitate PDF comparison.
-
 func (f *Fpdf) SetCatalogSort(flag bool) {
 	f.catalogSort = flag
 }
@@ -31,15 +25,13 @@ func (f *Fpdf) SetCatalogSort(flag bool) {
 // SetDefaultCreationDate sets the default value of the document creation date
 // that will be used when initializing a new Fpdf instance. See
 // SetCreationDate() for more details.
-
 func SetDefaultCreationDate(tm time.Time) {
 	gl.creationDate = tm
 }
 
-// SetDefaultModificationDate sets the default value of the document modification date
-// that will be used when initializing a new Fpdf instance. See
-// SetCreationDate() for more details.
-
+// SetDefaultModificationDate sets the default document modification date used
+// when initializing a new Fpdf instance. See SetCreationDate() for more
+// details.
 func SetDefaultModificationDate(tm time.Time) {
 	gl.modDate = tm
 }
@@ -48,20 +40,17 @@ func SetDefaultModificationDate(tm time.Time) {
 // default, the time when the document is generated is used for this value.
 // This method is typically only used for testing purposes to facilitate PDF
 // comparison. Specify a zero-value time to revert to the default behavior.
-
 func (f *Fpdf) SetCreationDate(tm time.Time) {
 	f.creationDate = tm
 }
 
 // SetModificationDate fixes the document's internal ModDate value.
-// See `SetCreationDate` for more details.
-
+// See SetCreationDate() for more details.
 func (f *Fpdf) SetModificationDate(tm time.Time) {
 	f.modDate = tm
 }
 
 // SetJavascript adds Adobe JavaScript to the document.
-
 func (f *Fpdf) SetJavascript(script string) {
 	f.javascript = &script
 }
@@ -70,7 +59,6 @@ func (f *Fpdf) SetJavascript(script string) {
 // replace all occurrences of that alias after writing but before the document
 // is closed. Functions ExampleFpdf_RegisterAlias() and
 // ExampleFpdf_RegisterAlias_utf8() in fpdf_test.go demonstrate this method.
-
 func (f *Fpdf) RegisterAlias(alias, replacement string) {
 	f.aliasMap[alias] = replacement
 }
@@ -173,11 +161,9 @@ func (f *Fpdf) putresources() {
 		f.out(">>")
 		f.out("endobj")
 	}
-	return
 }
 
-// returns Now() if tm is zero
-
+// timeOrNow returns time.Now() if tm is zero.
 func timeOrNow(tm time.Time) time.Time {
 	if tm.IsZero() {
 		return time.Now()
@@ -369,5 +355,4 @@ func (f *Fpdf) enddoc() {
 	f.outf("%d", o)
 	f.out("%%EOF")
 	f.state = 3
-	return
 }

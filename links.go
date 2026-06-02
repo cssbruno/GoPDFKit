@@ -1,24 +1,18 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
 // AddLink creates a new internal link and returns its identifier. An internal
-// link is a clickable area which directs to another place within the document.
-// The identifier can then be passed to Cell(), Write(), ImageOptions() or Link(). The
-// destination is defined with SetLink().
-
+// link is a clickable area that points to another place within the document.
+// The identifier can then be passed to Cell, Write, ImageOptions, or Link. The
+// destination is defined with SetLink.
 func (f *Fpdf) AddLink() int {
 	f.links = append(f.links, internalLink{})
 	return len(f.links) - 1
 }
 
-// SetLink defines the page and position a link points to. See AddLink().
-
+// SetLink defines the page and position that link points to. See AddLink.
 func (f *Fpdf) SetLink(link int, y float64, page int) {
 	if !f.validLinkID(link) {
 		f.SetErrorf("invalid link id: %d", link)
@@ -41,8 +35,7 @@ func (f *Fpdf) SetLink(link int, y float64, page int) {
 	f.links[link] = internalLink{page, y}
 }
 
-// newLink adds a new clickable link on current page
-
+// newLink adds a new clickable link on the current page.
 func (f *Fpdf) newLink(x, y, w, h float64, link int, linkStr string) {
 	if link != 0 && !f.validLinkID(link) {
 		f.SetErrorf("invalid link id: %d", link)
@@ -60,19 +53,17 @@ func (f *Fpdf) validLinkID(link int) bool {
 }
 
 // Link puts a link on a rectangular area of the page. Text or image links are
-// generally put via Cell(), Write() or ImageOptions(), but this method can be useful
-// for instance to define a clickable area inside an image. link is the value
-// returned by AddLink().
-
+// generally put via Cell, Write, or ImageOptions, but this method can be useful
+// to define a clickable area inside an image. link is the value returned by
+// AddLink.
 func (f *Fpdf) Link(x, y, w, h float64, link int) {
 	f.newLink(x, y, w, h, link, "")
 }
 
 // LinkString puts a link on a rectangular area of the page. Text or image
-// links are generally put via Cell(), Write() or ImageOptions(), but this method can
-// be useful for instance to define a clickable area inside an image. linkStr
-// is the target URL.
-
+// links are generally put via Cell, Write, or ImageOptions, but this method can
+// be useful to define a clickable area inside an image. linkStr is the target
+// URL.
 func (f *Fpdf) LinkString(x, y, w, h float64, linkStr string) {
 	f.newLink(x, y, w, h, 0, linkStr)
 }
@@ -82,7 +73,6 @@ func (f *Fpdf) LinkString(x, y, w, h float64, linkStr string) {
 // the outline; 0 is the top level, 1 is just below, and so on. y specifies the
 // vertical position of the bookmark destination in the current page; -1
 // indicates the current position.
-
 func (f *Fpdf) Bookmark(txtStr string, level int, y float64) {
 	if y == -1 {
 		y = f.y

@@ -1,10 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- *                 *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit_test
 
@@ -20,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cssbruno/gopdfkit"
-	"github.com/cssbruno/gopdfkit/internal/example"
+	"github.com/cssbruno/gopdfkit/testsupport/example"
 )
 
 func ExampleTtfParse() {
@@ -118,7 +113,7 @@ func TestMakeFontOpenTypeCFF(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open compressed CFF: %s", err)
 	}
-	defer zFile.Close()
+	defer func() { _ = zFile.Close() }()
 	zr, err := zlib.NewReader(zFile)
 	if err != nil {
 		t.Fatalf("open zlib CFF: %s", err)
@@ -328,7 +323,7 @@ func hexStr(s string) string {
 	var b bytes.Buffer
 	b.WriteString("\"")
 	for _, ch := range []byte(s) {
-		b.WriteString(fmt.Sprintf("\\x%02x", ch))
+		_, _ = fmt.Fprintf(&b, "\\x%02x", ch)
 	}
 	b.WriteString("\":")
 	return b.String()

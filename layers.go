@@ -1,8 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -32,8 +29,7 @@ func (f *Fpdf) layerInit() {
 // AddLayer defines a layer that can be shown or hidden when the document is
 // displayed. name specifies the layer name that the document reader will
 // display in the layer list. visible specifies whether the layer will be
-// initially visible. The return value is an integer ID that is used in a call
-// to BeginLayer().
+// initially visible. The returned integer ID is used in a call to BeginLayer.
 func (f *Fpdf) AddLayer(name string, visible bool) (layerID int) {
 	layerID = len(f.layer.list)
 	f.layer.list = append(f.layer.list, layerType{name: name, visible: visible})
@@ -41,9 +37,8 @@ func (f *Fpdf) AddLayer(name string, visible bool) (layerID int) {
 }
 
 // BeginLayer is called to begin adding content to the specified layer. All
-// content added to the page between a call to BeginLayer and a call to
-// EndLayer is added to the layer specified by id. See AddLayer for more
-// details.
+// content added to the page between BeginLayer and EndLayer is added to the
+// layer specified by id. See AddLayer for more details.
 func (f *Fpdf) BeginLayer(id int) {
 	f.EndLayer()
 	if id >= 0 && id < len(f.layer.list) {

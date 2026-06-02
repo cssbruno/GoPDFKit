@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -16,7 +12,6 @@ import (
 // pages. Allowable types are trim, trimbox, crop, cropbox, bleed, bleedbox,
 // art and artbox box types are case insensitive. See SetPageBox() for a method
 // that specifies the coordinates and extent of the page box individually.
-
 func (f *Fpdf) SetPageBoxRec(t string, pb PageBox) {
 	if !finiteNumbers(pb.X, pb.Y, pb.Wd, pb.Ht) {
 		f.err = fmt.Errorf("invalid page box coordinates")
@@ -48,6 +43,9 @@ func (f *Fpdf) SetPageBoxRec(t string, pb PageBox) {
 	pb.Wd = (pb.Wd * f.k) + pb.X
 	pb.Ht = (pb.Ht * f.k) + pb.Y
 	if f.page > 0 {
+		if f.pageBoxes[f.page] == nil {
+			f.pageBoxes[f.page] = make(map[string]PageBox)
+		}
 		f.pageBoxes[f.page][t] = pb
 	}
 	f.defPageBoxes[t] = pb
@@ -56,7 +54,6 @@ func (f *Fpdf) SetPageBoxRec(t string, pb PageBox) {
 // SetPageBox sets the page box for the current page, and any following pages.
 // Allowable types are trim, trimbox, crop, cropbox, bleed, bleedbox, art and
 // artbox box types are case insensitive.
-
 func (f *Fpdf) SetPageBox(t string, x, y, wd, ht float64) {
 	f.SetPageBoxRec(t, PageBox{Size{Wd: wd, Ht: ht}, Point{X: x, Y: y}})
 }

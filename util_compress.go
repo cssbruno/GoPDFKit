@@ -1,10 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- *                         *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -15,12 +10,6 @@ import (
 	"io"
 	"sync"
 )
-
-// sliceCompress returns a zlib-compressed copy of the specified byte array
-func sliceCompress(data []byte) []byte {
-	out, _ := sliceCompressLevel(data, zlib.BestSpeed)
-	return out
-}
 
 func sliceCompressLevel(data []byte, level int) ([]byte, error) {
 	var buf bytes.Buffer
@@ -73,13 +62,13 @@ func validCompressionLevel(level int) bool {
 	return level >= zlib.HuffmanOnly && level <= zlib.BestCompression
 }
 
-// sliceUncompress returns an uncompressed copy of the specified zlib-compressed byte array.
+// sliceUncompress returns an uncompressed copy of zlib-compressed data.
 // If limit is non-negative, decompression fails once the output grows beyond it.
 func sliceUncompress(data []byte, limit ...int) (outData []byte, err error) {
 	inBuf := bytes.NewReader(data)
 	r, err := zlib.NewReader(inBuf)
 	if err == nil {
-		defer r.Close()
+		defer func() { _ = r.Close() }()
 		var outBuf bytes.Buffer
 		if len(limit) > 0 && limit[0] >= 0 {
 			_, err = outBuf.ReadFrom(io.LimitReader(r, int64(limit[0])+1))

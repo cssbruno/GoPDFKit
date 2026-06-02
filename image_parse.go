@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -22,9 +18,8 @@ import (
 	"golang.org/x/image/webp"
 )
 
-// parsejpg extracts info from io.Reader with JPEG data
+// parsejpg extracts image information from an io.Reader containing JPEG data.
 // Thank you, Bruno Michel, for providing this code.
-
 func (f *Fpdf) parsejpg(r io.Reader) (info *ImageInfo) {
 	info = f.newImageInfo()
 	var (
@@ -68,8 +63,7 @@ func (f *Fpdf) parsejpg(r io.Reader) (info *ImageInfo) {
 	return
 }
 
-// parsepng extracts info from a PNG data
-
+// parsepng extracts image information from PNG data.
 func (f *Fpdf) parsepng(r io.Reader, readdpi bool) (info *ImageInfo) {
 	buf, err := bufferFromReaderLimit(r, maxImageSourceBytes)
 	if err != nil {
@@ -95,8 +89,7 @@ func (f *Fpdf) readByte(r io.Reader) (val byte) {
 	return
 }
 
-// parsegif extracts info from a GIF data (via PNG conversion)
-
+// parsegif extracts image information from GIF data via PNG conversion.
 func (f *Fpdf) parsegif(r io.Reader) (info *ImageInfo) {
 	data, err := bufferFromReaderLimit(r, maxImageSourceBytes)
 	if err != nil {
@@ -127,8 +120,8 @@ func (f *Fpdf) parsegif(r io.Reader) (info *ImageInfo) {
 	return f.parsepngstream(pngBuf, false)
 }
 
-// parsewebp extracts info from a WebP image by converting it to PNG first.
-
+// parsewebp extracts image information from a WebP image by converting it to
+// PNG first.
 func (f *Fpdf) parsewebp(r io.Reader) (info *ImageInfo) {
 	data, err := bufferFromReaderLimit(r, maxImageSourceBytes)
 	if err != nil {
@@ -147,6 +140,10 @@ func (f *Fpdf) parsewebp(r io.Reader) (info *ImageInfo) {
 	img, err := webp.Decode(bytes.NewReader(data.Bytes()))
 	if err != nil {
 		f.err = err
+		return
+	}
+	if img == nil {
+		f.err = fmt.Errorf("invalid WebP image")
 		return
 	}
 	bounds := img.Bounds()

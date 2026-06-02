@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -33,7 +29,7 @@ func (f *Fpdf) TransformBegin() {
 }
 
 // TransformScaleX scales the width of the following text, drawings and images.
-// scaleWd is the percentage scaling factor. (x, y) is center of scaling.
+// scaleWd is the percentage scaling factor. (x, y) is at the center of scaling.
 //
 // The TransformBegin() example demonstrates this method.
 func (f *Fpdf) TransformScaleX(scaleWd, x, y float64) {
@@ -41,7 +37,7 @@ func (f *Fpdf) TransformScaleX(scaleWd, x, y float64) {
 }
 
 // TransformScaleY scales the height of the following text, drawings and
-// images. scaleHt is the percentage scaling factor. (x, y) is center of
+// images. scaleHt is the percentage scaling factor. (x, y) is at the center of
 // scaling.
 //
 // The TransformBegin() example demonstrates this method.
@@ -51,7 +47,7 @@ func (f *Fpdf) TransformScaleY(scaleHt, x, y float64) {
 
 // TransformScaleXY uniformly scales the width and height of the following
 // text, drawings and images. s is the percentage scaling factor for both width
-// and height. (x, y) is center of scaling.
+// and height. (x, y) is at the center of scaling.
 //
 // The TransformBegin() example demonstrates this method.
 func (f *Fpdf) TransformScaleXY(s, x, y float64) {
@@ -60,7 +56,7 @@ func (f *Fpdf) TransformScaleXY(s, x, y float64) {
 
 // TransformScale generally scales the following text, drawings and images.
 // scaleWd and scaleHt are the percentage scaling factors for width and height.
-// (x, y) is center of scaling.
+// (x, y) is at the center of scaling.
 //
 // The TransformBegin() example demonstrates this method.
 func (f *Fpdf) TransformScale(scaleWd, scaleHt, x, y float64) {
@@ -101,7 +97,7 @@ func (f *Fpdf) TransformMirrorPoint(x, y float64) {
 }
 
 // TransformMirrorLine symmetrically mirrors the following text, drawings and
-// images on the line defined by angle and the point (x, y). angles is
+// images on the line defined by angle and the point (x, y). angle is
 // specified in degrees and measured counter-clockwise from the 3 o'clock
 // position.
 //
@@ -207,7 +203,7 @@ func (f *Fpdf) Transform(tm TransformMatrix) {
 	}
 }
 
-// TransformEnd applies a transformation that was begun with a call to TransformBegin().
+// TransformEnd ends a transformation that was begun with TransformBegin().
 //
 // The TransformBegin() example demonstrates this method.
 func (f *Fpdf) TransformEnd() {

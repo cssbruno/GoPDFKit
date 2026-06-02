@@ -1,10 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- *                         *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -21,7 +16,7 @@ const (
 	maxImagePixels       = 50 * 1000 * 1000
 )
 
-// fileExist returns true if the specified normal file exists
+// fileExist returns true if the specified regular file exists.
 func fileExist(filename string) (ok bool) {
 	info, err := os.Stat(filename)
 	if err == nil {
@@ -32,20 +27,15 @@ func fileExist(filename string) (ok bool) {
 	return ok
 }
 
-// fileSize returns the size of the specified file; ok will be false
-// if the file does not exist or is not an ordinary file
+// fileSize returns the size of the specified file; ok is false if the file does
+// not exist or is not a regular file.
 func fileSize(filename string) (size int64, ok bool) {
 	info, err := os.Stat(filename)
-	ok = err == nil
+	ok = err == nil && info != nil
 	if ok {
 		size = info.Size()
 	}
 	return
-}
-
-// bufferFromReader returns a new buffer populated with the contents of the specified Reader
-func bufferFromReader(r io.Reader) (b *bytes.Buffer, err error) {
-	return bufferFromReaderLimit(r, -1)
 }
 
 func bufferFromReaderLimit(r io.Reader, limit int) (b *bytes.Buffer, err error) {

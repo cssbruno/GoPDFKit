@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package main
 
@@ -55,7 +51,7 @@ func newCommand(name string, stdout, stderr io.Writer, build fontBuildFunc) comm
 func (cmd command) run(args []string) int {
 	options, err := cmd.parse(args)
 	if err != nil {
-		fmt.Fprintln(cmd.stderr, err)
+		_, _ = fmt.Fprintln(cmd.stderr, err)
 		cmd.printUsage()
 		return exitUsage
 	}
@@ -64,11 +60,11 @@ func (cmd command) run(args []string) int {
 		return exitOK
 	}
 	if err = options.prepare(); err != nil {
-		fmt.Fprintln(cmd.stderr, err)
+		_, _ = fmt.Fprintln(cmd.stderr, err)
 		return exitUsage
 	}
 	if err = cmd.makeFonts(options); err != nil {
-		fmt.Fprintln(cmd.stderr, err)
+		_, _ = fmt.Fprintln(cmd.stderr, err)
 		return exitBuild
 	}
 	return exitOK
@@ -105,7 +101,7 @@ func (options *fontmakerOptions) prepare() error {
 	if outputDir == "" {
 		return errors.New("output directory cannot be empty")
 	}
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o750); err != nil {
 		return fmt.Errorf("prepare output directory %s: %w", outputDir, err)
 	}
 	encoding, err := resolveEncoding(strings.TrimSpace(options.encoding))
@@ -136,7 +132,7 @@ func (cmd command) makeFonts(options fontmakerOptions) error {
 	if len(failures) > 0 {
 		return errors.Join(failures...)
 	}
-	fmt.Fprintf(cmd.stdout, "fontmaker: generated %d font definition(s) in %s\n", len(options.fonts), options.outputDir)
+	_, _ = fmt.Fprintf(cmd.stdout, "fontmaker: generated %d font definition(s) in %s\n", len(options.fonts), options.outputDir)
 	return nil
 }
 
@@ -168,18 +164,18 @@ func encodingCandidates(encoding string) []string {
 
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
+	return err == nil && info != nil && !info.IsDir()
 }
 
 func (cmd command) printUsage() {
-	fmt.Fprintf(cmd.stderr, "Usage: %s [options] font_file [font_file...]\n\n", cmd.name)
-	fmt.Fprintln(cmd.stderr, "Generate GoPDFKit JSON font definitions from TrueType, OpenType, or binary Type1 fonts.")
-	fmt.Fprintln(cmd.stderr, "Type1 fonts require an AFM metrics file with the same base path.")
-	fmt.Fprintln(cmd.stderr)
-	fmt.Fprintln(cmd.stderr, "Options:")
+	_, _ = fmt.Fprintf(cmd.stderr, "Usage: %s [options] font_file [font_file...]\n\n", cmd.name)
+	_, _ = fmt.Fprintln(cmd.stderr, "Generate GoPDFKit JSON font definitions from TrueType, OpenType, or binary Type1 fonts.")
+	_, _ = fmt.Fprintln(cmd.stderr, "Type1 fonts require an AFM metrics file with the same base path.")
+	_, _ = fmt.Fprintln(cmd.stderr)
+	_, _ = fmt.Fprintln(cmd.stderr, "Options:")
 	cmd.printFlagDefaults()
-	fmt.Fprintln(cmd.stderr)
-	fmt.Fprintf(cmd.stderr, "Example:\n  %s --embed --enc=../../assets/static/font/cp1252.map --dst=../../assets/static/font ../../assets/static/font/calligra.ttf\n", cmd.name)
+	_, _ = fmt.Fprintln(cmd.stderr)
+	_, _ = fmt.Fprintf(cmd.stderr, "Example:\n  %s --embed --enc=../../assets/static/font/cp1252.map --dst=../../assets/static/font ../../assets/static/font/calligra.ttf\n", cmd.name)
 }
 
 func (cmd command) printFlagDefaults() {

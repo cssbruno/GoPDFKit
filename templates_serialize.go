@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -11,14 +7,13 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/gob"
-	"errors"
 	"fmt"
 	"maps"
-	"reflect"
 )
 
-// newTpl creates a template, copying graphics settings from a template if one is given
-func newTpl(corner Point, size Size, orientationStr, unitStr, fontDirStr string, fn func(*Tpl), copyFrom *Fpdf) Template {
+// createTemplate creates a template, copying graphics settings from an Fpdf
+// when one is provided.
+func createTemplate(corner Point, size Size, orientationStr, unitStr, fontDirStr string, fn func(*Tpl), copyFrom *Fpdf) Template {
 	sizeStr := ""
 
 	fpdf := fpdfNew(orientationStr, unitStr, sizeStr, fontDirStr, size)
@@ -26,22 +21,22 @@ func newTpl(corner Point, size Size, orientationStr, unitStr, fontDirStr string,
 	if copyFrom != nil {
 		tpl.loadParamsFromFpdf(copyFrom)
 	}
-	tpl.Fpdf.AddPage()
+	tpl.AddPage()
 	fn(&tpl)
 
-	bytes := make([][]byte, len(tpl.Fpdf.pages))
-	// skip the first page as it will always be empty
+	bytes := make([][]byte, len(tpl.pages))
+	// Skip the first page because it is always empty.
 	for x := 1; x < len(bytes); x++ {
-		bytes[x] = tpl.Fpdf.pages[x].Bytes()
+		bytes[x] = tpl.pages[x].Bytes()
 	}
 
-	templates := make([]Template, 0, len(tpl.Fpdf.templates))
-	for _, key := range templateKeyList(tpl.Fpdf.templates, true) {
-		templates = append(templates, tpl.Fpdf.templates[key])
+	templates := make([]Template, 0, len(tpl.templates))
+	for _, key := range templateKeyList(tpl.templates, true) {
+		templates = append(templates, tpl.templates[key])
 	}
-	images := tpl.Fpdf.images
+	images := tpl.images
 
-	template := FpdfTpl{corner, size, bytes, images, templates, tpl.Fpdf.page}
+	template := FpdfTpl{corner, size, bytes, images, templates, tpl.page}
 	return &template
 }
 
@@ -55,17 +50,17 @@ type FpdfTpl struct {
 	page      int
 }
 
-// ID returns the global template identifier
+// ID returns the global template identifier.
 func (t *FpdfTpl) ID() string {
 	return fmt.Sprintf("%x", sha1.Sum(t.Bytes()))
 }
 
-// Size gives the bounding dimensions of this template
+// Size returns the bounding dimensions of this template.
 func (t *FpdfTpl) Size() (corner Point, size Size) {
 	return t.corner, t.size
 }
 
-// Bytes returns the actual template data, not including resources
+// Bytes returns the template data, not including resources.
 func (t *FpdfTpl) Bytes() []byte {
 	if t.page <= 0 || t.page >= len(t.bytes) {
 		return nil
@@ -73,18 +68,18 @@ func (t *FpdfTpl) Bytes() []byte {
 	return t.bytes[t.page]
 }
 
-// FromPage creates a new template from a specific Page
+// FromPage creates a new template from a specific page.
 func (t *FpdfTpl) FromPage(page int) (Template, error) {
-	// pages start at 1
-	if page == 0 {
-		return nil, errors.New("Pages start at 1 No template will have a page 0")
+	// Pages start at 1.
+	if page < 1 {
+		return nil, fmt.Errorf("pages start at 1; no template will have a page 0")
 	}
 
 	if page > t.NumPages() {
-		return nil, fmt.Errorf("The template does not have a page %d", page)
+		return nil, fmt.Errorf("template does not have a page %d", page)
 	}
-	// if it is already pointing to the correct page
-	// there is no need to create a new template
+	// If it is already pointing to the correct page, there is no need to create
+	// a new template.
 	if t.page == page {
 		return t, nil
 	}
@@ -98,33 +93,32 @@ func (t *FpdfTpl) FromPage(page int) (Template, error) {
 func (t *FpdfTpl) FromPages() []Template {
 	p := make([]Template, t.NumPages())
 	for x := 1; x <= t.NumPages(); x++ {
-		// the only error is when accessing a
-		// non existing template... that can't happen
-		// here
+		// The only error is from accessing a nonexistent template, which cannot
+		// happen here.
 		p[x-1], _ = t.FromPage(x)
 	}
 
 	return p
 }
 
-// Images returns a list of the images used in this template
+// Images returns the images used in this template.
 func (t *FpdfTpl) Images() map[string]*ImageInfo {
 	return t.images
 }
 
-// Templates returns a list of templates used in this template
+// Templates returns the templates used in this template.
 func (t *FpdfTpl) Templates() []Template {
 	return t.templates
 }
 
-// NumPages returns the number of available pages within the template. Look at FromPage and FromPages on access to that content.
+// NumPages returns the number of available pages within the template. Use
+// FromPage or FromPages to access that content.
 func (t *FpdfTpl) NumPages() int {
-	// the first page is empty to
-	// make the pages begin at one
+	// The first page is empty to make pages begin at one.
 	return len(t.bytes) - 1
 }
 
-// Serialize turns a template into a byte string for later deserialization
+// Serialize turns a template into a byte slice for later deserialization.
 func (t *FpdfTpl) Serialize() ([]byte, error) {
 	b := new(bytes.Buffer)
 	enc := gob.NewEncoder(b)
@@ -133,8 +127,7 @@ func (t *FpdfTpl) Serialize() ([]byte, error) {
 	return b.Bytes(), err
 }
 
-// DeserializeTemplate creaties a template from a previously serialized
-// template
+// DeserializeTemplate creates a template from a previously serialized template.
 func DeserializeTemplate(b []byte) (Template, error) {
 	tpl := new(FpdfTpl)
 	dec := gob.NewDecoder(bytes.NewBuffer(b))
@@ -145,40 +138,66 @@ func DeserializeTemplate(b []byte) (Template, error) {
 	return tpl, err
 }
 
-// childrenImages returns the next layer of children images, it doesn't dig into
-// children of children. Applies template namespace to keys to ensure
-// no collisions. See UseTemplateScaled
+// childrenImages returns the next layer of child images without recursing into
+// grandchildren. It applies the template namespace to keys to avoid collisions.
+// See UseTemplateScaled.
 func (t *FpdfTpl) childrenImages() map[string]*ImageInfo {
-	childrenImgs := make(map[string]*ImageInfo)
+	images := make(map[string]*ImageInfo)
 
-	for x := 0; x < len(t.templates); x++ {
-		if invalidTemplate(t.templates[x]) {
+	for _, child := range t.templates {
+		if invalidTemplate(child) {
 			continue
 		}
-		imgs := t.templates[x].Images()
-		for key, val := range imgs {
-			name := sprintf("t%s-%s", t.templates[x].ID(), key)
-			childrenImgs[name] = val
+		for key, image := range child.Images() {
+			images[sprintf("t%s-%s", child.ID(), key)] = image
 		}
 	}
 
-	return childrenImgs
+	return images
 }
 
-// childrensTemplates returns the next layer of children templates, it doesn't dig into
-// children of children.
-func (t *FpdfTpl) childrensTemplates() []Template {
-	childrenTmpls := make([]Template, 0)
-
-	for x := 0; x < len(t.templates); x++ {
-		if invalidTemplate(t.templates[x]) {
+// childrenTemplates returns the next layer of child templates without
+// recursing into grandchildren.
+func (t *FpdfTpl) childrenTemplates() []Template {
+	templates := make([]Template, 0)
+	for _, child := range t.templates {
+		if invalidTemplate(child) {
 			continue
 		}
-		tmpls := t.templates[x].Templates()
-		childrenTmpls = append(childrenTmpls, tmpls...)
+		templates = append(templates, child.Templates()...)
 	}
 
-	return childrenTmpls
+	return templates
+}
+
+func (t *FpdfTpl) topLevelTemplates() []Template {
+	nestedIDs := make(map[string]bool)
+	for _, child := range t.childrenTemplates() {
+		if !invalidTemplate(child) {
+			nestedIDs[child.ID()] = true
+		}
+	}
+
+	templates := make([]Template, 0, len(t.templates))
+	for _, child := range t.templates {
+		if invalidTemplate(child) || nestedIDs[child.ID()] {
+			continue
+		}
+		templates = append(templates, child)
+	}
+
+	return templates
+}
+
+func (t *FpdfTpl) ownImages() map[string]*ImageInfo {
+	childImages := t.childrenImages()
+	images := make(map[string]*ImageInfo)
+	for key, image := range t.images {
+		if _, inherited := childImages[key]; !inherited {
+			images[key] = image
+		}
+	}
+	return images
 }
 
 // GobEncode encodes the receiving template into a byte buffer. Use GobDecode
@@ -187,47 +206,21 @@ func (t *FpdfTpl) GobEncode() ([]byte, error) {
 	w := new(bytes.Buffer)
 	encoder := gob.NewEncoder(w)
 
-	childrensTemplates := t.childrensTemplates()
-	firstClassTemplates := make([]Template, 0)
-
-found_continue:
-	for x := 0; x < len(t.templates); x++ {
-		for y := range childrensTemplates {
-			if childrensTemplates[y].ID() == t.templates[x].ID() {
-				continue found_continue
-			}
-		}
-
-		firstClassTemplates = append(firstClassTemplates, t.templates[x])
+	fields := []any{
+		t.topLevelTemplates(),
+		t.ownImages(),
+		t.corner,
+		t.size,
+		t.bytes,
+		t.page,
 	}
-	err := encoder.Encode(firstClassTemplates)
-
-	childrenImgs := t.childrenImages()
-	firstClassImgs := make(map[string]*ImageInfo)
-
-	for key, img := range t.images {
-		if _, ok := childrenImgs[key]; !ok {
-			firstClassImgs[key] = img
+	for _, field := range fields {
+		if err := encoder.Encode(field); err != nil {
+			return nil, err
 		}
 	}
 
-	if err == nil {
-		err = encoder.Encode(firstClassImgs)
-	}
-	if err == nil {
-		err = encoder.Encode(t.corner)
-	}
-	if err == nil {
-		err = encoder.Encode(t.size)
-	}
-	if err == nil {
-		err = encoder.Encode(t.bytes)
-	}
-	if err == nil {
-		err = encoder.Encode(t.page)
-	}
-
-	return w.Bytes(), err
+	return w.Bytes(), nil
 }
 
 // GobDecode decodes the specified byte buffer into the receiving template.
@@ -235,49 +228,47 @@ func (t *FpdfTpl) GobDecode(buf []byte) error {
 	r := bytes.NewBuffer(buf)
 	decoder := gob.NewDecoder(r)
 
-	firstClassTemplates := make([]*FpdfTpl, 0)
-	err := decoder.Decode(&firstClassTemplates)
-	t.templates = make([]Template, len(firstClassTemplates))
+	templates, err := decodeTemplateList(decoder)
+	if err != nil {
+		return err
+	}
+	t.templates = templates
 
-	if err == nil {
-		for x := 0; x < len(t.templates); x++ {
-			if firstClassTemplates[x] == nil {
-				return fmt.Errorf("invalid nil child template")
-			}
-			t.templates[x] = Template(firstClassTemplates[x])
+	childImages := t.childrenImages()
+	t.templates = append(t.childrenTemplates(), t.templates...)
+
+	if err := decoder.Decode(&t.images); err != nil {
+		return err
+	}
+	if t.images == nil {
+		t.images = make(map[string]*ImageInfo)
+	}
+	maps.Copy(t.images, childImages)
+
+	fields := []any{&t.corner, &t.size, &t.bytes, &t.page}
+	for _, field := range fields {
+		if err := decoder.Decode(field); err != nil {
+			return err
 		}
 	}
 
-	var firstClassImages map[string]*ImageInfo
-	if err == nil {
-		firstClassImages = t.childrenImages()
+	return nil
+}
+
+func decodeTemplateList(decoder *gob.Decoder) ([]Template, error) {
+	children := make([]*FpdfTpl, 0)
+	if err := decoder.Decode(&children); err != nil {
+		return nil, err
 	}
 
-	if err == nil {
-		t.templates = append(t.childrensTemplates(), t.templates...)
+	templates := make([]Template, 0, len(children))
+	for _, child := range children {
+		if child == nil {
+			return nil, fmt.Errorf("invalid nil child template")
+		}
+		templates = append(templates, child)
 	}
-
-	t.images = make(map[string]*ImageInfo)
-	if err == nil {
-		err = decoder.Decode(&t.images)
-	}
-
-	maps.Copy(t.images, firstClassImages)
-
-	if err == nil {
-		err = decoder.Decode(&t.corner)
-	}
-	if err == nil {
-		err = decoder.Decode(&t.size)
-	}
-	if err == nil {
-		err = decoder.Decode(&t.bytes)
-	}
-	if err == nil {
-		err = decoder.Decode(&t.page)
-	}
-
-	return err
+	return templates, nil
 }
 
 func (t *FpdfTpl) validate() error {
@@ -301,8 +292,12 @@ func invalidTemplate(tpl Template) bool {
 	if tpl == nil {
 		return true
 	}
-	value := reflect.ValueOf(tpl)
-	return value.Kind() == reflect.Ptr && value.IsNil()
+	switch t := tpl.(type) {
+	case *FpdfTpl:
+		return t == nil
+	default:
+		return false
+	}
 }
 
 // Tpl is an Fpdf used for writing a template. It has most of the facilities of
@@ -313,26 +308,26 @@ type Tpl struct {
 }
 
 func (t *Tpl) loadParamsFromFpdf(f *Fpdf) {
-	t.Fpdf.compress = false
+	t.compress = false
 
-	t.Fpdf.k = f.k
-	t.Fpdf.x = f.x
-	t.Fpdf.y = f.y
-	t.Fpdf.lineWidth = f.lineWidth
-	t.Fpdf.capStyle = f.capStyle
-	t.Fpdf.joinStyle = f.joinStyle
+	t.k = f.k
+	t.x = f.x
+	t.y = f.y
+	t.lineWidth = f.lineWidth
+	t.capStyle = f.capStyle
+	t.joinStyle = f.joinStyle
 
-	t.Fpdf.color.draw = f.color.draw
-	t.Fpdf.color.fill = f.color.fill
-	t.Fpdf.color.text = f.color.text
+	t.color.draw = f.color.draw
+	t.color.fill = f.color.fill
+	t.color.text = f.color.text
 
-	t.Fpdf.fonts = f.fonts
-	t.Fpdf.currentFont = f.currentFont
-	t.Fpdf.fontFamily = f.fontFamily
-	t.Fpdf.fontSize = f.fontSize
-	t.Fpdf.fontSizePt = f.fontSizePt
-	t.Fpdf.fontStyle = f.fontStyle
-	t.Fpdf.ws = f.ws
+	t.fonts = f.fonts
+	t.currentFont = f.currentFont
+	t.fontFamily = f.fontFamily
+	t.fontSize = f.fontSize
+	t.fontSizePt = f.fontSizePt
+	t.fontStyle = f.fontStyle
+	t.ws = f.ws
 
-	maps.Copy(t.Fpdf.images, f.images)
+	maps.Copy(t.images, f.images)
 }

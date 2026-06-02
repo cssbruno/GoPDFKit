@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -66,6 +62,9 @@ func (edges htmlBoxEdges) hasAny() bool {
 }
 
 func htmlElementDeclarations(el HTMLSegmentType, cssRules []htmlCSSRule, ancestors ...HTMLSegmentType) map[string]string {
+	if ancestors == nil {
+		ancestors = []HTMLSegmentType{}
+	}
 	decl := map[string]string{}
 	for _, rule := range cssRules {
 		for _, selector := range rule.selectors {
@@ -493,6 +492,9 @@ func parseHTMLCSSSelectorPart(value string) (htmlCSSSelectorPart, bool) {
 }
 
 func applyHTMLCSSRules(st *htmlTextStyle, el HTMLSegmentType, rules []htmlCSSRule, baseFontSize, baseLineHeight float64, pdf *Fpdf, ancestors ...HTMLSegmentType) {
+	if ancestors == nil {
+		ancestors = []HTMLSegmentType{}
+	}
 	for _, rule := range rules {
 		for _, selector := range rule.selectors {
 			if htmlCSSSelectorMatches(selector, el, ancestors) {
@@ -504,6 +506,9 @@ func applyHTMLCSSRules(st *htmlTextStyle, el HTMLSegmentType, rules []htmlCSSRul
 }
 
 func htmlCSSSelectorMatches(selector htmlCSSSelector, el HTMLSegmentType, ancestors []HTMLSegmentType) bool {
+	if ancestors == nil {
+		ancestors = []HTMLSegmentType{}
+	}
 	if len(selector.parts) == 0 {
 		return false
 	}

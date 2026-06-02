@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -271,7 +267,6 @@ func htmlPlainText(tokens []HTMLSegmentType) string {
 			}
 			if needSpace && out.Len() > 0 && !lastWasNewline {
 				out.WriteByte(' ')
-				lastWasNewline = false
 			}
 			trimmed := strings.TrimSpace(text)
 			out.WriteString(trimmed)
@@ -381,6 +376,9 @@ func (html *HTML) nextBlockHeight(tokens []HTMLSegmentType, start int, lineHt fl
 		switch token.Str {
 		case "p", "div", "section", "article", "header", "footer":
 			blockTokens, _ := htmlCollectElementTokens(tokens, i, token.Str)
+			if len(blockTokens) < 2 {
+				return 0
+			}
 			style := inherited
 			applyHTMLCSSRules(&style, token, cssRules, inherited.fontSize, inherited.lineHeight, html.pdf, ancestors...)
 			applyHTMLAttrs(&style, token.Attr, inherited.fontSize, inherited.lineHeight, html.pdf)
@@ -391,6 +389,9 @@ func (html *HTML) nextBlockHeight(tokens []HTMLSegmentType, start int, lineHt fl
 			return html.textBlockHeight(blockTokens[1:len(blockTokens)-1], style, lineHt, fallback)
 		case "h1", "h2", "h3", "h4", "h5", "h6":
 			blockTokens, _ := htmlCollectElementTokens(tokens, i, token.Str)
+			if len(blockTokens) < 2 {
+				return 0
+			}
 			style := inherited
 			style.bold = true
 			style.fontSize = htmlHeadingFontSize(inherited.fontSize, token.Str)

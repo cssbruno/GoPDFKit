@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -13,8 +9,10 @@ import (
 	"strings"
 )
 
-// Get next character
-
+// MultiCell prints text with automatic line breaks. The text is placed in
+// cells of width w and line height h. Each line is bordered according to
+// borderStr, aligned according to alignStr, and optionally filled when fill is
+// true. When w is 0, the cell extends to the right margin.
 func (f *Fpdf) MultiCell(w, h float64, txtStr, borderStr, alignStr string, fill bool) {
 	if f.err != nil {
 		return
@@ -27,8 +25,8 @@ func (f *Fpdf) MultiCell(w, h float64, txtStr, borderStr, alignStr string, fill 
 		w = f.w - f.rMargin - f.x
 	}
 	wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
-	s := strings.Replace(txtStr, "\r", "", -1)
-	var srune []rune
+	s := strings.ReplaceAll(txtStr, "\r", "")
+	srune := []rune{}
 	var nb int
 	if f.isCurrentUTF8 {
 		srune = []rune(s)

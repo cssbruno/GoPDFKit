@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -13,13 +9,15 @@ import (
 	"strings"
 )
 
+// SVGImage describes one embedded raster image from an SVG image element.
 type SVGImage struct {
-	X, Y      float64
-	Wd, Ht    float64
-	ImageType string
-	Data      []byte // SVGImage describes one embedded raster image from an SVG image element.
-
-	Style SVGStyle
+	X         float64  // Image X coordinate.
+	Y         float64  // Image Y coordinate.
+	Wd        float64  // Image width.
+	Ht        float64  // Image height.
+	ImageType string   // Embedded image type, such as png or jpg.
+	Data      []byte   // Encoded image bytes.
+	Style     SVGStyle // Image style.
 }
 
 func svgImageTypeFromMime(mimeType string) string {

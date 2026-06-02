@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -20,32 +16,42 @@ import (
 
 // ImageCrop describes a rectangular viewport in the rendered image's units.
 type ImageCrop struct {
-	X, Y, W, H float64
+	X float64 // Crop origin X coordinate.
+	Y float64 // Crop origin Y coordinate.
+	W float64 // Crop width.
+	H float64 // Crop height.
 }
 
-// ExtendedImageOptions configures richer image placement than ImageOptions().
+// ExtendedImageOptions configures additional image placement options.
 type ExtendedImageOptions struct {
-	X, Y, W, H       float64
-	Flow             bool
-	Options          ImageOptions
-	Link             int
-	LinkString       string
-	Rotation         float64
-	HorizontalFlip   bool
-	VerticalFlip     bool
-	Crop             *ImageCrop
-	MaskImage        string
-	MaskImageOptions ImageOptions
+	X                float64      // Image X coordinate.
+	Y                float64      // Image Y coordinate.
+	W                float64      // Requested image width.
+	H                float64      // Requested image height.
+	Flow             bool         // Whether placement advances the current Y position.
+	Options          ImageOptions // Image parsing and placement options.
+	Link             int          // Internal link identifier.
+	LinkString       string       // External link target.
+	Rotation         float64      // Clockwise rotation in degrees.
+	HorizontalFlip   bool         // Whether to mirror the image horizontally.
+	VerticalFlip     bool         // Whether to mirror the image vertically.
+	Crop             *ImageCrop   // Optional crop rectangle.
+	MaskImage        string       // Optional soft-mask image name or path.
+	MaskImageOptions ImageOptions // Options for the soft-mask image.
 }
 
 // ImageOptionsExtended places an image with optional rotation, flipping,
-// cropping and an external soft-mask image.
+// cropping, and an external soft-mask image.
 func (f *Fpdf) ImageOptionsExtended(name string, opts ExtendedImageOptions) {
 	if f.err != nil {
 		return
 	}
 	info := f.RegisterImageOptions(name, opts.Options)
 	if f.err != nil {
+		return
+	}
+	if info == nil {
+		f.SetErrorf("image parser returned no image info")
 		return
 	}
 	if opts.MaskImage != "" {
@@ -134,6 +140,10 @@ func (f *Fpdf) ImageOptionsExtended(name string, opts ExtendedImageOptions) {
 }
 
 func (f *Fpdf) applyExternalImageMask(info *ImageInfo, maskPath string, options ImageOptions) {
+	if info == nil {
+		f.SetErrorf("image mask target is missing")
+		return
+	}
 	mask, err := decodeMaskImage(maskPath, options)
 	if err != nil {
 		f.SetError(err)
@@ -150,7 +160,12 @@ func (f *Fpdf) applyExternalImageMask(info *ImageInfo, maskPath string, options 
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		raw.WriteByte(0)
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			r, g, b, a := mask.At(x, y).RGBA()
+			color := mask.At(x, y)
+			if color == nil {
+				f.SetErrorf("image mask has nil pixel at %d,%d", x, y)
+				return
+			}
+			r, g, b, a := color.RGBA()
 			gray := (299*r + 587*g + 114*b) / 1000
 			gray = gray * a / 0xffff
 			raw.WriteByte(byte(gray >> 8))
@@ -181,11 +196,21 @@ func decodeMaskImage(path string, options ImageOptions) (image.Image, error) {
 		}
 	}
 	if imageType == "webp" {
-		return webp.Decode(bytes.NewReader(data))
+		img, err := webp.Decode(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		if img == nil {
+			return nil, fmt.Errorf("invalid WebP mask image")
+		}
+		return img, nil
 	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decode image mask: %w", err)
+	}
+	if img == nil {
+		return nil, fmt.Errorf("invalid mask image")
 	}
 	return img, nil
 }

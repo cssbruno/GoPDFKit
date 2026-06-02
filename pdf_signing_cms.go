@@ -1,11 +1,8 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
-package pdfsigning
+// This file signs and verifies PDF CMS/PKCS7 signatures.
+package gopdfkit
 
 import (
 	"bytes"
@@ -42,24 +39,38 @@ var (
 
 // PKCS7Options configures CMS/PKCS7 SignedData creation.
 type PKCS7Options struct {
-	Signer           crypto.Signer
-	Certificate      *x509.Certificate
+	// Signer signs the CMS signed attributes.
+	Signer crypto.Signer
+	// Certificate is the signing certificate and must match Signer.
+	Certificate *x509.Certificate
+	// CertificateChain contains optional intermediate certificates to include.
 	CertificateChain []*x509.Certificate
-	DigestAlgorithm  crypto.Hash
-	Detached         bool
-	SigningTime      time.Time
+	// DigestAlgorithm selects the message digest. A zero value uses SHA-256.
+	DigestAlgorithm crypto.Hash
+	// Detached omits the signed content from the CMS payload when true.
+	Detached bool
+	// SigningTime sets the CMS signingTime attribute. A zero value uses now.
+	SigningTime time.Time
 }
 
 // PKCS7VerifyResult contains the relevant result of a CMS/PKCS7 verification.
 type PKCS7VerifyResult struct {
-	Certificates   []*x509.Certificate
-	Signer         *x509.Certificate
-	Digest         crypto.Hash
-	Detached       bool
-	Content        []byte
-	SigningTime    *time.Time
+	// Certificates contains the certificates embedded in the CMS payload.
+	Certificates []*x509.Certificate
+	// Signer is the certificate that produced the verified signature.
+	Signer *x509.Certificate
+	// Digest is the digest algorithm used by the signer.
+	Digest crypto.Hash
+	// Detached reports whether the CMS payload is detached from its content.
+	Detached bool
+	// Content contains the verified content.
+	Content []byte
+	// SigningTime is the optional signingTime attribute from the CMS payload.
+	SigningTime *time.Time
+	// ValidSignature reports whether the CMS signature was cryptographically valid.
 	ValidSignature bool
-	TrustedSigner  bool
+	// TrustedSigner reports whether the signer chained to the supplied truststore.
+	TrustedSigner bool
 }
 
 // CreatePKCS7 creates CMS SignedData using this package's own DER encoder.

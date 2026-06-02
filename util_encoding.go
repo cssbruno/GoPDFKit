@@ -1,10 +1,5 @@
-/****************************************************************************
- * Software: GoPDFKit                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- *                         *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package gopdfkit
 
@@ -19,7 +14,7 @@ import (
 	"unicode/utf16"
 )
 
-// utf8toutf16 converts UTF-8 to UTF-16BE; from http://www.fpdf.org/
+// utf8toutf16 converts UTF-8 to UTF-16BE; based on http://www.fpdf.org/.
 func utf8toutf16(s string, withBOM ...bool) string {
 	bom := true
 	if len(withBOM) > 0 {
@@ -67,16 +62,15 @@ func repClosure(m map[rune]byte) func(string) string {
 }
 
 // UnicodeTranslator returns a function that can be used to translate, where
-// possible, utf-8 strings to a form that is compatible with the specified code
+// possible, UTF-8 strings to a form that is compatible with the specified code
 // page. The returned function accepts a string and returns a string.
 //
-// r is a reader that should read a buffer made up of content lines that
-// pertain to the code page of interest. Each line is made up of three
-// whitespace separated fields. The first begins with "!" and is followed by
-// two hexadecimal digits that identify the glyph position in the code page of
-// interest. The second field begins with "U+" and is followed by the unicode
-// code point value. The third is the glyph name. A number of these code page
-// map files are packaged with the gfpdf library in the font directory.
+// r should read content lines for the code page of interest. Each line is made
+// up of three whitespace-separated fields. The first begins with "!" and is
+// followed by two hexadecimal digits that identify the glyph position in the
+// code page of interest. The second field begins with "U+" and is followed by
+// the Unicode code point value. The third is the glyph name. A number of these
+// code page map files are packaged with gopdfkit in the font directory.
 //
 // An error occurs only if a line is read that does not conform to the expected
 // format. In this case, the returned function is valid but does not perform
@@ -107,7 +101,7 @@ func UnicodeTranslator(r io.Reader) (f func(string) string, err error) {
 }
 
 // UnicodeTranslatorFromFile returns a function that can be used to translate,
-// where possible, utf-8 strings to a form that is compatible with the
+// where possible, UTF-8 strings to a form that is compatible with the
 // specified code page. See UnicodeTranslator for more details.
 //
 // fileStr identifies a font descriptor file that maps glyph positions to names.
@@ -119,7 +113,7 @@ func UnicodeTranslatorFromFile(fileStr string) (f func(string) string, err error
 	fl, err = os.Open(fileStr)
 	if err == nil {
 		f, err = UnicodeTranslator(fl)
-		fl.Close()
+		_ = fl.Close()
 	} else {
 		f = doNothing
 	}
@@ -127,7 +121,7 @@ func UnicodeTranslatorFromFile(fileStr string) (f func(string) string, err error
 }
 
 // UnicodeTranslatorFromDescriptor returns a function that can be used to
-// translate, where possible, utf-8 strings to a form that is compatible with
+// translate, where possible, UTF-8 strings to a form that is compatible with
 // the specified code page. See UnicodeTranslator for more details.
 //
 // cpStr identifies a code page. A descriptor file in the font directory, set
@@ -158,10 +152,11 @@ func (f *Fpdf) UnicodeTranslatorFromDescriptor(cpStr string) (rep func(string) s
 	return
 }
 
-// Condition font family string to PDF name compliance. See section 5.3 (Names)
-// in https://resources.infosecinstitute.com/pdf-file-format-basic-structure/
+// fontFamilyEscape conditions a font family string for PDF name compliance.
+// See section 5.3 (Names) in
+// https://resources.infosecinstitute.com/pdf-file-format-basic-structure/
 func fontFamilyEscape(familyStr string) (escStr string) {
-	escStr = strings.Replace(familyStr, " ", "#20", -1)
-	// Additional replacements can take place here
+	escStr = strings.ReplaceAll(familyStr, " ", "#20")
+	// Additional replacements can be added here.
 	return
 }
