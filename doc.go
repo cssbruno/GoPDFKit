@@ -81,8 +81,9 @@ go get github.com/cssbruno/gopdfkit@latest
 	pdf.Cell(40, 10, "Hello, world")
 	err := pdf.OutputFileAndClose("hello.pdf")
 
-Runnable examples live under examples/. Additional generated-PDF examples live
-as Go tests, especially in document/document_test.go. Running the tests writes
+Runnable examples live under examples/ and write PDFs under
+assets/generated/pdf/examples. Additional generated-PDF examples live as Go
+tests, especially in document/document_test.go. Running the tests writes
 generated PDFs under assets/generated/pdf.
 
 	go run ./examples/hello-world
@@ -187,6 +188,7 @@ Then call AddFont() and SetFont() from your PDF generation code.
 
 ## Generated PDFs and References
 
+Running the runnable examples writes PDFs in assets/generated/pdf/examples.
 Running go test ./... generates PDFs in assets/generated/pdf. Reference PDFs
 are stored in assets/generated/pdf/reference.
 

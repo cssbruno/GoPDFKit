@@ -5,6 +5,8 @@ package main
 
 import (
 	"bytes"
+	"image"
+	"image/draw"
 	"image/png"
 
 	barcodelib "github.com/boombuler/barcode"
@@ -23,9 +25,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	qrImage := image.NewRGBA(code.Bounds())
+	draw.Draw(qrImage, qrImage.Bounds(), code, code.Bounds().Min, draw.Src)
 
 	var pngData bytes.Buffer
-	if err := png.Encode(&pngData, code); err != nil {
+	if err := png.Encode(&pngData, qrImage); err != nil {
 		panic(err)
 	}
 

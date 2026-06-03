@@ -101,9 +101,10 @@ Advanced users can import `document` directly:
 pdf := document.New("P", "mm", "A4", "")
 ```
 
-Runnable examples live under [`examples/`][examples]. Additional generated-PDF
-examples live as Go tests, especially in [`document/document_test.go`][document-test].
-Running the tests writes generated PDFs under `assets/generated/pdf`.
+Runnable examples live under [`examples/`][examples] and write PDFs under
+`assets/generated/pdf/examples`. Additional generated-PDF examples live as Go
+tests, especially in [`document/document_test.go`][document-test]. Running the
+tests writes generated PDFs under `assets/generated/pdf`.
 
 ```shell
 go run ./examples/hello-world
@@ -224,8 +225,9 @@ Then call `AddFont()` and `SetFont()` from your PDF generation code.
 
 ## Generated PDFs and References
 
-Running `go test ./...` generates PDFs in `assets/generated/pdf`. Reference PDFs
-are stored in `assets/generated/pdf/reference`.
+Running the runnable examples writes PDFs in `assets/generated/pdf/examples`.
+Running `go test ./...` generates PDFs in `assets/generated/pdf`. Reference
+PDFs are stored in `assets/generated/pdf/reference`.
 
 `internal/testsupport/example` contains helpers used by tests to name generated
 files and compare generated PDFs against reference copies. Comparisons need

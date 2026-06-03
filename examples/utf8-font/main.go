@@ -16,10 +16,18 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	regularFont, err := os.ReadFile(assets.File("font", "DejaVuSansCondensed.ttf"))
+	if err != nil {
+		panic(err)
+	}
+	boldFont, err := os.ReadFile(assets.File("font", "DejaVuSansCondensed-Bold.ttf"))
+	if err != nil {
+		panic(err)
+	}
 
 	pdf := gopdfkit.New()
-	pdf.AddUTF8Font("dejavu", "", assets.File("font", "DejaVuSansCondensed.ttf"))
-	pdf.AddUTF8Font("dejavu", "B", assets.File("font", "DejaVuSansCondensed-Bold.ttf"))
+	pdf.AddUTF8FontFromBytes("dejavu", "", regularFont)
+	pdf.AddUTF8FontFromBytes("dejavu", "B", boldFont)
 
 	pdf.AddPage()
 	pdf.SetFont("dejavu", "B", 16)

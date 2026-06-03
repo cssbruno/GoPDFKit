@@ -8,6 +8,7 @@ makefont/makefont
 open
 **/*.out
 assets/generated/pdf/*.pdf
+assets/generated/pdf/examples/signed.pdf
 pdf.txt
 private
 *.sublime*

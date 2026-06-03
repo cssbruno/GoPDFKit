@@ -25,4 +25,4 @@ cd examples/external-qr-code
 go run .
 ```
 
-Generated PDFs are written beside each example's `main.go`.
+Generated PDFs are written under `assets/generated/pdf/examples`.

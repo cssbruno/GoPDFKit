@@ -40,7 +40,7 @@ func main() {
 			},
 		},
 	)
-	report.Metadata.CreatedAt = time.Now().UTC()
+	report.Metadata.CreatedAt = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	report.Footer = &document.FooterBlock{ShowPageNumber: true, ReservePageArea: true}
 
 	pdf := gopdfkit.New()
