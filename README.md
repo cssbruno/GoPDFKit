@@ -6,9 +6,9 @@
 
 ![][logo]
 
-Package `gopdfkit` is the small convenience facade for a Go-native PDF document
-generator. The main implementation lives in `github.com/cssbruno/gopdfkit/document`;
-focused helper packages cover fonts, imported pages, and signatures.
+Package `gopdfkit` is a Go-native PDF document generator. The module includes
+the high-level `document` API plus focused packages for fonts, imported pages,
+and signatures.
 
 This repository is the `github.com/cssbruno/gopdfkit` module. The `0.1` line is a
 breaking cleanup focused on a clearer package layout and shorter, feature-based
@@ -31,9 +31,10 @@ source files.
 * Integrated PDF signing and verification helpers
 * CLI tools under `cmd/`
 
-The root `gopdfkit` package intentionally stays small. It exposes the beginner
-entry point and delegates to `document`; advanced applications can import
-`document` directly for the full PDF API.
+The root `gopdfkit` package provides the default constructor and public document
+type aliases. Applications that need explicit constructor options, document
+model types, measurement helpers, or lower-level drawing APIs can import
+`document` directly.
 
 ## Go Project Comparison
 
@@ -55,13 +56,12 @@ benchmark.
 | [signintech/gopdf][signintech-gopdf] | A broader document-generation surface: cells, multicells, headers, footers, HTML/table helpers, SVG and WebP handling, metadata, protection, attachments, thumbnails, and signing helpers. | `signintech/gopdf` is a good fit for lower-level coordinate drawing with Unicode fonts, JPG and PNG images, transforms, and imported pages. |
 | [Maroto v2][maroto] | Lower-level PDF primitives plus imports, templates, SVG and WebP, attachments, metadata, protection, thumbnails, and signing helpers. | Maroto is better when the main need is grid-based report layout with rows, columns, components, headers, and a testable component tree. |
 | [pdfcpu][pdfcpu] | Direct content generation from Go code, including text, graphics, images, HTML fragments, templates, imported pages, and signed output. | pdfcpu is better for processing existing PDFs: validation, encryption, merge, split, rotate, crop, attachments, bookmarks, forms, stamps, watermarks, signature validation, and JSON-driven creation. |
-| [UniPDF][unipdf] | A small MIT-licensed generator focused on in-process PDF creation and predictable output. | UniPDF is broader commercial SDK coverage: creation, editing, processing, signing, forms, extraction, protection, and UniHTML. |
 
 ## Package Layout
 
 The active implementation packages are:
 
-* `gopdfkit`: small facade for quick starts.
+* `gopdfkit`: default constructor and root package types.
 * `document`: high-level PDF document API and current feature implementation.
 * `font`: font parsing and JSON font definition generation.
 * `sign`: PDF signing and signature verification.
@@ -98,6 +98,12 @@ Advanced users can import `document` directly:
 
 ```go
 pdf := document.New("P", "mm", "A4", "")
+```
+
+Use `NewWithOptions` when generation defaults should be configured up front:
+
+```go
+pdf := document.NewWithOptions(document.Options{Optimize: true})
 ```
 
 Runnable examples live under [`examples/`][examples] and write PDFs under
@@ -328,4 +334,3 @@ Dave Barnes, Brigham Thompson, Joe Westcott, and Benoit KUGLER.
 [pdf-html-subset]: doc/pdf-html-subset.md
 [pdfcpu]: https://pkg.go.dev/github.com/pdfcpu/pdfcpu/pkg/pdfcpu
 [signintech-gopdf]: https://pkg.go.dev/github.com/signintech/gopdf
-[unipdf]: https://unidoc.io/

@@ -2,11 +2,10 @@
 // Copyright (c) 2026 cssBruno
 
 /*
-Package gopdfkit is the small convenience facade for a Go-native PDF document
-generator.
+Package gopdfkit is a Go-native PDF document generator.
 
-The main implementation lives in github.com/cssbruno/gopdfkit/document. Focused
-helper packages cover fonts, imported pages, and signatures.
+The module includes the high-level document API plus focused packages for
+fonts, imported pages, and signatures.
 
 This repository is the github.com/cssbruno/gopdfkit module. The 0.1 line is a
 breaking cleanup focused on a clearer package layout and shorter, feature-based
@@ -29,9 +28,10 @@ source files.
   - Integrated PDF signing and verification helpers
   - CLI tools under cmd/
 
-The root gopdfkit package intentionally stays small. It exposes the beginner
-entry point and delegates to document; advanced applications can import
-document directly for the full PDF API.
+The root gopdfkit package provides the default constructor and public document
+type aliases. Applications that need explicit constructor options, document
+model types, measurement helpers, or lower-level drawing APIs can import
+document directly.
 
 ## Go Project Comparison
 
@@ -74,10 +74,6 @@ benchmark.
     and signed output. pdfcpu is better for processing existing PDFs:
     validation, encryption, merge, split, rotate, crop, attachments, bookmarks,
     forms, stamps, watermarks, signature validation, and JSON-driven creation.
-  - Compared with UniPDF, GoPDFKit is a small MIT-licensed generator focused on
-    in-process PDF creation and predictable output. UniPDF has broader
-    commercial SDK coverage: creation, editing, processing, signing, forms,
-    extraction, protection, and UniHTML.
 
 ## Package Layout
 
@@ -102,6 +98,10 @@ go get github.com/cssbruno/gopdfkit@latest
 	pdf.SetFont("Helvetica", "B", 16)
 	pdf.Cell(40, 10, "Hello, world")
 	err := pdf.OutputFileAndClose("hello.pdf")
+
+Use NewWithOptions when generation defaults should be configured up front:
+
+	pdf := document.NewWithOptions(document.Options{Optimize: true})
 
 Runnable examples live under examples/ and write PDFs under
 assets/generated/pdf/examples. Additional generated-PDF examples live as Go
