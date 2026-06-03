@@ -3316,8 +3316,8 @@ func ExampleUTF8CutFont() {
 	fullFontFileStr = example.FontFile("calligra.ttf")
 	fullFont, err = os.ReadFile(fullFontFileStr)
 	if err == nil {
-		subFontFileStr = "calligra_abcde.ttf"
-		subFont = document.UTF8CutFont(fullFont, "abcde")
+		subFontFileStr = "calligra_cabbedvwxyz.ttf"
+		subFont = document.UTF8CutFont(fullFont, "cabbedvwxyz")
 		err = os.WriteFile(subFontFileStr, subFont, 0600)
 		if err == nil {
 			y := 24.0
@@ -3329,12 +3329,12 @@ func ExampleUTF8CutFont() {
 				pdf.Cell(200.0, lineHt, fmt.Sprintf(format, args...))
 				y += lineHt
 			}
-			writeSize := func(fileStr string) {
+			writeSize := func(fileStr, labelStr string) {
 				var info os.FileInfo
 				var err error
 				info, err = os.Stat(fileStr)
 				if err == nil {
-					write("%6d: size of %s", info.Size(), fileStr)
+					write("%6d: size of %s", info.Size(), labelStr)
 				}
 			}
 			pdf.AddPage()
@@ -3343,8 +3343,8 @@ func ExampleUTF8CutFont() {
 			write("cabbed")
 			write("vwxyz")
 			pdf.SetFont("courier", "", fontHt)
-			writeSize(fullFontFileStr)
-			writeSize(subFontFileStr)
+			writeSize(fullFontFileStr, filepath.ToSlash(filepath.Join("assets", "static", "font", "calligra.ttf")))
+			writeSize(subFontFileStr, subFontFileStr)
 			err = pdf.OutputFileAndClose(pdfFileStr)
 			_ = os.Remove(subFontFileStr)
 		}
