@@ -1,8 +1,86 @@
 English:
 Eat some more of these soft French buns and drink some tea.
 
+Afrikaans:
+Eet nog 'n paar van hierdie sagte Franse broodjies en drink 'n bietjie tee.
+
+Albanian:
+Hani edhe disa nga këto simite të buta franceze dhe pini pak çaj.
+
+Azerbaijani:
+Bu yumşaq fransız bulkalarından bir az da yeyin və bir az çay için.
+
+Basque:
+Jan itzazu beste zenbait opil frantses bigun hauek eta edan te pixka bat.
+
+Bosnian:
+Pojedite još nekoliko ovih mekanih francuskih kiflica i popijte malo čaja.
+
+Bulgarian:
+Хапнете още няколко от тези меки френски кифлички и пийте малко чай.
+
+Catalan:
+Menja una mica més d'aquests panets francesos tous i beu una mica de te.
+
+Croatian:
+Pojedi još nekoliko ovih mekanih francuskih peciva i popij malo čaja.
+
+Czech:
+Snězte ještě pár těchto měkkých francouzských bochánků a vypijte trochu čaje.
+
+Danish:
+Spis lidt mere af disse bløde franske boller og drik noget te.
+
+Dutch:
+Eet nog wat meer van deze zachte Franse broodjes en drink wat thee.
+
+Estonian:
+Söö veel mõned neist pehmetest Prantsuse kuklitest ja joo natuke teed.
+
+Finnish:
+Syö vielä muutama näistä pehmeistä ranskalaisista sämpylöistä ja juo hieman teetä.
+
+French:
+Mangez encore quelques-uns de ces petits pains français moelleux et buvez du thé.
+
+German:
+Iss noch ein paar von diesen weichen französischen Brötchen und trink etwas Tee.
+
 Greek:
 Φάτε μερικά από αυτά τα μαλακά γαλλικά κουλουράκια και πίνετε λίγο τσάι.
+
+Esperanto:
+Manĝu ankoraŭ kelkajn el ĉi tiuj molaj francaj bulkoj kaj trinku iom da teo.
+
+Galician:
+Come un pouco máis destes boliños franceses brandos e bebe un pouco de té.
+
+Hungarian:
+Egyél még néhányat ezekből a puha francia zsemlékből, és igyál egy kis teát.
+
+Irish:
+Ith tuilleadh de na borróga boga Francacha seo agus ól beagán tae.
+
+Italian:
+Mangia ancora un po' di questi soffici panini francesi e bevi un po' di tè.
+
+Latvian:
+Apēdiet vēl dažas no šīm mīkstajām franču maizītēm un iedzeriet tēju.
+
+Lithuanian:
+Suvalgykite dar kelias šias minkštas prancūziškas bandeles ir išgerkite arbatos.
+
+Luxembourgish:
+Iess nach e puer vun dëse mëlle franséische Bréidercher a drénk e bëssen Téi.
+
+Macedonian:
+Јадете уште неколку од овие меки француски лепчиња и испијте малку чај.
+
+Maltese:
+Kul ftit aktar minn dawn il-pasti Franċiżi rotob u ixrob ftit tè.
+
+Norwegian:
+Spis litt mer av disse myke franske bollene og drikk litt te.
 
 Polish:
 Zjedz trochę tych miękkich francuskich bułeczek i wypij herbatę.
@@ -10,11 +88,41 @@ Zjedz trochę tych miękkich francuskich bułeczek i wypij herbatę.
 Portuguese:
 Coma um pouco mais desses delicados pãezinhos franceses e beba um pouco de chá.
 
+Romanian:
+Mănâncă încă puțin din aceste chifle franțuzești moi și bea puțin ceai.
+
 Russian:
 Ешьте еще эти мягкие французские булочки и пейте чай.
 
+Serbian:
+Поједите још неколико ових меких француских земички и попијте мало чаја.
+
+Slovak:
+Zjedzte ešte zopár týchto mäkkých francúzskych žemlí a vypite trochu čaju.
+
+Slovenian:
+Pojejte še nekaj teh mehkih francoskih žemljic in popijte malo čaja.
+
+Spanish:
+Come un poco más de estos bollos franceses suaves y bebe un poco de té.
+
+Swedish:
+Ät lite mer av dessa mjuka franska bullar och drick lite te.
+
+Turkish:
+Bu yumuşak Fransız çöreklerinden biraz daha ye ve biraz çay iç.
+
+Ukrainian:
+З'їжте ще кілька цих м'яких французьких булочок і випийте трохи чаю.
+
 Vietnamese:
 Ăn thêm một số bánh Pháp mềm và uống một ít trà.
+
+Welsh:
+Bwytewch ragor o'r byns Ffrengig meddal hyn ac yfwch ychydig o de.
+
+Yoruba:
+Je diẹ sii ninu awọn akara Faranse rirọ wọnyi ki o si mu tii diẹ.
 
 Arabic:
 أكل بعض أكثر من هذه الكعك الفرنسي لينة وشرب بعض الشاي.
