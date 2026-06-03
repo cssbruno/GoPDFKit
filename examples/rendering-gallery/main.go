@@ -1028,17 +1028,10 @@ func generateEventTicket() {
 	pdf.SetTextColor(70, 80, 90)
 	pdf.Text(18, 38, "Seat A12  |  Track: Rendering")
 	pdf.Text(18, 48, "2026-01-01 09:00")
-	for i := 0; i < 12; i++ {
-		x := 120 + float64(i)*3
-		h := 34.0
-		if i%2 == 0 {
-			h = 44
-		}
-		pdf.SetFillColor(35, 70, 120)
-		pdf.Rect(x, 20, 1.5, h, "F")
-	}
+	drawCode39Barcode(pdf, 88, 20, 72, 34, "TICKET-2026-0001")
 	pdf.SetFont("Helvetica", "", 8)
-	pdf.Text(116, 62, "TICKET-2026-0001")
+	pdf.SetTextColor(35, 70, 120)
+	pdf.Text(108, 62, "TICKET-2026-0001")
 
 	save(pdf, "event-ticket.pdf")
 }
@@ -1369,7 +1362,7 @@ func generateMedicalIntakeForm() {
 func generateDeliveryManifest() {
 	pdf := newPDF("Delivery Manifest")
 	pdf.AddPage()
-	title(pdf, "Delivery Manifest", "Route summary with package table and barcode-like marks")
+	title(pdf, "Delivery Manifest", "Route summary with package table and Code 39 barcode")
 	drawField(pdf, 16, 44, "Route", "NE-42")
 	drawField(pdf, 84, 44, "Driver", "M. Costa")
 	drawField(pdf, 152, 44, "Stops", "8")
@@ -1384,15 +1377,7 @@ func generateDeliveryManifest() {
 	for i, row := range rows {
 		drawDataRow(pdf, 16, 96+float64(i)*9, []float64{26, 70, 40, 40}, row)
 	}
-	for i := 0; i < 18; i++ {
-		x := 132.0 + float64(i)*2.8
-		h := 22.0
-		if i%3 == 0 {
-			h = 32
-		}
-		pdf.SetFillColor(30, 40, 50)
-		pdf.Rect(x, 168, 1.2, h, "F")
-	}
+	drawCode39Barcode(pdf, 118, 168, 74, 32, "MANIFEST-NE-42")
 	pdf.SetFont("Helvetica", "", 8)
 	pdf.Text(132, 206, "MANIFEST-NE-42")
 
@@ -1505,6 +1490,100 @@ func centerLabel(pdf *gopdfkit.Document, label string) {
 	pdf.SetFont("Helvetica", "B", 12)
 	pdf.SetXY(8, h/2-5)
 	pdf.CellFormat(w-16, 10, label, "", 0, "C", false, 0, "")
+}
+
+var code39Patterns = map[rune]string{
+	'0': "nnnwwnwnn",
+	'1': "wnnwnnnnw",
+	'2': "nnwwnnnnw",
+	'3': "wnwwnnnnn",
+	'4': "nnnwwnnnw",
+	'5': "wnnwwnnnn",
+	'6': "nnwwwnnnn",
+	'7': "nnnwnnwnw",
+	'8': "wnnwnnwnn",
+	'9': "nnwwnnwnn",
+	'A': "wnnnnwnnw",
+	'B': "nnwnnwnnw",
+	'C': "wnwnnwnnn",
+	'D': "nnnnwwnnw",
+	'E': "wnnnwwnnn",
+	'F': "nnwnwwnnn",
+	'G': "nnnnnwwnw",
+	'H': "wnnnnwwnn",
+	'I': "nnwnnwwnn",
+	'J': "nnnnwwwnn",
+	'K': "wnnnnnnww",
+	'L': "nnwnnnnww",
+	'M': "wnwnnnnwn",
+	'N': "nnnnwnnww",
+	'O': "wnnnwnnwn",
+	'P': "nnwnwnnwn",
+	'Q': "nnnnnnwww",
+	'R': "wnnnnnwwn",
+	'S': "nnwnnnwwn",
+	'T': "nnnnwnwwn",
+	'U': "wwnnnnnnw",
+	'V': "nwwnnnnnw",
+	'W': "wwwnnnnnn",
+	'X': "nwnnwnnnw",
+	'Y': "wwnnwnnnn",
+	'Z': "nwwnwnnnn",
+	'-': "nwnnnnwnw",
+	'.': "wwnnnnwnn",
+	' ': "nwwnnnwnn",
+	'$': "nwnwnwnnn",
+	'/': "nwnwnnnwn",
+	'+': "nwnnnwnwn",
+	'%': "nnnwnwnwn",
+	'*': "nwnnwnwnn",
+}
+
+func drawCode39Barcode(pdf *gopdfkit.Document, x, y, width, height float64, value string) {
+	value = strings.ToUpper(value)
+	encoded := "*" + value + "*"
+	const wideRatio = 3.0
+	const quietModules = 10.0
+
+	totalModules := quietModules * 2
+	patterns := make([]string, 0, len(encoded))
+	for _, r := range encoded {
+		pattern, ok := code39Patterns[r]
+		if !ok {
+			continue
+		}
+		patterns = append(patterns, pattern)
+		for _, element := range pattern {
+			if element == 'w' {
+				totalModules += wideRatio
+			} else {
+				totalModules++
+			}
+		}
+	}
+	if totalModules <= 0 {
+		return
+	}
+	totalModules += float64(max(len(patterns)-1, 0))
+
+	narrow := width / totalModules
+	x += quietModules * narrow
+	pdf.SetFillColor(30, 40, 50)
+	for patternIndex, pattern := range patterns {
+		for i, element := range pattern {
+			elementWidth := narrow
+			if element == 'w' {
+				elementWidth *= wideRatio
+			}
+			if i%2 == 0 {
+				pdf.Rect(x, y, elementWidth, height, "F")
+			}
+			x += elementWidth
+		}
+		if patternIndex < len(patterns)-1 {
+			x += narrow
+		}
+	}
 }
 
 func mustRead(path string) []byte {
