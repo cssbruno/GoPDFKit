@@ -259,57 +259,94 @@ func htmlBorderFromDeclarations(decl map[string]string, pdf *Document, relative 
 		border.enabled = true
 	}
 	border.setAll(htmlBorderSideStyle{enabled: border.enabled, width: border.width, color: border.color})
-	for _, side := range []struct {
-		name string
-		set  func(htmlBorderSideStyle)
-	}{{name: "top", set: func(side htmlBorderSideStyle) {
-		border.top = side
-	}}, {name: "right", set: func(side htmlBorderSideStyle) {
-		border.right = side
-	}}, {name: "bottom", set: func(side htmlBorderSideStyle) {
-		border.bottom = side
-	}}, {name: "left", set: func(side htmlBorderSideStyle) {
-		border.left = side
-	}}} {
-		if sideStyle, ok := htmlBorderSideFromDeclarations(decl, side.name, border, pdf, relative); ok {
-			border.sideSpecific = true
-			side.set(sideStyle)
-		}
+	if sideStyle, ok := htmlBorderSideFromDeclarations(decl, "top", border, pdf, relative); ok {
+		border.sideSpecific = true
+		border.top = sideStyle
+	}
+	if sideStyle, ok := htmlBorderSideFromDeclarations(decl, "right", border, pdf, relative); ok {
+		border.sideSpecific = true
+		border.right = sideStyle
+	}
+	if sideStyle, ok := htmlBorderSideFromDeclarations(decl, "bottom", border, pdf, relative); ok {
+		border.sideSpecific = true
+		border.bottom = sideStyle
+	}
+	if sideStyle, ok := htmlBorderSideFromDeclarations(decl, "left", border, pdf, relative); ok {
+		border.sideSpecific = true
+		border.left = sideStyle
 	}
 	border.enabled = border.hasAny()
 	return border
 }
 
 func htmlBorderSideFromDeclarations(decl map[string]string, side string, fallback htmlBorderStyle, pdf *Document, relative float64) (htmlBorderSideStyle, bool) {
-	prefix := "border-" + side
-	if !htmlHasSpecificBorderDeclaration(decl, prefix) {
+	sideDecl := htmlBorderSideDeclarationNames(side)
+	if !htmlHasSpecificBorderDeclaration(decl, sideDecl) {
 		return htmlBorderSideStyle{}, false
 	}
 	current := htmlBorderSideStyle{enabled: fallback.enabled, width: fallback.width, color: fallback.color}
-	shorthand := decl[prefix]
-	if htmlBorderStyleNone(firstNonEmpty(decl[prefix+"-style"], shorthand)) {
+	shorthand := decl[sideDecl.shorthand]
+	if htmlBorderStyleNone(firstNonEmpty(decl[sideDecl.style], shorthand)) {
 		return htmlBorderSideStyle{}, true
 	}
-	if width, ok := parseHTMLBorderWidth(firstNonEmpty(decl[prefix+"-width"], shorthand), pdf, relative); ok {
+	if width, ok := parseHTMLBorderWidth(firstNonEmpty(decl[sideDecl.width], shorthand), pdf, relative); ok {
 		current.width = width
 		current.enabled = width > 0
 	}
-	if color, ok := htmlBorderColor(firstNonEmpty(decl[prefix+"-color"], shorthand)); ok {
+	if color, ok := htmlBorderColor(firstNonEmpty(decl[sideDecl.color], shorthand)); ok {
 		current.color = color
 	}
-	if htmlBorderEnabled(shorthand) || htmlBorderVisibleStyle(decl[prefix+"-style"]) || current.width > 0 {
+	if htmlBorderEnabled(shorthand) || htmlBorderVisibleStyle(decl[sideDecl.style]) || current.width > 0 {
 		current.enabled = true
 	}
 	return current.withFallback(fallback), true
 }
 
-func htmlHasSpecificBorderDeclaration(decl map[string]string, prefix string) bool {
-	for _, name := range []string{prefix, prefix + "-width", prefix + "-style", prefix + "-color"} {
-		if strings.TrimSpace(decl[name]) != "" {
-			return true
+type htmlBorderSideDeclarationSet struct {
+	shorthand string
+	width     string
+	style     string
+	color     string
+}
+
+func htmlBorderSideDeclarationNames(side string) htmlBorderSideDeclarationSet {
+	switch side {
+	case "top":
+		return htmlBorderSideDeclarationSet{
+			shorthand: "border-top",
+			width:     "border-top-width",
+			style:     "border-top-style",
+			color:     "border-top-color",
+		}
+	case "right":
+		return htmlBorderSideDeclarationSet{
+			shorthand: "border-right",
+			width:     "border-right-width",
+			style:     "border-right-style",
+			color:     "border-right-color",
+		}
+	case "bottom":
+		return htmlBorderSideDeclarationSet{
+			shorthand: "border-bottom",
+			width:     "border-bottom-width",
+			style:     "border-bottom-style",
+			color:     "border-bottom-color",
+		}
+	default:
+		return htmlBorderSideDeclarationSet{
+			shorthand: "border-left",
+			width:     "border-left-width",
+			style:     "border-left-style",
+			color:     "border-left-color",
 		}
 	}
-	return false
+}
+
+func htmlHasSpecificBorderDeclaration(decl map[string]string, side htmlBorderSideDeclarationSet) bool {
+	return strings.TrimSpace(decl[side.shorthand]) != "" ||
+		strings.TrimSpace(decl[side.width]) != "" ||
+		strings.TrimSpace(decl[side.style]) != "" ||
+		strings.TrimSpace(decl[side.color]) != ""
 }
 
 func htmlBorderVisibleStyle(value string) bool {
