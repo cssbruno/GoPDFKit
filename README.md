@@ -114,6 +114,7 @@ go run ./examples/html-fragment
 go run ./examples/image-from-memory
 go run ./examples/import-page
 go run ./examples/protection-attachments
+go run ./examples/rendering-gallery
 go run ./examples/structured-report
 go run ./examples/sign-pdf
 go run ./examples/templates

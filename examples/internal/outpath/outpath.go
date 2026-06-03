@@ -15,6 +15,7 @@ import (
 
 func init() {
 	fixed := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	document.SetDefaultCatalogSort(true)
 	document.SetDefaultCreationDate(fixed)
 	document.SetDefaultModificationDate(fixed)
 }
