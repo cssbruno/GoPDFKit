@@ -8,12 +8,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/cssbruno/gopdfkit/document"
 )
 
-var gopdfkitDir string
+var (
+	gopdfkitDir string
+	pdfDir      string
+)
+
+const pdfDisplayDir = "assets/generated/pdf"
 
 func init() {
 	setRoot()
@@ -23,32 +30,43 @@ func init() {
 	document.SetDefaultModificationDate(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
 }
 
-// setRoot records the path from the current working directory to the repository
-// root.
+// setRoot records the repository root from this source file instead of the
+// process working directory. Go may execute tests from temporary directories or
+// from the module cache.
 func setRoot() {
-	wd, err := os.Getwd()
-	if err != nil {
-		panic(err)
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("could not resolve GoPDFKit example helper source path")
 	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
+	if _, err := os.Stat(filepath.Join(root, "assets", "static")); err != nil {
+		panic(fmt.Errorf("could not find GoPDFKit static assets from %s: %w", root, err))
+	}
+	gopdfkitDir = root
+	pdfDir = filepath.Join(gopdfkitDir, pdfDisplayDir)
+	if !ensureWritableDir(pdfDir) {
+		tmpDir, err := os.MkdirTemp("", "gopdfkit-generated-pdf-*")
+		if err != nil {
+			panic(err)
+		}
+		pdfDir = tmpDir
+	}
+}
 
-	gopdfkitDir = ""
-	for {
-		if _, err := os.Stat(filepath.Join(gopdfkitDir, "assets", "static")); err == nil {
-			if gopdfkitDir != "" {
-				if err := os.Chdir(gopdfkitDir); err != nil {
-					panic(err)
-				}
-				gopdfkitDir = ""
-			}
-			return
-		}
-		parent := filepath.Dir(wd)
-		if parent == wd {
-			panic("could not find GoPDFKit repository root")
-		}
-		wd = parent
-		gopdfkitDir = filepath.Join(gopdfkitDir, "..")
+func ensureWritableDir(dir string) bool {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return false
 	}
+	file, err := os.CreateTemp(dir, ".write-test-*")
+	if err != nil {
+		return false
+	}
+	name := file.Name()
+	if err := file.Close(); err != nil {
+		_ = os.Remove(name)
+		return false
+	}
+	return os.Remove(name) == nil
 }
 
 // ImageFile returns the path to a file in the static image directory.
@@ -73,7 +91,7 @@ func TextFile(fileStr string) string {
 
 // PdfDir returns the path to the PDF output directory.
 func PdfDir() string {
-	return filepath.Join(gopdfkitDir, "assets", "generated", "pdf")
+	return pdfDir
 }
 
 // PdfFile returns the path to a file in the PDF output directory.
@@ -93,9 +111,27 @@ func Filename(baseStr string) string {
 // message for fileStr. Otherwise, it prints err.
 func Summary(err error, fileStr string) {
 	if err == nil {
-		fileStr = filepath.ToSlash(fileStr)
+		fileStr = filepath.ToSlash(displayPath(fileStr))
 		fmt.Printf("Successfully generated %s\n", fileStr)
 	} else {
 		fmt.Println(err)
 	}
+}
+
+func displayPath(fileStr string) string {
+	if rel, ok := relativeInside(pdfDir, fileStr); ok {
+		return filepath.Join(pdfDisplayDir, rel)
+	}
+	if rel, ok := relativeInside(gopdfkitDir, fileStr); ok {
+		return rel
+	}
+	return fileStr
+}
+
+func relativeInside(root, path string) (string, bool) {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return rel, true
 }
