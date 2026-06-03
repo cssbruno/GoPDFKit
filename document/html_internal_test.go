@@ -132,6 +132,37 @@ func TestHTMLBoxEdgesFromDeclarations(t *testing.T) {
 	}
 }
 
+func TestHTMLBorderRadiusFromDeclarations(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	radius := htmlBorderRadiusFromDeclarations(map[string]string{
+		"border-radius":              "2mm 3mm 4mm 5mm",
+		"border-top-right-radius":    "6mm",
+		"border-bottom-left-radius":  "7mm",
+		"border-bottom-right-radius": "8mm / 9mm",
+	}, pdf, 100)
+
+	if !almostEqual(radius.topLeft, 2) || !almostEqual(radius.topRight, 6) || !almostEqual(radius.bottomRight, 8) || !almostEqual(radius.bottomLeft, 7) {
+		t.Fatalf("radius = %#v, want top-left=2 top-right=6 bottom-right=8 bottom-left=7", radius)
+	}
+}
+
+func TestHTMLBoxShadowFromDeclarations(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	shadow := htmlBoxShadowFromDeclarations(map[string]string{
+		"box-shadow": "2mm 3mm 4mm 1mm rgba(10, 20, 30, 0.35)",
+	}, pdf, 100)
+
+	if !shadow.enabled {
+		t.Fatal("box shadow disabled, want enabled")
+	}
+	if !almostEqual(shadow.offsetX, 2) || !almostEqual(shadow.offsetY, 3) || !almostEqual(shadow.blur, 4) || !almostEqual(shadow.spread, 1) {
+		t.Fatalf("box shadow dimensions = %#v, want 2/3/4/1mm", shadow)
+	}
+	if shadow.color.R != 10 || shadow.color.G != 20 || shadow.color.B != 30 || !almostEqual(shadow.alpha, 0.35) {
+		t.Fatalf("box shadow color/alpha = %#v alpha %.2f, want rgba(10,20,30,.35)", shadow.color, shadow.alpha)
+	}
+}
+
 func TestHTMLTableCellPadding(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	edges := htmlTableCellPadding(map[string]string{
@@ -705,9 +736,9 @@ func TestHTMLValidateHTMLReportsUnsupportedRenderingFeatures(t *testing.T) {
 func TestHTMLValidateHTMLAllowsSupportedBorderLonghands(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	html := pdf.HTMLNew()
-	messages := html.ValidateHTML(`<div style="border-width:1mm;border-style:solid;border-color:#123456;border-left:2mm solid orange;border-top-style:none">box</div><img src="" style="object-fit:cover;max-width:20mm;max-height:20mm"/>`)
+	messages := html.ValidateHTML(`<div style="border-width:1mm;border-style:solid;border-color:#123456;border-left:2mm solid orange;border-top-style:none;border-radius:4px;box-shadow:2px 3px 5px rgba(0,0,0,.2)">box</div><img src="" style="object-fit:cover;max-width:20mm;max-height:20mm"/>`)
 	if len(messages) != 0 {
-		t.Fatalf("validate messages = %#v, want none for supported border and image CSS", messages)
+		t.Fatalf("validate messages = %#v, want none for supported border, shadow, and image CSS", messages)
 	}
 }
 

@@ -1,4 +1,4 @@
-# GoPDFKit document generator
+# GoPDFKit
 
 [![CI][badge-ci]][ci]
 [![MIT licensed][badge-mit]][license]
@@ -6,79 +6,16 @@
 
 ![][logo]
 
-Package `gopdfkit` is a Go-native PDF document generator. The module includes
-the high-level `document` API plus focused packages for fonts, imported pages,
-and signatures.
+GoPDFKit is an MIT-licensed Go library for generating PDFs directly from Go
+code. It keeps an FPDF-style API for familiar page/text/drawing workflows, with
+additional helpers for HTML fragments, imported pages, signing, thumbnails, and
+structured document models.
 
-This repository is the `github.com/cssbruno/gopdfkit` module. The `0.1` line is a
-breaking cleanup focused on a clearer package layout and shorter, feature-based
-source files.
+The root `gopdfkit` package is intentionally small. It exposes the default
+constructor and public aliases. Import `github.com/cssbruno/gopdfkit/document`
+when you need the full API.
 
-## Features
-
-* UTF-8 TrueType font support
-* Standard PDF fonts: Courier, Helvetica, Times, Symbol, and ZapfDingbats
-* Page sizing, margins, headers, footers, page boxes, and page breaks
-* Cells, multicells, aligned writing, links, bookmarks, and aliases
-* JPEG, PNG, GIF, WebP, and SVG image support
-* Lines, rectangles, rounded rectangles, arcs, Bézier curves, polygons, and paths
-* Clipping, transforms, transparency, gradients, spot colors, and layers
-* Templates and imported template objects
-* Document protection, attachments, metadata, JavaScript, and XMP metadata
-* Controlled HTML/CSS fragment rendering
-* Shared document model and renderer for structured reports/forms
-* Integrated thumbnail helpers
-* Integrated PDF signing and verification helpers
-* CLI tools under `cmd/`
-
-The root `gopdfkit` package provides the default constructor and public document
-type aliases. Applications that need explicit constructor options, document
-model types, measurement helpers, or lower-level drawing APIs can import
-`document` directly.
-
-## Go Project Comparison
-
-GoPDFKit is performance-first: it generates PDFs directly in Go, avoids browser
-or office runtimes, and keeps HTML support intentionally bounded so rendering
-costs and failure modes stay predictable. It will not try to become fully
-browser-compatible HTML-to-PDF, and DOCX conversion is out of scope. Typst
-support may be considered later as an optional authoring or import path, but it
-is not part of the current API.
-
-This comparison only covers Go projects and is based on public project
-documentation plus this repository's API. It is a positioning guide, not a
-benchmark.
-
-| Project | What GoPDFKit has | What it does not try to replace |
-| --- | --- | --- |
-| GoPDFKit | FPDF-style generation, UTF-8 TrueType fonts, standard fonts, drawing, controlled HTML fragments, tables, SVG and WebP images, imported pages, templates, protection, attachments, metadata, thumbnails, signing, and verification helpers. | Full browser HTML/CSS layout, JavaScript page rendering, DOCX conversion, arbitrary PDF editing, and enterprise document SDK coverage. |
-| [go-pdf/fpdf][go-pdf-fpdf] | Similar FPDF-style workflow, plus GoPDFKit's package split, controlled HTML validation and limits, WebP handling, expanded SVG handling, report helpers, thumbnails, and integrated signing and verification. | `go-pdf/fpdf` remains the closest mature open-source peer and already covers many classic FPDF features, including drawing, fonts, images, templates, layers, protection, attachments, barcodes, charts, and PDF imports. |
-| [signintech/gopdf][signintech-gopdf] | A broader document-generation surface: cells, multicells, headers, footers, HTML/table helpers, SVG and WebP handling, metadata, protection, attachments, thumbnails, and signing helpers. | `signintech/gopdf` is a good fit for lower-level coordinate drawing with Unicode fonts, JPG and PNG images, transforms, and imported pages. |
-| [Maroto v2][maroto] | Lower-level PDF primitives plus imports, templates, SVG and WebP, attachments, metadata, protection, thumbnails, and signing helpers. | Maroto is better when the main need is grid-based report layout with rows, columns, components, headers, and a testable component tree. |
-| [pdfcpu][pdfcpu] | Direct content generation from Go code, including text, graphics, images, HTML fragments, templates, imported pages, and signed output. | pdfcpu is better for processing existing PDFs: validation, encryption, merge, split, rotate, crop, attachments, bookmarks, forms, stamps, watermarks, signature validation, and JSON-driven creation. |
-
-## Package Layout
-
-The active implementation packages are:
-
-* `gopdfkit`: default constructor and root package types.
-* `document`: high-level PDF document API and current feature implementation.
-* `font`: font parsing and JSON font definition generation.
-* `sign`: PDF signing and signature verification.
-* `importpdf`: small helpers for imported PDF pages.
-
-Test-only deterministic PDF helpers live under `internal/`.
-
-PDF signing is available from `sign`, and documents can be saved signed:
-
-```go
-err := pdf.OutputSignedFile("signed.pdf", sign.Options{
-    Signer:      signer,
-    Certificate: cert,
-})
-```
-
-## Installation
+## Install
 
 ```shell
 go get github.com/cssbruno/gopdfkit@latest
@@ -87,136 +24,171 @@ go get github.com/cssbruno/gopdfkit@latest
 ## Quick Start
 
 ```go
-pdf := gopdfkit.New()
-pdf.AddPage()
-pdf.SetFont("Helvetica", "B", 16)
-pdf.Cell(40, 10, "Hello, world")
-err := pdf.OutputFileAndClose("hello.pdf")
+package main
+
+import "github.com/cssbruno/gopdfkit"
+
+func main() {
+	pdf := gopdfkit.New()
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "B", 16)
+	pdf.Cell(40, 10, "Hello, world")
+	if err := pdf.OutputFileAndClose("hello.pdf"); err != nil {
+		panic(err)
+	}
+}
 ```
 
-Advanced users can import `document` directly:
+Use `document.NewWithOptions` when generation defaults should be configured at
+construction time:
 
 ```go
-pdf := document.New("P", "mm", "A4", "")
+pdf := document.NewWithOptions(document.Options{
+	OrientationStr: "P",
+	UnitStr:        "mm",
+	SizeStr:        "A4",
+	Optimize:       true,
+})
 ```
 
-Use `NewWithOptions` when generation defaults should be configured up front:
+`Optimize: true` selects best zlib compression for generated page and template
+streams. It is not a full PDF optimizer for images, object streams, fonts, or
+arbitrary existing PDFs.
 
-```go
-pdf := document.NewWithOptions(document.Options{Optimize: true})
-```
+## Current Capabilities
 
-Runnable examples live under [`examples/`][examples] and write PDFs under
-`assets/generated/pdf/examples`. Additional generated-PDF examples live as Go
-tests, especially in [`document/document_test.go`][document-test]. Running the
-tests writes generated PDFs under `assets/generated/pdf`.
+GoPDFKit currently supports:
 
-```shell
-go run ./examples/hello-world
-go run ./examples/drawing
-go run ./examples/headers-footers
-go run ./examples/html-fragment
-go run ./examples/image-from-memory
-go run ./examples/import-page
-go run ./examples/protection-attachments
-go run ./examples/rendering-gallery
-go run ./examples/structured-report
-go run ./examples/sign-pdf
-go run ./examples/templates
-go run ./examples/thumbnail
-go run ./examples/utf8-font
-```
+* PDF generation with pages, margins, headers, footers, page boxes, and page
+  breaks
+* Standard PDF fonts and UTF-8 TrueType fonts
+* Text, cells, multicells, aligned writing, styled paragraphs, links, bookmarks,
+  and aliases
+* Tables, reports, invoices, static filled form documents, and shared document
+  model rendering
+* Drawing primitives: lines, rectangles, rounded rectangles, arcs, Bezier
+  curves, polygons, paths, clipping, transforms, transparency, gradients, spot
+  colors, and layers
+* JPEG, PNG, GIF, WebP, SVG, data-image, and thumbnail workflows
+* Controlled HTML/CSS fragment rendering through `HTMLNew`, including text
+  styles, spacing, borders, border radius, backgrounds, and simple box shadows
+* Templates and imported PDF pages
+* Page workflows built from imported pages: merge, split, reorder, rotate,
+  4-up layout, template overlay, and watermark overlay
+* Attachments, metadata, XMP metadata, JavaScript actions, password protection,
+  PDF signing, and signature verification
+
+## Current Limits
+
+These are not implemented as general-purpose features:
+
+* Full browser-compatible HTML/CSS layout
+* JavaScript page rendering
+* DOCX conversion
+* Interactive AcroForm field creation
+* Filling, flattening, or FDF-merging existing interactive forms
+* Unlocking, decrypting, or removing passwords from existing PDFs
+* Arbitrary PDF editing, text extraction, OCR, or content rewriting
+
+Imported page support is intentionally narrow: classic xref-table PDFs,
+unencrypted documents, and pages whose content streams are unfiltered or
+FlateDecode-compressed. PDFs that use xref streams or object streams are
+reported as unsupported.
+
+Password protection applies to newly generated output. The permission flags are
+advisory because PDF readers decide how strictly to enforce them.
+
+## Examples
+
+Runnable examples live under [`examples/`][examples]. They write PDFs to
+`assets/generated/pdf/examples`.
+
+| Workflow | Command | Output |
+| --- | --- | --- |
+| Hello world | `go run ./examples/hello-world` | `hello-world.pdf` |
+| Report | `go run ./examples/report` | `gopdfkit-report.pdf` |
+| Table report | `go run ./examples/table-report` | `gopdfkit-tables.pdf` |
+| Invoice | `go run ./examples/invoice` | `invoice.pdf` |
+| Styled paragraphs | `go run ./examples/styled-paragraphs` | `styled-paragraphs.pdf` |
+| HTML CSS styles | `go run ./examples/html-css-styles` | `html-css-styles.pdf` |
+| Manual pagination | `go run ./examples/pagination-table` | `pagination-table.pdf` |
+| Document pagination | `go run ./examples/pagination-document` | `pagination-document.pdf` |
+| Images | `go run ./examples/add-images-to-pages` | `images-on-pages.pdf` |
+| Compression | `go run ./examples/compress-optimize-pdf` | `compressed-optimized.pdf`, `uncompressed-debug.pdf` |
+| Watermark | `go run ./examples/watermark-pdf` | `watermarked.pdf` |
+| Merge pages | `go run ./examples/merge-pdf-pages` | `merged-pages.pdf` |
+| Split and reorder pages | `go run ./examples/split-reorder-pages` | `split-page-2.pdf`, `reordered-pages.pdf` |
+| Rotate pages | `go run ./examples/rotate-pages` | `rotated-pages.pdf` |
+| 4-up pages | `go run ./examples/four-up-pages` | `four-up-pages.pdf` |
+| Template overlay | `go run ./examples/template-overlay` | `template-overlay.pdf` |
+| Static form document | `go run ./examples/form-creation` | `form-creation.pdf` |
+| Password protection | `go run ./examples/protect-pdf` | `protected-password.pdf` |
+| Templates | `go run ./examples/templates` | `templates.pdf` |
+| Thumbnail | `go run ./examples/thumbnail` | `thumbnail.pdf` |
+| UTF-8 font | `go run ./examples/utf8-font` | `utf8-font.pdf` |
+| Signing | `go run ./examples/sign-pdf` | `signed.pdf` |
 
 The QR-code example is a separate module so barcode dependencies stay out of
-GoPDFKit:
+the main module:
 
 ```shell
 cd examples/external-qr-code
 go run .
 ```
 
-## Repository Layout
-
-The repository has runnable command examples plus test examples that stay close
-to the behavior they validate.
+## Packages
 
 ```text
-document/           high-level PDF document API and current implementation
-font/               font parsing and font definition generation
-importpdf/          imported PDF page helpers
-sign/               PDF signing and verification
-
-cmd/
-  list/              generated-reference listing utility
-  fontmaker/         font definition generator
-
-examples/            runnable usage examples
-
-assets/
-  static/            checked-in fonts, images, and text fixtures
-  generated/pdf/     generated PDFs and reference PDFs
-
-internal/
-  testpdf/              deterministic PDF comparison helpers for tests
-  testsupport/example/  test/example support helpers
-
-doc/                 Markdown and generated documentation inputs/templates
-tools/               tool-only module for quality/security commands
+gopdfkit   root package: default constructor and public aliases
+document   main PDF generation API
+font       font parsing and JSON font definition generation
+importpdf  small wrappers around imported-page APIs
+sign       PDF signing and signature verification
 ```
 
-The `document` package is still split by feature-oriented files while the
-dedicated packages are extracted incrementally.
+Useful repository directories:
 
-## HTML and CSS Support
+```text
+cmd/fontmaker          font definition generator
+cmd/list               generated-reference listing utility
+examples/              runnable examples
+assets/static/         checked-in fonts, images, and text fixtures
+assets/generated/pdf/  generated PDFs
+doc/                   Markdown documentation
+tools/                 tool-only module for quality/security commands
+```
+
+## HTML Support
 
 `HTMLNew()` renders a controlled subset of HTML fragments into PDF drawing
-operations. It is useful for rich text, generated document sections, reports,
-letters, and forms. It is not a browser-compatible HTML/CSS renderer.
+operations. It is useful for rich text, generated sections, reports, letters,
+and static forms. It is not a browser engine.
 
-See [`doc/pdf-html-subset.md`][pdf-html-subset] for the full renderer contract.
-
-Supported HTML includes:
-
-* inline tags: `b`, `strong`, `i`, `em`, `u`, `s`, `code`, `sub`, `sup`
-* links, paragraphs, headings, `div`, `section`, blockquotes, and preformatted text
-* ordered, unordered, and definition lists
-* tables with captions, `thead`, `tbody`, `tfoot`, `colspan`, and `rowspan`
-* horizontal rules
-* images, figures, captions, data URLs, and opt-in local images
-* inline SVG
+Supported content includes inline text tags, links, paragraphs, headings,
+blocks, lists, tables, horizontal rules, images, figures, captions, opt-in local
+images, data URLs, and inline SVG.
 
 Supported CSS is deliberately small: text styling, line height, alignment,
 vertical alignment, whitespace handling, simple colors, backgrounds, borders,
-padding, margins, table/image dimensions, image fit modes, list marker style,
-and basic page-break controls.
+border radius, simple box shadows, padding, margins, table/image dimensions,
+image fit modes, list marker style, and basic page-break controls.
 
-Selectors are limited to tag, class, ID, tag-qualified class or ID, descendant,
-and direct-child selectors. Attribute selectors, pseudo selectors, media rules,
-floats, flexbox, grid, absolute positioning, shadows, browser table layout, and
-full browser font shaping are not implemented.
-
-Use `HTML.DebugLog` while rendering or `HTML.ValidateHTML` before rendering to
-collect best-effort diagnostics for unsupported tags, attributes, CSS selectors,
-and CSS properties.
-
-HTML input limits are configurable through fields such as `MaxHTMLBytes`,
-`MaxElementDepth`, `MaxTableRows`, `MaxGeneratedPages`, and
-`MaxDataImageBytes`.
+See [`doc/pdf-html-subset.md`][pdf-html-subset] for the full contract.
 
 ## Fonts
 
-Nothing special is required for standard PDF fonts:
+Standard PDF fonts require no setup:
 
 ```go
 pdf.SetFont("Helvetica", "", 12)
 ```
 
-Use `AddUTF8Font()` or `AddUTF8FontFromBytes()` for UTF-8 TrueType fonts,
+Use `AddUTF8Font` or `AddUTF8FontFromBytes` for UTF-8 TrueType fonts,
 including OpenType files with TrueType outlines. Use `RTL()` and `LTR()` to
 switch right-to-left rendering mode.
 
 For non-UTF-8 TrueType, OpenType/CFF, or Type1 fonts, generate a JSON font
-definition file with `font.Make` or the `cmd/fontmaker` command.
+definition with `font.Make` or `cmd/fontmaker`:
 
 ```shell
 cd cmd/fontmaker
@@ -227,20 +199,30 @@ go build
   ../../assets/static/font/calligra.ttf
 ```
 
-Then call `AddFont()` and `SetFont()` from your PDF generation code.
+## Signing
 
-## Generated PDFs and References
+Documents can be signed while writing:
 
-Running the runnable examples writes PDFs in `assets/generated/pdf/examples`.
-Running `go test ./...` generates PDFs in `assets/generated/pdf`. Reference
-PDFs are stored in `assets/generated/pdf/reference`.
+```go
+err := pdf.OutputSignedFile("signed.pdf", sign.Options{
+	Signer:      signer,
+	Certificate: cert,
+})
+```
 
-`internal/testsupport/example` contains helpers used by tests to name generated
-files and compare generated PDFs against reference copies. Comparisons need
-deterministic object ordering and timestamps; tests use `SetCatalogSort()` and
-`SetCreationDate()` for that.
+Signature verification helpers live in the `sign` package.
 
-## Testing and Quality
+## Errors
+
+Most `Document` methods record errors on the document instead of returning
+errors directly. Once an error is set, later methods usually return without
+changing the PDF. Check `Ok()`, `Err()`, or `Error()` after generation,
+especially before trusting output.
+
+Applications can transfer their own failures into the PDF object with
+`SetError()` or `SetErrorf()`.
+
+## Development
 
 Common commands:
 
@@ -258,44 +240,15 @@ make bench
 make bench-ci
 ```
 
-Tooling commands are defined in the `Makefile`. The `tools/` module keeps
-tool-only dependencies separate from the main library module.
+Some test examples generate or refresh PDFs under `assets/generated/pdf`. The
+`document` test package also clears generated PDFs before its example tests run.
 
-## Errors
+## Background
 
-Most `Document` methods record errors on the document instead of returning errors
-directly. Once an error is set, later methods usually return without changing
-the PDF. Check `Ok()`, `Err()`, or `Error()` after generation, especially after
-calling `Output()`.
-
-Applications can transfer their own failures into the PDF object with
-`SetError()` or `SetErrorf()`.
-
-## Conversion Notes
-
-This package is derived from the original [FPDF][fpdf-site] PHP library. The API
-keeps many FPDF-style method names for compatibility and familiarity, even where
-shorter Go names would be more idiomatic.
-
-Internally, this fork uses Go buffers and `io.Writer`/`io.WriteCloser` output
-instead of PHP string concatenation and dynamic argument behavior. Font
-definition files are JSON rather than PHP.
-
-The `0.1` cleanup removes the old `Type` suffix convention from public type
-names. No compatibility aliases are provided for those breaking renames.
-
-## Contributing
-
-Pull requests are welcome for focused fixes, tests, documentation, and feature
-work. Please keep changes scoped and keep tests beside the code they validate.
-
-Before submitting a change, run:
-
-```shell
-go test ./...
-go vet ./...
-gofmt -w .
-```
+GoPDFKit is derived from the original [FPDF][fpdf-site] PHP library and keeps
+many FPDF-style method names for compatibility and familiarity. Internally, this
+Go version uses buffers, `io.Writer`/`io.WriteCloser` output, and JSON font
+definition files.
 
 ## License
 
@@ -307,8 +260,8 @@ This package's code and documentation are closely derived from the
 [FPDF][fpdf-site] library created by Olivier Plathey. Many font and image
 resources are copied directly from FPDF.
 
-The project also incorporates work or ideas from Bruno Michel, David Hernández
-Sanz, Martin Hall-May, Andreas Würmser, Manuel Cornes, Moritz Wagner, Klemen
+The project also incorporates work or ideas from Bruno Michel, David Hernandez
+Sanz, Martin Hall-May, Andreas Wurmser, Manuel Cornes, Moritz Wagner, Klemen
 Vodopivec, Lawrence Kesteloot, Stefan Schroeder, Ivan Daniluk, Anthony Starks,
 Robert Lillack, Claudio Felber, Stani Michiels, Marcus Downing, Jan Slabon,
 Setasign, Jelmer Snoeck, Guillermo Pascual, Kent Quirk, Paulo Coutinho, Dan
@@ -319,18 +272,9 @@ Dave Barnes, Brigham Thompson, Joe Westcott, and Benoit KUGLER.
 [badge-doc]: https://img.shields.io/badge/godoc-GoPDFKit-blue.svg
 [badge-mit]: https://img.shields.io/badge/license-MIT-blue.svg
 [ci]: https://github.com/cssbruno/gopdfkit/actions/workflows/ci.yml
-[dfont]: http://dejavu-fonts.org/
-[effective-go]: https://golang.org/doc/effective_go.html
 [examples]: examples
 [fpdf-site]: http://www.fpdf.org/
-[document-test]: https://github.com/cssbruno/gopdfkit/blob/master/document/document_test.go
-[github]: https://github.com/cssbruno/gopdfkit
 [godoc]: https://pkg.go.dev/github.com/cssbruno/gopdfkit
-[go-pdf-fpdf]: https://pkg.go.dev/codeberg.org/go-pdf/fpdf
 [license]: https://raw.githubusercontent.com/cssbruno/gopdfkit/master/LICENSE
 [logo]: https://raw.githubusercontent.com/cssbruno/gopdfkit/master/assets/static/image/gopher_pdf.png
-[maroto]: https://pkg.go.dev/github.com/johnfercher/maroto/v2
-[noto]: https://github.com/jsntn/webfonts/blob/master/NotoSansSC-Regular.ttf
 [pdf-html-subset]: doc/pdf-html-subset.md
-[pdfcpu]: https://pkg.go.dev/github.com/pdfcpu/pdfcpu/pkg/pdfcpu
-[signintech-gopdf]: https://pkg.go.dev/github.com/signintech/gopdf

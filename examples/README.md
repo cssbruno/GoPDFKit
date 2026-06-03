@@ -10,11 +10,14 @@ go run ./examples/drawing
 go run ./examples/form-creation
 go run ./examples/four-up-pages
 go run ./examples/headers-footers
+go run ./examples/html-css-styles
 go run ./examples/html-fragment
 go run ./examples/invoice
 go run ./examples/image-from-memory
 go run ./examples/import-page
 go run ./examples/merge-pdf-pages
+go run ./examples/pagination-document
+go run ./examples/pagination-table
 go run ./examples/protection-attachments
 go run ./examples/protect-pdf
 go run ./examples/report
@@ -47,6 +50,9 @@ document workflow examples produce:
 - `gopdfkit-tables.pdf`
 - `invoice.pdf`
 - `styled-paragraphs.pdf`
+- `html-css-styles.pdf`
+- `pagination-table.pdf`
+- `pagination-document.pdf`
 - `merged-pages.pdf`
 - `split-page-2.pdf`
 - `reordered-pages.pdf`
@@ -66,6 +72,9 @@ Workflow coverage:
 - Table PDF reports: `go run ./examples/table-report`
 - Invoice creation: `go run ./examples/invoice`
 - Styled paragraphs: `go run ./examples/styled-paragraphs`
+- HTML CSS styles with border radius and box shadows: `go run ./examples/html-css-styles`
+- Manual table pagination: `go run ./examples/pagination-table`
+- Document-model pagination and explicit page breaks: `go run ./examples/pagination-document`
 - Merge PDF pages: `go run ./examples/merge-pdf-pages`
 - Split PDF pages and change page order: `go run ./examples/split-reorder-pages`
 - Rotate pages: `go run ./examples/rotate-pages`

@@ -26,6 +26,8 @@ type htmlCSSSelectorPart struct {
 type htmlBlockBoxStyle struct {
 	background       CSSColorType
 	border           htmlBorderStyle
+	radius           htmlBorderRadiusStyle
+	shadow           htmlBoxShadowStyle
 	breakBefore      bool
 	breakAfter       bool
 	breakInsideAvoid bool
@@ -57,8 +59,38 @@ type htmlBorderSideStyle struct {
 	color   CSSColorType
 }
 
+type htmlBorderRadiusStyle struct {
+	topLeft     float64
+	topRight    float64
+	bottomRight float64
+	bottomLeft  float64
+}
+
+type htmlBoxShadowStyle struct {
+	enabled bool
+	offsetX float64
+	offsetY float64
+	blur    float64
+	spread  float64
+	color   CSSColorType
+	alpha   float64
+}
+
 func (edges htmlBoxEdges) hasAny() bool {
 	return edges.top > 0 || edges.right > 0 || edges.bottom > 0 || edges.left > 0
+}
+
+func (radius htmlBorderRadiusStyle) hasAny() bool {
+	return radius.topLeft > 0 || radius.topRight > 0 || radius.bottomRight > 0 || radius.bottomLeft > 0
+}
+
+func (radius htmlBorderRadiusStyle) clamped(w, h float64) htmlBorderRadiusStyle {
+	maxRadius := minFloat(w, h) / 2
+	radius.topLeft = clampFloat(radius.topLeft, 0, maxRadius)
+	radius.topRight = clampFloat(radius.topRight, 0, maxRadius)
+	radius.bottomRight = clampFloat(radius.bottomRight, 0, maxRadius)
+	radius.bottomLeft = clampFloat(radius.bottomLeft, 0, maxRadius)
+	return radius
 }
 
 func (html *HTML) cachedStyleDeclarations(style string) map[string]string {
@@ -333,6 +365,203 @@ func htmlBorderColor(value string) (CSSColorType, bool) {
 	return CSSColorType{}, false
 }
 
+func htmlBorderRadiusFromDeclarations(decl map[string]string, pdf *Document, relative float64) htmlBorderRadiusStyle {
+	radius := htmlBorderRadiusStyle{}
+	if values := htmlCSSValueFields(strings.Split(firstNonEmpty(decl["border-radius"]), "/")[0]); len(values) > 0 && len(values) <= 4 {
+		if edges, ok := parseHTMLBoxEdgeValues(values, pdf, relative); ok {
+			radius = htmlBorderRadiusStyle{
+				topLeft:     edges.top,
+				topRight:    edges.right,
+				bottomRight: edges.bottom,
+				bottomLeft:  edges.left,
+			}
+		}
+	}
+	for _, corner := range []struct {
+		name string
+		set  func(float64)
+	}{
+		{name: "top-left", set: func(v float64) { radius.topLeft = v }},
+		{name: "top-right", set: func(v float64) { radius.topRight = v }},
+		{name: "bottom-right", set: func(v float64) { radius.bottomRight = v }},
+		{name: "bottom-left", set: func(v float64) { radius.bottomLeft = v }},
+	} {
+		value := strings.TrimSpace(strings.Split(decl["border-"+corner.name+"-radius"], "/")[0])
+		if n, ok := parseHTMLBoxLength(value, pdf, relative); ok {
+			corner.set(n)
+		}
+	}
+	return radius
+}
+
+func htmlBoxShadowFromDeclarations(decl map[string]string, pdf *Document, relative float64) htmlBoxShadowStyle {
+	value := strings.TrimSpace(decl["box-shadow"])
+	if value == "" || strings.EqualFold(value, "none") || pdf == nil {
+		return htmlBoxShadowStyle{}
+	}
+	if comma := htmlCSSTopLevelComma(value); comma >= 0 {
+		value = value[:comma]
+	}
+	tokens := htmlCSSValueFields(value)
+	lengths := make([]float64, 0, 4)
+	shadow := htmlBoxShadowStyle{
+		color: CSSColorType{R: 0, G: 0, B: 0, Set: true},
+		alpha: 0.18,
+	}
+	for _, token := range tokens {
+		if strings.EqualFold(token, "inset") {
+			continue
+		}
+		if color, alpha, ok := parseCSSColorWithAlpha(token); ok {
+			if !color.None {
+				shadow.color = color
+				shadow.alpha = alpha
+			}
+			continue
+		}
+		if len(lengths) < 4 {
+			if n, ok := parseHTMLBoxLengthSigned(token, pdf, relative); ok {
+				lengths = append(lengths, n)
+			}
+		}
+	}
+	if len(lengths) < 2 {
+		return htmlBoxShadowStyle{}
+	}
+	shadow.offsetX = lengths[0]
+	shadow.offsetY = lengths[1]
+	if len(lengths) > 2 && lengths[2] > 0 {
+		shadow.blur = lengths[2]
+	}
+	if len(lengths) > 3 {
+		shadow.spread = lengths[3]
+	}
+	shadow.alpha = clampFloat(shadow.alpha, 0, 1)
+	shadow.enabled = shadow.alpha > 0 && shadow.color.Set && !shadow.color.None
+	return shadow
+}
+
+func htmlCSSValueFields(value string) []string {
+	var fields []string
+	start := -1
+	depth := 0
+	for i, r := range value {
+		switch {
+		case unicode.IsSpace(r) && depth == 0:
+			if start >= 0 {
+				fields = append(fields, value[start:i])
+				start = -1
+			}
+		case r == '(':
+			if start < 0 {
+				start = i
+			}
+			depth++
+		case r == ')':
+			if start < 0 {
+				start = i
+			}
+			if depth > 0 {
+				depth--
+			}
+		default:
+			if start < 0 {
+				start = i
+			}
+		}
+	}
+	if start >= 0 {
+		fields = append(fields, value[start:])
+	}
+	return fields
+}
+
+func htmlCSSTopLevelComma(value string) int {
+	depth := 0
+	for i, r := range value {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+func parseCSSColorWithAlpha(value string) (CSSColorType, float64, bool) {
+	color, ok := parseCSSColor(value)
+	if ok {
+		return color, 1, true
+	}
+	value = strings.TrimSpace(strings.ToLower(value))
+	if !strings.HasPrefix(value, "rgba(") || !strings.HasSuffix(value, ")") {
+		return CSSColorType{}, 0, false
+	}
+	parts := strings.Split(value[5:len(value)-1], ",")
+	if len(parts) != 4 {
+		return CSSColorType{}, 0, false
+	}
+	r, okR := parseCSSColorComponent(parts[0])
+	g, okG := parseCSSColorComponent(parts[1])
+	b, okB := parseCSSColorComponent(parts[2])
+	alpha, okA := parseCSSAlpha(parts[3])
+	if !okR || !okG || !okB || !okA {
+		return CSSColorType{}, 0, false
+	}
+	return CSSColorType{R: r, G: g, B: b, Set: true}, alpha, true
+}
+
+func parseCSSColorComponent(value string) (int, bool) {
+	value = strings.TrimSpace(value)
+	if strings.HasSuffix(value, "%") {
+		n, err := strconv.ParseFloat(strings.TrimSuffix(value, "%"), 64)
+		if err != nil || !isFiniteFloat(n) {
+			return 0, false
+		}
+		return clampColor(int(n * 255 / 100)), true
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, false
+	}
+	return clampColor(n), true
+}
+
+func parseCSSAlpha(value string) (float64, bool) {
+	value = strings.TrimSpace(value)
+	if strings.HasSuffix(value, "%") {
+		n, err := strconv.ParseFloat(strings.TrimSuffix(value, "%"), 64)
+		if err != nil || !isFiniteFloat(n) {
+			return 0, false
+		}
+		return clampFloat(n/100, 0, 1), true
+	}
+	n, err := strconv.ParseFloat(value, 64)
+	if err != nil || !isFiniteFloat(n) {
+		return 0, false
+	}
+	return clampFloat(n, 0, 1), true
+}
+
+func parseHTMLBoxLengthSigned(value string, pdf *Document, relative float64) (float64, bool) {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(value, "-") {
+		n, ok := parseHTMLBoxLength(strings.TrimSpace(value[1:]), pdf, relative)
+		return -n, ok
+	}
+	if strings.HasPrefix(value, "+") {
+		value = strings.TrimSpace(value[1:])
+	}
+	return parseHTMLBoxLength(value, pdf, relative)
+}
+
 func htmlApplyBorderStyle(pdf *Document, border htmlBorderStyle, fallbackR, fallbackG, fallbackB int, fallbackWidth float64) {
 	if border.color.Set && !border.color.None {
 		pdf.SetDrawColor(border.color.R, border.color.G, border.color.B)
@@ -346,17 +575,70 @@ func htmlApplyBorderStyle(pdf *Document, border htmlBorderStyle, fallbackR, fall
 	}
 }
 
-func htmlDrawBorderedRect(pdf *Document, x, y, wd, ht float64, border htmlBorderStyle, fill bool, fallbackR, fallbackG, fallbackB int, fallbackWidth float64) {
+func htmlDrawBoxShadow(pdf *Document, x, y, wd, ht float64, radius htmlBorderRadiusStyle, shadow htmlBoxShadowStyle) {
+	if !shadow.enabled || wd <= 0 || ht <= 0 {
+		return
+	}
+	fillR, fillG, fillB := pdf.GetFillColor()
+	alpha, blend := pdf.GetAlpha()
+	defer func() {
+		pdf.SetFillColor(fillR, fillG, fillB)
+		pdf.SetAlpha(alpha, blend)
+	}()
+	pdf.SetFillColor(shadow.color.R, shadow.color.G, shadow.color.B)
+	steps := 1
+	if shadow.blur > 0 {
+		steps = 4
+	}
+	for i := steps; i >= 1; i-- {
+		grow := shadow.spread
+		if shadow.blur > 0 {
+			grow += shadow.blur * float64(i) / float64(steps)
+		}
+		drawX := x + shadow.offsetX - grow
+		drawY := y + shadow.offsetY - grow
+		drawWd := wd + 2*grow
+		drawHt := ht + 2*grow
+		if drawWd <= 0 || drawHt <= 0 {
+			continue
+		}
+		layerAlpha := shadow.alpha / float64(steps)
+		if steps == 1 {
+			layerAlpha = shadow.alpha
+		}
+		pdf.SetAlpha(clampFloat(layerAlpha, 0, 1), "Normal")
+		drawRadius := radius
+		if grow > 0 {
+			drawRadius.topLeft += grow
+			drawRadius.topRight += grow
+			drawRadius.bottomRight += grow
+			drawRadius.bottomLeft += grow
+		}
+		drawRadius = drawRadius.clamped(drawWd, drawHt)
+		if drawRadius.hasAny() {
+			pdf.RoundedRectExt(drawX, drawY, drawWd, drawHt, drawRadius.topLeft, drawRadius.topRight, drawRadius.bottomRight, drawRadius.bottomLeft, "F")
+		} else {
+			pdf.Rect(drawX, drawY, drawWd, drawHt, "F")
+		}
+	}
+}
+
+func htmlDrawBorderedRect(pdf *Document, x, y, wd, ht float64, border htmlBorderStyle, radius htmlBorderRadiusStyle, fill bool, fallbackR, fallbackG, fallbackB int, fallbackWidth float64) {
+	radius = radius.clamped(wd, ht)
 	if fill {
-		pdf.Rect(x, y, wd, ht, "F")
+		if radius.hasAny() {
+			pdf.RoundedRectExt(x, y, wd, ht, radius.topLeft, radius.topRight, radius.bottomRight, radius.bottomLeft, "F")
+		} else {
+			pdf.Rect(x, y, wd, ht, "F")
+		}
 	}
 	if !border.hasAny() {
 		return
 	}
 	if !border.sideSpecific {
 		htmlApplyBorderStyle(pdf, border, fallbackR, fallbackG, fallbackB, fallbackWidth)
-		if !fill {
-			pdf.Rect(x, y, wd, ht, "D")
+		if radius.hasAny() {
+			pdf.RoundedRectExt(x, y, wd, ht, radius.topLeft, radius.topRight, radius.bottomRight, radius.bottomLeft, "D")
 			return
 		}
 		pdf.Rect(x, y, wd, ht, "D")

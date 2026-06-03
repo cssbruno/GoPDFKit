@@ -150,7 +150,7 @@ func (html *HTML) writeTable(tokens []HTMLSegmentType, start int, lineHt float64
 			if measuredCell.fill.Set {
 				pdf.SetFillColor(measuredCell.fill.R, measuredCell.fill.G, measuredCell.fill.B)
 			}
-			htmlDrawBorderedRect(pdf, x, y, wd, cellHt, cellBorder, measuredCell.fill.Set, drawR, drawG, drawB, lineWidth)
+			htmlDrawBorderedRect(pdf, x, y, wd, cellHt, cellBorder, htmlBorderRadiusStyle{}, measuredCell.fill.Set, drawR, drawG, drawB, lineWidth)
 			html.applyTextStyle(measuredCell.style, fallback)
 			textY := y + measuredCell.padding.top + htmlTableVerticalOffset(htmlMaxFloat(cellHt-measuredCell.padding.top-measuredCell.padding.bottom, 0), measuredCell.textHt, measuredCell.style.verticalAlign)
 			pdf.SetXY(x+measuredCell.padding.left, textY)

@@ -49,13 +49,13 @@ depending on where they appear.
 | `width`, `height`, `align`, `valign`, `bgcolor`, `border`, `bordercolor`, `colspan`, `rowspan` on table cells | Yes | Controls supported table/cell rendering. |
 | Tag, class, ID, descendant, direct-child, and comma-separated selectors | Yes | Applies supported CSS declarations. |
 | Text CSS: `color`, `font-family`, `font-size`, `font-style`, `font-weight`, `line-height`, `text-align`, `text-decoration`, `vertical-align`, `white-space` | Yes | Applies supported text styling. |
-| Box CSS: `background`, `background-color`, borders, margins, and padding | Yes | Applies supported PDF box drawing. |
+| Box CSS: `background`, `background-color`, borders, `border-radius`, `box-shadow`, margins, and padding | Yes | Applies supported PDF box drawing. Shadows are simplified to translucent PDF shapes. |
 | Sizing CSS: `width`, `height`, `max-width`, `max-height` | Yes | Applies supported block, table, and image sizing. |
 | Pagination CSS: `break-before`, `break-after`, `break-inside`, `page-break-before`, `page-break-after`, `page-break-inside` | Partial | Applies basic page-break behavior, not full paged-media layout. |
 | Sibling selectors, attribute selectors, pseudo-classes, pseudo-elements | No | Unsupported selector forms are ignored/reported. |
 | `@media`, `@page`, and other at-rules | No | Browser stylesheet at-rules are not implemented. |
 | `display:flex`, `display:grid`, floats, positioning, `z-index`, `overflow` | No | Browser layout engines are not implemented. |
-| CSS transforms, shadows, `border-radius` | No | Decorative browser effects are not implemented. |
+| CSS transforms | No | Browser transform layout is not implemented. |
 | Remote CSS and remote images | No | Remote loading is rejected or unsupported for deterministic PDF generation. |
 
 ## Supported HTML Tags
@@ -215,6 +215,12 @@ Boxes:
 - `border-left-width`
 - `border-left-style`
 - `border-left-color`
+- `border-radius`
+- `border-top-left-radius`
+- `border-top-right-radius`
+- `border-bottom-right-radius`
+- `border-bottom-left-radius`
+- `box-shadow`
 - `margin`
 - `margin-top`
 - `margin-right`
@@ -266,10 +272,11 @@ Still missing:
 
 ## Current Box Model Behavior
 
-Block boxes support margin, padding, background color, whole-box borders, and
-per-side border widths, colors, and styles. Per-side margins and paddings are
-also supported. `border-radius`, shadows, floats, positioning, flexbox, and grid
-are not supported.
+Block boxes support margin, padding, background color, whole-box borders,
+border radius, simple outer box shadows, and per-side border widths, colors,
+and styles. Per-side margins and paddings are also supported. Shadows are
+rendered as translucent PDF shapes rather than browser-blurred raster effects.
+Floats, positioning, flexbox, and grid are not supported.
 
 ## Current Image Behavior
 
@@ -331,8 +338,6 @@ support:
 - `z-index`
 - `overflow`
 - CSS transforms
-- border radius
-- shadows
 - `@page`
 - media queries
 - widows and orphans

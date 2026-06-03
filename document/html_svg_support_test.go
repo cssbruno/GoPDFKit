@@ -539,6 +539,31 @@ func TestHTMLWriteBlockBoxStylesAndHorizontalRule(t *testing.T) {
 	}
 }
 
+func TestHTMLWriteRoundedBoxShadowStyles(t *testing.T) {
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	_, lineHeight := pdf.GetFontSize()
+	html := pdf.HTMLNew()
+	html.Write(lineHeight, `<div style="background:#f8fbff;border:1px solid #6688aa;border-radius:8px;box-shadow:3px 4px 8px rgba(0,0,0,.25);padding:8px;margin:6px">Rounded shadow card</div>`)
+
+	var output bytes.Buffer
+	if err := pdf.Output(&output); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	pdfText := output.String()
+	if !strings.Contains(pdfText, "Rounded shadow card") {
+		t.Fatal("generated PDF does not contain rounded shadow text")
+	}
+	if !strings.Contains(pdfText, " c ") {
+		t.Fatal("generated PDF does not contain rounded corner curve operations")
+	}
+	if !strings.Contains(pdfText, "/GS") {
+		t.Fatal("generated PDF does not contain alpha state for box shadow")
+	}
+}
+
 func TestHTMLWriteLineHeightAndBoxEdges(t *testing.T) {
 	render := func(fragment string) (float64, error) {
 		pdf := document.New("P", "mm", "A4", "")

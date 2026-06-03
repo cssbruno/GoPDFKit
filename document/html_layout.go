@@ -81,7 +81,7 @@ func htmlBlockHasBoxStyle(el HTMLSegmentType, cssRules []htmlCSSRule, ancestors 
 		return true
 	}
 	style := htmlBlockBox(el, cssRules, nil, 0, ancestors...)
-	return style.border.enabled || style.background.Set || style.padding.hasAny() || style.margin.hasAny() || style.breakBefore || style.breakAfter || style.breakInsideAvoid
+	return style.border.enabled || style.background.Set || style.radius.hasAny() || style.shadow.enabled || style.padding.hasAny() || style.margin.hasAny() || style.breakBefore || style.breakAfter || style.breakInsideAvoid
 }
 
 func (html *HTML) blockHasBoxStyle(el HTMLSegmentType, cssRules []htmlCSSRule, ancestors ...HTMLSegmentType) bool {
@@ -90,7 +90,7 @@ func (html *HTML) blockHasBoxStyle(el HTMLSegmentType, cssRules []htmlCSSRule, a
 		return true
 	}
 	style := html.blockBox(el, cssRules, nil, 0, ancestors...)
-	return style.border.enabled || style.background.Set || style.padding.hasAny() || style.margin.hasAny() || style.breakBefore || style.breakAfter || style.breakInsideAvoid
+	return style.border.enabled || style.background.Set || style.radius.hasAny() || style.shadow.enabled || style.padding.hasAny() || style.margin.hasAny() || style.breakBefore || style.breakAfter || style.breakInsideAvoid
 }
 
 func (html *HTML) writeBlockBox(tokens []HTMLSegmentType, start int, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) int {
@@ -146,7 +146,8 @@ func (html *HTML) writeBlockBox(tokens []HTMLSegmentType, start int, lineHt floa
 	if fillBox {
 		pdf.SetFillColor(box.background.R, box.background.G, box.background.B)
 	}
-	htmlDrawBorderedRect(pdf, x, y, boxWd, ht, box.border, fillBox, drawR, drawG, drawB, lineWidth)
+	htmlDrawBoxShadow(pdf, x, y, boxWd, ht, box.radius, box.shadow)
+	htmlDrawBorderedRect(pdf, x, y, boxWd, ht, box.border, box.radius, fillBox, drawR, drawG, drawB, lineWidth)
 	pdf.SetCellMargin(0)
 	pdf.SetXY(x+box.padding.left, y+box.padding.top)
 	html.applyTextStyle(style, fallback)
@@ -174,6 +175,8 @@ func htmlBlockBoxFromDeclarations(el HTMLSegmentType, decl map[string]string, pd
 	box := htmlBlockBoxStyle{}
 	box.background = firstColor(htmlDeclarationColor(decl, "background-color", "background"), htmlAttrColor(el.Attr, "bgcolor"))
 	box.border = htmlBorderFromDeclarations(decl, pdf, relative)
+	box.radius = htmlBorderRadiusFromDeclarations(decl, pdf, relative)
+	box.shadow = htmlBoxShadowFromDeclarations(decl, pdf, relative)
 	if !box.border.hasAny() && htmlBorderEnabled(el.Attr["border"]) {
 		box.border.setAll(htmlBorderSideStyle{enabled: true})
 	}
@@ -343,6 +346,16 @@ func minFloat(a, b float64) float64 {
 		return a
 	}
 	return b
+}
+
+func clampFloat(value, minValue, maxValue float64) float64 {
+	if value < minValue {
+		return minValue
+	}
+	if value > maxValue {
+		return maxValue
+	}
+	return value
 }
 
 func minInt(a, b int) int {
