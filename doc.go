@@ -2,9 +2,12 @@
 // Copyright (c) 2026 cssBruno
 
 /*
-Package gopdfkit implements a Go-native PDF document generator. It supports
-text, drawing, images, templates, SVG, HTML fragments, integrated barcodes,
-PDF signing helpers, and deterministic test output.
+Package gopdfkit is the small convenience facade for a Go-native PDF document
+generator.
+
+The main implementation lives in github.com/cssbruno/gopdfkit/document.
+Independent helpers such as deterministic PDF comparison live in their own
+packages.
 
 This repository is the github.com/cssbruno/gopdfkit module. The 0.1 line is a
 breaking cleanup focused on a clearer package layout and shorter, feature-based
@@ -28,8 +31,9 @@ source files.
   - Integrated PDF signing and verification helpers
   - CLI tools under cmd/
 
-The root gopdfkit package contains the primary document, image, barcode, and
-signing APIs.
+The root gopdfkit package intentionally stays small and delegates to document.
+Feature package entry points exist for font, img, draw, html, barcode, sign,
+importpdf, pdfkit, and layout.
 
 ## Support Matrix
 
@@ -53,19 +57,26 @@ columns describe typical support rather than a guarantee for every library.
 	Templates and imported template objects              Yes                    Varies                                       Varies
 	Document protection, attachments, metadata, JavaScript, and XMP metadata
 	                                                       Yes                    Varies                                       Varies
-	PDF signing and verification helpers                 Yes, integrated in the root API Varies                                Varies
-	Barcode helpers                                      Yes, integrated in the root API Varies                                Varies
+	PDF signing and verification helpers                 Yes, in sign with document helpers                 Varies
+	Barcode helpers                                      Yes, in barcode with document helpers              Varies
 
-## Integrated Barcode and Signing
+## Package Layout
 
-Barcode generation is available directly from *Fpdf:
+The active implementation packages are gopdfkit, document, compare, font,
+barcode, and sign. The repo also contains package entry points for img, draw,
+html, importpdf, pdfkit, and layout.
 
-	key := pdf.RegisterQRBarcode("https://example.test/verify", gopdfkit.QRBarcodeHigh, gopdfkit.QRBarcodeUnicode)
+Barcode generation is available from `barcode`, with rendering helpers on `*document.Document`:
+
+	key, err := barcode.QR("https://example.test/verify", barcode.High, barcode.Unicode)
+	if err != nil {
+	    // handle error
+	}
 	pdf.Barcode(key, 10, 10, 24, 24, false)
 
-PDF signing is also available from the root package:
+PDF signing is available from sign, and documents can be saved signed:
 
-	err := pdf.OutputSignedFile("signed.pdf", gopdfkit.SignOptions{
+	err := pdf.OutputSignedFile("signed.pdf", sign.Options{
 	    Signer:      signer,
 	    Certificate: cert,
 	})
@@ -76,13 +87,13 @@ go get github.com/cssbruno/gopdfkit@latest
 
 ## Quick Start
 
-	pdf := gopdfkit.New("P", "mm", "A4", "")
+	pdf := gopdfkit.New()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "B", 16)
 	pdf.Cell(40, 10, "Hello, world")
 	err := pdf.OutputFileAndClose("hello.pdf")
 
-Most runnable usage examples live as Go tests, especially in fpdf_test.go.
+Most runnable usage examples live as Go tests, especially in document/document_test.go.
 Running the tests writes generated PDFs under assets/generated/pdf.
 
 ## Repository Layout
@@ -99,9 +110,9 @@ they validate.
   - doc/: Markdown and generated documentation inputs/templates
   - tools/: tool-only module for quality/security commands
 
-The root package is split by feature area:
+The document package is split by feature area:
 
-  - types_*.go and fpdf_state.go contain shared public/internal data types.
+  - types_*.go and document/state.go contain shared public/internal data types.
   - font_*.go, image_*.go, html_*.go, svg_*.go, text_*.go,
     drawing_*.go, output_*.go, and document_*.go group behavior by domain.
   - util_*.go contains small compression, encoding, I/O, and math helpers.
@@ -153,7 +164,7 @@ including OpenType files with TrueType outlines. Use RTL() and LTR() to
 switch right-to-left rendering mode.
 
 For non-UTF-8 TrueType, OpenType/CFF, or Type1 fonts, generate a JSON font
-definition file with MakeFont or the cmd/fontmaker command.
+definition file with font.Make or the cmd/fontmaker command.
 
 	cd cmd/fontmaker
 	go build
@@ -194,7 +205,7 @@ tool-only dependencies separate from the main library module.
 
 ## Errors
 
-Most Fpdf methods record errors on the document instead of returning errors
+Most Document methods record errors on the document instead of returning errors
 directly. Once an error is set, later methods usually return without changing
 the PDF. Check Ok(), Err(), or Error() after generation, especially after
 calling Output().

@@ -5,7 +5,7 @@
 Command fontmaker generates JSON font definition files for GoPDFKit.
 
 The command accepts TrueType, OpenType, and binary Type 1 font files and writes
-the files needed by Fpdf.AddFont. Type 1 input also requires a sibling AFM
+the files needed by GoPDFKit.AddFont. Type 1 input also requires a sibling AFM
 metrics file.
 */
 package main

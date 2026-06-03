@@ -10,17 +10,18 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/cssbruno/gopdfkit"
+	"github.com/cssbruno/gopdfkit/compare"
+	"github.com/cssbruno/gopdfkit/document"
 )
 
 var gopdfkitDir string
 
 func init() {
 	setRoot()
-	gopdfkit.SetDefaultCompression(false)
-	gopdfkit.SetDefaultCatalogSort(true)
-	gopdfkit.SetDefaultCreationDate(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
-	gopdfkit.SetDefaultModificationDate(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
+	document.SetDefaultCompression(false)
+	document.SetDefaultCatalogSort(true)
+	document.SetDefaultCreationDate(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
+	document.SetDefaultModificationDate(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
 }
 
 // setRoot records the path from the current working directory to the repository
@@ -34,6 +35,12 @@ func setRoot() {
 	gopdfkitDir = ""
 	for {
 		if _, err := os.Stat(filepath.Join(gopdfkitDir, "assets", "static")); err == nil {
+			if gopdfkitDir != "" {
+				if err := os.Chdir(gopdfkitDir); err != nil {
+					panic(err)
+				}
+				gopdfkitDir = ""
+			}
 			return
 		}
 		parent := filepath.Dir(wd)
@@ -94,7 +101,7 @@ func referenceCompare(fileStr string) (err error) {
 	err = os.MkdirAll(refDirStr, 0o750)
 	if err == nil {
 		refFileStr = filepath.Join(refDirStr, baseFileStr)
-		err = gopdfkit.ComparePDFFiles(fileStr, refFileStr, false)
+		err = compare.ComparePDFFiles(fileStr, refFileStr, false)
 	}
 	return
 }

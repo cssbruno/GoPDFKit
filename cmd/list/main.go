@@ -50,7 +50,7 @@ func main() {
 			ok, name = matchTail(name, ".pdf")
 			if ok {
 				name = strings.ReplaceAll(name, "_", " ")
-				ok, showStr = matchHead(name, "Fpdf ")
+				ok, showStr = matchHead(name, "Document ")
 				if ok {
 					fmt.Printf("[%s](%s)\n", showStr, path)
 				} else {

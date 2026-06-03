@@ -6,9 +6,10 @@
 
 ![][logo]
 
-Package `gopdfkit` implements a Go-native PDF document generator. It supports
-text, drawing, images, templates, SVG, HTML fragments, integrated barcodes,
-PDF signing helpers, and deterministic test output.
+Package `gopdfkit` is the small convenience facade for a Go-native PDF document
+generator. The main implementation now lives in `github.com/cssbruno/gopdfkit/document`;
+independent helpers such as deterministic PDF comparison live in their own
+packages.
 
 This repository is the `github.com/cssbruno/gopdfkit` module. The `0.1` line is a
 breaking cleanup focused on a clearer package layout and shorter, feature-based
@@ -32,8 +33,9 @@ source files.
 * Integrated PDF signing and verification helpers
 * CLI tools under `cmd/`
 
-The root `gopdfkit` package contains the primary document, image, barcode, and
-signing APIs.
+The root `gopdfkit` package intentionally stays small. It exposes the beginner
+entry point and delegates to `document`, while feature packages are split out so
+larger applications can import the parts they need.
 
 ## Support Matrix
 
@@ -56,22 +58,37 @@ columns describe typical support rather than a guarantee for every library.
 | Configurable HTML validation and render limits | Yes | Varies | Varies |
 | Templates and imported template objects | Yes | Varies | Varies |
 | Document protection, attachments, metadata, JavaScript, and XMP metadata | Yes | Varies | Varies |
-| PDF signing and verification helpers | Yes, integrated in the root API | Varies | Varies |
-| Barcode helpers | Yes, integrated in the root API | Varies | Varies |
+| PDF signing and verification helpers | Yes, in `sign` with document output helpers | Varies | Varies |
+| Barcode helpers | Yes, in `barcode` with document rendering helpers | Varies | Varies |
 
-## Integrated Barcode and Signing
+## Package Layout
 
-Barcode generation is available directly from `*Fpdf`:
+The active implementation packages are:
+
+* `gopdfkit`: small facade for quick starts.
+* `document`: high-level PDF document API and current feature implementation.
+* `compare`: deterministic PDF byte comparison helpers.
+* `font`: font parsing and JSON font definition generation.
+* `barcode`: barcode encoding, registry, sizing, and scaled images.
+* `sign`: PDF signing and signature verification.
+
+The repo also contains package entry points for the planned feature split:
+`img`, `draw`, `html`, `importpdf`, `pdfkit`, and `layout`.
+
+Barcode generation is available from `barcode`, with rendering helpers on `*document.Document`:
 
 ```go
-key := pdf.RegisterQRBarcode("https://example.test/verify", gopdfkit.QRBarcodeHigh, gopdfkit.QRBarcodeUnicode)
+key, err := barcode.QR("https://example.test/verify", barcode.High, barcode.Unicode)
+if err != nil {
+    return err
+}
 pdf.Barcode(key, 10, 10, 24, 24, false)
 ```
 
-PDF signing is also available from the root package:
+PDF signing is available from `sign`, and documents can be saved signed:
 
 ```go
-err := pdf.OutputSignedFile("signed.pdf", gopdfkit.SignOptions{
+err := pdf.OutputSignedFile("signed.pdf", sign.Options{
     Signer:      signer,
     Certificate: cert,
 })
@@ -86,15 +103,21 @@ go get github.com/cssbruno/gopdfkit@latest
 ## Quick Start
 
 ```go
-pdf := gopdfkit.New("P", "mm", "A4", "")
+pdf := gopdfkit.New()
 pdf.AddPage()
 pdf.SetFont("Helvetica", "B", 16)
 pdf.Cell(40, 10, "Hello, world")
 err := pdf.OutputFileAndClose("hello.pdf")
 ```
 
+Advanced users can import `document` directly:
+
+```go
+pdf := document.New("P", "mm", "A4", "")
+```
+
 Most runnable usage examples live as Go tests, especially in
-[`fpdf_test.go`][fpdf-test]. Running the tests writes generated PDFs under
+[`document/document_test.go`][document-test]. Running the tests writes generated PDFs under
 `assets/generated/pdf`.
 
 ## Repository Layout
@@ -104,9 +127,15 @@ Examples are tests and shared test helpers, so they stay close to the behavior
 they validate.
 
 ```text
+document/           high-level PDF document API and current implementation
+compare/            deterministic PDF comparison helpers
+font/ img/ draw/    reserved package entry points for feature extraction
+html/ barcode/ sign/
+importpdf/ pdfkit/ layout/
+
 cmd/
-  list/              font/map listing utility
-  fontmaker/          font definition generator
+  list/              generated-reference listing utility
+  fontmaker/         font definition generator
 
 assets/
   static/            checked-in fonts, images, and text fixtures
@@ -118,12 +147,8 @@ doc/                 Markdown and generated documentation inputs/templates
 tools/               tool-only module for quality/security commands
 ```
 
-The root package is split by feature area:
-
-* `types_*.go` and `fpdf_state.go` contain shared public/internal data types.
-* `font_*.go`, `image_*.go`, `html_*.go`, `svg_*.go`, `text_*.go`,
-  `drawing_*.go`, `output_*.go`, and `document_*.go` group behavior by domain.
-* `util_*.go` contains small compression, encoding, I/O, and math helpers.
+The `document` package is still split by feature-oriented files while the
+dedicated packages are extracted incrementally.
 
 ## HTML and CSS Support
 
@@ -174,7 +199,7 @@ including OpenType files with TrueType outlines. Use `RTL()` and `LTR()` to
 switch right-to-left rendering mode.
 
 For non-UTF-8 TrueType, OpenType/CFF, or Type1 fonts, generate a JSON font
-definition file with `MakeFont` or the `cmd/fontmaker` command.
+definition file with `font.Make` or the `cmd/fontmaker` command.
 
 ```shell
 cd cmd/fontmaker
@@ -220,7 +245,7 @@ tool-only dependencies separate from the main library module.
 
 ## Errors
 
-Most `Fpdf` methods record errors on the document instead of returning errors
+Most `Document` methods record errors on the document instead of returning errors
 directly. Once an error is set, later methods usually return without changing
 the PDF. Check `Ok()`, `Err()`, or `Error()` after generation, especially after
 calling `Output()`.
@@ -279,7 +304,7 @@ Dave Barnes, Brigham Thompson, Joe Westcott, and Benoit KUGLER.
 [dfont]: http://dejavu-fonts.org/
 [effective-go]: https://golang.org/doc/effective_go.html
 [fpdf-site]: http://www.fpdf.org/
-[fpdf-test]: https://github.com/cssbruno/gopdfkit/blob/master/fpdf_test.go
+[document-test]: https://github.com/cssbruno/gopdfkit/blob/master/document/document_test.go
 [github]: https://github.com/cssbruno/gopdfkit
 [godoc]: https://pkg.go.dev/github.com/cssbruno/gopdfkit
 [license]: https://raw.githubusercontent.com/cssbruno/gopdfkit/master/LICENSE
