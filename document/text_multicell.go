@@ -4,7 +4,6 @@
 package document
 
 import (
-	"fmt"
 	"math"
 	"strings"
 )
@@ -113,10 +112,6 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 			ns++
 		}
 		if f.isCurrentUTF8 {
-			if int(c) >= len(cw) {
-				f.err = fmt.Errorf("character outside the supported range: %s", string(c))
-				return
-			}
 			l += f.currentFontRuneWidth(c)
 		} else {
 			l += cw[int(c)]

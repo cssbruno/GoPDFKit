@@ -89,6 +89,12 @@ func TextFile(fileStr string) string {
 	return filepath.Join(gopdfkitDir, "assets", "static", "text", fileStr)
 }
 
+// RepoFile returns the path to a file at the repository root.
+func RepoFile(elems ...string) string {
+	parts := append([]string{gopdfkitDir}, elems...)
+	return filepath.Join(parts...)
+}
+
 // PdfDir returns the path to the PDF output directory.
 func PdfDir() string {
 	return pdfDir
@@ -111,11 +117,15 @@ func Filename(baseStr string) string {
 // message for fileStr. Otherwise, it prints err.
 func Summary(err error, fileStr string) {
 	if err == nil {
-		fileStr = filepath.ToSlash(displayPath(fileStr))
-		fmt.Printf("Successfully generated %s\n", fileStr)
+		fmt.Printf("Successfully generated %s\n", DisplayPath(fileStr))
 	} else {
 		fmt.Println(err)
 	}
+}
+
+// DisplayPath returns a stable slash-separated path for example output.
+func DisplayPath(fileStr string) string {
+	return filepath.ToSlash(displayPath(fileStr))
 }
 
 func displayPath(fileStr string) string {

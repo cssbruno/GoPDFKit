@@ -43,6 +43,9 @@ func TestPathsDoNotDependOnWorkingDirectory(t *testing.T) {
 	if got := filepath.Base(example.Filename("sample")); got != "sample.pdf" {
 		t.Fatalf("Filename() base = %q, want sample.pdf", got)
 	}
+	if _, err := os.Stat(example.RepoFile("LICENSE")); err != nil {
+		t.Fatalf("RepoFile() path is not usable outside repo cwd: %v", err)
+	}
 }
 
 func TestSummaryUsesStableGeneratedPDFPath(t *testing.T) {

@@ -3,10 +3,7 @@
 
 package document
 
-import (
-	"fmt"
-	"strings"
-)
+import "strings"
 
 // Text prints a character string. The origin (x, y) is at the left edge of the
 // first character's baseline. This method allows a string to be placed
@@ -133,10 +130,6 @@ func (f *Document) write(h float64, txtStr string, link int, linkStr string) {
 			sep = i
 		}
 		if f.isCurrentUTF8 {
-			if int(c) >= len(cw) {
-				f.err = fmt.Errorf("character outside the supported range: %s", string(c))
-				return
-			}
 			l += float64(f.currentFontRuneWidth(c))
 		} else {
 			l += float64(cw[int(c)])

@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -423,7 +425,7 @@ func TestSecurityMalformedFontDiffRejected(t *testing.T) {
 }
 
 func TestSecurityUnsafeUTF8FontNameRejected(t *testing.T) {
-	fontBytes, err := os.ReadFile("assets/static/font/DejaVuSansCondensed.ttf")
+	fontBytes, err := os.ReadFile(securityFixturePath(t, "assets", "static", "font", "DejaVuSansCondensed.ttf"))
 	if err != nil {
 		t.Fatalf("ReadFile font: %v", err)
 	}
@@ -432,6 +434,16 @@ func TestSecurityUnsafeUTF8FontNameRejected(t *testing.T) {
 	if pdf.Error() == nil {
 		t.Fatal("expected invalid UTF-8 font name error")
 	}
+}
+
+func securityFixturePath(t *testing.T, elems ...string) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	parts := append([]string{filepath.Dir(file), ".."}, elems...)
+	return filepath.Clean(filepath.Join(parts...))
 }
 
 func TestSecurityNonFiniteDrawingInputsRejected(t *testing.T) {

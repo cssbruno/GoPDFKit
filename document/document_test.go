@@ -2098,12 +2098,12 @@ func ExampleDocument_RegisterImageOptions() {
 		info := pdf.GetImageInfo(imageStr)
 		if info != nil {
 			if info.Width() > 0.0 {
-				fmt.Printf("Image %s is registered\n", filepath.ToSlash(imageStr))
+				fmt.Printf("Image %s is registered\n", example.DisplayPath(imageStr))
 			} else {
-				fmt.Printf("Incorrect information for image %s\n", filepath.ToSlash(imageStr))
+				fmt.Printf("Incorrect information for image %s\n", example.DisplayPath(imageStr))
 			}
 		} else {
-			fmt.Printf("Image %s is not registered\n", filepath.ToSlash(imageStr))
+			fmt.Printf("Image %s is not registered\n", example.DisplayPath(imageStr))
 		}
 	}
 	infoShow(fileList[0])
@@ -3502,7 +3502,7 @@ func TestIssue0316(t *testing.T) {
 	}
 }
 
-func TestMultiCellUnsupportedChar(t *testing.T) {
+func TestMultiCellSupplementaryRuneUsesFallbackWidth(t *testing.T) {
 	pdf := document.New("P", "mm", "A4", "")
 	pdf.AddPage()
 	fontBytes, _ := os.ReadFile(example.FontFile("DejaVuSansCondensed.ttf"))
@@ -3516,13 +3516,16 @@ func TestMultiCellUnsupportedChar(t *testing.T) {
 	}()
 
 	pdf.MultiCell(0, 5, "😀", "", "", false)
-	if pdf.Error() == nil {
-		t.Fatal("expected unsupported supplementary character error")
+	if pdf.Error() != nil {
+		t.Fatalf("MultiCell() error = %v, want fallback rendering", pdf.Error())
 	}
 
 	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err == nil {
-		t.Fatal("expected Output() to return the unsupported character error")
+	if err := pdf.Output(&buf); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if buf.Len() == 0 {
+		t.Fatal("Output() wrote an empty PDF")
 	}
 }
 
@@ -3532,12 +3535,12 @@ func ExampleDocument_SetAttachments() {
 	pdf := document.New("P", "mm", "A4", "")
 
 	// Global attachments
-	file, err := os.ReadFile("document/grid.go")
+	file, err := os.ReadFile(example.RepoFile("document", "grid.go"))
 	if err != nil {
 		pdf.SetError(err)
 	}
 	a1 := document.Attachment{Content: file, Filename: "grid.go"}
-	file, err = os.ReadFile("LICENSE")
+	file, err = os.ReadFile(example.RepoFile("LICENSE"))
 	if err != nil {
 		pdf.SetError(err)
 	}
@@ -3557,7 +3560,7 @@ func ExampleDocument_AddAttachmentAnnotation() {
 	pdf.AddPage()
 
 	// Per page attachment
-	file, err := os.ReadFile("document/grid.go")
+	file, err := os.ReadFile(example.RepoFile("document", "grid.go"))
 	if err != nil {
 		pdf.SetError(err)
 	}

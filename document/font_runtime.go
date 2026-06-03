@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -103,10 +104,10 @@ func (f *Document) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 		}
 		var ttfStat os.FileInfo
 		var err error
-		fileStr = path.Join(f.fontpath, fileStr)
+		fileStr = joinFontPath(f.fontpath, fileStr)
 		ttfStat, err = os.Stat(fileStr)
 		if err != nil && strings.HasSuffix(strings.ToLower(fileStr), ".ttf") {
-			otfStr := strings.TrimSuffix(fileStr, path.Ext(fileStr)) + ".otf"
+			otfStr := strings.TrimSuffix(fileStr, filepath.Ext(fileStr)) + ".otf"
 			if otfStat, otfErr := os.Stat(otfStr); otfErr == nil {
 				fileStr = otfStr
 				ttfStat = otfStat
@@ -150,7 +151,7 @@ func (f *Document) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 				return
 			}
 		}
-		fileStr = path.Join(f.fontpath, fileStr)
+		fileStr = joinFontPath(f.fontpath, fileStr)
 		file, err := os.Open(fileStr)
 		if err != nil {
 			f.err = err
@@ -164,6 +165,13 @@ func (f *Document) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 func validFontResourceName(name string) bool {
 	name = strings.TrimSpace(name)
 	return name != "" && name == path.Base(name) && name != "." && name != ".." && !strings.Contains(name, "\\")
+}
+
+func joinFontPath(fontDirStr, fileStr string) string {
+	if fontDirStr == "" || filepath.IsAbs(fileStr) {
+		return fileStr
+	}
+	return filepath.Join(fontDirStr, fileStr)
 }
 
 func validFontFilePath(name string) bool {
@@ -833,5 +841,5 @@ func (f *Document) loadFontFile(name string) ([]byte, error) {
 			return data, err
 		}
 	}
-	return os.ReadFile(path.Join(f.fontpath, name))
+	return os.ReadFile(joinFontPath(f.fontpath, name))
 }
