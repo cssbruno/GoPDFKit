@@ -49,7 +49,7 @@ func (html *HTML) writeHorizontalRule(el HTMLSegmentType, cssRules []htmlCSSRule
 	if pdf.GetX() != pdf.lMargin {
 		pdf.Ln(lineHt)
 	}
-	decl := htmlElementDeclarations(el, cssRules, ancestors...)
+	decl := html.elementDeclarations(el, cssRules, ancestors...)
 	availableWd := pdf.w - pdf.rMargin - pdf.lMargin
 	wd, ok := parseHTMLBoxLength(firstNonEmpty(decl["width"], el.Attr["width"]), pdf, availableWd)
 	if !ok || wd <= 0 || wd > availableWd {
@@ -84,6 +84,15 @@ func htmlBlockHasBoxStyle(el HTMLSegmentType, cssRules []htmlCSSRule, ancestors 
 	return style.border.enabled || style.background.Set || style.padding.hasAny() || style.margin.hasAny() || style.breakBefore || style.breakAfter || style.breakInsideAvoid
 }
 
+func (html *HTML) blockHasBoxStyle(el HTMLSegmentType, cssRules []htmlCSSRule, ancestors ...HTMLSegmentType) bool {
+	decl := html.elementDeclarations(el, cssRules, ancestors...)
+	if htmlHasBoxEdgeDeclaration(decl, "padding") || htmlHasBoxEdgeDeclaration(decl, "margin") || htmlHasBreakDeclaration(decl) || htmlHasBorderDeclaration(decl) {
+		return true
+	}
+	style := html.blockBox(el, cssRules, nil, 0, ancestors...)
+	return style.border.enabled || style.background.Set || style.padding.hasAny() || style.margin.hasAny() || style.breakBefore || style.breakAfter || style.breakInsideAvoid
+}
+
 func (html *HTML) writeBlockBox(tokens []HTMLSegmentType, start int, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) int {
 	blockTokens, end := htmlCollectElementTokens(tokens, start, tokens[start].Str)
 	if len(blockTokens) == 0 {
@@ -94,7 +103,7 @@ func (html *HTML) writeBlockBox(tokens []HTMLSegmentType, start int, lineHt floa
 		pdf.Ln(lineHt)
 	}
 	availableWd := pdf.w - pdf.rMargin - pdf.lMargin
-	box := htmlBlockBox(tokens[start], cssRules, pdf, availableWd, ancestors...)
+	box := html.blockBox(tokens[start], cssRules, pdf, availableWd, ancestors...)
 	if box.breakBefore {
 		if !html.addPageFormat() {
 			return end
@@ -103,13 +112,13 @@ func (html *HTML) writeBlockBox(tokens []HTMLSegmentType, start int, lineHt floa
 	text := htmlPlainText(blockTokens[1 : len(blockTokens)-1])
 	style := inherited
 	applyHTMLCSSRules(&style, tokens[start], cssRules, inherited.fontSize, inherited.lineHeight, pdf, ancestors...)
-	applyHTMLAttrs(&style, tokens[start].Attr, inherited.fontSize, inherited.lineHeight, pdf)
+	html.applyAttrs(&style, tokens[start].Attr, inherited.fontSize, inherited.lineHeight, pdf)
 	html.applyTextStyle(style, fallback)
 	boxWd := htmlMaxFloat(availableWd-box.margin.left-box.margin.right, 0)
 	contentWd := htmlMaxFloat(boxWd-box.padding.left-box.padding.right, 0)
 	styleLineHt := htmlEffectiveLineHeight(style, lineHt)
-	lines := htmlSplitLines(pdf, text, contentWd)
-	ht := float64(len(lines))*styleLineHt + box.padding.top + box.padding.bottom
+	lineCount := htmlSplitLineCount(pdf, text, contentWd)
+	ht := float64(lineCount)*styleLineHt + box.padding.top + box.padding.bottom
 	textR, textG, textB := pdf.GetTextColor()
 	fillR, fillG, fillB := pdf.GetFillColor()
 	drawR, drawG, drawB := pdf.GetDrawColor()
@@ -153,6 +162,15 @@ func (html *HTML) writeBlockBox(tokens []HTMLSegmentType, start int, lineHt floa
 
 func htmlBlockBox(el HTMLSegmentType, cssRules []htmlCSSRule, pdf *Document, relative float64, ancestors ...HTMLSegmentType) htmlBlockBoxStyle {
 	decl := htmlElementDeclarations(el, cssRules, ancestors...)
+	return htmlBlockBoxFromDeclarations(el, decl, pdf, relative)
+}
+
+func (html *HTML) blockBox(el HTMLSegmentType, cssRules []htmlCSSRule, pdf *Document, relative float64, ancestors ...HTMLSegmentType) htmlBlockBoxStyle {
+	decl := html.elementDeclarations(el, cssRules, ancestors...)
+	return htmlBlockBoxFromDeclarations(el, decl, pdf, relative)
+}
+
+func htmlBlockBoxFromDeclarations(el HTMLSegmentType, decl map[string]string, pdf *Document, relative float64) htmlBlockBoxStyle {
 	box := htmlBlockBoxStyle{}
 	box.background = firstColor(htmlDeclarationColor(decl, "background-color", "background"), htmlAttrColor(el.Attr, "bgcolor"))
 	box.border = htmlBorderFromDeclarations(decl, pdf, relative)
@@ -347,7 +365,7 @@ func (html *HTML) keepHeadingWithNext(tokens []HTMLSegmentType, start int, lineH
 	style.bold = true
 	style.fontSize = htmlHeadingFontSize(inherited.fontSize, tokens[start].Str)
 	applyHTMLCSSRules(&style, tokens[start], cssRules, inherited.fontSize, inherited.lineHeight, html.pdf, ancestors...)
-	applyHTMLAttrs(&style, tokens[start].Attr, inherited.fontSize, inherited.lineHeight, html.pdf)
+	html.applyAttrs(&style, tokens[start].Attr, inherited.fontSize, inherited.lineHeight, html.pdf)
 	headingHt := html.textBlockHeight(headingTokens[1:len(headingTokens)-1], style, lineHt, fallback)
 	nextHt := html.nextBlockHeight(tokens, end+1, lineHt, inherited, fallback, cssRules, ancestors)
 	if headingHt <= 0 || nextHt <= 0 {
@@ -381,9 +399,9 @@ func (html *HTML) nextBlockHeight(tokens []HTMLSegmentType, start int, lineHt fl
 			}
 			style := inherited
 			applyHTMLCSSRules(&style, token, cssRules, inherited.fontSize, inherited.lineHeight, html.pdf, ancestors...)
-			applyHTMLAttrs(&style, token.Attr, inherited.fontSize, inherited.lineHeight, html.pdf)
-			if htmlBlockHasBoxStyle(token, cssRules, ancestors...) {
-				box := htmlBlockBox(token, cssRules, html.pdf, html.pdf.w-html.pdf.rMargin-html.pdf.lMargin, ancestors...)
+			html.applyAttrs(&style, token.Attr, inherited.fontSize, inherited.lineHeight, html.pdf)
+			if html.blockHasBoxStyle(token, cssRules, ancestors...) {
+				box := html.blockBox(token, cssRules, html.pdf, html.pdf.w-html.pdf.rMargin-html.pdf.lMargin, ancestors...)
 				return html.textBlockHeight(blockTokens[1:len(blockTokens)-1], style, lineHt, fallback) + box.padding.top + box.padding.bottom + box.margin.top + box.margin.bottom
 			}
 			return html.textBlockHeight(blockTokens[1:len(blockTokens)-1], style, lineHt, fallback)
@@ -396,7 +414,7 @@ func (html *HTML) nextBlockHeight(tokens []HTMLSegmentType, start int, lineHt fl
 			style.bold = true
 			style.fontSize = htmlHeadingFontSize(inherited.fontSize, token.Str)
 			applyHTMLCSSRules(&style, token, cssRules, inherited.fontSize, inherited.lineHeight, html.pdf, ancestors...)
-			applyHTMLAttrs(&style, token.Attr, inherited.fontSize, inherited.lineHeight, html.pdf)
+			html.applyAttrs(&style, token.Attr, inherited.fontSize, inherited.lineHeight, html.pdf)
 			return html.textBlockHeight(blockTokens[1:len(blockTokens)-1], style, lineHt, fallback)
 		case "table":
 			return html.tableHeight(tokens, i, lineHt, inherited, fallback, cssRules, ancestors)
@@ -419,8 +437,8 @@ func (html *HTML) textBlockHeight(tokens []HTMLSegmentType, style htmlTextStyle,
 		return htmlEffectiveLineHeight(style, lineHt)
 	}
 	availableWd := html.pdf.w - html.pdf.rMargin - html.pdf.lMargin
-	lines := htmlSplitLines(html.pdf, text, availableWd)
-	return float64(len(lines)) * htmlEffectiveLineHeight(style, lineHt)
+	lineCount := htmlSplitLineCount(html.pdf, text, availableWd)
+	return float64(lineCount) * htmlEffectiveLineHeight(style, lineHt)
 }
 
 func (html *HTML) tableHeight(tokens []HTMLSegmentType, start int, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) float64 {
@@ -429,11 +447,11 @@ func (html *HTML) tableHeight(tokens []HTMLSegmentType, start int, lineHt float6
 		return 0
 	}
 	availableWd := html.pdf.w - html.pdf.rMargin - html.pdf.lMargin
-	tableWd, ok := parseHTMLBoxLength(firstNonEmpty(htmlStyleValue(table.attrs, "width"), table.attrs["width"]), html.pdf, availableWd)
+	tableWd, ok := parseHTMLBoxLength(firstNonEmpty(html.styleValue(table.attrs, "width"), table.attrs["width"]), html.pdf, availableWd)
 	if !ok || tableWd <= 0 || tableWd > availableWd {
 		tableWd = availableWd
 	}
-	padding := htmlTablePadding(table.attrs, html.pdf)
+	padding := html.tablePadding(table.attrs, html.pdf)
 	layoutRows := htmlTableLayoutRows(table.rows)
 	colCount := htmlTableLayoutColumnCount(layoutRows)
 	if colCount == 0 {
@@ -441,7 +459,7 @@ func (html *HTML) tableHeight(tokens []HTMLSegmentType, start int, lineHt float6
 	}
 	tableEl := HTMLSegmentType{Cat: 'O', Str: "table", Attr: table.attrs}
 	tableAncestors := appendHTMLAncestors(ancestors, tableEl)
-	colWidths := htmlTableColumnWidths(layoutRows, colCount, tableWd, html.pdf)
+	colWidths := html.tableColumnWidths(layoutRows, colCount, tableWd, html.pdf)
 	rowHeights := html.tableRowHeights(layoutRows, colWidths, padding, lineHt, inherited, fallback, cssRules, tableAncestors)
 	return html.tableCaptionHeight(table, tableWd, lineHt, inherited, fallback, cssRules, tableAncestors) + sumFloat64(rowHeights) + lineHt
 }
@@ -450,16 +468,79 @@ func collapseHTMLWhitespace(text string) string {
 	if text == "" {
 		return ""
 	}
-	fields := strings.Fields(text)
-	if len(fields) == 0 {
+	needsCollapse := false
+	previousSpace := false
+	textSeen := false
+	for _, r := range text {
+		if unicode.IsSpace(r) {
+			if r != ' ' || previousSpace {
+				needsCollapse = true
+				break
+			}
+			previousSpace = true
+			continue
+		}
+		textSeen = true
+		previousSpace = false
+	}
+	if !textSeen {
+		if text == " " {
+			return text
+		}
 		return " "
 	}
-	collapsed := strings.Join(fields, " ")
-	if unicode.IsSpace(rune(text[0])) {
-		collapsed = " " + collapsed
+	if !needsCollapse {
+		return text
 	}
-	if unicode.IsSpace(rune(text[len(text)-1])) {
-		collapsed += " "
+	var out strings.Builder
+	out.Grow(len(text))
+	leadingSpace := false
+	pendingSpace := false
+	wroteText := false
+	textStart := -1
+	for i, r := range text {
+		if unicode.IsSpace(r) {
+			if textStart >= 0 {
+				if !wroteText {
+					if leadingSpace {
+						out.WriteByte(' ')
+					}
+				} else if pendingSpace {
+					out.WriteByte(' ')
+				}
+				out.WriteString(text[textStart:i])
+				wroteText = true
+				pendingSpace = false
+				textStart = -1
+			}
+			if wroteText {
+				pendingSpace = true
+			} else {
+				leadingSpace = true
+			}
+			continue
+		}
+		if textStart < 0 {
+			textStart = i
+		}
 	}
-	return collapsed
+	if textStart >= 0 {
+		if !wroteText {
+			if leadingSpace {
+				out.WriteByte(' ')
+			}
+		} else if pendingSpace {
+			out.WriteByte(' ')
+		}
+		out.WriteString(text[textStart:])
+		wroteText = true
+		pendingSpace = false
+	}
+	if !wroteText {
+		return " "
+	}
+	if pendingSpace {
+		out.WriteByte(' ')
+	}
+	return out.String()
 }

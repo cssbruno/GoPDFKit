@@ -47,10 +47,21 @@ func (html *HTML) writeInlineSVG(tokens []HTMLSegmentType, start int, lineHt flo
 	if len(svgTokens) == 0 {
 		return end
 	}
-	svg, err := SVGParse([]byte(htmlSerializeTokens(svgTokens)))
-	if err != nil {
-		html.pdf.SetError(err)
-		return end
+	svgText := htmlSerializeTokens(svgTokens)
+	svg, ok := html.inlineSVGCache[svgText]
+	if !ok {
+		parsed, err := SVGParse([]byte(svgText))
+		if err != nil {
+			html.pdf.SetError(err)
+			return end
+		}
+		svg = parsed
+		if html.renderCacheActive {
+			if html.inlineSVGCache == nil {
+				html.inlineSVGCache = make(map[string]SVG)
+			}
+			html.inlineSVGCache[svgText] = svg
+		}
 	}
 	if svg.Wd <= 0 || svg.Ht <= 0 {
 		return end
@@ -62,8 +73,8 @@ func (html *HTML) writeInlineSVG(tokens []HTMLSegmentType, start int, lineHt flo
 	availableWd := pdf.w - pdf.rMargin - pdf.GetX()
 	pageHt := pdf.h - pdf.bMargin - pdf.GetY()
 	attrs := tokens[start].Attr
-	targetWd, hasWd := parseHTMLBoxLength(firstNonEmpty(htmlStyleValue(attrs, "width"), attrs["width"]), pdf, availableWd)
-	targetHt, hasHt := parseHTMLBoxLength(firstNonEmpty(htmlStyleValue(attrs, "height"), attrs["height"]), pdf, pageHt)
+	targetWd, hasWd := parseHTMLBoxLength(firstNonEmpty(html.styleValue(attrs, "width"), attrs["width"]), pdf, availableWd)
+	targetHt, hasHt := parseHTMLBoxLength(firstNonEmpty(html.styleValue(attrs, "height"), attrs["height"]), pdf, pageHt)
 	if !hasWd || targetWd <= 0 {
 		targetWd = svg.Wd * 72 / 96 / pdf.k
 	}
@@ -128,6 +139,17 @@ func htmlImageObjectFit(attrs map[string]string) string {
 	}
 }
 
+func (html *HTML) imageObjectFit(attrs map[string]string) string {
+	switch strings.ToLower(strings.TrimSpace(html.styleValue(attrs, "object-fit"))) {
+	case "cover":
+		return "cover"
+	case "contain":
+		return "contain"
+	default:
+		return ""
+	}
+}
+
 func htmlImageFitBox(info *ImageInfo, pdf *Document, wd, ht, boxWd, boxHt float64, fit string) (drawX, drawY, drawWd, drawHt, flowWd, flowHt float64) {
 	flowWd, flowHt = boxWd, boxHt
 	if flowWd <= 0 || flowHt <= 0 {
@@ -169,8 +191,8 @@ func (html *HTML) figureHeight(tokens []HTMLSegmentType, start int, lineHt float
 		}
 		switch token.Str {
 		case "img":
-			wd, _ := parseHTMLBoxLength(firstNonEmpty(htmlStyleValue(token.Attr, "width"), token.Attr["width"]), html.pdf, availableWd)
-			ht, _ := parseHTMLBoxLength(firstNonEmpty(htmlStyleValue(token.Attr, "height"), token.Attr["height"]), html.pdf, pageHt)
+			wd, _ := parseHTMLBoxLength(firstNonEmpty(html.styleValue(token.Attr, "width"), token.Attr["width"]), html.pdf, availableWd)
+			ht, _ := parseHTMLBoxLength(firstNonEmpty(html.styleValue(token.Attr, "height"), token.Attr["height"]), html.pdf, pageHt)
 			if ht <= 0 {
 				if wd > 0 {
 					ht = wd
@@ -178,7 +200,7 @@ func (html *HTML) figureHeight(tokens []HTMLSegmentType, start int, lineHt float
 					ht = lineHt * 3
 				}
 			}
-			if maxHt, ok := parseHTMLBoxLength(htmlStyleValue(token.Attr, "max-height"), html.pdf, pageHt); ok && maxHt > 0 && ht > maxHt {
+			if maxHt, ok := parseHTMLBoxLength(html.styleValue(token.Attr, "max-height"), html.pdf, pageHt); ok && maxHt > 0 && ht > maxHt {
 				ht = maxHt
 			}
 			total += ht
@@ -196,7 +218,7 @@ func (html *HTML) figureHeight(tokens []HTMLSegmentType, start int, lineHt float
 			if style.fontSize > 1 {
 				style.fontSize *= 0.9
 			}
-			applyHTMLAttrs(&style, token.Attr, inherited.fontSize, inherited.lineHeight, html.pdf)
+			html.applyAttrs(&style, token.Attr, inherited.fontSize, inherited.lineHeight, html.pdf)
 			html.applyTextStyle(style, fallback)
 			text := htmlPlainText(captionTokens[1 : len(captionTokens)-1])
 			if text != "" {
@@ -217,8 +239,8 @@ func (html *HTML) imageFlowHeight(attrs map[string]string, lineHt float64) float
 	}
 	availableWd := html.pdf.w - html.pdf.rMargin - html.pdf.lMargin
 	pageHt := html.pdf.h - html.pdf.bMargin - html.pdf.GetY()
-	wd, _ := parseHTMLBoxLength(firstNonEmpty(htmlStyleValue(attrs, "width"), attrs["width"]), html.pdf, availableWd)
-	ht, _ := parseHTMLBoxLength(firstNonEmpty(htmlStyleValue(attrs, "height"), attrs["height"]), html.pdf, pageHt)
+	wd, _ := parseHTMLBoxLength(firstNonEmpty(html.styleValue(attrs, "width"), attrs["width"]), html.pdf, availableWd)
+	ht, _ := parseHTMLBoxLength(firstNonEmpty(html.styleValue(attrs, "height"), attrs["height"]), html.pdf, pageHt)
 	if ht <= 0 {
 		if wd > 0 {
 			ht = wd
@@ -226,7 +248,7 @@ func (html *HTML) imageFlowHeight(attrs map[string]string, lineHt float64) float
 			ht = lineHt * 3
 		}
 	}
-	if maxHt, ok := parseHTMLBoxLength(htmlStyleValue(attrs, "max-height"), html.pdf, pageHt); ok && maxHt > 0 && ht > maxHt {
+	if maxHt, ok := parseHTMLBoxLength(html.styleValue(attrs, "max-height"), html.pdf, pageHt); ok && maxHt > 0 && ht > maxHt {
 		ht = maxHt
 	}
 	return ht
@@ -234,6 +256,22 @@ func (html *HTML) imageFlowHeight(attrs map[string]string, lineHt float64) float
 
 func htmlImageAlign(attrs map[string]string, fallback string) string {
 	align := strings.ToLower(firstNonEmpty(htmlStyleValue(attrs, "text-align"), attrs["align"]))
+	switch align {
+	case "center", "middle":
+		return "C"
+	case "right":
+		return "R"
+	case "left":
+		return "L"
+	}
+	if fallback == "C" || fallback == "R" {
+		return fallback
+	}
+	return "L"
+}
+
+func (html *HTML) imageAlign(attrs map[string]string, fallback string) string {
+	align := strings.ToLower(firstNonEmpty(html.styleValue(attrs, "text-align"), attrs["align"]))
 	switch align {
 	case "center", "middle":
 		return "C"

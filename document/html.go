@@ -55,9 +55,12 @@ type HTML struct {
 	MaxTableRows int
 	// DebugLog receives best-effort diagnostics for unsupported HTML or CSS.
 	// Leave nil to keep rendering quiet.
-	DebugLog             func(message string)
-	renderStartPageCount int
-	dataImageCache       map[string]htmlImageSource
+	DebugLog              func(message string)
+	renderStartPageCount  int
+	renderCacheActive     bool
+	dataImageCache        map[string]htmlImageSource
+	styleDeclarationCache map[string]map[string]string
+	inlineSVGCache        map[string]SVG
 }
 
 type htmlImageSource struct {
@@ -103,9 +106,15 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 		return
 	}
 	previousStartPageCount := html.renderStartPageCount
+	previousRenderCacheActive := html.renderCacheActive
 	previousDataImageCache := html.dataImageCache
+	previousStyleDeclarationCache := html.styleDeclarationCache
+	previousInlineSVGCache := html.inlineSVGCache
 	html.renderStartPageCount = html.pdf.PageCount()
+	html.renderCacheActive = true
 	html.dataImageCache = make(map[string]htmlImageSource)
+	html.styleDeclarationCache = nil
+	html.inlineSVGCache = nil
 	defer func() {
 		pageCount := html.generatedPageCount()
 		maxPages := html.maxGeneratedPages()
@@ -113,7 +122,10 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 			html.pdf.SetErrorf("HTML rendering exceeded maximum generated pages: %d > %d", pageCount, maxPages)
 		}
 		html.renderStartPageCount = previousStartPageCount
+		html.renderCacheActive = previousRenderCacheActive
 		html.dataImageCache = previousDataImageCache
+		html.styleDeclarationCache = previousStyleDeclarationCache
+		html.inlineSVGCache = previousInlineSVGCache
 	}()
 	textR, textG, textB := html.pdf.GetTextColor()
 	fontPt, _ := html.pdf.GetFontSize()
@@ -209,11 +221,11 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 		blockBreak()
 		availableWd := html.pdf.w - html.pdf.rMargin - html.pdf.GetX()
 		pageHt := html.pdf.h - html.pdf.bMargin - html.pdf.GetY()
-		wd, _ := parseHTMLBoxLength(firstNonEmpty(htmlStyleValue(attrs, "width"), attrs["width"]), html.pdf, availableWd)
-		ht, _ := parseHTMLBoxLength(firstNonEmpty(htmlStyleValue(attrs, "height"), attrs["height"]), html.pdf, pageHt)
+		wd, _ := parseHTMLBoxLength(firstNonEmpty(html.styleValue(attrs, "width"), attrs["width"]), html.pdf, availableWd)
+		ht, _ := parseHTMLBoxLength(firstNonEmpty(html.styleValue(attrs, "height"), attrs["height"]), html.pdf, pageHt)
 		boxWd, boxHt := wd, ht
-		maxWd, hasMaxWd := parseHTMLBoxLength(htmlStyleValue(attrs, "max-width"), html.pdf, availableWd)
-		maxHt, hasMaxHt := parseHTMLBoxLength(htmlStyleValue(attrs, "max-height"), html.pdf, pageHt)
+		maxWd, hasMaxWd := parseHTMLBoxLength(html.styleValue(attrs, "max-width"), html.pdf, availableWd)
+		maxHt, hasMaxHt := parseHTMLBoxLength(html.styleValue(attrs, "max-height"), html.pdf, pageHt)
 		name, options, err := html.htmlImageSource(src)
 		if err != nil {
 			html.pdf.SetError(err)
@@ -244,10 +256,10 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 			boxHt = minFloat(boxHt, maxHt)
 			boxWd *= ratio
 		}
-		fit := htmlImageObjectFit(attrs)
+		fit := html.imageObjectFit(attrs)
 		drawX, drawY, drawWd, drawHt, flowWd, flowHt := htmlImageFitBox(info, html.pdf, wd, ht, boxWd, boxHt, fit)
 		x := html.pdf.GetX()
-		switch htmlImageAlign(attrs, st.align) {
+		switch html.imageAlign(attrs, st.align) {
 		case "C":
 			x += htmlMaxFloat((availableWd-flowWd)/2, 0)
 		case "R":
@@ -293,7 +305,7 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 		}
 		html.pdf.imageOut(info, x+drawX, 0, drawWd, drawHt, options.AllowNegativePosition, true, 0, st.href)
 	}
-	tokens := HTMLTokenize(htmlStr)
+	tokens := htmlTokenize(htmlStr, make(map[string]map[string]string))
 	if message := htmlElementDepthMessage(tokens, html.maxElementDepth()); message != "" {
 		html.pdf.SetError(errors.New(message))
 		return
@@ -369,7 +381,7 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 						}
 					}
 				}
-				if htmlBlockHasBoxStyle(el, cssRules, elementStack...) {
+				if html.blockHasBoxStyle(el, cssRules, elementStack...) {
 					i = html.writeBlockBox(tokens, i, lineHt, st, defaultColor, cssRules, elementStack)
 					pushStyle = false
 				} else {
@@ -424,7 +436,7 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 				}
 			}
 			applyHTMLCSSRules(&st, el, cssRules, base.fontSize, base.lineHeight, html.pdf, elementStack...)
-			applyHTMLAttrs(&st, el.Attr, base.fontSize, base.lineHeight, html.pdf)
+			html.applyAttrs(&st, el.Attr, base.fontSize, base.lineHeight, html.pdf)
 			if openedList != nil {
 				listStack = append(listStack, htmlListStateFromElement(st, openedList.Attr, lineHt))
 			}
@@ -455,25 +467,45 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 }
 
 func (html *HTML) applyTextStyle(st htmlTextStyle, fallback CSSColorType) {
-	styleStr := ""
+	styleStr := htmlTextStyleFontStyle(st)
+	fontStyle := htmlTextStyleBaseFontStyle(st)
+	fontFamilyChanged := st.fontFamily != "" && !strings.EqualFold(fontFamilyEscape(st.fontFamily), html.pdf.fontFamily)
+	fontSizeChanged := st.fontSize != 0 && html.pdf.fontSizePt != st.fontSize
+	if html.pdf.currentFont.Name == "" || fontFamilyChanged || html.pdf.fontStyle != fontStyle || html.pdf.underline != st.underline || html.pdf.strikeout != st.strike || fontSizeChanged {
+		html.pdf.SetFont(st.fontFamily, styleStr, st.fontSize)
+	}
+	color := fallback
+	if st.color.Set {
+		color = st.color
+	}
+	if html.pdf.color.text.mode != colorModeRGB || html.pdf.color.text.ir != color.R || html.pdf.color.text.ig != color.G || html.pdf.color.text.ib != color.B {
+		html.pdf.SetTextColor(color.R, color.G, color.B)
+	}
+}
+
+func htmlTextStyleMask(st htmlTextStyle) int {
+	mask := 0
 	if st.bold {
-		styleStr += "B"
+		mask |= 1
 	}
 	if st.italic {
-		styleStr += "I"
+		mask |= 2
 	}
 	if st.underline {
-		styleStr += "U"
+		mask |= 4
 	}
 	if st.strike {
-		styleStr += "S"
+		mask |= 8
 	}
-	html.pdf.SetFont(st.fontFamily, styleStr, st.fontSize)
-	if st.color.Set {
-		html.pdf.SetTextColor(st.color.R, st.color.G, st.color.B)
-	} else {
-		html.pdf.SetTextColor(fallback.R, fallback.G, fallback.B)
-	}
+	return mask
+}
+
+func htmlTextStyleFontStyle(st htmlTextStyle) string {
+	return [...]string{"", "B", "I", "BI", "U", "BU", "IU", "BIU", "S", "BS", "IS", "BIS", "US", "BUS", "IUS", "BIUS"}[htmlTextStyleMask(st)]
+}
+
+func htmlTextStyleBaseFontStyle(st htmlTextStyle) string {
+	return [...]string{"", "B", "I", "BI"}[htmlTextStyleMask(st)&3]
 }
 
 func htmlListStateFromElement(st htmlTextStyle, attrs map[string]string, lineHt float64) htmlListState {

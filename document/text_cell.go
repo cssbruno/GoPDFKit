@@ -93,7 +93,7 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 	if w == 0 {
 		w = f.w - f.rMargin - f.x
 	}
-	var s fmtBuffer
+	var s []byte
 	if fill || borderStr == "1" {
 		var op string
 		if fill {
@@ -105,9 +105,11 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 		} else {
 			op = "S"
 		}
-		s.printf("%.2f %.2f %.2f %.2f re %s ", f.x*k, (f.h-f.y)*k, w*k, -h*k, op)
+		s = ensurePDFBuffer(s, 128+len(txtStr))
+		s = appendPDFRectPaint(s, f.x*k, (f.h-f.y)*k, w*k, -h*k, op, true)
 	}
 	if len(borderStr) > 0 && borderStr != "1" {
+		s = ensurePDFBuffer(s, 128+len(txtStr))
 		x := f.x
 		y := f.y
 		left := x * k
@@ -115,19 +117,20 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 		right := (x + w) * k
 		bottom := (f.h - (y + h)) * k
 		if strings.Contains(borderStr, "L") {
-			s.printf("%.2f %.2f m %.2f %.2f l S ", left, top, left, bottom)
+			s = appendPDFLine(s, left, top, left, bottom, 2, true)
 		}
 		if strings.Contains(borderStr, "T") {
-			s.printf("%.2f %.2f m %.2f %.2f l S ", left, top, right, top)
+			s = appendPDFLine(s, left, top, right, top, 2, true)
 		}
 		if strings.Contains(borderStr, "R") {
-			s.printf("%.2f %.2f m %.2f %.2f l S ", right, top, right, bottom)
+			s = appendPDFLine(s, right, top, right, bottom, 2, true)
 		}
 		if strings.Contains(borderStr, "B") {
-			s.printf("%.2f %.2f m %.2f %.2f l S ", left, bottom, right, bottom)
+			s = appendPDFLine(s, left, bottom, right, bottom, 2, true)
 		}
 	}
 	if len(txtStr) > 0 {
+		s = ensurePDFBuffer(s, 128+len(txtStr)*2+len(f.color.text.str))
 		var dx, dy float64
 		switch {
 		case strings.Contains(alignStr, "R"):
@@ -155,7 +158,9 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 			dy = 0
 		}
 		if f.colorFlag {
-			s.printf("q %s ", f.color.text.str)
+			s = append(s, "q "...)
+			s = append(s, f.color.text.str...)
+			s = append(s, ' ')
 		}
 		if (f.ws != 0 || alignStr == "J") && f.isCurrentUTF8 {
 			if f.isRTL {
@@ -167,19 +172,26 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 			}
 			space := f.escape(utf8toutf16(" ", false))
 			strSize := f.GetStringSymbolWidth(txtStr)
-			s.printf("BT 0 Tw %.2f %.2f Td [", (f.x+dx)*k, (f.h-(f.y+.5*h+.3*f.fontSize))*k)
+			s = append(s, "BT 0 Tw "...)
+			s = appendPDFNumberSpace(s, (f.x+dx)*k, 2)
+			s = appendPDFNumberSpace(s, (f.h-(f.y+.5*h+.3*f.fontSize))*k, 2)
+			s = append(s, "Td ["...)
 			t := strings.Split(txtStr, " ")
 			shift := float64((wmax - strSize)) / float64(len(t)-1)
 			numt := len(t)
 			for i := range numt {
 				tx := t[i]
-				tx = "(" + f.escape(utf8toutf16(tx, false)) + ")"
-				s.printf("%s ", tx)
+				s = append(s, '(')
+				s = append(s, f.escape(utf8toutf16(tx, false))...)
+				s = append(s, ") "...)
 				if (i + 1) < numt {
-					s.printf("%.3f(%s) ", -shift, space)
+					s = appendPDFNumber(s, -shift, 3)
+					s = append(s, '(')
+					s = append(s, space...)
+					s = append(s, ") "...)
 				}
 			}
-			s.printf("] TJ ET")
+			s = append(s, "] TJ ET"...)
 		} else {
 			var txt2 string
 			if f.isCurrentUTF8 {
@@ -197,24 +209,30 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 			}
 			bt := (f.x + dx) * k
 			td := (f.h - (f.y + dy + .5*h + .3*f.fontSize)) * k
-			s.printf("BT %.2f %.2f Td (%s)Tj ET", bt, td, txt2)
+			s = append(s, "BT "...)
+			s = appendPDFNumberSpace(s, bt, 2)
+			s = appendPDFNumberSpace(s, td, 2)
+			s = append(s, "Td ("...)
+			s = append(s, txt2...)
+			s = append(s, ")Tj ET"...)
 		}
 		if f.underline {
-			s.printf(" %s", f.dounderline(f.x+dx, f.y+dy+.5*h+.3*f.fontSize, txtStr))
+			s = append(s, ' ')
+			s = f.appendUnderlineRect(s, f.x+dx, f.y+dy+.5*h+.3*f.fontSize, txtStr)
 		}
 		if f.strikeout {
-			s.printf(" %s", f.dostrikeout(f.x+dx, f.y+dy+.5*h+.3*f.fontSize, txtStr))
+			s = append(s, ' ')
+			s = f.appendStrikeoutRect(s, f.x+dx, f.y+dy+.5*h+.3*f.fontSize, txtStr)
 		}
 		if f.colorFlag {
-			s.printf(" Q")
+			s = append(s, " Q"...)
 		}
 		if link > 0 || len(linkStr) > 0 {
 			f.newLink(f.x+dx, f.y+dy+.5*h-.5*f.fontSize, f.GetStringWidth(txtStr), f.fontSize, link, linkStr)
 		}
 	}
-	str := s.String()
-	if len(str) > 0 {
-		f.out(str)
+	if len(s) > 0 {
+		f.outbytes(s)
 	}
 	f.lasth = h
 	if ln > 0 {

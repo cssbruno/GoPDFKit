@@ -113,7 +113,14 @@ func parseStyleDeclarations(style string) map[string]string {
 		return nil
 	}
 	declarations := make(map[string]string, strings.Count(style, ":"))
-	for _, declaration := range strings.Split(style, ";") {
+	for len(style) > 0 {
+		declaration := style
+		if end := strings.IndexByte(style, ';'); end >= 0 {
+			declaration = style[:end]
+			style = style[end+1:]
+		} else {
+			style = ""
+		}
 		name, value, ok := strings.Cut(declaration, ":")
 		if !ok {
 			continue

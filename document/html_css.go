@@ -61,14 +61,60 @@ func (edges htmlBoxEdges) hasAny() bool {
 	return edges.top > 0 || edges.right > 0 || edges.bottom > 0 || edges.left > 0
 }
 
+func (html *HTML) cachedStyleDeclarations(style string) map[string]string {
+	if strings.TrimSpace(style) == "" || !strings.Contains(style, ":") {
+		return nil
+	}
+	if html == nil || !html.renderCacheActive {
+		return parseStyleDeclarations(style)
+	}
+	if html.styleDeclarationCache == nil {
+		html.styleDeclarationCache = make(map[string]map[string]string)
+	}
+	if declarations, ok := html.styleDeclarationCache[style]; ok {
+		return declarations
+	}
+	declarations := parseStyleDeclarations(style)
+	html.styleDeclarationCache[style] = declarations
+	return declarations
+}
+
+func (html *HTML) styleDeclarations(attrs map[string]string) map[string]string {
+	if attrs == nil {
+		return nil
+	}
+	return html.cachedStyleDeclarations(attrs["style"])
+}
+
+func (html *HTML) styleValue(attrs map[string]string, name string) string {
+	if attrs == nil {
+		return ""
+	}
+	return html.styleDeclarations(attrs)[strings.ToLower(name)]
+}
+
 func htmlElementDeclarations(el HTMLSegmentType, cssRules []htmlCSSRule, ancestors ...HTMLSegmentType) map[string]string {
+	return htmlElementDeclarationsWithStyle(el, cssRules, parseStyleDeclarations(el.Attr["style"]), ancestors...)
+}
+
+func (html *HTML) elementDeclarations(el HTMLSegmentType, cssRules []htmlCSSRule, ancestors ...HTMLSegmentType) map[string]string {
+	return htmlElementDeclarationsWithStyle(el, cssRules, html.styleDeclarations(el.Attr), ancestors...)
+}
+
+func htmlElementDeclarationsWithStyle(el HTMLSegmentType, cssRules []htmlCSSRule, style map[string]string, ancestors ...HTMLSegmentType) map[string]string {
 	if ancestors == nil {
 		ancestors = []HTMLSegmentType{}
 	}
-	decl := map[string]string{}
+	if len(cssRules) == 0 {
+		return style
+	}
+	var decl map[string]string
 	for _, rule := range cssRules {
 		for _, selector := range rule.selectors {
 			if htmlCSSSelectorMatches(selector, el, ancestors) {
+				if decl == nil {
+					decl = make(map[string]string, len(rule.declarations)+len(style))
+				}
 				for name, value := range rule.declarations {
 					decl[name] = value
 				}
@@ -76,7 +122,10 @@ func htmlElementDeclarations(el HTMLSegmentType, cssRules []htmlCSSRule, ancesto
 			}
 		}
 	}
-	for name, value := range parseStyleDeclarations(el.Attr["style"]) {
+	if decl == nil {
+		return style
+	}
+	for name, value := range style {
 		decl[name] = value
 	}
 	return decl
@@ -137,7 +186,15 @@ func htmlHasBorderDeclaration(decl map[string]string) bool {
 }
 
 func htmlBorderFromAttrs(attrs map[string]string, pdf *Document, relative float64) htmlBorderStyle {
-	border := htmlBorderFromDeclarations(parseStyleDeclarations(attrs["style"]), pdf, relative)
+	return htmlBorderFromStyle(attrs, parseStyleDeclarations(attrs["style"]), pdf, relative)
+}
+
+func (html *HTML) borderFromAttrs(attrs map[string]string, pdf *Document, relative float64) htmlBorderStyle {
+	return htmlBorderFromStyle(attrs, html.styleDeclarations(attrs), pdf, relative)
+}
+
+func htmlBorderFromStyle(attrs map[string]string, style map[string]string, pdf *Document, relative float64) htmlBorderStyle {
+	border := htmlBorderFromDeclarations(style, pdf, relative)
 	if !border.hasAny() && htmlBorderEnabled(attrs["border"]) {
 		border.setAll(htmlBorderSideStyle{enabled: true})
 	}
@@ -555,15 +612,78 @@ func htmlCSSSelectorPartMatches(part htmlCSSSelectorPart, el HTMLSegmentType) bo
 }
 
 func htmlClassContains(classAttr, className string) bool {
-	for _, class := range strings.Fields(strings.ToLower(classAttr)) {
-		if class == className {
-			return true
+	start := -1
+	for i, r := range classAttr {
+		if unicode.IsSpace(r) {
+			if start >= 0 && strings.EqualFold(classAttr[start:i], className) {
+				return true
+			}
+			start = -1
+			continue
+		}
+		if start < 0 {
+			start = i
 		}
 	}
-	return false
+	return start >= 0 && strings.EqualFold(classAttr[start:], className)
+}
+
+func htmlListStyleType(value string) string {
+	start := -1
+	for i, r := range value {
+		if unicode.IsSpace(r) {
+			if start >= 0 {
+				if style := htmlListStyleToken(value[start:i]); style != "" {
+					return style
+				}
+			}
+			start = -1
+			continue
+		}
+		if start < 0 {
+			start = i
+		}
+	}
+	if start >= 0 {
+		return htmlListStyleToken(value[start:])
+	}
+	return ""
+}
+
+func htmlListStyleToken(token string) string {
+	switch {
+	case strings.EqualFold(token, "decimal"):
+		return "decimal"
+	case strings.EqualFold(token, "lower-alpha"):
+		return "lower-alpha"
+	case strings.EqualFold(token, "upper-alpha"):
+		return "upper-alpha"
+	case strings.EqualFold(token, "lower-roman"):
+		return "lower-roman"
+	case strings.EqualFold(token, "upper-roman"):
+		return "upper-roman"
+	case strings.EqualFold(token, "disc"):
+		return "disc"
+	case strings.EqualFold(token, "circle"):
+		return "circle"
+	case strings.EqualFold(token, "square"):
+		return "square"
+	case strings.EqualFold(token, "none"):
+		return "none"
+	default:
+		return ""
+	}
 }
 
 func applyHTMLAttrs(st *htmlTextStyle, attrs map[string]string, baseFontSize, baseLineHeight float64, pdf *Document) {
+	applyHTMLAttrsWithStyle(st, attrs, parseStyleDeclarations(attrs["style"]), baseFontSize, baseLineHeight, pdf)
+}
+
+func (html *HTML) applyAttrs(st *htmlTextStyle, attrs map[string]string, baseFontSize, baseLineHeight float64, pdf *Document) {
+	applyHTMLAttrsWithStyle(st, attrs, html.styleDeclarations(attrs), baseFontSize, baseLineHeight, pdf)
+}
+
+func applyHTMLAttrsWithStyle(st *htmlTextStyle, attrs map[string]string, style map[string]string, baseFontSize, baseLineHeight float64, pdf *Document) {
 	if attrs == nil {
 		return
 	}
@@ -577,7 +697,7 @@ func applyHTMLAttrs(st *htmlTextStyle, attrs map[string]string, baseFontSize, ba
 	case "top", "middle", "bottom":
 		st.verticalAlign = strings.ToLower(strings.TrimSpace(attrs["valign"]))
 	}
-	applyHTMLStyleDeclarations(st, parseStyleDeclarations(attrs["style"]), baseFontSize, baseLineHeight, pdf)
+	applyHTMLStyleDeclarations(st, style, baseFontSize, baseLineHeight, pdf)
 }
 
 func applyHTMLStyleDeclarations(st *htmlTextStyle, style map[string]string, baseFontSize, baseLineHeight float64, pdf *Document) {
@@ -631,33 +751,28 @@ func applyHTMLStyleDeclarations(st *htmlTextStyle, style map[string]string, base
 	}
 }
 
-func htmlListStyleType(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	for _, token := range strings.Fields(value) {
-		switch token {
-		case "decimal", "lower-alpha", "upper-alpha", "lower-roman", "upper-roman", "disc", "circle", "square":
-			return token
-		case "none":
-			return "none"
-		}
-	}
-	return ""
-}
-
 func htmlFontFamily(value string) string {
-	value = strings.ToLower(value)
-	for _, family := range strings.Split(value, ",") {
-		family = strings.Trim(strings.TrimSpace(family), `"'`)
-		switch family {
-		case "monospace", "courier", "courier new":
+	for {
+		part := value
+		if comma := strings.IndexByte(value, ','); comma >= 0 {
+			part = value[:comma]
+			value = value[comma+1:]
+		} else {
+			value = ""
+		}
+		family := strings.Trim(strings.TrimSpace(part), `"'`)
+		switch {
+		case strings.EqualFold(family, "monospace"), strings.EqualFold(family, "courier"), strings.EqualFold(family, "courier new"):
 			return "Courier"
-		case "serif", "times", "times new roman":
+		case strings.EqualFold(family, "serif"), strings.EqualFold(family, "times"), strings.EqualFold(family, "times new roman"):
 			return "Times"
-		case "sans-serif", "sans", "helvetica", "arial":
+		case strings.EqualFold(family, "sans-serif"), strings.EqualFold(family, "sans"), strings.EqualFold(family, "helvetica"), strings.EqualFold(family, "arial"):
 			return "Helvetica"
 		}
+		if value == "" {
+			return ""
+		}
 	}
-	return ""
 }
 
 func parseHTMLFontSize(value string, base float64) (float64, bool) {

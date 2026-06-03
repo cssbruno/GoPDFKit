@@ -26,23 +26,39 @@ func (f *Document) Text(x, y float64, txtStr string) {
 	} else {
 		txt2 = f.escape(txtStr)
 	}
-	s := sprintf("BT %.2f %.2f Td (%s) Tj ET", x*f.k, (f.h-y)*f.k, txt2)
+	buf := make([]byte, 0, len(txt2)+len(f.color.text.str)+96)
+	if f.colorFlag {
+		buf = append(buf, "q "...)
+		buf = append(buf, f.color.text.str...)
+		buf = append(buf, ' ')
+	}
+	buf = append(buf, "BT "...)
+	buf = appendPDFNumberSpace(buf, x*f.k, 2)
+	buf = appendPDFNumberSpace(buf, (f.h-y)*f.k, 2)
+	buf = append(buf, "Td ("...)
+	buf = append(buf, txt2...)
+	buf = append(buf, ") Tj ET"...)
 	if f.underline && txtStr != "" {
-		s += " " + f.dounderline(x, y, txtStr)
+		buf = append(buf, ' ')
+		buf = f.appendUnderlineRect(buf, x, y, txtStr)
 	}
 	if f.strikeout && txtStr != "" {
-		s += " " + f.dostrikeout(x, y, txtStr)
+		buf = append(buf, ' ')
+		buf = f.appendStrikeoutRect(buf, x, y, txtStr)
 	}
 	if f.colorFlag {
-		s = sprintf("q %s %s Q", f.color.text.str, s)
+		buf = append(buf, " Q"...)
 	}
-	f.out(s)
+	f.outbytes(buf)
 }
 
 // SetWordSpacing sets spacing between words of following text. See the
 // WriteAligned() example for a demonstration of its use.
 func (f *Document) SetWordSpacing(space float64) {
-	f.out(sprintf("%.5f Tw", space*f.k))
+	var scratch [32]byte
+	buf := appendPDFNumber(scratch[:0], space*f.k, 5)
+	buf = append(buf, " Tw"...)
+	f.outbytes(buf)
 }
 
 // SetTextRenderingMode sets the rendering mode of following text.
@@ -58,7 +74,10 @@ func (f *Document) SetWordSpacing(space float64) {
 // This method is demonstrated in the SetTextRenderingMode example.
 func (f *Document) SetTextRenderingMode(mode int) {
 	if mode >= 0 && mode <= 7 {
-		f.out(sprintf("%d Tr", mode))
+		var scratch [16]byte
+		buf := appendPDFInt(scratch[:0], mode)
+		buf = append(buf, " Tr"...)
+		f.outbytes(buf)
 	}
 }
 
@@ -299,15 +318,27 @@ func (f *Document) SetUnderlineThickness(thickness float64) {
 
 // Underline text
 func (f *Document) dounderline(x, y float64, txt string) string {
+	buf := make([]byte, 0, 64)
+	buf = f.appendUnderlineRect(buf, x, y, txt)
+	return string(buf)
+}
+
+func (f *Document) appendUnderlineRect(buf []byte, x, y float64, txt string) []byte {
 	up := float64(f.currentFont.Up)
 	ut := float64(f.currentFont.Ut) * f.userUnderlineThickness
 	w := f.GetStringWidth(txt) + f.ws*float64(blankCount(txt))
-	return sprintf("%.2f %.2f %.2f %.2f re f", x*f.k, (f.h-(y-up/1000*f.fontSize))*f.k, w*f.k, -ut/1000*f.fontSizePt)
+	return appendPDFRectPaint(buf, x*f.k, (f.h-(y-up/1000*f.fontSize))*f.k, w*f.k, -ut/1000*f.fontSizePt, "f", false)
 }
 
 func (f *Document) dostrikeout(x, y float64, txt string) string {
+	buf := make([]byte, 0, 64)
+	buf = f.appendStrikeoutRect(buf, x, y, txt)
+	return string(buf)
+}
+
+func (f *Document) appendStrikeoutRect(buf []byte, x, y float64, txt string) []byte {
 	up := float64(f.currentFont.Up)
 	ut := float64(f.currentFont.Ut)
 	w := f.GetStringWidth(txt) + f.ws*float64(blankCount(txt))
-	return sprintf("%.2f %.2f %.2f %.2f re f", x*f.k, (f.h-(y+4*up/1000*f.fontSize))*f.k, w*f.k, -ut/1000*f.fontSizePt)
+	return appendPDFRectPaint(buf, x*f.k, (f.h-(y+4*up/1000*f.fontSize))*f.k, w*f.k, -ut/1000*f.fontSizePt, "f", false)
 }

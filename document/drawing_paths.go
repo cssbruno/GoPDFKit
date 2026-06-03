@@ -11,7 +11,9 @@ import (
 // Line draws a line between points (x1, y1) and (x2, y2) using the current
 // draw color, line width, and cap style.
 func (f *Document) Line(x1, y1, x2, y2 float64) {
-	f.outf("%.2f %.2f m %.2f %.2f l S", x1*f.k, (f.h-y1)*f.k, x2*f.k, (f.h-y2)*f.k)
+	buf := make([]byte, 0, 64)
+	buf = appendPDFLine(buf, x1*f.k, (f.h-y1)*f.k, x2*f.k, (f.h-y2)*f.k, 2, false)
+	f.outbytes(buf)
 }
 
 // fillDrawOp normalizes shorthand style values to PDF path-painting operators.
@@ -42,7 +44,9 @@ func fillDrawOp(styleStr string) (opStr string) {
 // draw color and line width centered on the rectangle's perimeter. Filling
 // uses the current fill color.
 func (f *Document) Rect(x, y, w, h float64, styleStr string) {
-	f.outf("%.2f %.2f %.2f %.2f re %s", x*f.k, (f.h-y)*f.k, w*f.k, -h*f.k, fillDrawOp(styleStr))
+	buf := make([]byte, 0, 64)
+	buf = appendPDFRectPaint(buf, x*f.k, (f.h-y)*f.k, w*f.k, -h*f.k, fillDrawOp(styleStr), false)
+	f.outbytes(buf)
 }
 
 // RoundedRect outputs a rectangle of width w and height h with the upper-left
@@ -123,10 +127,18 @@ func (f *Document) Polygon(points []Point, styleStr string) {
 			if j == 0 {
 				f.point(pt.X, pt.Y)
 			} else {
-				f.outf("%.5f %.5f l ", pt.X*f.k, (f.h-pt.Y)*f.k)
+				buf := make([]byte, 0, 40)
+				buf = appendPDFNumberSpace(buf, pt.X*f.k, 5)
+				buf = appendPDFNumberSpace(buf, (f.h-pt.Y)*f.k, 5)
+				buf = append(buf, "l "...)
+				f.outbytes(buf)
 			}
 		}
-		f.outf("%.5f %.5f l ", points[0].X*f.k, (f.h-points[0].Y)*f.k)
+		buf := make([]byte, 0, 40)
+		buf = appendPDFNumberSpace(buf, points[0].X*f.k, 5)
+		buf = appendPDFNumberSpace(buf, (f.h-points[0].Y)*f.k, 5)
+		buf = append(buf, "l "...)
+		f.outbytes(buf)
 		f.DrawPath(styleStr)
 	}
 }
@@ -160,12 +172,18 @@ func (f *Document) Beziergon(points []Point, styleStr string) {
 
 // point outputs the current point.
 func (f *Document) point(x, y float64) {
-	f.outf("%.2f %.2f m", x*f.k, (f.h-y)*f.k)
+	buf := make([]byte, 0, 32)
+	buf = appendPDFNumberSpace(buf, x*f.k, 2)
+	buf = appendPDFNumberSpace(buf, (f.h-y)*f.k, 2)
+	buf = append(buf, 'm')
+	f.outbytes(buf)
 }
 
 // curve outputs a single cubic Bézier curve segment from the current point.
 func (f *Document) curve(cx0, cy0, cx1, cy1, x, y float64) {
-	f.outf("%.5f %.5f %.5f %.5f %.5f %.5f c", cx0*f.k, (f.h-cy0)*f.k, cx1*f.k, (f.h-cy1)*f.k, x*f.k, (f.h-y)*f.k)
+	buf := make([]byte, 0, 96)
+	buf = appendPDFCubicCurve(buf, cx0*f.k, (f.h-cy0)*f.k, cx1*f.k, (f.h-cy1)*f.k, x*f.k, (f.h-y)*f.k)
+	f.outbytes(buf)
 }
 
 // Curve draws a single-segment quadratic Bézier curve. The curve starts at
@@ -183,7 +201,14 @@ func (f *Document) curve(cx0, cy0, cx1, cy1, x, y float64) {
 // The Circle() example demonstrates this method.
 func (f *Document) Curve(x0, y0, cx, cy, x1, y1 float64, styleStr string) {
 	f.point(x0, y0)
-	f.outf("%.5f %.5f %.5f %.5f v %s", cx*f.k, (f.h-cy)*f.k, x1*f.k, (f.h-y1)*f.k, fillDrawOp(styleStr))
+	buf := make([]byte, 0, 72)
+	buf = appendPDFNumberSpace(buf, cx*f.k, 5)
+	buf = appendPDFNumberSpace(buf, (f.h-cy)*f.k, 5)
+	buf = appendPDFNumberSpace(buf, x1*f.k, 5)
+	buf = appendPDFNumberSpace(buf, (f.h-y1)*f.k, 5)
+	buf = append(buf, "v "...)
+	buf = append(buf, fillDrawOp(styleStr)...)
+	f.outbytes(buf)
 }
 
 // CurveCubic draws a single-segment cubic Bézier curve. This routine performs
@@ -211,7 +236,11 @@ func (f *Document) CurveCubic(x0, y0, cx0, cy0, x1, y1, cx1, cy1 float64, styleS
 // The Circle() example demonstrates this method.
 func (f *Document) CurveBezierCubic(x0, y0, cx0, cy0, cx1, cy1, x1, y1 float64, styleStr string) {
 	f.point(x0, y0)
-	f.outf("%.5f %.5f %.5f %.5f %.5f %.5f c %s", cx0*f.k, (f.h-cy0)*f.k, cx1*f.k, (f.h-cy1)*f.k, x1*f.k, (f.h-y1)*f.k, fillDrawOp(styleStr))
+	buf := make([]byte, 0, 104)
+	buf = appendPDFCubicCurve(buf, cx0*f.k, (f.h-cy0)*f.k, cx1*f.k, (f.h-cy1)*f.k, x1*f.k, (f.h-y1)*f.k)
+	buf = append(buf, ' ')
+	buf = append(buf, fillDrawOp(styleStr)...)
+	f.outbytes(buf)
 }
 
 // Arc draws an elliptical arc centered at point (x, y). rx and ry specify its
@@ -251,7 +280,11 @@ func (f *Document) MoveTo(x, y float64) {
 //
 // The MoveTo() example demonstrates this method.
 func (f *Document) LineTo(x, y float64) {
-	f.outf("%.2f %.2f l", x*f.k, (f.h-y)*f.k)
+	buf := make([]byte, 0, 32)
+	buf = appendPDFNumberSpace(buf, x*f.k, 2)
+	buf = appendPDFNumberSpace(buf, (f.h-y)*f.k, 2)
+	buf = append(buf, 'l')
+	f.outbytes(buf)
 	f.x, f.y = x, y
 }
 
@@ -264,7 +297,13 @@ func (f *Document) LineTo(x, y float64) {
 //
 // The MoveTo() example demonstrates this method.
 func (f *Document) CurveTo(cx, cy, x, y float64) {
-	f.outf("%.5f %.5f %.5f %.5f v", cx*f.k, (f.h-cy)*f.k, x*f.k, (f.h-y)*f.k)
+	buf := make([]byte, 0, 64)
+	buf = appendPDFNumberSpace(buf, cx*f.k, 5)
+	buf = appendPDFNumberSpace(buf, (f.h-cy)*f.k, 5)
+	buf = appendPDFNumberSpace(buf, x*f.k, 5)
+	buf = appendPDFNumberSpace(buf, (f.h-y)*f.k, 5)
+	buf = append(buf, 'v')
+	f.outbytes(buf)
 	f.x, f.y = x, y
 }
 
@@ -288,7 +327,7 @@ func (f *Document) CurveBezierCubicTo(cx0, cy0, cx1, cy1, x, y float64) {
 //
 // The MoveTo() example demonstrates this method.
 func (f *Document) ClosePath() {
-	f.outf("h")
+	f.out("h")
 }
 
 // DrawPath actually draws the path on the page.
@@ -344,7 +383,16 @@ func (f *Document) arc(x, y, rx, ry, degRotate, degStart, degEnd float64, styleS
 	dtm := dt / 3
 	if degRotate != 0 {
 		a := -degRotate * math.Pi / 180
-		f.outf("q %.5f %.5f %.5f %.5f %.5f %.5f cm", math.Cos(a), -1*math.Sin(a), math.Sin(a), math.Cos(a), x, y)
+		buf := make([]byte, 0, 112)
+		buf = append(buf, "q "...)
+		buf = appendPDFNumberSpace(buf, math.Cos(a), 5)
+		buf = appendPDFNumberSpace(buf, -1*math.Sin(a), 5)
+		buf = appendPDFNumberSpace(buf, math.Sin(a), 5)
+		buf = appendPDFNumberSpace(buf, math.Cos(a), 5)
+		buf = appendPDFNumberSpace(buf, x, 5)
+		buf = appendPDFNumberSpace(buf, y, 5)
+		buf = append(buf, "cm"...)
+		f.outbytes(buf)
 		x = 0
 		y = 0
 	}

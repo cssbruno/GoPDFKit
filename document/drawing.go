@@ -67,7 +67,7 @@ func (f *Document) SetLineWidth(width float64) {
 func (f *Document) setLineWidth(width float64) {
 	f.lineWidth = width
 	if f.page > 0 {
-		f.outf("%.2f w", width*f.k)
+		f.outPDFLineWidth(width * f.k)
 	}
 }
 
@@ -92,7 +92,7 @@ func (f *Document) SetLineCapStyle(styleStr string) {
 	}
 	f.capStyle = capStyle
 	if f.page > 0 {
-		f.outf("%d J", f.capStyle)
+		f.outPDFIntOperator(f.capStyle, 'J')
 	}
 }
 
@@ -111,7 +111,7 @@ func (f *Document) SetLineJoinStyle(styleStr string) {
 	}
 	f.joinStyle = joinStyle
 	if f.page > 0 {
-		f.outf("%d j", f.joinStyle)
+		f.outPDFIntOperator(f.joinStyle, 'j')
 	}
 }
 

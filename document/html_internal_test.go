@@ -33,6 +33,48 @@ func TestHTMLParseLineHeight(t *testing.T) {
 	}
 }
 
+func TestHTMLCollapseWhitespace(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want string
+	}{
+		{name: "empty", text: "", want: ""},
+		{name: "single-space", text: " ", want: " "},
+		{name: "only-space-run", text: " \n\t ", want: " "},
+		{name: "already-normalized", text: "alpha beta", want: "alpha beta"},
+		{name: "leading-and-trailing", text: " alpha beta ", want: " alpha beta "},
+		{name: "internal-run", text: "alpha   beta", want: "alpha beta"},
+		{name: "tabs-and-newlines", text: "alpha\tbeta\n gamma", want: "alpha beta gamma"},
+		{name: "unicode-space", text: "alpha\u00a0beta", want: "alpha beta"},
+	}
+	for _, tt := range tests {
+		if got := collapseHTMLWhitespace(tt.text); got != tt.want {
+			t.Fatalf("%s: collapseHTMLWhitespace(%q) = %q, want %q", tt.name, tt.text, got, tt.want)
+		}
+	}
+}
+
+func TestParseStyleDeclarations(t *testing.T) {
+	got := parseStyleDeclarations(" color : #123456 ; font-weight:bold; ; text-align : right ")
+	want := map[string]string{
+		"color":       "#123456",
+		"font-weight": "bold",
+		"text-align":  "right",
+	}
+	for name, value := range want {
+		if got[name] != value {
+			t.Fatalf("parseStyleDeclarations()[%q] = %q, want %q in %#v", name, got[name], value, got)
+		}
+	}
+	if len(got) != len(want) {
+		t.Fatalf("parseStyleDeclarations() len = %d, want %d: %#v", len(got), len(want), got)
+	}
+	if got := parseStyleDeclarations("color"); got != nil {
+		t.Fatalf("parseStyleDeclarations(no colon) = %#v, want nil", got)
+	}
+}
+
 func TestHTMLSplitLinesWrapsLongWords(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	pdf.AddPage()

@@ -33,29 +33,51 @@ The root gopdfkit package intentionally stays small. It exposes the beginner
 entry point and delegates to document; advanced applications can import
 document directly for the full PDF API.
 
-## Support Matrix
+## Go Project Comparison
 
-This table compares the features this codebase explicitly supports with common
-alternatives. Other projects can differ by version and configuration, so their
-columns describe typical support rather than a guarantee for every library.
+GoPDFKit is performance-first: it generates PDFs directly in Go, avoids browser
+or office runtimes, and keeps HTML support intentionally bounded so rendering
+costs and failure modes stay predictable. It will not try to become fully
+browser-compatible HTML-to-PDF, and DOCX conversion is out of scope. Typst
+support may be considered later as an optional authoring or import path, but it
+is not part of the current API.
 
-	Capability                                             GoPDFKit support       Browser HTML-to-PDF support                  Other FPDF-style code support
-	Go-native PDF generation                             Yes                    No, usually requires a browser/runtime bridge Varies
-	Standard PDF fonts                                   Yes                    Varies                                       Usually yes
-	UTF-8 TrueType fonts                                 Yes                    Yes                                          Varies
-	Text cells, multicells, links, bookmarks, and aliases Yes                    Varies                                       Usually yes
-	Drawing primitives and paths                         Yes                    Varies                                       Usually yes
-	Clipping, transforms, transparency, gradients, spot colors, and layers
-	                                                       Yes                    Varies                                       Varies
-	JPEG, PNG, GIF, WebP, and SVG images                 Yes                    Usually yes                                  Varies
-	Controlled HTML/CSS fragment rendering               Yes                    Yes, with broader browser layout              Varies
-	Browser-grade HTML/CSS layout                        No                     Usually yes                                  Usually no
-	Tables with thead, tbody, tfoot, colspan, and rowspan Yes                    Usually yes                                  Varies
-	Configurable HTML validation and render limits        Yes                    Varies                                       Varies
-	Templates and imported template objects              Yes                    Varies                                       Varies
-	Document protection, attachments, metadata, JavaScript, and XMP metadata
-	                                                       Yes                    Varies                                       Varies
-	PDF signing and verification helpers                 Yes, in sign with document helpers                 Varies
+This comparison only covers Go projects and is based on public project
+documentation plus this repository's API. It is a positioning guide, not a
+benchmark.
+
+  - GoPDFKit has FPDF-style generation, UTF-8 TrueType fonts, standard fonts,
+    drawing, controlled HTML fragments, tables, SVG and WebP images, imported
+    pages, templates, protection, attachments, metadata, thumbnails, signing,
+    and verification helpers. It does not provide full browser HTML/CSS layout,
+    JavaScript page rendering, DOCX conversion, arbitrary PDF editing, or
+    enterprise document SDK coverage.
+  - Compared with go-pdf/fpdf, GoPDFKit has a similar FPDF-style workflow plus
+    this repo's package split, controlled HTML validation and limits, WebP
+    handling, expanded SVG handling, report helpers, thumbnails, and integrated
+    signing and verification. go-pdf/fpdf remains the closest mature open-source
+    peer and already covers many classic FPDF features, including drawing,
+    fonts, images, templates, layers, protection, attachments, barcodes, charts,
+    and PDF imports.
+  - Compared with signintech/gopdf, GoPDFKit has a broader document-generation
+    surface: cells, multicells, headers, footers, HTML/table helpers, SVG and
+    WebP handling, metadata, protection, attachments, thumbnails, and signing
+    helpers. signintech/gopdf is a good fit for lower-level coordinate drawing
+    with Unicode fonts, JPG and PNG images, transforms, and imported pages.
+  - Compared with Maroto v2, GoPDFKit has lower-level PDF primitives plus
+    imports, templates, SVG and WebP, attachments, metadata, protection,
+    thumbnails, and signing helpers. Maroto is better when the main need is
+    grid-based report layout with rows, columns, components, headers, and a
+    testable component tree.
+  - Compared with pdfcpu, GoPDFKit generates content directly from Go code,
+    including text, graphics, images, HTML fragments, templates, imported pages,
+    and signed output. pdfcpu is better for processing existing PDFs:
+    validation, encryption, merge, split, rotate, crop, attachments, bookmarks,
+    forms, stamps, watermarks, signature validation, and JSON-driven creation.
+  - Compared with UniPDF, GoPDFKit is a small MIT-licensed generator focused on
+    in-process PDF creation and predictable output. UniPDF has broader
+    commercial SDK coverage: creation, editing, processing, signing, forms,
+    extraction, protection, and UniHTML.
 
 ## Package Layout
 

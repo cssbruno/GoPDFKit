@@ -39,7 +39,9 @@ func (f *Document) SVGWrite(sb *SVG, scale float64) {
 		if f.page > 0 {
 			f.outputDashPattern()
 		}
-		f.SetAlpha(alpha, blendMode)
+		if f.alpha != alpha || f.blendMode != blendMode {
+			f.SetAlpha(alpha, blendMode)
+		}
 		if fontUnitSize > 0 {
 			f.SetFontUnitSize(fontUnitSize)
 		}
@@ -48,7 +50,9 @@ func (f *Document) SVGWrite(sb *SVG, scale float64) {
 	if len(sb.Elements) > 0 {
 		for _, element := range sb.Elements {
 			f.svgWriteElement(originX, originY, scale, element)
-			f.SetAlpha(alpha, blendMode)
+			if f.alpha != alpha || f.blendMode != blendMode {
+				f.SetAlpha(alpha, blendMode)
+			}
 		}
 		return
 	}
@@ -62,15 +66,21 @@ func (f *Document) SVGWrite(sb *SVG, scale float64) {
 	}
 	for _, image := range sb.Images {
 		f.svgWriteImage(originX, originY, scale, image)
-		f.SetAlpha(alpha, blendMode)
+		if f.alpha != alpha || f.blendMode != blendMode {
+			f.SetAlpha(alpha, blendMode)
+		}
 	}
 	for _, path := range paths {
 		f.svgWritePath(originX, originY, scale, path)
-		f.SetAlpha(alpha, blendMode)
+		if f.alpha != alpha || f.blendMode != blendMode {
+			f.SetAlpha(alpha, blendMode)
+		}
 	}
 	for _, text := range sb.Texts {
 		f.svgWriteText(originX, originY, scale, text)
-		f.SetAlpha(alpha, blendMode)
+		if f.alpha != alpha || f.blendMode != blendMode {
+			f.SetAlpha(alpha, blendMode)
+		}
 	}
 }
 
@@ -532,7 +542,7 @@ func (f *Document) svgApplyPathStyle(path SVGPath, scale float64) string {
 		}
 		if style.StrokeDashSet {
 			f.SetDashPattern(svgScaledValues(style.StrokeDashArray, scale), style.StrokeDashOffset*scale)
-		} else if explicitPaint {
+		} else if explicitPaint && (len(f.dashArray) > 0 || f.dashPhase != 0) {
 			f.SetDashPattern(nil, 0)
 		}
 	}

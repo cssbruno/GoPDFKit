@@ -24,6 +24,10 @@ type HTMLSegmentType struct {
 
 // HTMLTokenize returns a list of supported HTML tags and literal text elements.
 func HTMLTokenize(htmlStr string) []HTMLSegmentType {
+	return htmlTokenize(htmlStr, nil)
+}
+
+func htmlTokenize(htmlStr string, attrCache map[string]map[string]string) []HTMLSegmentType {
 	list := make([]HTMLSegmentType, 0, strings.Count(htmlStr, "<")+1)
 	for len(htmlStr) > 0 {
 		tagStart := strings.IndexByte(htmlStr, '<')
@@ -56,7 +60,7 @@ func HTMLTokenize(htmlStr string) []HTMLSegmentType {
 		if strings.HasPrefix(rawTag, "!--") {
 			continue
 		}
-		name, attrs, closeTag, selfClosing := parseHTMLTag(rawTag)
+		name, attrs, closeTag, selfClosing := parseHTMLTagWithAttrCache(rawTag, attrCache)
 		if name == "" {
 			continue
 		}
@@ -100,6 +104,10 @@ func htmlTagEnd(s string) int {
 }
 
 func parseHTMLTag(raw string) (name string, attrs map[string]string, closeTag, selfClosing bool) {
+	return parseHTMLTagWithAttrCache(raw, nil)
+}
+
+func parseHTMLTagWithAttrCache(raw string, attrCache map[string]map[string]string) (name string, attrs map[string]string, closeTag, selfClosing bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || strings.HasPrefix(raw, "!") || strings.HasPrefix(raw, "?") {
 		return "", nil, false, false
@@ -124,7 +132,16 @@ func parseHTMLTag(raw string) (name string, attrs map[string]string, closeTag, s
 	if closeTag || nameEnd >= len(raw) {
 		return name, nil, closeTag, selfClosing
 	}
-	attrs = parseHTMLAttrs(raw[nameEnd:])
+	attrRaw := raw[nameEnd:]
+	if attrCache != nil {
+		if cached, ok := attrCache[attrRaw]; ok {
+			return name, cached, closeTag, selfClosing
+		}
+	}
+	attrs = parseHTMLAttrs(attrRaw)
+	if attrCache != nil {
+		attrCache[attrRaw] = attrs
+	}
 	return name, attrs, closeTag, selfClosing
 }
 
