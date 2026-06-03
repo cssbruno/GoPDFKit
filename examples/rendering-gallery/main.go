@@ -27,6 +27,16 @@ func main() {
 	generateUnicodeScripts()
 	generateHTMLReport()
 	generateLongFormContract()
+	generateTypographyShowcase()
+	generateLineStylesPaths()
+	generateSpotColors()
+	generateLayersShowcase()
+	generateAttachmentsAnnotations()
+	generateMetadataXMP()
+	generatePageBoxesShowcase()
+	generateSVGVector()
+	generateCompressionVariants()
+	generateColumnsLayout()
 }
 
 func newPDF(title string) *gopdfkit.Document {
@@ -410,6 +420,330 @@ func generateLongFormContract() {
 	pdf.CellFormat(80, 5, "Customer", "", 1, "C", false, 0, "")
 
 	save(pdf, "long-form-contract.pdf")
+}
+
+func generateTypographyShowcase() {
+	pdf := newPDF("Typography Showcase")
+	pdf.AddPage()
+	title(pdf, "Typography Showcase", "Font styles, alignment, spacing, rendering modes, and links")
+
+	pdf.SetFont("Times", "B", 18)
+	pdf.Text(16, 48, "Serif Bold Heading")
+	pdf.SetFont("Helvetica", "", 11)
+	pdf.SetXY(16, 58)
+	pdf.MultiCell(176, 6, "This PDF exercises common text operations used by reports, letters, labels, and formatted forms.", "", "L", false)
+
+	styles := []struct {
+		Style string
+		Label string
+	}{
+		{"", "regular"},
+		{"B", "bold"},
+		{"I", "italic"},
+		{"U", "underline"},
+		{"S", "strike-through"},
+		{"BU", "bold underline"},
+	}
+	y := 84.0
+	for _, style := range styles {
+		pdf.SetFont("Helvetica", style.Style, 12)
+		pdf.Text(20, y, "Text style: "+style.Label)
+		y += 10
+	}
+
+	pdf.SetFont("Helvetica", "", 11)
+	pdf.SetXY(16, 154)
+	pdf.WriteAligned(176, 6, "Left aligned text demonstrates WriteAligned with a fixed width.", "L")
+	pdf.WriteAligned(176, 6, "Centered text demonstrates the same width with center alignment.", "C")
+	pdf.WriteAligned(176, 6, "Right aligned text demonstrates right-side alignment.", "R")
+
+	pdf.SetXY(16, 188)
+	pdf.SetWordSpacing(2.5)
+	pdf.Write(6, "Increased word spacing across this sentence.")
+	pdf.SetWordSpacing(0)
+
+	pdf.SetFont("Helvetica", "B", 18)
+	pdf.SetDrawColor(35, 70, 120)
+	pdf.SetTextColor(35, 70, 120)
+	pdf.SetTextRenderingMode(1)
+	pdf.Text(20, 224, "Stroked text")
+	pdf.SetTextRenderingMode(2)
+	pdf.Text(20, 244, "Fill and stroke")
+	pdf.SetTextRenderingMode(0)
+
+	save(pdf, "typography-showcase.pdf")
+}
+
+func generateLineStylesPaths() {
+	pdf := newPDF("Line Styles and Paths")
+	pdf.AddPage()
+	title(pdf, "Line Styles and Paths", "Caps, joins, dash patterns, polygons, and bezier paths")
+
+	pdf.SetLineWidth(3)
+	caps := []string{"butt", "round", "square"}
+	for i, capStyle := range caps {
+		y := 55 + float64(i)*18
+		pdf.SetLineCapStyle(capStyle)
+		pdf.SetDrawColor(35, 70, 120)
+		pdf.Line(34, y, 120, y)
+		pdf.SetFont("Helvetica", "", 9)
+		pdf.Text(128, y+1, "cap: "+capStyle)
+	}
+
+	pdf.SetLineWidth(1.2)
+	pdf.SetLineCapStyle("butt")
+	pdf.SetLineJoinStyle("round")
+	pdf.SetDashPattern([]float64{3, 2}, 0)
+	pdf.SetDrawColor(165, 70, 45)
+	pdf.Polygon(star(62, 132, 34, 14, 6), "D")
+	pdf.SetDashPattern(nil, 0)
+
+	pdf.SetLineJoinStyle("bevel")
+	pdf.SetFillColor(232, 242, 250)
+	pdf.SetDrawColor(30, 100, 160)
+	pdf.Polygon([]document.Point{
+		{X: 128, Y: 105},
+		{X: 178, Y: 116},
+		{X: 164, Y: 164},
+		{X: 118, Y: 150},
+	}, "DF")
+
+	pdf.SetLineJoinStyle("miter")
+	pdf.SetDrawColor(45, 115, 80)
+	pdf.Beziergon([]document.Point{
+		{X: 34, Y: 204},
+		{X: 64, Y: 174},
+		{X: 92, Y: 236},
+		{X: 132, Y: 188},
+		{X: 172, Y: 224},
+	}, "D")
+
+	save(pdf, "line-styles-paths.pdf")
+}
+
+func generateSpotColors() {
+	pdf := newPDF("Spot Colors")
+	pdf.AddSpotColor("Brand Blue", 88, 42, 0, 12)
+	pdf.AddSpotColor("Warm Accent", 0, 55, 95, 5)
+	pdf.AddSpotColor("Deep Ink", 72, 66, 58, 84)
+	pdf.AddPage()
+	title(pdf, "Spot Colors", "Named CMYK spot colors with different tints")
+
+	swatches := []struct {
+		Name string
+		Y    float64
+	}{
+		{"Brand Blue", 52},
+		{"Warm Accent", 92},
+		{"Deep Ink", 132},
+	}
+	for _, swatch := range swatches {
+		pdf.SetFont("Helvetica", "B", 11)
+		pdf.SetTextColor(35, 45, 55)
+		pdf.Text(16, swatch.Y+8, swatch.Name)
+		for i, tint := range []byte{30, 60, 90, 100} {
+			x := 72 + float64(i)*28
+			pdf.SetFillSpotColor(swatch.Name, tint)
+			pdf.Rect(x, swatch.Y, 20, 20, "F")
+			pdf.SetFont("Helvetica", "", 7)
+			pdf.SetTextColor(70, 80, 90)
+			pdf.Text(x+3, swatch.Y+27, fmt.Sprintf("%d%%", tint))
+		}
+	}
+	pdf.SetTextSpotColor("Brand Blue", 100)
+	pdf.SetFont("Helvetica", "B", 16)
+	pdf.Text(16, 204, "Spot color text")
+	pdf.SetDrawSpotColor("Warm Accent", 100)
+	pdf.SetLineWidth(2)
+	pdf.Line(16, 212, 132, 212)
+
+	save(pdf, "spot-colors.pdf")
+}
+
+func generateLayersShowcase() {
+	pdf := newPDF("Layers Showcase")
+	background := pdf.AddLayer("Background grid", true)
+	notes := pdf.AddLayer("Review notes", false)
+	main := pdf.AddLayer("Main content", true)
+	pdf.OpenLayerPane()
+	pdf.AddPage()
+	title(pdf, "Layers Showcase", "Optional content groups: visible and hidden layers")
+
+	pdf.BeginLayer(background)
+	pdf.SetDrawColor(225, 232, 239)
+	for x := 20.0; x <= 190; x += 10 {
+		pdf.Line(x, 42, x, 252)
+	}
+	for y := 42.0; y <= 252; y += 10 {
+		pdf.Line(20, y, 190, y)
+	}
+	pdf.EndLayer()
+
+	pdf.BeginLayer(main)
+	pdf.SetFillColor(236, 246, 240)
+	pdf.SetDrawColor(70, 140, 90)
+	pdf.RoundedRect(38, 78, 134, 64, 5, "1234", "DF")
+	pdf.SetFont("Helvetica", "B", 17)
+	pdf.SetTextColor(35, 80, 55)
+	pdf.Text(54, 112, "Main visible layer")
+	pdf.EndLayer()
+
+	pdf.BeginLayer(notes)
+	pdf.SetFillColor(255, 245, 190)
+	pdf.SetDrawColor(185, 150, 45)
+	pdf.RoundedRect(48, 160, 116, 32, 4, "1234", "DF")
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.SetTextColor(95, 75, 20)
+	pdf.Text(56, 179, "Hidden review note layer")
+	pdf.EndLayer()
+
+	save(pdf, "layers-showcase.pdf")
+}
+
+func generateAttachmentsAnnotations() {
+	pdf := newPDF("Attachments and Annotations")
+	readme := mustRead("README.md")
+	license := mustRead("LICENSE")
+	pdf.SetAttachments([]document.Attachment{
+		{Content: readme, Filename: "README.md", Description: "Repository README"},
+		{Content: license, Filename: "LICENSE", Description: "Project license"},
+	})
+
+	pdf.AddPage()
+	title(pdf, "Attachments and Annotations", "Document-level attachments and page attachment links")
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetXY(16, 48)
+	pdf.MultiCell(176, 6, "This PDF embeds README.md and LICENSE globally, then adds two visible attachment annotation rectangles on the page.", "", "L", false)
+
+	annotated := document.Attachment{Content: []byte("review-note: generated by rendering-gallery\n"), Filename: "review-note.txt", Description: "Review note"}
+	for i, label := range []string{"Open attached review note", "Same attachment reused"} {
+		y := 88 + float64(i)*38
+		pdf.SetDrawColor(35, 70, 120)
+		pdf.SetFillColor(245, 248, 251)
+		pdf.RoundedRect(22, y, 92, 20, 3, "1234", "DF")
+		pdf.SetFont("Helvetica", "B", 10)
+		pdf.SetTextColor(35, 70, 120)
+		pdf.Text(28, y+13, label)
+		pdf.AddAttachmentAnnotation(&annotated, 22, y, 92, 20)
+	}
+
+	save(pdf, "attachments-annotations.pdf")
+}
+
+func generateMetadataXMP() {
+	pdf := newPDF("Metadata and XMP")
+	pdf.SetSubject("Generated metadata showcase", false)
+	pdf.SetKeywords("pdf,metadata,xmp,javascript,generated", false)
+	pdf.SetProducer("GoPDFKit metadata example", false)
+	pdf.SetXmpMetadata([]byte(`<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
+      <dc:title><rdf:Alt><rdf:li xml:lang="x-default">Metadata and XMP</rdf:li></rdf:Alt></dc:title>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`))
+	pdf.SetJavascript("this.info.Subject = 'Generated metadata showcase';")
+	pdf.AddPage()
+	title(pdf, "Metadata and XMP", "Info dictionary, XMP packet, keywords, and JavaScript action")
+	pdf.SetFont("Helvetica", "", 11)
+	pdf.SetXY(16, 52)
+	pdf.MultiCell(176, 6, "This example sets PDF metadata fields, embeds an XMP metadata packet, and includes a small JavaScript action for readers that support it.", "", "L", false)
+
+	save(pdf, "metadata-xmp.pdf")
+}
+
+func generatePageBoxesShowcase() {
+	pdf := newPDF("Page Boxes Showcase")
+	pdf.AddPage()
+	pdf.SetPageBox("trim", 12, 12, 186, 273)
+	pdf.SetPageBox("bleed", 6, 6, 198, 285)
+	pdf.SetPageBox("art", 28, 42, 154, 188)
+	title(pdf, "Page Boxes Showcase", "Trim, bleed, and art boxes are written into page dictionaries")
+	pdf.SetDrawColor(220, 85, 70)
+	pdf.Rect(12, 36, 186, 237, "D")
+	pdf.SetDrawColor(70, 130, 190)
+	pdf.Rect(6, 30, 198, 249, "D")
+	pdf.SetDrawColor(70, 150, 90)
+	pdf.Rect(28, 60, 154, 188, "D")
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetTextColor(60, 70, 80)
+	pdf.Text(18, 286, "Red: TrimBox, Blue: BleedBox, Green: ArtBox")
+
+	save(pdf, "page-boxes-showcase.pdf")
+}
+
+func generateSVGVector() {
+	pdf := newPDF("SVG Vector")
+	pdf.AddPage()
+	title(pdf, "SVG Vector", "Parsed SVG paths rendered as PDF vector operations")
+
+	svg, err := document.SVGParse([]byte(`<svg width="300" height="180" viewBox="0 0 300 180">
+		<path d="M20 140 C70 20 112 30 148 112 S238 170 280 44" fill="none" stroke="#245c9c" stroke-width="8" stroke-linecap="round"/>
+		<path d="M48 132 L92 58 L136 132 Z" fill="#e8f1fa" stroke="#245c9c" stroke-width="4"/>
+		<path d="M180 54 L250 54 L250 124 L180 124 Z" fill="#f5d76e" stroke="#8a6415" stroke-width="4"/>
+		<text x="42" y="164" font-size="18" fill="#334455">SVG parsed into PDF</text>
+	</svg>`))
+	if err != nil {
+		panic(err)
+	}
+	pdf.SetXY(18, 58)
+	pdf.SVGWrite(&svg, 0.58)
+
+	save(pdf, "svg-vector.pdf")
+}
+
+func generateCompressionVariants() {
+	compressed := newPDF("Compression Default")
+	compressed.AddPage()
+	title(compressed, "Compression Default", "Default compressed PDF streams")
+	fillCompressionBody(compressed)
+	save(compressed, "compression-default.pdf")
+
+	uncompressed := newPDF("Compression Disabled")
+	uncompressed.SetNoCompression()
+	uncompressed.AddPage()
+	title(uncompressed, "Compression Disabled", "Uncompressed PDF streams for debugging")
+	fillCompressionBody(uncompressed)
+	save(uncompressed, "compression-none.pdf")
+}
+
+func fillCompressionBody(pdf *gopdfkit.Document) {
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.SetXY(16, 44)
+	for i := 1; i <= 36; i++ {
+		pdf.CellFormat(0, 5, fmt.Sprintf("Repeated deterministic content row %02d: %s", i, strings.Repeat("data ", 12)), "", 1, "L", false, 0, "")
+	}
+}
+
+func generateColumnsLayout() {
+	pdf := newPDF("Columns Layout")
+	pdf.AddPage()
+	title(pdf, "Columns Layout", "Manual multi-column text flow with gutters")
+	pdf.SetFont("Helvetica", "", 9)
+
+	columnWidth := 54.0
+	gutter := 8.0
+	startX := 16.0
+	y := 46.0
+	text := strings.Repeat("Column text flows through narrow measures with explicit x and y placement. ", 5)
+	for col := 0; col < 3; col++ {
+		x := startX + float64(col)*(columnWidth+gutter)
+		pdf.SetXY(x, y)
+		pdf.SetFillColor(248, 250, 252)
+		pdf.Rect(x-2, y-4, columnWidth+4, 190, "F")
+		pdf.SetXY(x, y)
+		for section := 1; section <= 4; section++ {
+			pdf.SetFont("Helvetica", "B", 10)
+			pdf.MultiCell(columnWidth, 5, fmt.Sprintf("Column %d.%d", col+1, section), "", "L", false)
+			pdf.SetFont("Helvetica", "", 8)
+			pdf.MultiCell(columnWidth, 4.5, text, "", "J", false)
+			pdf.Ln(2)
+		}
+	}
+
+	save(pdf, "columns-layout.pdf")
 }
 
 func title(pdf *gopdfkit.Document, heading, subheading string) {
