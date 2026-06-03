@@ -208,12 +208,14 @@ func (r *documentRenderer) renderList(block ListBlock) {
 			x, y := r.pdf.GetXY()
 			r.applyTextStyle(mergedTextStyle(NewMeasureContext(r.pdf, r.contentWidth()).DefaultStyle, block.Style))
 			r.pdf.CellFormat(markerWidth, 5, marker, "", 0, "R", false, 0, "")
-			r.pdf.SetXY(x+markerWidth+2, y)
+			itemX := x + markerWidth + 2
+			r.pdf.SetXY(itemX, y)
 			itemWidth := r.contentWidth() - markerWidth - 2
-			oldRight := r.pdf.rMargin
+			oldLeft, oldRight := r.pdf.lMargin, r.pdf.rMargin
+			r.pdf.lMargin = itemX
 			r.pdf.rMargin = r.pdf.w - r.pdf.GetX() - itemWidth
 			r.renderBlocks(item.Blocks)
-			r.pdf.rMargin = oldRight
+			r.pdf.lMargin, r.pdf.rMargin = oldLeft, oldRight
 			r.pdf.SetX(r.pdf.lMargin)
 		}
 	})
@@ -282,8 +284,10 @@ func (r *documentRenderer) renderTableRow(row TableRow, widths []float64) {
 
 func (r *documentRenderer) renderTableCell(cell TableCell, x, y, wd, ht float64) {
 	r.pdf.Rect(x, y, wd, ht, "D")
-	r.pdf.SetXY(x+1, y+1)
-	oldRight := r.pdf.rMargin
+	cellX := x + 1
+	r.pdf.SetXY(cellX, y+1)
+	oldLeft, oldRight := r.pdf.lMargin, r.pdf.rMargin
+	r.pdf.lMargin = cellX
 	r.pdf.rMargin = r.pdf.w - x - wd + 1
 	if len(cell.Blocks) == 0 {
 		r.applyTextStyle(cell.Style)
@@ -291,7 +295,7 @@ func (r *documentRenderer) renderTableCell(cell TableCell, x, y, wd, ht float64)
 	} else {
 		r.renderBlocks(cell.Blocks)
 	}
-	r.pdf.rMargin = oldRight
+	r.pdf.lMargin, r.pdf.rMargin = oldLeft, oldRight
 }
 
 func (r *documentRenderer) renderImage(block ImageBlock) {
@@ -432,7 +436,9 @@ func (r *documentRenderer) renderQRVerification(block QRVerificationBlock) {
 }
 
 func (r *documentRenderer) renderBox(box BoxStyle, render func()) {
-	r.pdf.Ln(box.Margin.Top)
+	if box.Margin.Top > 0 {
+		r.pdf.Ln(box.Margin.Top)
+	}
 	x, y := r.pdf.GetXY()
 	wd := r.contentWidth()
 	if box.BackgroundColor.Set {
@@ -495,7 +501,7 @@ func listMarker(block ListBlock, index int) string {
 	if block.Ordered {
 		return strconv.Itoa(index+1) + "."
 	}
-	return "•"
+	return "-"
 }
 
 func documentParagraphBox(box BoxStyle) BoxStyle {
