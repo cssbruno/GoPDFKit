@@ -186,7 +186,11 @@ func documentNew(orientationStr, unitStr, sizeStr, fontDirStr string, size Size)
 // options. It is an alternative to New when the default page size must be set by
 // width and height instead of a named page size.
 func NewWithOptions(options Options) (f *Document) {
-	return documentNew(options.OrientationStr, options.UnitStr, options.SizeStr, options.FontDirStr, options.Size)
+	f = documentNew(options.OrientationStr, options.UnitStr, options.SizeStr, options.FontDirStr, options.Size)
+	if f.err == nil && options.Optimize {
+		f.SetCompressionLevel(zlib.BestCompression)
+	}
+	return f
 }
 
 // New returns a new Document instance. Its methods are subsequently called to

@@ -104,13 +104,15 @@ func (p Point) XY() (float64, float64) {
 // OrientationStr, UnitStr, SizeStr, and FontDirStr correspond to the arguments
 // accepted by New. If the Wd and Ht fields of Size are each greater than
 // zero, Size will be used to set the default page size rather than SizeStr. Wd
-// and Ht are specified in the units of measure indicated by UnitStr.
+// and Ht are specified in the units of measure indicated by UnitStr. Optimize
+// enables best-compression generation defaults for page and template streams.
 type Options struct {
 	OrientationStr string // Default page orientation.
 	UnitStr        string // Document unit of measure.
 	SizeStr        string // Named page size.
 	Size           Size   // Explicit page size override.
 	FontDirStr     string // Font resource directory.
+	Optimize       bool   // Use best-compression generation defaults.
 }
 
 // PageBox defines the coordinates and extent of a PDF page box.
