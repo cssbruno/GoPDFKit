@@ -4,7 +4,7 @@
 [![MIT licensed][badge-mit]][license]
 [![GoDoc][badge-doc]][godoc]
 
-![][logo]
+<img src="https://raw.githubusercontent.com/cssbruno/gopdfkit/master/assets/static/image/gopher_pdf.png" alt="GoPDFKit gopher" width="160">
 
 GoPDFKit is an MIT-licensed Go library for generating PDFs directly from Go
 code. It keeps an FPDF-style API for familiar page/text/drawing workflows, with
@@ -285,5 +285,4 @@ Dave Barnes, Brigham Thompson, Joe Westcott, and Benoit KUGLER.
 [fpdf-site]: http://www.fpdf.org/
 [godoc]: https://pkg.go.dev/github.com/cssbruno/gopdfkit
 [license]: https://raw.githubusercontent.com/cssbruno/gopdfkit/master/LICENSE
-[logo]: https://raw.githubusercontent.com/cssbruno/gopdfkit/master/assets/static/image/gopher_pdf.png
 [pdf-html-subset]: doc/pdf-html-subset.md
