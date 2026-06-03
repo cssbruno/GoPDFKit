@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: Document                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package document_test
 
@@ -24,7 +20,7 @@ import (
 
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/font"
-	"github.com/cssbruno/gopdfkit/testsupport/example"
+	"github.com/cssbruno/gopdfkit/internal/testsupport/example"
 )
 
 type closeErrorWriter struct {
@@ -57,13 +53,6 @@ func cleanup() {
 			}
 			return nil
 		})
-}
-
-func TestDocumentImplementPdf(t *testing.T) {
-	// this will not compile if Document and Tpl
-	// do not implement Pdf
-	var _ document.Pdf = (*document.Document)(nil)
-	var _ document.Pdf = (*document.Tpl)(nil)
 }
 
 // TestPagedTemplate ensures new paged templates work
@@ -1886,7 +1875,7 @@ func ExampleDocument_ClipText() {
 
 // ExampleDocument_PageSize generates a PDF document with various page sizes.
 func ExampleDocument_PageSize() {
-	pdf := document.NewCustom(&document.InitType{
+	pdf := document.NewWithOptions(document.Options{
 		UnitStr:    "in",
 		Size:       document.Size{Wd: 6, Ht: 6},
 		FontDirStr: example.FontDir(),
@@ -1896,7 +1885,7 @@ func ExampleDocument_PageSize() {
 	pdf.AddPageFormat("L", document.Size{Wd: 3, Ht: 12})
 	pdf.SetXY(0.5, 1.5)
 	pdf.CellFormat(11, 0.2, "12 in x 3 in", "", 0, "C", false, 0, "")
-	pdf.AddPage() // Default size established in NewCustom()
+	pdf.AddPage() // Default size established in NewWithOptions()
 	pdf.SetXY(0.5, 3)
 	pdf.CellFormat(5, 0.2, "6 in x 6 in", "", 0, "C", false, 0, "")
 	pdf.AddPageFormat("P", document.Size{Wd: 3, Ht: 12})

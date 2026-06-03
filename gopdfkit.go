@@ -8,33 +8,15 @@ import "github.com/cssbruno/gopdfkit/document"
 // Document is the high-level PDF document API exposed by the document package.
 type Document = document.Document
 
-// InitType customizes a new Document.
-type InitType = document.InitType
+// Options customizes a new Document.
+type Options = document.Options
 
-// New returns a new PDF document. With no arguments it uses the document
-// package defaults. The four-argument form preserves the legacy convenience
-// facade while the implementation lives in document.New.
-func New(args ...string) *Document {
-	if len(args) == 0 {
-		return document.New("", "", "", "")
-	}
-	orientation, unit, size, fontDir := "", "", "", ""
-	if len(args) > 0 {
-		orientation = args[0]
-	}
-	if len(args) > 1 {
-		unit = args[1]
-	}
-	if len(args) > 2 {
-		size = args[2]
-	}
-	if len(args) > 3 {
-		fontDir = args[3]
-	}
-	return document.New(orientation, unit, size, fontDir)
+// New returns a new PDF document using the document package defaults.
+func New() *Document {
+	return document.New("", "", "", "")
 }
 
-// NewCustom returns a new PDF document using the document package initializer.
-func NewCustom(init *InitType) *Document {
-	return document.NewCustom(init)
+// NewWithOptions returns a new PDF document using explicit construction options.
+func NewWithOptions(options Options) *Document {
+	return document.NewWithOptions(options)
 }

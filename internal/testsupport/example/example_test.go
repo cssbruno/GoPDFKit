@@ -6,7 +6,7 @@ package example_test
 import (
 	"errors"
 
-	"github.com/cssbruno/gopdfkit/testsupport/example"
+	"github.com/cssbruno/gopdfkit/internal/testsupport/example"
 )
 
 // ExampleFilename demonstrates Filename and Summary error output.

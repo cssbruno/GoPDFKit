@@ -182,12 +182,11 @@ func documentNew(orientationStr, unitStr, sizeStr, fontDirStr string, size Size)
 	return
 }
 
-// NewCustom returns a new Document instance. Its methods are subsequently called
-// to produce a single PDF document. NewCustom is an alternative to New that
-// provides additional customization. The PageSize example demonstrates this
-// method.
-func NewCustom(init *InitType) (f *Document) {
-	return documentNew(init.OrientationStr, init.UnitStr, init.SizeStr, init.FontDirStr, init.Size)
+// NewWithOptions returns a new Document instance using explicit construction
+// options. It is an alternative to New when the default page size must be set by
+// width and height instead of a named page size.
+func NewWithOptions(options Options) (f *Document) {
+	return documentNew(options.OrientationStr, options.UnitStr, options.SizeStr, options.FontDirStr, options.Size)
 }
 
 // New returns a new Document instance. Its methods are subsequently called to

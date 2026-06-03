@@ -16,7 +16,7 @@ import (
 
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/font"
-	"github.com/cssbruno/gopdfkit/testsupport/example"
+	"github.com/cssbruno/gopdfkit/internal/testsupport/example"
 )
 
 func ExampleParseTTF() {

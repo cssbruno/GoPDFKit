@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/compare"
+	"github.com/cssbruno/gopdfkit/internal/testpdf"
 )
 
 func TestSecurityMalformedUTF8DoesNotPanic(t *testing.T) {
@@ -218,10 +218,10 @@ func TestSecurityMalformedFontReaderReturnsError(t *testing.T) {
 }
 
 func TestSecurityCompareHelpers(t *testing.T) {
-	if err := compare.ComparePDFs(bytes.NewReader([]byte("same")), bytes.NewReader([]byte("same")), false); err != nil {
+	if err := testpdf.ComparePDFs(bytes.NewReader([]byte("same")), bytes.NewReader([]byte("same")), false); err != nil {
 		t.Fatalf("ComparePDFs() error = %v", err)
 	}
-	if err := compare.CompareBytes([]byte("a"), []byte("ab"), false); err == nil {
+	if err := testpdf.CompareBytes([]byte("a"), []byte("ab"), false); err == nil {
 		t.Fatal("CompareBytes() accepted different lengths")
 	}
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
-// Package importpdf will own importing pages and templates from existing PDFs.
+// Package importpdf provides helpers for importing pages from existing PDFs.
 package importpdf

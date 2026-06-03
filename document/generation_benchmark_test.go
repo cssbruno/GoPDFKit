@@ -1,9 +1,5 @@
-/****************************************************************************
- * Software: Document                                                         *
- * License:  MIT License                                                    *
- *                                                                          *
- * Copyright (c) 2026 cssBruno                                              *
- ****************************************************************************/
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
 
 package document_test
 
@@ -16,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/testsupport/example"
+	"github.com/cssbruno/gopdfkit/internal/testsupport/example"
 )
 
 func benchmarkGeneratedPDF(b *testing.B, build func(*document.Document)) {

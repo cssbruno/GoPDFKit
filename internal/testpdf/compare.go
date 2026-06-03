@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
-package compare
+package testpdf
 
 import (
 	"bytes"

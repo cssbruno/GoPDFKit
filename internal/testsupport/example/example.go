@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
-// Package example provides helpers for deterministic example PDF generation.
+// Package example provides internal helpers for deterministic example PDF generation.
 package example
 
 import (
@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/cssbruno/gopdfkit/compare"
 	"github.com/cssbruno/gopdfkit/document"
+	"github.com/cssbruno/gopdfkit/internal/testpdf"
 )
 
 var gopdfkitDir string
@@ -101,7 +101,7 @@ func referenceCompare(fileStr string) (err error) {
 	err = os.MkdirAll(refDirStr, 0o750)
 	if err == nil {
 		refFileStr = filepath.Join(refDirStr, baseFileStr)
-		err = compare.ComparePDFFiles(fileStr, refFileStr, false)
+		err = testpdf.ComparePDFFiles(fileStr, refFileStr, false)
 	}
 	return
 }

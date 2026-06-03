@@ -392,7 +392,7 @@ func TestHTMLWriteTableCellBorderAndBackground(t *testing.T) {
 }
 
 func TestHTMLWriteTableRepeatsHeaderRowsAcrossPages(t *testing.T) {
-	pdf := document.NewCustom(&document.InitType{
+	pdf := document.NewWithOptions(document.Options{
 		UnitStr: "mm",
 		Size:    document.Size{Wd: 80, Ht: 70},
 	})

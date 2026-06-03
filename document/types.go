@@ -100,12 +100,12 @@ func (p Point) XY() (float64, float64) {
 	return p.X, p.Y
 }
 
-// InitType is used with NewCustom to customize a Document instance.
+// Options is used with NewWithOptions to customize a Document instance.
 // OrientationStr, UnitStr, SizeStr, and FontDirStr correspond to the arguments
 // accepted by New. If the Wd and Ht fields of Size are each greater than
 // zero, Size will be used to set the default page size rather than SizeStr. Wd
 // and Ht are specified in the units of measure indicated by UnitStr.
-type InitType struct {
+type Options struct {
 	OrientationStr string // Default page orientation.
 	UnitStr        string // Document unit of measure.
 	SizeStr        string // Named page size.

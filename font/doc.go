@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
-// Package font will own font parsing, loading, metrics, and embedding APIs.
+// Package font provides font parsing, metrics, and font definition generation APIs.
 package font
