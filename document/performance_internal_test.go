@@ -10,6 +10,7 @@ import (
 	"image/color"
 	"image/png"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -38,12 +39,26 @@ func BenchmarkPerfReplaceAliasesManyPages(b *testing.B) {
 	}
 }
 
+func BenchmarkPerfReplaceAliasesNoMatchesManyPages(b *testing.B) {
+	const pages = 50
+	const aliases = 20
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		pdf := benchmarkNoMatchAliasPDF(pages, aliases)
+		b.StartTimer()
+
+		pdf.replaceAliases()
+	}
+}
+
 func benchmarkAliasPDF(pages, aliases int) *Document {
 	pdf := New("P", "mm", "A4", "")
 	pdf.SetCompression(false)
 	pdf.SetFont("Helvetica", "", 10)
 	for i := 0; i < aliases; i++ {
-		pdf.RegisterAlias(fmt.Sprintf("{mark %d}", i), fmt.Sprintf("%d", i+1))
+		pdf.RegisterAlias(fmt.Sprintf("{mark %d}", i), strconv.Itoa(i+1))
 	}
 	for page := 0; page < pages; page++ {
 		pdf.AddPage()
@@ -51,6 +66,23 @@ func benchmarkAliasPDF(pages, aliases int) *Document {
 			for i := 0; i < aliases; i++ {
 				pdf.Cell(8, 4, fmt.Sprintf("{mark %d}", i))
 			}
+			pdf.Ln(4)
+		}
+	}
+	return pdf
+}
+
+func benchmarkNoMatchAliasPDF(pages, aliases int) *Document {
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.SetFont("Helvetica", "", 10)
+	for i := 0; i < aliases; i++ {
+		pdf.RegisterAlias(fmt.Sprintf("{mark %d}", i), strconv.Itoa(i+1))
+	}
+	for page := 0; page < pages; page++ {
+		pdf.AddPage()
+		for row := 0; row < 40; row++ {
+			pdf.Cell(80, 4, "plain report row without page markers")
 			pdf.Ln(4)
 		}
 	}
@@ -94,7 +126,7 @@ func benchmarkAlphaPNG(tb testing.TB, width, height int) []byte {
 }
 
 func BenchmarkPerfAddUTF8FontFromCache(b *testing.B) {
-	fontBytes, err := os.ReadFile("assets/static/font/DejaVuSansCondensed.ttf")
+	fontBytes, err := os.ReadFile("../assets/static/font/DejaVuSansCondensed.ttf")
 	if err != nil {
 		b.Fatalf("ReadFile() error = %v", err)
 	}

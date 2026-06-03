@@ -4,6 +4,7 @@
 package document
 
 import (
+	"bytes"
 	"strings"
 )
 
@@ -13,12 +14,17 @@ func (f *Document) replaceAliases() {
 	}
 	rawPairs := make([]string, 0, len(f.aliasMap)*2)
 	utf16Pairs := make([]string, 0, len(f.aliasMap)*2)
+	rawNeedles := make([][]byte, 0, len(f.aliasMap))
+	utf16Needles := make([][]byte, 0, len(f.aliasMap))
 	for alias, replacement := range f.aliasMap {
 		if alias == "" {
 			continue
 		}
 		rawPairs = append(rawPairs, alias, f.escape(replacement))
-		utf16Pairs = append(utf16Pairs, utf8toutf16(alias, false), f.escape(utf8toutf16(replacement, false)))
+		rawNeedles = append(rawNeedles, []byte(alias))
+		utf16Alias := utf8toutf16(alias, false)
+		utf16Pairs = append(utf16Pairs, utf16Alias, f.escape(utf8toutf16(replacement, false)))
+		utf16Needles = append(utf16Needles, []byte(utf16Alias))
 	}
 	if len(rawPairs) == 0 {
 		return
@@ -26,6 +32,10 @@ func (f *Document) replaceAliases() {
 	rawReplacer := strings.NewReplacer(rawPairs...)
 	utf16Replacer := strings.NewReplacer(utf16Pairs...)
 	for n := 1; n <= f.page; n++ {
+		pageBytes := f.pages[n].Bytes()
+		if !containsAnyBytes(pageBytes, rawNeedles) && !containsAnyBytes(pageBytes, utf16Needles) {
+			continue
+		}
 		s := f.pages[n].String()
 		replaced := rawReplacer.Replace(s)
 		replaced = utf16Replacer.Replace(replaced)
@@ -34,6 +44,15 @@ func (f *Document) replaceAliases() {
 			_, _ = f.pages[n].WriteString(replaced)
 		}
 	}
+}
+
+func containsAnyBytes(data []byte, needles [][]byte) bool {
+	for _, needle := range needles {
+		if bytes.Contains(data, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func (f *Document) putpages() {
