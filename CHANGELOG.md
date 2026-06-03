@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.0 - 2026-06-02
+## v0.1.0 - 2026-06-03
 
 Initial cssbruno/gopdfkit release.
 
@@ -10,6 +10,10 @@ Initial cssbruno/gopdfkit release.
 - GitHub Release workflow for tagged releases.
 - Go quality tool commands for `golangci-lint`, `nilaway`, `gosec`, and `govulncheck`.
 - `govulncheck` release gate with Go 1.26.3 toolchain baseline.
+- `document.RenderHTMLTemplate`, `document.HTMLTemplateValues`,
+  `document.HTMLTemplateRaw`, and `document.HTMLTemplateImage` for simple
+  `{{key}}` substitution before HTML rendering.
+- HTML examples for images, generated tables, and template values.
 
 ### Changed
 
@@ -22,6 +26,18 @@ Initial cssbruno/gopdfkit release.
 - Removed deprecated image and template compatibility wrappers from the public API.
 - Removed the oversized exported `document.Pdf` interface.
 - Migrated examples and benchmarks to `ImageOptions`, `RegisterImageOptions`, and `RegisterImageOptionsReader`.
+- Documented the pre-1.0 versioning policy: minor releases for new functions
+  or breaking API changes, patch releases for bug fixes.
+- Reduced the README gopher image size.
+
+### Fixed
+
+- Fixed document-model list and table cell rendering so nested content does not
+  leak margins or overlap later form content.
+- Replaced decorative barcode-like marks in generated examples with real Code
+  39 barcodes.
+- Updated the UTF-8 cut-font example to use the glyphs shown in the generated
+  PDF and stable relative font labels.
 
 ### Known Quality Baseline
 

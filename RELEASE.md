@@ -8,6 +8,15 @@ line starts at `v0.1.0`.
 - Use Go module semver tags: `vMAJOR.MINOR.PATCH`.
 - Keep `VERSION` set to the next tag.
 - Keep `CHANGELOG.md` updated with a matching `## vMAJOR.MINOR.PATCH` section.
+- Until `v1.0.0`, the API is not considered stable and releases may include
+  breaking changes.
+- For the `v0.x` line, bump `MINOR` for new public functions, new public
+  behavior, or breaking API changes. For example, release `v0.2.0` after
+  `v0.1.0`.
+- For the `v0.x` line, bump `PATCH` for bug fixes only. For example, release
+  `v0.1.1` after `v0.1.0`.
+- Do not use patch releases for breaking API changes or new public functions,
+  even before `v1.0.0`.
 
 ## Local Release Commands
 
