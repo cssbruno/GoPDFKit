@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
@@ -37,7 +38,7 @@ func main() {
 	}
 
 	if err := pdf.OutputFileAndClose(outpath.File("four-up-pages.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 

@@ -4,6 +4,8 @@
 package main
 
 import (
+	"log"
+
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
@@ -26,7 +28,7 @@ func main() {
 	drawReportFooter(pdf)
 
 	if err := pdf.OutputFileAndClose(outpath.File("gopdfkit-report.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 

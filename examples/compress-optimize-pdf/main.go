@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/cssbruno/gopdfkit/document"
@@ -55,13 +56,13 @@ func buildReport(optimize bool) []byte {
 
 	var out bytes.Buffer
 	if err := pdf.Output(&out); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	return out.Bytes()
 }
 
 func mustWrite(path string, data []byte) {
 	if err := os.WriteFile(path, data, 0o644); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }

@@ -4,6 +4,7 @@
 package main
 
 import (
+	"log"
 	"os"
 
 	"github.com/cssbruno/gopdfkit"
@@ -14,7 +15,7 @@ import (
 func main() {
 	readme, err := os.ReadFile("README.md")
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	pdf := gopdfkit.New()
@@ -30,6 +31,6 @@ func main() {
 	pdf.MultiCell(0, 7, "This PDF is password-protected and has README.md embedded as a document-level attachment.", "", "L", false)
 
 	if err := pdf.OutputFileAndClose(outpath.File("protection-attachments.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }

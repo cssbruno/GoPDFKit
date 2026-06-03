@@ -5,8 +5,10 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/cssbruno/gopdfkit"
@@ -69,7 +71,7 @@ func newPDF(title string) *gopdfkit.Document {
 
 func save(pdf *gopdfkit.Document, name string) {
 	if err := pdf.OutputFileAndClose(outpath.File(name)); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 
@@ -706,7 +708,7 @@ func generateSVGVector() {
 		<text x="42" y="164" font-size="18" fill="#334455">SVG parsed into PDF</text>
 	</svg>`))
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	pdf.SetXY(18, 58)
 	pdf.SVGWrite(&svg, 0.58)
@@ -999,7 +1001,7 @@ func generateCalendarMonth() {
 			if row == 0 && col < 3 || date > 31 {
 				continue
 			}
-			pdf.Text(x+3, y+6, fmt.Sprintf("%d", date))
+			pdf.Text(x+3, y+6, strconv.Itoa(date))
 			if date == 15 {
 				pdf.SetFillColor(232, 242, 250)
 				pdf.Rect(x+2, y+9, cellW-4, 8, "F")
@@ -1589,7 +1591,7 @@ func drawCode39Barcode(pdf *gopdfkit.Document, x, y, width, height float64, valu
 func mustRead(path string) []byte {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	return data
 }

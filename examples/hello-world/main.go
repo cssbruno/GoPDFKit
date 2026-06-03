@@ -4,6 +4,8 @@
 package main
 
 import (
+	"log"
+
 	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
@@ -15,6 +17,6 @@ func main() {
 	pdf.Cell(40, 10, "Hello from GoPDFKit")
 
 	if err := pdf.OutputFileAndClose(outpath.File("hello-world.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }

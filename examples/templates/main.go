@@ -4,6 +4,8 @@
 package main
 
 import (
+	"log"
+
 	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/assets"
@@ -30,6 +32,6 @@ func main() {
 	}
 
 	if err := pdf.OutputFileAndClose(outpath.File("templates.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }

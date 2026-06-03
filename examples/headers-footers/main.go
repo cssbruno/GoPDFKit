@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
@@ -35,6 +36,6 @@ func main() {
 	}
 
 	if err := pdf.OutputFileAndClose(outpath.File("headers-footers.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }

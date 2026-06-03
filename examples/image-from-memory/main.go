@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"log"
 
 	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/document"
@@ -29,7 +30,7 @@ func main() {
 
 	var pngData bytes.Buffer
 	if err := png.Encode(&pngData, img); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	pdf := gopdfkit.New()
@@ -43,6 +44,6 @@ func main() {
 	pdf.ImageOptions("gradient", 20, 30, 100, 0, false, options, 0, "")
 
 	if err := pdf.OutputFileAndClose(outpath.File("image-from-memory.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }

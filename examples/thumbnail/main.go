@@ -4,6 +4,7 @@
 package main
 
 import (
+	"log"
 	"os"
 
 	"github.com/cssbruno/gopdfkit"
@@ -15,10 +16,8 @@ import (
 func main() {
 	file, err := os.Open(assets.File("image", "logo.png"))
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
-	defer func() { _ = file.Close() }()
-
 	pdf := gopdfkit.New()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "B", 16)
@@ -30,12 +29,15 @@ func main() {
 		MaxHeight: 96,
 		Format:    document.ThumbnailFormatPNG,
 	})
+	if closeErr := file.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	pdf.ImageOptions("logo-thumb", 20, 35, 36, 0, false, document.ImageOptions{ImageType: "png"}, 0, "")
 
 	if err := pdf.OutputFileAndClose(outpath.File("thumbnail.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }

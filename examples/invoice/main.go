@@ -4,6 +4,8 @@
 package main
 
 import (
+	"log"
+
 	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
@@ -60,7 +62,7 @@ func main() {
 	pdf.MultiCell(176, 5, "Payment terms, remittance information, and invoice notes can be rendered as regular wrapped text below the totals.", "", "L", false)
 
 	if err := pdf.OutputFileAndClose(outpath.File("invoice.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 

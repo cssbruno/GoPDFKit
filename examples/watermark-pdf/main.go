@@ -4,6 +4,8 @@
 package main
 
 import (
+	"log"
+
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 	"github.com/cssbruno/gopdfkit/examples/internal/samplepdf"
@@ -23,6 +25,6 @@ func main() {
 	}
 
 	if err := pdf.OutputFileAndClose(outpath.File("watermarked.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }

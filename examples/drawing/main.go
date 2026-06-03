@@ -4,6 +4,7 @@
 package main
 
 import (
+	"log"
 	"math"
 
 	"github.com/cssbruno/gopdfkit"
@@ -36,7 +37,7 @@ func main() {
 	pdf.Text(108, 98, "LinearGradient")
 
 	if err := pdf.OutputFileAndClose(outpath.File("drawing.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 

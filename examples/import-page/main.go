@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"log"
 
 	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/document"
@@ -17,7 +18,7 @@ func main() {
 	pdf := gopdfkit.New()
 	pageID := pdf.ImportPageStream(bytes.NewReader(source), 1, "MediaBox")
 	if pdf.Err() {
-		panic(pdf.Error())
+		log.Fatal(pdf.Error())
 	}
 
 	pdf.AddPage()
@@ -26,7 +27,7 @@ func main() {
 	pdf.UseImportedPage(pageID, 25, 35, 150, 0)
 
 	if err := pdf.OutputFileAndClose(outpath.File("import-page.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 
@@ -41,7 +42,7 @@ func buildSourcePDF() []byte {
 
 	var out bytes.Buffer
 	if err := pdf.Output(&out); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	return out.Bytes()
 }

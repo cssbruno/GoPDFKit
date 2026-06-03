@@ -4,6 +4,8 @@
 package main
 
 import (
+	"log"
+
 	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/assets"
@@ -35,7 +37,7 @@ func main() {
 	pdf.MultiCell(174, 6, "The same ImageOptions API can place registered images on any page. Width or height may be set to zero to preserve aspect ratio.", "", "L", false)
 
 	if err := pdf.OutputFileAndClose(outpath.File("images-on-pages.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 

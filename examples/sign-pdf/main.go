@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"log"
 	"math/big"
 	"time"
 
@@ -36,14 +37,14 @@ func main() {
 		SigningTime:     signingTime,
 	})
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 
 func selfSignedSigner() (*x509.Certificate, crypto.Signer) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -59,11 +60,11 @@ func selfSignedSigner() (*x509.Certificate, crypto.Signer) {
 
 	der, err := x509.CreateCertificate(rand.Reader, template, template, key.Public(), key)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	cert, err := x509.ParseCertificate(der)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	return cert, key
 }

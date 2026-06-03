@@ -4,6 +4,8 @@
 package main
 
 import (
+	"log"
+
 	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
@@ -23,6 +25,6 @@ func main() {
 	pdf.MultiCell(174, 7, "This PDF requires the user password \"reader\" to open. The owner password is \"owner\" and print permission is enabled.", "", "L", false)
 
 	if err := pdf.OutputFileAndClose(outpath.File("protected-password.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }

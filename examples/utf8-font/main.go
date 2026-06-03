@@ -4,6 +4,7 @@
 package main
 
 import (
+	"log"
 	"os"
 
 	"github.com/cssbruno/gopdfkit"
@@ -14,15 +15,15 @@ import (
 func main() {
 	text, err := os.ReadFile(assets.File("text", "utf-8test.txt"))
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	regularFont, err := os.ReadFile(assets.File("font", "DejaVuSansCondensed.ttf"))
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	boldFont, err := os.ReadFile(assets.File("font", "DejaVuSansCondensed-Bold.ttf"))
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	pdf := gopdfkit.New()
@@ -37,6 +38,6 @@ func main() {
 	pdf.MultiCell(170, 6, string(text), "", "L", false)
 
 	if err := pdf.OutputFileAndClose(outpath.File("utf8-font.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }

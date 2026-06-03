@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/cssbruno/gopdfkit"
@@ -77,6 +78,6 @@ func main() {
 	`)
 
 	if err := pdf.OutputFileAndClose(outpath.File("html-tables.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }

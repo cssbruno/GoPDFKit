@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"path/filepath"
 
 	"github.com/cssbruno/gopdfkit"
@@ -58,6 +59,6 @@ func main() {
 	`, imagePath))
 
 	if err := pdf.OutputFileAndClose(outpath.File("html-images.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }

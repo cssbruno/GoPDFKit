@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"log"
 
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
@@ -15,7 +16,7 @@ func main() {
 	source := samplepdf.Build("Rotate Source", 3)
 	sizes, err := document.GetPageSizes(source)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	pdf := document.New("P", "pt", "A4", "")
@@ -32,6 +33,6 @@ func main() {
 	}
 
 	if err := pdf.OutputFileAndClose(outpath.File("rotated-pages.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }

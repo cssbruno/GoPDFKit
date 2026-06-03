@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"log"
 
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
@@ -20,7 +21,7 @@ func main() {
 	split.AddPage()
 	split.UseImportedPage(page2, 0, 0, 0, 0)
 	if err := split.OutputFileAndClose(outpath.File("split-page-2.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	reordered := document.New("P", "pt", "A4", "")
@@ -31,7 +32,7 @@ func main() {
 		reordered.UseImportedPage(id, 0, 0, 0, 0)
 	}
 	if err := reordered.OutputFileAndClose(outpath.File("reordered-pages.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 

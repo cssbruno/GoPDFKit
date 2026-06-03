@@ -4,6 +4,7 @@
 package main
 
 import (
+	"log"
 	"path/filepath"
 
 	"github.com/cssbruno/gopdfkit"
@@ -46,7 +47,7 @@ func main() {
 		},
 	})
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	pdf := gopdfkit.New()
@@ -60,6 +61,6 @@ func main() {
 	html.Write(6, fragment)
 
 	if err := pdf.OutputFileAndClose(outpath.File("html-template.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }

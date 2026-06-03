@@ -4,6 +4,8 @@
 package main
 
 import (
+	"log"
+
 	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
@@ -64,7 +66,7 @@ func main() {
 	pdf.Text(16, 281, "GoPDFKit example - assets/generated/pdf/examples/structured-report.pdf")
 
 	if err := pdf.OutputFileAndClose(outpath.File("structured-report.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 

@@ -4,6 +4,8 @@
 package main
 
 import (
+	"log"
+
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 	"github.com/cssbruno/gopdfkit/examples/internal/samplepdf"
@@ -21,7 +23,7 @@ func main() {
 	appendPages(pdf, second)
 
 	if err := pdf.OutputFileAndClose(outpath.File("merged-pages.pdf")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 
