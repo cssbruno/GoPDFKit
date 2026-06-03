@@ -173,6 +173,11 @@ vertical alignment, whitespace handling, simple colors, backgrounds, borders,
 border radius, simple box shadows, padding, margins, table/image dimensions,
 image fit modes, list marker style, and basic page-break controls.
 
+Use `document.RenderHTMLTemplate` when HTML fragments need `{{key}}`
+substitution. Plain values are escaped, `document.HTMLTemplateRaw` inserts
+trusted HTML, and `document.HTMLTemplateImage` inserts an `<img>` tag that can
+be sized and spaced with supported HTML/CSS.
+
 See [`doc/pdf-html-subset.md`][pdf-html-subset] for the full contract.
 
 ## Fonts

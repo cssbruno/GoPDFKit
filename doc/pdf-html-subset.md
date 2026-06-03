@@ -4,6 +4,13 @@ This document defines the HTML/CSS subset rendered by `HTMLNew()` into PDF
 drawing operations. It is a PDF-focused rich-text renderer, not a browser
 engine. Inputs should be normalized to this contract before rendering.
 
+For simple fragment templating, `document.RenderHTMLTemplate` replaces
+`{{key}}` placeholders before rendering. Plain values are HTML-escaped,
+`document.HTMLTemplateRaw` inserts trusted HTML, and
+`document.HTMLTemplateImage` inserts an `<img>` tag with supported attributes
+and CSS such as `width`, `height`, `max-width`, `max-height`, `object-fit`, and
+`margin`.
+
 ## HTML Render Support Table
 
 Use this table as the quick checklist for HTML passed to `HTMLNew().Write()`.

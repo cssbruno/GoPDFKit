@@ -219,7 +219,14 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 			return
 		}
 		blockBreak()
-		availableWd := html.pdf.w - html.pdf.rMargin - html.pdf.GetX()
+		margin := htmlBoxEdgesFromDeclarations(html.styleDeclarations(attrs), "margin", html.pdf, html.pdf.w-html.pdf.lMargin-html.pdf.rMargin)
+		if margin.top > 0 {
+			html.pdf.Ln(margin.top)
+		}
+		availableWd := html.pdf.w - html.pdf.rMargin - html.pdf.GetX() - margin.left - margin.right
+		if availableWd < 0 {
+			availableWd = 0
+		}
 		pageHt := html.pdf.h - html.pdf.bMargin - html.pdf.GetY()
 		wd, _ := parseHTMLBoxLength(firstNonEmpty(html.styleValue(attrs, "width"), attrs["width"]), html.pdf, availableWd)
 		ht, _ := parseHTMLBoxLength(firstNonEmpty(html.styleValue(attrs, "height"), attrs["height"]), html.pdf, pageHt)
@@ -258,7 +265,7 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 		}
 		fit := html.imageObjectFit(attrs)
 		drawX, drawY, drawWd, drawHt, flowWd, flowHt := htmlImageFitBox(info, html.pdf, wd, ht, boxWd, boxHt, fit)
-		x := html.pdf.GetX()
+		x := html.pdf.GetX() + margin.left
 		switch html.imageAlign(attrs, st.align) {
 		case "C":
 			x += htmlMaxFloat((availableWd-flowWd)/2, 0)
@@ -281,8 +288,8 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 			if st.href != "" {
 				html.pdf.newLink(x, y, flowWd, flowHt, 0, st.href)
 			}
-			html.pdf.SetY(y + flowHt)
-			html.pdf.SetX(x)
+			html.pdf.SetY(y + flowHt + margin.bottom)
+			html.pdf.SetX(html.pdf.lMargin)
 			return
 		}
 		if fit == "contain" {
@@ -299,11 +306,14 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 			if st.href != "" {
 				html.pdf.newLink(x, y, flowWd, flowHt, 0, st.href)
 			}
-			html.pdf.SetY(y + flowHt)
-			html.pdf.SetX(x)
+			html.pdf.SetY(y + flowHt + margin.bottom)
+			html.pdf.SetX(html.pdf.lMargin)
 			return
 		}
 		html.pdf.imageOut(info, x+drawX, 0, drawWd, drawHt, options.AllowNegativePosition, true, 0, st.href)
+		if margin.bottom > 0 {
+			html.pdf.Ln(margin.bottom)
+		}
 	}
 	tokens := htmlTokenize(htmlStr, make(map[string]map[string]string))
 	if message := htmlElementDepthMessage(tokens, html.maxElementDepth()); message != "" {

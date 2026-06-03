@@ -83,6 +83,11 @@ and static forms. Supported CSS maps to PDF operations for text, colors,
 spacing, borders, border radius, backgrounds, simple box shadows, line height,
 page breaks, and table layout. It is not a browser engine.
 
+Use document.RenderHTMLTemplate for simple {{key}} substitution before
+rendering HTML. Plain values are escaped, HTMLTemplateRaw inserts trusted HTML,
+and HTMLTemplateImage inserts an img tag that can be sized and spaced with
+supported HTML/CSS.
+
 See doc/pdf-html-subset.md for the full renderer contract.
 
 # Errors

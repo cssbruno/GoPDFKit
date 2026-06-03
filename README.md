@@ -110,7 +110,11 @@ Runnable examples live under [`examples/`][examples]. They write PDFs to
 | Table report | `go run ./examples/table-report` | `gopdfkit-tables.pdf` |
 | Invoice | `go run ./examples/invoice` | `invoice.pdf` |
 | Styled paragraphs | `go run ./examples/styled-paragraphs` | `styled-paragraphs.pdf` |
+| HTML fragment | `go run ./examples/html-fragment` | `html-fragment.pdf` |
 | HTML CSS styles | `go run ./examples/html-css-styles` | `html-css-styles.pdf` |
+| HTML images and SVG | `go run ./examples/html-images` | `html-images.pdf` |
+| HTML tables | `go run ./examples/html-tables` | `html-tables.pdf` |
+| HTML template values | `go run ./examples/html-template` | `html-template.pdf` |
 | Manual pagination | `go run ./examples/pagination-table` | `pagination-table.pdf` |
 | Document pagination | `go run ./examples/pagination-document` | `pagination-document.pdf` |
 | Images | `go run ./examples/add-images-to-pages` | `images-on-pages.pdf` |
@@ -172,6 +176,11 @@ Supported CSS is deliberately small: text styling, line height, alignment,
 vertical alignment, whitespace handling, simple colors, backgrounds, borders,
 border radius, simple box shadows, padding, margins, table/image dimensions,
 image fit modes, list marker style, and basic page-break controls.
+
+Use `document.RenderHTMLTemplate` when HTML fragments need `{{key}}`
+substitution. Plain values are escaped, `document.HTMLTemplateRaw` inserts
+trusted HTML, and `document.HTMLTemplateImage` inserts an `<img>` tag that can
+be sized and spaced with supported HTML/CSS.
 
 See [`doc/pdf-html-subset.md`][pdf-html-subset] for the full contract.
 
