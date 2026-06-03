@@ -15,35 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cssbruno/gopdfkit/barcode"
 	"github.com/cssbruno/gopdfkit/sign"
 )
-
-func TestRootBarcodeIntegration(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
-	pdf.AddPage()
-
-	key, err := barcode.QR("https://example.test/verify", barcode.High, barcode.Unicode)
-	if err != nil {
-		t.Fatalf("barcode.QR() error = %v", err)
-	}
-	if key == "" {
-		t.Fatal("barcode.QR() key is empty")
-	}
-	width, height := pdf.GetUnscaledBarcodeDimensions(key)
-	if width <= 0 || height <= 0 {
-		t.Fatalf("GetUnscaledBarcodeDimensions() = %v, %v; want positive dimensions", width, height)
-	}
-	pdf.Barcode(key, 10, 10, 24, 24, false)
-
-	var output bytes.Buffer
-	if err := pdf.Output(&output); err != nil {
-		t.Fatalf("Output() error = %v", err)
-	}
-	if !bytes.Contains(output.Bytes(), []byte("/Subtype /Image")) {
-		t.Fatal("barcode output did not embed an image")
-	}
-}
 
 func TestOutputSignedIntegration(t *testing.T) {
 	cert, signer := rootTestSigner(t)

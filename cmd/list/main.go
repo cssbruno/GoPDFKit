@@ -53,14 +53,8 @@ func main() {
 				ok, showStr = matchHead(name, "Document ")
 				if ok {
 					fmt.Printf("[%s](%s)\n", showStr, path)
-				} else {
-					for _, prefix := range []string{"barcode ", "thumb "} {
-						ok, showStr = matchHead(name, prefix)
-						if ok {
-							fmt.Printf("[%s](%s)\n", showStr, path)
-							break
-						}
-					}
+				} else if ok, showStr = matchHead(name, "thumb "); ok {
+					fmt.Printf("[%s](%s)\n", showStr, path)
 				}
 			}
 		}
