@@ -5,6 +5,7 @@ package document
 
 import (
 	"bytes"
+	"sort"
 	"strings"
 )
 
@@ -12,38 +13,49 @@ func (f *Document) replaceAliases() {
 	if len(f.aliasMap) == 0 {
 		return
 	}
-	rawPairs := make([]string, 0, len(f.aliasMap)*2)
-	utf16Pairs := make([]string, 0, len(f.aliasMap)*2)
-	rawNeedles := make([][]byte, 0, len(f.aliasMap))
-	utf16Needles := make([][]byte, 0, len(f.aliasMap))
+	aliases := make([]aliasReplacement, 0, len(f.aliasMap))
 	for alias, replacement := range f.aliasMap {
 		if alias == "" {
 			continue
 		}
-		rawPairs = append(rawPairs, alias, f.escape(replacement))
-		rawNeedles = append(rawNeedles, []byte(alias))
-		utf16Alias := utf8toutf16(alias, false)
-		utf16Pairs = append(utf16Pairs, utf16Alias, f.escape(utf8toutf16(replacement, false)))
-		utf16Needles = append(utf16Needles, []byte(utf16Alias))
+		aliases = append(aliases, aliasReplacement{alias: alias, replacement: replacement})
 	}
-	if len(rawPairs) == 0 {
+	if len(aliases) == 0 {
 		return
 	}
-	rawReplacer := strings.NewReplacer(rawPairs...)
-	utf16Replacer := strings.NewReplacer(utf16Pairs...)
+	sort.Slice(aliases, func(i, j int) bool {
+		if len(aliases[i].alias) == len(aliases[j].alias) {
+			return aliases[i].alias < aliases[j].alias
+		}
+		return len(aliases[i].alias) > len(aliases[j].alias)
+	})
+	pairs := make([]string, 0, len(aliases)*4)
+	needles := make([][]byte, 0, len(aliases)*2)
+	for _, alias := range aliases {
+		pairs = append(pairs, alias.alias, f.escape(alias.replacement))
+		needles = append(needles, []byte(alias.alias))
+		utf16Alias := utf8toutf16(alias.alias, false)
+		pairs = append(pairs, utf16Alias, f.escape(utf8toutf16(alias.replacement, false)))
+		needles = append(needles, []byte(utf16Alias))
+	}
+	replacer := strings.NewReplacer(pairs...)
 	for n := 1; n <= f.page; n++ {
 		pageBytes := f.pages[n].Bytes()
-		if !containsAnyBytes(pageBytes, rawNeedles) && !containsAnyBytes(pageBytes, utf16Needles) {
+		if !containsAnyBytes(pageBytes, needles) {
 			continue
 		}
 		s := f.pages[n].String()
-		replaced := rawReplacer.Replace(s)
-		replaced = utf16Replacer.Replace(replaced)
+		replaced := replacer.Replace(s)
 		if replaced != s {
 			f.pages[n].Truncate(0)
 			_, _ = f.pages[n].WriteString(replaced)
 		}
 	}
+}
+
+type aliasReplacement struct {
+	alias       string
+	replacement string
 }
 
 func containsAnyBytes(data []byte, needles [][]byte) bool {
