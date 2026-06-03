@@ -37,6 +37,16 @@ func main() {
 	generateSVGVector()
 	generateCompressionVariants()
 	generateColumnsLayout()
+	generateCertificateAward()
+	generateShippingLabel()
+	generateReceiptRoll()
+	generateResumeCV()
+	generateFinancialStatement()
+	generateProjectProposal()
+	generateCalendarMonth()
+	generateEventTicket()
+	generateMeetingMinutes()
+	generateLabelSheet()
 }
 
 func newPDF(title string) *gopdfkit.Document {
@@ -746,6 +756,331 @@ func generateColumnsLayout() {
 	save(pdf, "columns-layout.pdf")
 }
 
+func generateCertificateAward() {
+	pdf := newPDF("Certificate Award")
+	pdf.AddPageFormat("L", document.Size{Wd: 297, Ht: 210})
+	pdf.SetDrawColor(35, 70, 120)
+	pdf.SetLineWidth(1.4)
+	pdf.Rect(12, 12, 273, 186, "D")
+	pdf.SetLineWidth(0.4)
+	pdf.Rect(18, 18, 261, 174, "D")
+
+	pdf.SetFont("Times", "B", 30)
+	pdf.SetTextColor(35, 70, 120)
+	pdf.SetXY(20, 42)
+	pdf.CellFormat(257, 16, "Certificate of Completion", "", 1, "C", false, 0, "")
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.SetTextColor(70, 80, 90)
+	pdf.SetXY(20, 70)
+	pdf.CellFormat(257, 8, "Presented to", "", 1, "C", false, 0, "")
+	pdf.SetFont("Times", "BI", 28)
+	pdf.SetTextColor(30, 40, 50)
+	pdf.SetXY(20, 90)
+	pdf.CellFormat(257, 15, "Alex Morgan", "", 1, "C", false, 0, "")
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.SetXY(48, 122)
+	pdf.MultiCell(201, 7, "For successfully completing the GoPDFKit document generation course and demonstrating practical PDF rendering workflows.", "", "C", false)
+	pdf.Line(58, 170, 118, 170)
+	pdf.Line(180, 170, 240, 170)
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.Text(75, 177, "Instructor")
+	pdf.Text(199, 177, "Date")
+
+	save(pdf, "certificate-award.pdf")
+}
+
+func generateShippingLabel() {
+	pdf := gopdfkit.NewWithOptions(gopdfkit.Options{UnitStr: "mm", Size: document.Size{Wd: 102, Ht: 152}})
+	pdf.SetTitle("Shipping Label", false)
+	pdf.SetCreator("examples/rendering-gallery", false)
+	pdf.AddPage()
+	pdf.SetLineWidth(0.6)
+	pdf.Rect(4, 4, 94, 144, "D")
+	pdf.SetFont("Helvetica", "B", 18)
+	pdf.SetXY(8, 10)
+	pdf.CellFormat(86, 10, "PRIORITY", "1", 1, "C", false, 0, "")
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.Text(8, 32, "SHIP TO")
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetXY(8, 38)
+	pdf.MultiCell(86, 6, "Northwind Operations\n22 Market Street\nSeattle, WA 98101", "", "L", false)
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.Text(8, 70, "FROM")
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.SetXY(8, 76)
+	pdf.MultiCell(86, 5, "GoPDFKit Fulfillment\n100 Example Avenue\nAustin, TX 73301", "", "L", false)
+	pdf.SetFont("Courier", "B", 22)
+	for i := 0; i < 14; i++ {
+		x := 10 + float64(i)*6
+		h := 22.0
+		if i%3 == 0 {
+			h = 30
+		}
+		pdf.Rect(x, 108, 2.5, h, "F")
+	}
+	pdf.SetFont("Helvetica", "", 8)
+	pdf.SetXY(8, 140)
+	pdf.CellFormat(86, 5, "TRACKING 9400 1000 0000 2026 0001", "", 0, "C", false, 0, "")
+
+	save(pdf, "shipping-label.pdf")
+}
+
+func generateReceiptRoll() {
+	pdf := gopdfkit.NewWithOptions(gopdfkit.Options{UnitStr: "mm", Size: document.Size{Wd: 80, Ht: 220}})
+	pdf.SetTitle("Receipt Roll", false)
+	pdf.SetCreator("examples/rendering-gallery", false)
+	pdf.AddPage()
+	pdf.SetFont("Courier", "B", 12)
+	pdf.SetXY(5, 10)
+	pdf.CellFormat(70, 6, "GOPDFKIT STORE", "", 1, "C", false, 0, "")
+	pdf.SetFont("Courier", "", 8)
+	pdf.CellFormat(70, 5, "2026-01-01 10:30", "", 1, "C", false, 0, "")
+	pdf.Line(5, 25, 75, 25)
+	items := []struct {
+		Name  string
+		Price string
+	}{
+		{"PDF TEMPLATE", "24.00"},
+		{"REPORT BUNDLE", "18.50"},
+		{"FONT EMBED", "09.75"},
+		{"SUPPORT PLAN", "12.00"},
+		{"TAX", "04.50"},
+	}
+	y := 34.0
+	for _, item := range items {
+		pdf.Text(7, y, item.Name)
+		pdf.Text(58, y, item.Price)
+		y += 8
+	}
+	pdf.Line(5, y, 75, y)
+	pdf.SetFont("Courier", "B", 10)
+	pdf.Text(7, y+10, "TOTAL")
+	pdf.Text(54, y+10, "68.75")
+	pdf.SetFont("Courier", "", 8)
+	pdf.SetXY(5, y+25)
+	pdf.MultiCell(70, 5, "Thank you for testing generated receipt layouts with custom page sizes.", "", "C", false)
+
+	save(pdf, "receipt-roll.pdf")
+}
+
+func generateResumeCV() {
+	pdf := newPDF("Resume CV")
+	pdf.AddPage()
+	pdf.SetFillColor(35, 70, 120)
+	pdf.Rect(0, 0, 62, 297, "F")
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetFont("Helvetica", "B", 18)
+	pdf.Text(10, 24, "Jordan Lee")
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.SetXY(10, 36)
+	pdf.MultiCell(44, 5, "PDF Engineer\njordan@example.test\n+1 555 0100", "", "L", false)
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.Text(10, 76, "Skills")
+	pdf.SetFont("Helvetica", "", 8)
+	pdf.SetXY(10, 84)
+	pdf.MultiCell(44, 5, "Go\nPDF layout\nDocument automation\nTesting\nTypography", "", "L", false)
+
+	pdf.SetTextColor(35, 45, 55)
+	pdf.SetFont("Helvetica", "B", 16)
+	pdf.Text(74, 28, "Profile")
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetXY(74, 36)
+	pdf.MultiCell(116, 6, "Pragmatic engineer focused on deterministic PDF generation, reusable document templates, and maintainable rendering pipelines.", "", "L", false)
+	resumeSection(pdf, 74, 74, "Experience", []string{
+		"Senior PDF Engineer - Document Systems",
+		"Built rendering workflows for reports, forms, labels, and statements.",
+		"Implemented generated fixture PDFs for visual review and regression checks.",
+	})
+	resumeSection(pdf, 74, 132, "Education", []string{
+		"B.S. Computer Science",
+		"Coursework in graphics, document systems, and backend services.",
+	})
+	resumeSection(pdf, 74, 178, "Projects", []string{
+		"GoPDFKit examples gallery",
+		"Generated assets covering typography, tables, images, SVG, and metadata.",
+	})
+
+	save(pdf, "resume-cv.pdf")
+}
+
+func generateFinancialStatement() {
+	pdf := newPDF("Financial Statement")
+	pdf.AddPage()
+	title(pdf, "Financial Statement", "Account summary with transaction ledger")
+	drawField(pdf, 16, 44, "Account", "ACCT-2026-001")
+	drawField(pdf, 84, 44, "Period", "Jan 2026")
+	drawField(pdf, 152, 44, "Balance", "$12,480.44")
+
+	drawHeaderRow(pdf, 16, 88, []float64{30, 78, 34, 34}, []string{"Date", "Description", "Debit", "Credit"})
+	rows := [][]string{
+		{"Jan 02", "Opening balance", "", "$9,950.00"},
+		{"Jan 04", "Subscription revenue", "", "$1,200.00"},
+		{"Jan 08", "Cloud services", "$320.40", ""},
+		{"Jan 12", "Consulting invoice", "", "$1,850.00"},
+		{"Jan 19", "Payment processor", "$199.16", ""},
+	}
+	for i, row := range rows {
+		drawDataRow(pdf, 16, 96+float64(i)*9, []float64{30, 78, 34, 34}, row)
+	}
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.SetXY(118, 158)
+	pdf.CellFormat(38, 8, "Ending Balance", "", 0, "R", false, 0, "")
+	pdf.CellFormat(36, 8, "$12,480.44", "1", 1, "R", false, 0, "")
+
+	save(pdf, "financial-statement.pdf")
+}
+
+func generateProjectProposal() {
+	pdf := newPDF("Project Proposal")
+	pdf.AddPage()
+	title(pdf, "Project Proposal", "Milestones, scope, estimate, and acceptance")
+	pdf.SetFont("Helvetica", "B", 14)
+	pdf.Text(16, 48, "Scope")
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetXY(16, 56)
+	pdf.MultiCell(176, 6, "Build a deterministic PDF generation library with examples, fixtures, documentation, and rendering coverage for common business documents.", "", "L", false)
+
+	pdf.SetFont("Helvetica", "B", 14)
+	pdf.Text(16, 88, "Milestones")
+	drawHeaderRow(pdf, 16, 98, []float64{64, 36, 76}, []string{"Milestone", "Date", "Deliverable"})
+	rows := [][]string{
+		{"Library API cleanup", "Week 1", "Public package surface"},
+		{"Examples and fixtures", "Week 2", "Generated PDF assets"},
+		{"Validation", "Week 3", "Tests and references"},
+	}
+	for i, row := range rows {
+		drawDataRow(pdf, 16, 106+float64(i)*9, []float64{64, 36, 76}, row)
+	}
+
+	pdf.SetFillColor(245, 248, 251)
+	pdf.SetDrawColor(210, 218, 226)
+	pdf.RoundedRect(16, 160, 176, 34, 4, "1234", "DF")
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.Text(22, 174, "Estimated total")
+	pdf.SetFont("Helvetica", "B", 18)
+	pdf.Text(146, 174, "$8,400")
+
+	save(pdf, "project-proposal.pdf")
+}
+
+func generateCalendarMonth() {
+	pdf := newPDF("Calendar Month")
+	pdf.AddPageFormat("L", document.Size{Wd: 297, Ht: 210})
+	pdf.SetFont("Helvetica", "B", 20)
+	pdf.SetTextColor(35, 70, 120)
+	pdf.Text(18, 22, "January 2026")
+	pdf.SetTextColor(0, 0, 0)
+
+	weekdays := []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+	cellW, cellH := 36.5, 22.0
+	startX, startY := 18.0, 36.0
+	pdf.SetFont("Helvetica", "B", 9)
+	for i, day := range weekdays {
+		pdf.SetXY(startX+float64(i)*cellW, startY)
+		pdf.CellFormat(cellW, 8, day, "1", 0, "C", true, 0, "")
+	}
+	pdf.SetFont("Helvetica", "", 9)
+	date := 1
+	for row := 0; row < 5; row++ {
+		for col := 0; col < 7; col++ {
+			x := startX + float64(col)*cellW
+			y := startY + 8 + float64(row)*cellH
+			pdf.Rect(x, y, cellW, cellH, "D")
+			if row == 0 && col < 3 || date > 31 {
+				continue
+			}
+			pdf.Text(x+3, y+6, fmt.Sprintf("%d", date))
+			if date == 15 {
+				pdf.SetFillColor(232, 242, 250)
+				pdf.Rect(x+2, y+9, cellW-4, 8, "F")
+				pdf.Text(x+4, y+15, "Review")
+			}
+			date++
+		}
+	}
+
+	save(pdf, "calendar-month.pdf")
+}
+
+func generateEventTicket() {
+	pdf := gopdfkit.NewWithOptions(gopdfkit.Options{UnitStr: "mm", Size: document.Size{Wd: 180, Ht: 80}})
+	pdf.SetTitle("Event Ticket", false)
+	pdf.SetCreator("examples/rendering-gallery", false)
+	pdf.AddPage()
+	pdf.SetFillColor(35, 70, 120)
+	pdf.Rect(0, 0, 180, 80, "F")
+	pdf.SetFillColor(255, 255, 255)
+	pdf.RoundedRect(8, 8, 164, 64, 5, "1234", "F")
+	pdf.SetFont("Helvetica", "B", 18)
+	pdf.SetTextColor(35, 70, 120)
+	pdf.Text(18, 26, "PDF Summit 2026")
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetTextColor(70, 80, 90)
+	pdf.Text(18, 38, "Seat A12  |  Track: Rendering")
+	pdf.Text(18, 48, "2026-01-01 09:00")
+	for i := 0; i < 12; i++ {
+		x := 120 + float64(i)*3
+		h := 34.0
+		if i%2 == 0 {
+			h = 44
+		}
+		pdf.SetFillColor(35, 70, 120)
+		pdf.Rect(x, 20, 1.5, h, "F")
+	}
+	pdf.SetFont("Helvetica", "", 8)
+	pdf.Text(116, 62, "TICKET-2026-0001")
+
+	save(pdf, "event-ticket.pdf")
+}
+
+func generateMeetingMinutes() {
+	pdf := newPDF("Meeting Minutes")
+	pdf.AddPage()
+	title(pdf, "Meeting Minutes", "Agenda, decisions, action items, and attendees")
+	drawField(pdf, 16, 44, "Date", "2026-01-01")
+	drawField(pdf, 84, 44, "Team", "PDF Services")
+	drawField(pdf, 152, 44, "Owner", "Operations")
+	pdf.SetFont("Helvetica", "B", 13)
+	pdf.Text(16, 84, "Decisions")
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetXY(16, 92)
+	pdf.MultiCell(176, 6, "- Keep generated PDF fixtures tracked\n- Expand examples for real document workflows\n- Use binary diffs for committed PDFs", "", "L", false)
+	pdf.SetFont("Helvetica", "B", 13)
+	pdf.Text(16, 132, "Action Items")
+	drawHeaderRow(pdf, 16, 142, []float64{82, 46, 48}, []string{"Task", "Owner", "Due"})
+	rows := [][]string{
+		{"Review generated assets", "Maintainer", "Jan 05"},
+		{"Update package docs", "Docs", "Jan 08"},
+		{"Run release checks", "CI", "Jan 10"},
+	}
+	for i, row := range rows {
+		drawDataRow(pdf, 16, 150+float64(i)*9, []float64{82, 46, 48}, row)
+	}
+
+	save(pdf, "meeting-minutes.pdf")
+}
+
+func generateLabelSheet() {
+	pdf := newPDF("Label Sheet")
+	pdf.AddPage()
+	title(pdf, "Label Sheet", "Grid of repeated mailing labels")
+	pdf.SetFont("Helvetica", "", 8)
+	labelW, labelH := 56.0, 32.0
+	startX, startY := 16.0, 44.0
+	for row := 0; row < 6; row++ {
+		for col := 0; col < 3; col++ {
+			x := startX + float64(col)*60
+			y := startY + float64(row)*36
+			pdf.SetDrawColor(210, 218, 226)
+			pdf.RoundedRect(x, y, labelW, labelH, 2, "1234", "D")
+			pdf.SetXY(x+4, y+6)
+			pdf.MultiCell(labelW-8, 4.5, fmt.Sprintf("Recipient %02d\n%d Example Way\nCity, ST 000%02d", row*3+col+1, 100+row*3+col, row*3+col), "", "L", false)
+		}
+	}
+
+	save(pdf, "label-sheet.pdf")
+}
+
 func title(pdf *gopdfkit.Document, heading, subheading string) {
 	pdf.SetFillColor(35, 70, 120)
 	pdf.Rect(0, 0, 210, 28, "F")
@@ -809,6 +1144,20 @@ func drawDataRow(pdf *gopdfkit.Document, x, y float64, widths []float64, values 
 		pdf.CellFormat(widths[i], 8, value, "1", 0, "L", false, 0, "")
 		x += widths[i]
 	}
+}
+
+func resumeSection(pdf *gopdfkit.Document, x, y float64, heading string, lines []string) {
+	pdf.SetFont("Helvetica", "B", 13)
+	pdf.SetTextColor(35, 70, 120)
+	pdf.Text(x, y, heading)
+	pdf.SetDrawColor(210, 218, 226)
+	pdf.Line(x, y+3, x+116, y+3)
+	pdf.SetTextColor(35, 45, 55)
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.Text(x, y+14, lines[0])
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.SetXY(x, y+20)
+	pdf.MultiCell(116, 5, strings.Join(lines[1:], "\n"), "", "L", false)
 }
 
 func formLine(pdf *gopdfkit.Document, x, y, width float64, label string) {
