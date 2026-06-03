@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.1.1 - 2026-06-03
+
+Patch release with performance fixes and internal robustness updates.
+
+### Changed
+
+- Optimized HTML table rendering by reducing repeated border, background, and
+  text-measurement work during table layout.
+- Reduced HTML table allocation pressure by pre-sizing table row/cell
+  structures and avoiding full cell copies in layout placements.
+- Updated document internals for image parsing, font limits, PDF import,
+  signing, templates, and output helpers.
+- Updated examples to match the current document and image APIs.
+- Refreshed generated PDF fixtures and removed generated example PDFs that are
+  no longer retained in the repository.
+
+### Fixed
+
+- Avoided unnecessary `rowspan` and `colspan` parsing work for normal HTML
+  table cells without span attributes.
+- Added image and font limit helpers plus security regression coverage for
+  oversized or unsafe inputs.
+
 ## v0.1.0 - 2026-06-03
 
 Initial cssbruno/gopdfkit release.
