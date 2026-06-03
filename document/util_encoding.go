@@ -44,7 +44,7 @@ func repClosure(m map[rune]byte) func(string) string {
 	return func(str string) string {
 		var ch byte
 		var ok bool
-		buf.Truncate(0)
+		buf.Reset()
 		for _, r := range str {
 			if r < 0x80 {
 				ch = byte(r)

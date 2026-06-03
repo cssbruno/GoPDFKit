@@ -100,11 +100,12 @@ func tableBlockFromHTMLTable(table htmlTableType) TableBlock {
 				RowSpan: htmlTableRowspan(cell.attrs),
 			})
 		}
-		if row.header {
+		switch {
+		case row.header:
 			block.Header = append(block.Header, tableRow)
-		} else if row.footer {
+		case row.footer:
 			block.Footer = append(block.Footer, tableRow)
-		} else {
+		default:
 			block.Body = append(block.Body, tableRow)
 		}
 	}

@@ -315,13 +315,14 @@ func (r *documentRenderer) renderImage(block ImageBlock) {
 		case "R":
 			x = r.pdf.w - r.pdf.rMargin - wd
 		}
-		if len(block.Data) > 0 && block.Format != "" {
+		switch {
+		case len(block.Data) > 0 && block.Format != "":
 			name := fmt.Sprintf("document-image-%p", &block)
 			r.pdf.RegisterImageOptionsReader(name, ImageOptions{ImageType: block.Format, ReadDpi: block.DPI > 0}, bytes.NewReader(block.Data))
 			r.pdf.ImageOptions(name, x, r.pdf.GetY(), wd, ht, false, ImageOptions{ImageType: block.Format}, 0, "")
-		} else if block.Source != "" {
+		case block.Source != "":
 			r.pdf.ImageOptions(block.Source, x, r.pdf.GetY(), wd, ht, false, ImageOptions{ImageType: block.Format}, 0, "")
-		} else if block.Alt != "" {
+		case block.Alt != "":
 			r.pdf.Rect(x, r.pdf.GetY(), wd, ht, "D")
 			r.pdf.MultiCell(wd, 5, block.Alt, "", "C", false)
 		}
@@ -367,11 +368,12 @@ func signatureColumnText(col SignatureColumn) string {
 		if field.Label == "" && field.Value == "" {
 			continue
 		}
-		if field.Label == "" {
+		switch {
+		case field.Label == "":
 			lines = append(lines, field.Value)
-		} else if field.Value == "" {
+		case field.Value == "":
 			lines = append(lines, field.Label)
-		} else {
+		default:
 			lines = append(lines, field.Label+": "+field.Value)
 		}
 	}

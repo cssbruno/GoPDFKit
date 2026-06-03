@@ -5,11 +5,14 @@ package document
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"sort"
 )
+
+const maxPDFImportSourceBytes = 128 * 1024 * 1024
 
 type importedPDFPage struct {
 	id        int
@@ -28,7 +31,7 @@ type importedPDFPage struct {
 // streams are unfiltered or FlateDecode-compressed. PDFs using xref streams or
 // object streams are reported as unsupported.
 func (f *Document) ImportPage(sourceFile string, pageNo int, box string) int {
-	data, err := os.ReadFile(sourceFile)
+	data, err := readPDFImportFile(sourceFile)
 	if err != nil {
 		f.SetError(err)
 		return 0
@@ -39,7 +42,7 @@ func (f *Document) ImportPage(sourceFile string, pageNo int, box string) int {
 // ImportPageStream imports one page from a PDF stream and returns its imported
 // page ID. The stream is read into memory, so callers may pass any io.Reader.
 func (f *Document) ImportPageStream(source io.Reader, pageNo int, box string) int {
-	data, err := io.ReadAll(source)
+	data, err := readPDFImportReader(source)
 	if err != nil {
 		f.SetError(err)
 		return 0
@@ -131,12 +134,13 @@ func (f *Document) UseImportedPage(pageID int, x, y, w, h float64) {
 	}
 	nativeW := page.widthPt / f.k
 	nativeH := page.heightPt / f.k
-	if w == 0 && h == 0 {
+	switch {
+	case w == 0 && h == 0:
 		w = nativeW
 		h = nativeH
-	} else if w == 0 {
+	case w == 0:
 		w = h * nativeW / nativeH
-	} else if h == 0 {
+	case h == 0:
 		h = w * nativeH / nativeW
 	}
 	if !finiteNumbers(x, y, w, h) || w <= 0 || h <= 0 {
@@ -149,14 +153,37 @@ func (f *Document) UseImportedPage(pageID int, x, y, w, h float64) {
 func pdfImportSourceBytes(source any) ([]byte, error) {
 	switch src := source.(type) {
 	case string:
-		return os.ReadFile(src)
+		return readPDFImportFile(src)
 	case []byte:
+		if len(src) > maxPDFImportSourceBytes {
+			return nil, errors.New("PDF import source exceeds maximum size")
+		}
 		return append([]byte(nil), src...), nil
 	case io.Reader:
-		return io.ReadAll(src)
+		return readPDFImportReader(src)
 	default:
 		return nil, fmt.Errorf("unsupported PDF import source type %T", source)
 	}
+}
+
+func readPDFImportFile(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	if info, err := file.Stat(); err == nil && info.Mode().IsRegular() && info.Size() > maxPDFImportSourceBytes {
+		return nil, errors.New("PDF import source exceeds maximum size")
+	}
+	return readPDFImportReader(file)
+}
+
+func readPDFImportReader(r io.Reader) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(r, maxPDFImportSourceBytes+1))
+	if err == nil && len(data) > maxPDFImportSourceBytes {
+		err = errors.New("PDF import source exceeds maximum size")
+	}
+	return data, err
 }
 
 func sortedPDFObjRefs(objects map[pdfObjRef][]byte) []pdfObjRef {

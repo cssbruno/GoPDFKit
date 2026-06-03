@@ -5,6 +5,7 @@ package testpdf
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -69,7 +70,7 @@ func CompareBytes(sl1, sl2 []byte, printDiff bool) (err error) {
 		posStart = posEnd
 	}
 	if diffs {
-		err = fmt.Errorf("documents are different")
+		err = errors.New("documents are different")
 	}
 	return
 }

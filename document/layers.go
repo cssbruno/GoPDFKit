@@ -87,19 +87,20 @@ func (f *Document) layerPutResourceDict() {
 		}
 		f.out(">>")
 	}
-
 }
 
 func (f *Document) layerPutCatalog() {
 	if len(f.layer.list) > 0 {
 		onStr := ""
 		var offStr strings.Builder
+		var onStrSb97 strings.Builder
 		for _, layer := range f.layer.list {
-			onStr += sprintf("%d 0 R ", layer.objNum)
+			onStrSb97.WriteString(sprintf("%d 0 R ", layer.objNum))
 			if !layer.visible {
 				offStr.WriteString(sprintf("%d 0 R ", layer.objNum))
 			}
 		}
+		onStr += onStrSb97.String()
 		f.outf("/OCProperties <</OCGs [%s] /D <</OFF [%s] /Order [%s]>>>>", onStr, offStr.String(), onStr)
 		if f.layer.openLayerPane {
 			f.out("/PageMode /UseOC")

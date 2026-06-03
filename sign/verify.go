@@ -6,6 +6,7 @@ package sign
 import (
 	"crypto/x509"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strconv"
 )
@@ -25,19 +26,19 @@ func Verify(input []byte, truststore *x509.CertPool) (*PDFSignature, error) {
 		return nil, err
 	}
 	if len(byteRange) != 4 {
-		return nil, fmt.Errorf("pdfsigning: unsupported ByteRange")
+		return nil, errors.New("pdfsigning: unsupported ByteRange")
 	}
 	if byteRange[0] != 0 || byteRange[1] < 0 || byteRange[2] < 0 || byteRange[3] < 0 {
-		return nil, fmt.Errorf("pdfsigning: invalid ByteRange values")
+		return nil, errors.New("pdfsigning: invalid ByteRange values")
 	}
 	if byteRange[1] > len(input) || byteRange[2] > len(input) || byteRange[3] > len(input)-byteRange[2] {
-		return nil, fmt.Errorf("pdfsigning: ByteRange exceeds PDF size")
+		return nil, errors.New("pdfsigning: ByteRange exceeds PDF size")
 	}
 	if byteRange[1] > byteRange[2] {
-		return nil, fmt.Errorf("pdfsigning: ByteRange overlaps signature contents")
+		return nil, errors.New("pdfsigning: ByteRange overlaps signature contents")
 	}
 	if byteRange[2]+byteRange[3] != len(input) {
-		return nil, fmt.Errorf("pdfsigning: ByteRange does not cover full PDF")
+		return nil, errors.New("pdfsigning: ByteRange does not cover full PDF")
 	}
 	signedContent := make([]byte, 0, byteRange[1]+byteRange[3])
 	signedContent = append(signedContent, input[:byteRange[1]]...)
@@ -51,7 +52,7 @@ func Verify(input []byte, truststore *x509.CertPool) (*PDFSignature, error) {
 		return nil, err
 	}
 	if !result.Detached {
-		return nil, fmt.Errorf("pdfsigning: PDF signature CMS must be detached")
+		return nil, errors.New("pdfsigning: PDF signature CMS must be detached")
 	}
 	return &PDFSignature{ByteRange: byteRange, CMS: result}, nil
 }
@@ -59,24 +60,24 @@ func Verify(input []byte, truststore *x509.CertPool) (*PDFSignature, error) {
 func extractByteRange(input []byte) ([]int, error) {
 	idx := findLastPDFName(input, "/ByteRange")
 	if idx < 0 {
-		return nil, fmt.Errorf("pdfsigning: ByteRange not found")
+		return nil, errors.New("pdfsigning: ByteRange not found")
 	}
 	pos := skipPDFSpaces(input, idx+len("/ByteRange"))
 	if pos >= len(input) || input[pos] != '[' {
-		return nil, fmt.Errorf("pdfsigning: invalid ByteRange")
+		return nil, errors.New("pdfsigning: invalid ByteRange")
 	}
 	pos++
 	values := make([]int, 0, 4)
 	for {
 		pos = skipPDFSpaces(input, pos)
 		if pos >= len(input) {
-			return nil, fmt.Errorf("pdfsigning: invalid ByteRange")
+			return nil, errors.New("pdfsigning: invalid ByteRange")
 		}
 		if input[pos] == ']' {
 			return values, nil
 		}
 		if len(values) == 4 {
-			return nil, fmt.Errorf("pdfsigning: unsupported ByteRange")
+			return nil, errors.New("pdfsigning: unsupported ByteRange")
 		}
 		start := pos
 		if input[pos] == '-' {
@@ -87,7 +88,7 @@ func extractByteRange(input []byte) ([]int, error) {
 			pos++
 		}
 		if pos == digitStart || pos-start > byteRangeWidth+1 {
-			return nil, fmt.Errorf("pdfsigning: invalid ByteRange value")
+			return nil, errors.New("pdfsigning: invalid ByteRange value")
 		}
 		value, err := strconv.Atoi(string(input[start:pos]))
 		if err != nil {
@@ -99,12 +100,15 @@ func extractByteRange(input []byte) ([]int, error) {
 
 func extractSignatureContents(input []byte, contentsStart, contentsEnd int) ([]byte, error) {
 	if contentsStart < 0 || contentsEnd > len(input) || contentsStart >= contentsEnd {
-		return nil, fmt.Errorf("pdfsigning: invalid signature contents range")
+		return nil, errors.New("pdfsigning: invalid signature contents range")
 	}
 	if input[contentsStart] != '<' || input[contentsEnd-1] != '>' {
-		return nil, fmt.Errorf("pdfsigning: signature contents is not a hex string")
+		return nil, errors.New("pdfsigning: signature contents is not a hex string")
 	}
 	hexBytes := input[contentsStart+1 : contentsEnd-1]
+	if hex.DecodedLen(len(hexBytes)) > maxCMSPackageBytes {
+		return nil, errors.New("pdfsigning: signature contents exceeds maximum size")
+	}
 	out := make([]byte, hex.DecodedLen(len(hexBytes)))
 	if _, err := hex.Decode(out, hexBytes); err != nil {
 		return nil, fmt.Errorf("decode signature contents: %w", err)
@@ -115,7 +119,7 @@ func extractSignatureContents(input []byte, contentsStart, contentsEnd int) ([]b
 	}
 	for _, b := range rest {
 		if b != 0 {
-			return nil, fmt.Errorf("pdfsigning: non-zero trailing signature contents")
+			return nil, errors.New("pdfsigning: non-zero trailing signature contents")
 		}
 	}
 	return value.Full, nil

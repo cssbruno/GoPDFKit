@@ -4,9 +4,9 @@
 package document
 
 import (
+	"errors"
 	"fmt"
 	"io"
-	"os"
 	"sync"
 )
 
@@ -29,7 +29,7 @@ func NewFontCache() *FontCache {
 
 // AddUTF8Font loads and parses a TrueType font file into the cache.
 func (c *FontCache) AddUTF8Font(family, style, path string) error {
-	data, err := os.ReadFile(path)
+	data, err := readFontResourceFile(path, maxFontSourceBytes)
 	if err != nil {
 		return err
 	}
@@ -38,7 +38,7 @@ func (c *FontCache) AddUTF8Font(family, style, path string) error {
 
 // AddUTF8FontFromReader loads and parses a TrueType font reader into the cache.
 func (c *FontCache) AddUTF8FontFromReader(family, style string, r io.Reader) error {
-	data, err := io.ReadAll(r)
+	data, err := readFontResourceReader(r, maxFontSourceBytes)
 	if err != nil {
 		return err
 	}
@@ -48,7 +48,10 @@ func (c *FontCache) AddUTF8FontFromReader(family, style string, r io.Reader) err
 // AddUTF8FontFromBytes loads and parses TrueType font bytes into the cache.
 func (c *FontCache) AddUTF8FontFromBytes(family, style string, data []byte) error {
 	if c == nil {
-		return fmt.Errorf("font cache is nil")
+		return errors.New("font cache is nil")
+	}
+	if err := validateFontDataSize(data, maxFontSourceBytes, "font data"); err != nil {
+		return err
 	}
 	key := getFontKey(fontFamilyEscape(family), style)
 	if !validPDFNameFragment(key) {

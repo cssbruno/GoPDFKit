@@ -5,9 +5,9 @@ package document
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"image"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -181,7 +181,7 @@ func (f *Document) applyExternalImageMask(info *ImageInfo, maskPath string, opti
 }
 
 func decodeMaskImage(path string, options ImageOptions) (image.Image, error) {
-	data, err := os.ReadFile(path)
+	data, err := readFileLimit(path, int64(maxImageSourceBytes))
 	if err != nil {
 		return nil, err
 	}
@@ -196,21 +196,35 @@ func decodeMaskImage(path string, options ImageOptions) (image.Image, error) {
 		}
 	}
 	if imageType == "webp" {
+		config, err := webp.DecodeConfig(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		if err := validateImageDimensions(config.Width, config.Height); err != nil {
+			return nil, err
+		}
 		img, err := webp.Decode(bytes.NewReader(data))
 		if err != nil {
 			return nil, err
 		}
 		if img == nil {
-			return nil, fmt.Errorf("invalid WebP mask image")
+			return nil, errors.New("invalid WebP mask image")
 		}
 		return img, nil
+	}
+	config, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("decode image mask config: %w", err)
+	}
+	if err := validateImageDimensions(config.Width, config.Height); err != nil {
+		return nil, err
 	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decode image mask: %w", err)
 	}
 	if img == nil {
-		return nil, fmt.Errorf("invalid mask image")
+		return nil, errors.New("invalid mask image")
 	}
 	return img, nil
 }

@@ -12,7 +12,7 @@ import (
 // will be used when initializing a new Document instance. See SetCatalogSort() for
 // more details.
 func SetDefaultCatalogSort(flag bool) {
-	gl.catalogSort = flag
+	_gl.catalogSort = flag
 }
 
 // SetCatalogSort sets a flag that will be used, if true, to consistently order
@@ -26,14 +26,14 @@ func (f *Document) SetCatalogSort(flag bool) {
 // that will be used when initializing a new Document instance. See
 // SetCreationDate() for more details.
 func SetDefaultCreationDate(tm time.Time) {
-	gl.creationDate = tm
+	_gl.creationDate = tm
 }
 
 // SetDefaultModificationDate sets the default document modification date used
 // when initializing a new Document instance. See SetCreationDate() for more
 // details.
 func SetDefaultModificationDate(tm time.Time) {
-	gl.modDate = tm
+	_gl.modDate = tm
 }
 
 // SetCreationDate fixes the document's internal CreationDate value. By
@@ -205,7 +205,7 @@ func (f *Document) putcatalog() {
 	case "fullwidth":
 		f.out("/OpenAction [3 0 R /FitH null]")
 	case "real":
-		f.out("/OpenAction [3 0 R /XYZ null null 1]")
+		f.out("/OpenAction [3 0 R /XYZ null 1]")
 	}
 	switch f.layoutMode {
 	case "single", "SinglePage":

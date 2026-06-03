@@ -8,6 +8,7 @@ import (
 	"crypto/sha1"
 	"encoding/gob"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -35,7 +36,7 @@ type ImageInfo struct {
 
 func generateImageID(info *ImageInfo) (string, error) {
 	if info == nil {
-		return "", fmt.Errorf("image info is nil")
+		return "", errors.New("image info is nil")
 	}
 	h := sha1.New()
 	fields := []any{info.data, info.smask, info.n, info.w, info.h, info.cs,
@@ -81,22 +82,22 @@ func (info *ImageInfo) GobDecode(buf []byte) (err error) {
 
 func (info *ImageInfo) validForPDF() error {
 	if info == nil {
-		return fmt.Errorf("image info is nil")
+		return errors.New("image info is nil")
 	}
 	if info.w <= 0 || info.h <= 0 || math.IsNaN(info.w) || math.IsNaN(info.h) || math.IsInf(info.w, 0) || math.IsInf(info.h, 0) {
-		return fmt.Errorf("invalid image dimensions")
+		return errors.New("invalid image dimensions")
 	}
 	switch info.cs {
 	case "DeviceGray", "DeviceRGB", "DeviceCMYK":
 	case "Indexed":
 		if len(info.pal) == 0 || len(info.pal)%3 != 0 {
-			return fmt.Errorf("invalid indexed image palette")
+			return errors.New("invalid indexed image palette")
 		}
 	default:
 		return fmt.Errorf("invalid image color space: %s", info.cs)
 	}
 	if info.bpc <= 0 || info.bpc > 16 {
-		return fmt.Errorf("invalid image bits per component")
+		return errors.New("invalid image bits per component")
 	}
 	switch info.f {
 	case "", "FlateDecode", "DCTDecode":
@@ -104,7 +105,7 @@ func (info *ImageInfo) validForPDF() error {
 		return fmt.Errorf("invalid image filter: %s", info.f)
 	}
 	if info.dp != "" && !validImageDecodeParams(info.dp) {
-		return fmt.Errorf("invalid image decode parameters")
+		return errors.New("invalid image decode parameters")
 	}
 	return nil
 }

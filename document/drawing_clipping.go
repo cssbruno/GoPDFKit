@@ -4,7 +4,7 @@
 package document
 
 import (
-	"fmt"
+	"errors"
 	"math"
 )
 
@@ -168,7 +168,7 @@ func (f *Document) ClipEnd() {
 			f.clipNest--
 			f.out("Q")
 		} else {
-			f.err = fmt.Errorf("error attempting to end clip operation out of sequence")
+			f.err = errors.New("error attempting to end clip operation out of sequence")
 		}
 	}
 }

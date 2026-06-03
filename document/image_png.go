@@ -5,10 +5,39 @@ package document
 
 import (
 	"bytes"
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"strings"
 )
+
+// parsepng extracts image information from PNG data.
+func (f *Document) parsepng(r io.Reader, readdpi bool) (info *ImageInfo) {
+	buf, err := bufferFromReaderLimit(r, maxImageSourceBytes)
+	if err != nil {
+		f.err = err
+		return
+	}
+	return f.parsepngstream(buf, readdpi)
+}
+
+func (f *Document) readBeInt32(r io.Reader) (val int32) {
+	err := binary.Read(r, binary.BigEndian, &val)
+	if err != nil && !errors.Is(err, io.EOF) {
+		f.err = err
+	}
+	return
+}
+
+func (f *Document) readByte(r io.Reader) (val byte) {
+	err := binary.Read(r, binary.BigEndian, &val)
+	if err != nil {
+		f.err = err
+	}
+	return
+}
 
 func (f *Document) pngColorSpace(ct byte) (colspace string, colorVal int) {
 	colorVal = 1
@@ -30,13 +59,13 @@ func (f *Document) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageI
 	info = f.newImageInfo()
 	// Check the PNG signature.
 	if string(buf.Next(8)) != "\x89PNG\x0d\x0a\x1a\x0a" {
-		f.err = fmt.Errorf("not a PNG buffer")
+		f.err = errors.New("not a PNG buffer")
 		return
 	}
 	// Read the header chunk.
 	_ = buf.Next(4)
 	if string(buf.Next(4)) != "IHDR" {
-		f.err = fmt.Errorf("incorrect PNG buffer")
+		f.err = errors.New("incorrect PNG buffer")
 		return
 	}
 	w := f.readBeInt32(buf)
@@ -45,11 +74,20 @@ func (f *Document) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageI
 		f.err = fmt.Errorf("invalid PNG image size: %d x %d", w, h)
 		return
 	}
-	bpc := f.readByte(buf)
-	if bpc > 8 {
-		f.err = fmt.Errorf("16-bit depth not supported in PNG file")
+	if err := validateImageDimensions(int(w), int(h)); err != nil {
+		f.err = fmt.Errorf("PNG dimensions exceed maximum image size: %w", err)
+		return
 	}
+	bpc := f.readByte(buf)
 	ct := f.readByte(buf)
+	if !validPNGBitDepthForColorType(bpc, ct) {
+		if bpc > 8 {
+			f.err = errors.New("16-bit depth not supported in PNG file")
+			return
+		}
+		f.err = fmt.Errorf("unsupported PNG bit depth %d for color type %d", bpc, ct)
+		return
+	}
 	var colspace string
 	var colorVal int
 	colspace, colorVal = f.pngColorSpace(ct)
@@ -57,15 +95,15 @@ func (f *Document) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageI
 		return
 	}
 	if f.readByte(buf) != 0 {
-		f.err = fmt.Errorf("'unknown compression method in PNG buffer")
+		f.err = errors.New("'unknown compression method in PNG buffer")
 		return
 	}
 	if f.readByte(buf) != 0 {
-		f.err = fmt.Errorf("'unknown filter method in PNG buffer")
+		f.err = errors.New("'unknown filter method in PNG buffer")
 		return
 	}
 	if f.readByte(buf) != 0 {
-		f.err = fmt.Errorf("interlacing not supported in PNG buffer")
+		f.err = errors.New("interlacing not supported in PNG buffer")
 		return
 	}
 	_ = buf.Next(4)
@@ -77,12 +115,12 @@ func (f *Document) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageI
 	loop := true
 	for loop {
 		if buf.Len() < 8 {
-			f.err = fmt.Errorf("incorrect PNG buffer")
+			f.err = errors.New("incorrect PNG buffer")
 			return
 		}
 		n := int(f.readBeInt32(buf))
 		if n < 0 || buf.Len() < n+8 {
-			f.err = fmt.Errorf("incorrect PNG chunk length")
+			f.err = errors.New("incorrect PNG chunk length")
 			return
 		}
 		chunkType := string(buf.Next(4))
@@ -97,16 +135,16 @@ func (f *Document) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageI
 			switch ct {
 			case 0:
 				if len(chunkData) < 2 {
-					f.err = fmt.Errorf("incorrect PNG tRNS chunk length")
+					f.err = errors.New("incorrect PNG tRNS chunk length")
 					return
 				}
 				trns = []int{int(chunkData[1])} // ord(substr($t,1,1)));
 			case 2:
 				if len(chunkData) < 6 {
-					f.err = fmt.Errorf("incorrect PNG tRNS chunk length")
+					f.err = errors.New("incorrect PNG tRNS chunk length")
 					return
 				}
-				trns = []int{int(chunkData[1]), int(chunkData[3]), int(chunkData[5])} // array(ord(substr($t,1,1)), ord(substr($t,3,1)), ord(substr($t,5,1)));
+				trns = []int{int(chunkData[1]), int(chunkData[3]), int(chunkData[5])} // array(ord(substr($t,1,1)), ord(substr($t,3,1)));
 			default:
 				pos := strings.Index(string(chunkData), "\x00")
 				if pos >= 0 {
@@ -116,13 +154,17 @@ func (f *Document) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageI
 		case "IDAT":
 			// Read an image data block.
 			data = append(data, chunkData...)
+			if len(data) > maxImageSourceBytes {
+				f.err = errors.New("PNG image data exceeds maximum size")
+				return
+			}
 		case "IEND":
 			loop = false
 		case "pHYs":
 			// PNG files can theoretically specify different x/y DPI values.
 			// Ignore those files, but record the DPI when both values match.
 			if len(chunkData) < 9 {
-				f.err = fmt.Errorf("incorrect PNG pHYs chunk length")
+				f.err = errors.New("incorrect PNG pHYs chunk length")
 				return
 			}
 			chunkBuf := bytes.NewBuffer(chunkData)
@@ -145,7 +187,11 @@ func (f *Document) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageI
 		}
 	}
 	if colspace == "Indexed" && len(pal) == 0 {
-		f.err = fmt.Errorf("missing palette in PNG buffer")
+		f.err = errors.New("missing palette in PNG buffer")
+	}
+	if len(data) == 0 {
+		f.err = errors.New("missing image data in PNG buffer")
+		return
 	}
 	info.w = float64(w)
 	info.h = float64(h)
@@ -163,12 +209,12 @@ func (f *Document) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageI
 		}
 		rowLen := 1 + bytesPerPixel*int64(w)
 		if rowLen <= 0 || int64(h) > int64(math.MaxInt)/rowLen {
-			f.err = fmt.Errorf("invalid PNG alpha channel size")
+			f.err = errors.New("invalid PNG alpha channel size")
 			return
 		}
 		expectedLen := rowLen * int64(h)
 		if expectedLen > maxImageDecodedBytes {
-			f.err = fmt.Errorf("PNG alpha channel exceeds maximum decoded size")
+			f.err = errors.New("PNG alpha channel exceeds maximum decoded size")
 			return
 		}
 		var err error
@@ -184,7 +230,7 @@ func (f *Document) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageI
 			height := int(h)
 			length := 2 * width
 			if len(data) < (1+length)*height {
-				f.err = fmt.Errorf("incorrect PNG alpha channel data")
+				f.err = errors.New("incorrect PNG alpha channel data")
 				return
 			}
 			color = make([]byte, 0, height*(1+width))
@@ -207,7 +253,7 @@ func (f *Document) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageI
 			height := int(h)
 			length := 4 * width
 			if len(data) < (1+length)*height {
-				f.err = fmt.Errorf("incorrect PNG alpha channel data")
+				f.err = errors.New("incorrect PNG alpha channel data")
 				return
 			}
 			color = make([]byte, 0, height*(1+3*width))
@@ -239,4 +285,15 @@ func (f *Document) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *ImageI
 	}
 	info.data = data
 	return
+}
+
+func validPNGBitDepthForColorType(bpc, ct byte) bool {
+	switch ct {
+	case 0, 3:
+		return bpc == 1 || bpc == 2 || bpc == 4 || bpc == 8
+	case 2, 4, 6:
+		return bpc == 8
+	default:
+		return false
+	}
 }

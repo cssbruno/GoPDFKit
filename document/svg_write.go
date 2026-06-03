@@ -485,7 +485,7 @@ func (f *Document) svgWriteGradientFill(originX, originY, scale float64, path SV
 		r := gradient.R
 		if gradient.Units == "userSpaceOnUse" {
 			if size := maxX - minX; size > 0 {
-				r = r / size
+				r /= size
 			}
 		}
 		f.gradientWithStops(3, stops, fx, fy, cx, cy, r)

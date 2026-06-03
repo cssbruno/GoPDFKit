@@ -3,18 +3,7 @@
 
 package document
 
-import (
-	"bytes"
-	"fmt"
-	"io"
-	"os"
-)
-
-const (
-	maxImageSourceBytes  = 64 * 1024 * 1024
-	maxImageDecodedBytes = 256 * 1024 * 1024
-	maxImagePixels       = 50 * 1000 * 1000
-)
+import "os"
 
 // fileExist returns true if the specified regular file exists.
 func fileExist(filename string) (ok bool) {
@@ -35,18 +24,5 @@ func fileSize(filename string) (size int64, ok bool) {
 	if ok {
 		size = info.Size()
 	}
-	return
-}
-
-func bufferFromReaderLimit(r io.Reader, limit int) (b *bytes.Buffer, err error) {
-	b = new(bytes.Buffer)
-	if limit >= 0 {
-		_, err = b.ReadFrom(io.LimitReader(r, int64(limit)+1))
-		if err == nil && b.Len() > limit {
-			err = fmt.Errorf("image data exceeds maximum size")
-		}
-		return
-	}
-	_, err = b.ReadFrom(r)
 	return
 }

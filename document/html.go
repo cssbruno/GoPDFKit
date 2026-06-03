@@ -791,13 +791,13 @@ func (html *HTML) htmlImageSource(src string) (string, ImageOptions, error) {
 		if u, err := url.Parse(src); err == nil && u.Scheme != "" {
 			switch strings.ToLower(u.Scheme) {
 			case "http", "https":
-				return "", options, fmt.Errorf("remote HTML images are disabled")
+				return "", options, errors.New("remote HTML images are disabled")
 			case "file":
-				return "", options, fmt.Errorf("file URL HTML images are disabled")
+				return "", options, errors.New("file URL HTML images are disabled")
 			}
 		}
 		if !html.AllowLocalImages {
-			return "", options, fmt.Errorf("local HTML images are disabled")
+			return "", options, errors.New("local HTML images are disabled")
 		}
 		return src, options, nil
 	}
@@ -806,7 +806,7 @@ func (html *HTML) htmlImageSource(src string) (string, ImageOptions, error) {
 	}
 	media, data, ok := strings.Cut(src[5:], ",")
 	if !ok {
-		return "", options, fmt.Errorf("invalid HTML image data URI")
+		return "", options, errors.New("invalid HTML image data URI")
 	}
 	parts := strings.Split(media, ";")
 	mimeType := strings.ToLower(strings.TrimSpace(parts[0]))
@@ -817,7 +817,7 @@ func (html *HTML) htmlImageSource(src string) (string, ImageOptions, error) {
 		}
 	}
 	if !base64Encoded {
-		return "", options, fmt.Errorf("HTML image data URI must be base64 encoded")
+		return "", options, errors.New("HTML image data URI must be base64 encoded")
 	}
 	imageType := htmlImageTypeFromMime(mimeType)
 	if imageType == "" {
@@ -828,14 +828,14 @@ func (html *HTML) htmlImageSource(src string) (string, ImageOptions, error) {
 		limit = htmlDefaultMaxDataImageBytes
 	}
 	if base64.StdEncoding.DecodedLen(len(data)) > limit {
-		return "", options, fmt.Errorf("HTML image data URI exceeds maximum size")
+		return "", options, errors.New("HTML image data URI exceeds maximum size")
 	}
 	buf, err := base64.StdEncoding.DecodeString(data)
 	if err != nil {
 		return "", options, fmt.Errorf("invalid HTML image data URI: %w", err)
 	}
 	if len(buf) > limit {
-		return "", options, fmt.Errorf("HTML image data URI exceeds maximum size")
+		return "", options, errors.New("HTML image data URI exceeds maximum size")
 	}
 	sum := sha256.Sum256(buf)
 	name := fmt.Sprintf("html-data-image-%x", sum)

@@ -86,7 +86,10 @@ func (p *protectType) setProtection(privFlag byte, userPassStr, ownerPassStr str
 		ownerPass = []byte(ownerPassStr)
 	}
 	userPass = append(userPass, p.padding...)[0:32]
-	ownerPass = append(ownerPass, p.padding...)[0:32]
+	ownerPassBuf := make([]byte, 0, len(ownerPass)+len(p.padding))
+	ownerPassBuf = append(ownerPassBuf, ownerPass...)
+	ownerPassBuf = append(ownerPassBuf, p.padding...)
+	ownerPass = ownerPassBuf[0:32]
 	p.encrypted = true
 	p.oValue = oValueGen(userPass, ownerPass)
 	var buf []byte

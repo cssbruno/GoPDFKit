@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-var gl struct {
+var _gl struct {
 	catalogSort  bool
 	noCompress   bool // Initial zero value indicates compression
 	creationDate time.Time
@@ -162,7 +162,7 @@ func documentNew(orientationStr, unitStr, sizeStr, fontDirStr string, size Size)
 	}
 	// Enable compression
 	f.compressLevel = zlib.BestSpeed
-	f.SetCompression(!gl.noCompress)
+	f.SetCompression(!_gl.noCompress)
 	f.spotColorMap = make(map[string]spotColorType)
 	f.blendList = make([]blendModeType, 0, 8)
 	f.blendList = append(f.blendList, blendModeType{}) // blendList[0] is unused (1-based)
@@ -175,9 +175,9 @@ func documentNew(orientationStr, unitStr, sizeStr, fontDirStr string, size Size)
 	f.pdfVersion = "1.3"
 	f.SetProducer("Document "+cnDocumentVersion, true)
 	f.layerInit()
-	f.catalogSort = gl.catalogSort
-	f.creationDate = gl.creationDate
-	f.modDate = gl.modDate
+	f.catalogSort = _gl.catalogSort
+	f.creationDate = _gl.creationDate
+	f.modDate = _gl.modDate
 	f.userUnderlineThickness = 1
 	return
 }

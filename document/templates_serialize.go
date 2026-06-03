@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"maps"
 )
@@ -50,6 +51,15 @@ type DocumentTpl struct {
 	page      int
 }
 
+const (
+	maxTemplateChildren        = 1024
+	maxTemplateDepth           = 128
+	maxTemplateImages          = 4096
+	maxTemplatePageBytes       = 16 * 1024 * 1024
+	maxTemplatePages           = 1000
+	maxTemplateSerializedBytes = 16 * 1024 * 1024
+)
+
 // ID returns the global template identifier.
 func (t *DocumentTpl) ID() string {
 	return fmt.Sprintf("%x", sha1.Sum(t.Bytes()))
@@ -72,7 +82,7 @@ func (t *DocumentTpl) Bytes() []byte {
 func (t *DocumentTpl) FromPage(page int) (Template, error) {
 	// Pages start at 1.
 	if page < 1 {
-		return nil, fmt.Errorf("pages start at 1; no template will have a page 0")
+		return nil, errors.New("pages start at 1; no template will have a page 0")
 	}
 
 	if page > t.NumPages() {
@@ -129,6 +139,9 @@ func (t *DocumentTpl) Serialize() ([]byte, error) {
 
 // DeserializeTemplate creates a template from a previously serialized template.
 func DeserializeTemplate(b []byte) (Template, error) {
+	if len(b) > maxTemplateSerializedBytes {
+		return nil, errors.New("serialized template exceeds maximum size")
+	}
 	tpl := new(DocumentTpl)
 	dec := gob.NewDecoder(bytes.NewBuffer(b))
 	err := dec.Decode(tpl)
@@ -264,7 +277,7 @@ func decodeTemplateList(decoder *gob.Decoder) ([]Template, error) {
 	templates := make([]Template, 0, len(children))
 	for _, child := range children {
 		if child == nil {
-			return nil, fmt.Errorf("invalid nil child template")
+			return nil, errors.New("invalid nil child template")
 		}
 		templates = append(templates, child)
 	}
@@ -272,8 +285,38 @@ func decodeTemplateList(decoder *gob.Decoder) ([]Template, error) {
 }
 
 func (t *DocumentTpl) validate() error {
+	return t.validateDepth(0, make(map[*DocumentTpl]bool))
+}
+
+func (t *DocumentTpl) validateDepth(depth int, visiting map[*DocumentTpl]bool) error {
+	if depth > maxTemplateDepth {
+		return errors.New("template nesting exceeds maximum size")
+	}
+	if t == nil {
+		return errors.New("invalid nil template")
+	}
+	if visiting[t] {
+		return errors.New("template nesting contains a cycle")
+	}
+	visiting[t] = true
+	defer func() { visiting[t] = false }()
+
 	if t.page <= 0 || t.page >= len(t.bytes) {
-		return fmt.Errorf("invalid template page index")
+		return errors.New("invalid template page index")
+	}
+	if len(t.bytes)-1 > maxTemplatePages {
+		return errors.New("template page count exceeds maximum size")
+	}
+	if len(t.images) > maxTemplateImages {
+		return errors.New("template image count exceeds maximum size")
+	}
+	if len(t.templates) > maxTemplateChildren {
+		return errors.New("template child count exceeds maximum size")
+	}
+	for _, page := range t.bytes {
+		if len(page) > maxTemplatePageBytes {
+			return errors.New("template page content exceeds maximum size")
+		}
 	}
 	for name, img := range t.images {
 		if err := img.validForPDF(); err != nil {
@@ -282,7 +325,12 @@ func (t *DocumentTpl) validate() error {
 	}
 	for _, tpl := range t.templates {
 		if invalidTemplate(tpl) {
-			return fmt.Errorf("invalid nil child template")
+			return errors.New("invalid nil child template")
+		}
+		if child, ok := tpl.(*DocumentTpl); ok {
+			if err := child.validateDepth(depth+1, visiting); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

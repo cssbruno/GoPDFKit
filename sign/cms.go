@@ -12,6 +12,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/asn1"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -36,6 +37,8 @@ var (
 	oidECDSAWithSHA512 = asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 4}
 	oidDocumentSigning = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 36}
 )
+
+const maxCMSPackageBytes = 16 * 1024 * 1024
 
 // PKCS7Options configures CMS/PKCS7 SignedData creation.
 type PKCS7Options struct {
@@ -82,7 +85,7 @@ func CreatePKCS7(content []byte, options PKCS7Options) ([]byte, error) {
 		return nil, ErrMissingCertificate
 	}
 	if !publicKeysEqual(options.Signer.Public(), options.Certificate.PublicKey) {
-		return nil, fmt.Errorf("pdfsigning: signer public key does not match certificate")
+		return nil, errors.New("pdfsigning: signer public key does not match certificate")
 	}
 	digest, err := normalizeDigest(options.DigestAlgorithm)
 	if err != nil {
@@ -169,12 +172,15 @@ func VerifyDetachedPKCS7(signature, content []byte, truststore *x509.CertPool) (
 }
 
 func verifyPKCS7(signature []byte, detachedContent []byte, truststore *x509.CertPool, requireDetached bool) (*PKCS7VerifyResult, error) {
+	if len(signature) > maxCMSPackageBytes {
+		return nil, errors.New("pdfsigning: CMS package exceeds maximum size")
+	}
 	outer, rest, err := readDER(signature)
 	if err != nil {
 		return nil, err
 	}
 	if len(rest) != 0 {
-		return nil, fmt.Errorf("pdfsigning: trailing bytes after CMS package")
+		return nil, errors.New("pdfsigning: trailing bytes after CMS package")
 	}
 	if err := expectTag(outer, 0x30, "CMS ContentInfo"); err != nil {
 		return nil, err
@@ -184,14 +190,14 @@ func verifyPKCS7(signature []byte, detachedContent []byte, truststore *x509.Cert
 		return nil, err
 	}
 	if len(outerChildren) != 2 {
-		return nil, fmt.Errorf("pdfsigning: invalid CMS ContentInfo")
+		return nil, errors.New("pdfsigning: invalid CMS ContentInfo")
 	}
 	contentType, err := decodeOID(outerChildren[0])
 	if err != nil {
 		return nil, err
 	}
 	if !contentType.Equal(oidSignedData) {
-		return nil, fmt.Errorf("pdfsigning: CMS content is not SignedData")
+		return nil, errors.New("pdfsigning: CMS content is not SignedData")
 	}
 	if err := expectTag(outerChildren[1], 0xa0, "CMS SignedData wrapper"); err != nil {
 		return nil, err
@@ -201,7 +207,7 @@ func verifyPKCS7(signature []byte, detachedContent []byte, truststore *x509.Cert
 		return nil, err
 	}
 	if len(rest) != 0 {
-		return nil, fmt.Errorf("pdfsigning: invalid SignedData wrapper")
+		return nil, errors.New("pdfsigning: invalid SignedData wrapper")
 	}
 	return verifySignedData(signedDataValue, detachedContent, truststore, requireDetached)
 }
@@ -215,7 +221,7 @@ func verifySignedData(signedDataValue derValue, detachedContent []byte, truststo
 		return nil, err
 	}
 	if len(children) < 5 {
-		return nil, fmt.Errorf("pdfsigning: incomplete SignedData")
+		return nil, errors.New("pdfsigning: incomplete SignedData")
 	}
 
 	encapChildren, err := readDERChildren(children[2].Content)
@@ -223,28 +229,28 @@ func verifySignedData(signedDataValue derValue, detachedContent []byte, truststo
 		return nil, err
 	}
 	if len(encapChildren) == 0 {
-		return nil, fmt.Errorf("pdfsigning: missing encapsulated content info")
+		return nil, errors.New("pdfsigning: missing encapsulated content info")
 	}
 	contentOID, err := decodeOID(encapChildren[0])
 	if err != nil {
 		return nil, err
 	}
 	if !contentOID.Equal(oidData) {
-		return nil, fmt.Errorf("pdfsigning: unsupported CMS content type")
+		return nil, errors.New("pdfsigning: unsupported CMS content type")
 	}
 
 	content := detachedContent
 	detached := true
 	if len(encapChildren) > 1 {
 		if requireDetached {
-			return nil, fmt.Errorf("pdfsigning: detached CMS verification requires detached content")
+			return nil, errors.New("pdfsigning: detached CMS verification requires detached content")
 		}
 		embedded, rest, err := readDER(encapChildren[1].Content)
 		if err != nil {
 			return nil, err
 		}
 		if len(rest) != 0 {
-			return nil, fmt.Errorf("pdfsigning: invalid embedded CMS content")
+			return nil, errors.New("pdfsigning: invalid embedded CMS content")
 		}
 		if err := expectTag(embedded, 0x04, "embedded CMS content"); err != nil {
 			return nil, err
@@ -253,7 +259,7 @@ func verifySignedData(signedDataValue derValue, detachedContent []byte, truststo
 		detached = false
 	}
 	if content == nil {
-		return nil, fmt.Errorf("pdfsigning: detached content is required")
+		return nil, errors.New("pdfsigning: detached content is required")
 	}
 
 	certificates, signerInfos, err := parseCertificatesAndSigners(children[3:])
@@ -261,10 +267,10 @@ func verifySignedData(signedDataValue derValue, detachedContent []byte, truststo
 		return nil, err
 	}
 	if len(certificates) == 0 {
-		return nil, fmt.Errorf("pdfsigning: CMS package has no certificates")
+		return nil, errors.New("pdfsigning: CMS package has no certificates")
 	}
 	if len(signerInfos) == 0 {
-		return nil, fmt.Errorf("pdfsigning: CMS package has no signer info")
+		return nil, errors.New("pdfsigning: CMS package has no signer info")
 	}
 
 	result, err := verifySignerInfo(signerInfos[0], certificates, content, truststore)
@@ -313,7 +319,7 @@ func verifySignerInfo(signerInfo derValue, certificates []*x509.Certificate, con
 		return nil, err
 	}
 	if len(children) < 6 {
-		return nil, fmt.Errorf("pdfsigning: incomplete SignerInfo")
+		return nil, errors.New("pdfsigning: incomplete SignerInfo")
 	}
 	issuer, serial, err := decodeIssuerAndSerial(children[1])
 	if err != nil {
@@ -321,14 +327,14 @@ func verifySignerInfo(signerInfo derValue, certificates []*x509.Certificate, con
 	}
 	signer := findSignerCertificate(certificates, issuer, serial)
 	if signer == nil {
-		return nil, fmt.Errorf("pdfsigning: signer certificate not found")
+		return nil, errors.New("pdfsigning: signer certificate not found")
 	}
 	digest, err := decodeDigestAlgorithm(children[2])
 	if err != nil {
 		return nil, err
 	}
 	if children[3].Tag != 0xa0 {
-		return nil, fmt.Errorf("pdfsigning: signed attributes are required")
+		return nil, errors.New("pdfsigning: signed attributes are required")
 	}
 	signedAttrsDER := der(0x31, children[3].Content)
 	messageDigest, signingTime, err := decodeSignedAttributes(signedAttrsDER)
@@ -337,7 +343,7 @@ func verifySignerInfo(signerInfo derValue, certificates []*x509.Certificate, con
 	}
 	expectedDigest := hashBytes(digest, content)
 	if !bytes.Equal(messageDigest, expectedDigest) {
-		return nil, fmt.Errorf("pdfsigning: CMS message digest mismatch")
+		return nil, errors.New("pdfsigning: CMS message digest mismatch")
 	}
 
 	if err := verifySignatureAlgorithm(children[4], signer.PublicKey, digest); err != nil {
@@ -402,7 +408,7 @@ func decodeSignedAttributes(attrsDER []byte) ([]byte, *time.Time, error) {
 		return nil, nil, err
 	}
 	if len(rest) != 0 {
-		return nil, nil, fmt.Errorf("pdfsigning: invalid signed attributes")
+		return nil, nil, errors.New("pdfsigning: invalid signed attributes")
 	}
 	if err := expectTag(attrs, 0x31, "signed attributes"); err != nil {
 		return nil, nil, err
@@ -418,7 +424,7 @@ func decodeSignedAttributes(attrsDER []byte) ([]byte, *time.Time, error) {
 	var previousAttr []byte
 	for _, attr := range children {
 		if previousAttr != nil && bytes.Compare(previousAttr, attr.Full) > 0 {
-			return nil, nil, fmt.Errorf("pdfsigning: signed attributes are not DER sorted")
+			return nil, nil, errors.New("pdfsigning: signed attributes are not DER sorted")
 		}
 		previousAttr = attr.Full
 		attrChildren, err := readDERChildren(attr.Content)
@@ -426,7 +432,7 @@ func decodeSignedAttributes(attrsDER []byte) ([]byte, *time.Time, error) {
 			return nil, nil, err
 		}
 		if len(attrChildren) != 2 {
-			return nil, nil, fmt.Errorf("pdfsigning: invalid signed attribute")
+			return nil, nil, errors.New("pdfsigning: invalid signed attribute")
 		}
 		oid, err := decodeOID(attrChildren[0])
 		if err != nil {
@@ -442,10 +448,10 @@ func decodeSignedAttributes(attrsDER []byte) ([]byte, *time.Time, error) {
 		switch {
 		case oid.Equal(oidContentType):
 			if contentTypeSeen {
-				return nil, nil, fmt.Errorf("pdfsigning: duplicate contentType attribute")
+				return nil, nil, errors.New("pdfsigning: duplicate contentType attribute")
 			}
 			if len(values) != 1 {
-				return nil, nil, fmt.Errorf("pdfsigning: invalid contentType attribute")
+				return nil, nil, errors.New("pdfsigning: invalid contentType attribute")
 			}
 			contentType, err := decodeOID(values[0])
 			if err != nil {
@@ -457,10 +463,10 @@ func decodeSignedAttributes(attrsDER []byte) ([]byte, *time.Time, error) {
 			contentTypeSeen = true
 		case oid.Equal(oidMessageDigest):
 			if messageDigestSeen {
-				return nil, nil, fmt.Errorf("pdfsigning: duplicate messageDigest attribute")
+				return nil, nil, errors.New("pdfsigning: duplicate messageDigest attribute")
 			}
 			if len(values) != 1 {
-				return nil, nil, fmt.Errorf("pdfsigning: invalid messageDigest attribute")
+				return nil, nil, errors.New("pdfsigning: invalid messageDigest attribute")
 			}
 			if err := expectTag(values[0], 0x04, "messageDigest attribute"); err != nil {
 				return nil, nil, err
@@ -469,7 +475,7 @@ func decodeSignedAttributes(attrsDER []byte) ([]byte, *time.Time, error) {
 			messageDigestSeen = true
 		case oid.Equal(oidSigningTime):
 			if len(values) != 1 {
-				return nil, nil, fmt.Errorf("pdfsigning: invalid signingTime attribute")
+				return nil, nil, errors.New("pdfsigning: invalid signingTime attribute")
 			}
 			var t time.Time
 			if _, err := asn1.Unmarshal(values[0].Full, &t); err != nil {
@@ -479,10 +485,10 @@ func decodeSignedAttributes(attrsDER []byte) ([]byte, *time.Time, error) {
 		}
 	}
 	if !contentTypeSeen {
-		return nil, nil, fmt.Errorf("pdfsigning: missing contentType attribute")
+		return nil, nil, errors.New("pdfsigning: missing contentType attribute")
 	}
 	if !messageDigestSeen || len(messageDigest) == 0 {
-		return nil, nil, fmt.Errorf("pdfsigning: missing messageDigest attribute")
+		return nil, nil, errors.New("pdfsigning: missing messageDigest attribute")
 	}
 	return messageDigest, signingTime, nil
 }
@@ -521,14 +527,14 @@ func verifySignatureAlgorithm(value derValue, publicKey any, digest crypto.Hash)
 		return err
 	}
 	if len(children) == 0 {
-		return fmt.Errorf("pdfsigning: invalid signature algorithm")
+		return errors.New("pdfsigning: invalid signature algorithm")
 	}
 	oid, err := decodeOID(children[0])
 	if err != nil {
 		return err
 	}
 	if len(children) > 1 && !isDERNull(children[1]) {
-		return fmt.Errorf("pdfsigning: unsupported signature algorithm parameters")
+		return errors.New("pdfsigning: unsupported signature algorithm parameters")
 	}
 	switch publicKey.(type) {
 	case *rsa.PublicKey:
@@ -565,7 +571,7 @@ func verifySignatureAlgorithm(value derValue, publicKey any, digest crypto.Hash)
 			}
 		}
 	}
-	return fmt.Errorf("pdfsigning: signature algorithm does not match signer key and digest")
+	return errors.New("pdfsigning: signature algorithm does not match signer key and digest")
 }
 
 func verifyPublicKeySignature(publicKey any, digest crypto.Hash, hashed, signature []byte) error {
@@ -574,7 +580,7 @@ func verifyPublicKeySignature(publicKey any, digest crypto.Hash, hashed, signatu
 		return rsa.VerifyPKCS1v15(key, digest, hashed, signature)
 	case *ecdsa.PublicKey:
 		if !ecdsa.VerifyASN1(key, hashed, signature) {
-			return fmt.Errorf("pdfsigning: invalid ECDSA signature")
+			return errors.New("pdfsigning: invalid ECDSA signature")
 		}
 		return nil
 	default:
@@ -617,10 +623,10 @@ func decodeDigestAlgorithm(value derValue) (crypto.Hash, error) {
 		return 0, err
 	}
 	if len(children) == 0 {
-		return 0, fmt.Errorf("pdfsigning: invalid algorithm identifier")
+		return 0, errors.New("pdfsigning: invalid algorithm identifier")
 	}
 	if len(children) > 2 || (len(children) == 2 && !isDERNull(children[1])) {
-		return 0, fmt.Errorf("pdfsigning: unsupported digest algorithm parameters")
+		return 0, errors.New("pdfsigning: unsupported digest algorithm parameters")
 	}
 	oid, err := decodeOID(children[0])
 	if err != nil {
@@ -659,10 +665,10 @@ func publicKeysEqual(a, b any) bool {
 
 func validateDocumentSignerCertificate(cert *x509.Certificate) error {
 	if cert.IsCA {
-		return fmt.Errorf("pdfsigning: signer certificate must not be a CA")
+		return errors.New("pdfsigning: signer certificate must not be a CA")
 	}
 	if cert.KeyUsage != 0 && cert.KeyUsage&(x509.KeyUsageDigitalSignature|x509.KeyUsageContentCommitment) == 0 {
-		return fmt.Errorf("pdfsigning: signer certificate is not allowed for digital signatures")
+		return errors.New("pdfsigning: signer certificate is not allowed for digital signatures")
 	}
 	if len(cert.ExtKeyUsage) == 0 && len(cert.UnknownExtKeyUsage) == 0 {
 		return nil
@@ -672,7 +678,7 @@ func validateDocumentSignerCertificate(cert *x509.Certificate) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("pdfsigning: signer certificate is not allowed for document signing")
+	return errors.New("pdfsigning: signer certificate is not allowed for document signing")
 }
 
 func decodeIssuerAndSerial(value derValue) ([]byte, *big.Int, error) {
@@ -681,7 +687,7 @@ func decodeIssuerAndSerial(value derValue) ([]byte, *big.Int, error) {
 		return nil, nil, err
 	}
 	if len(children) != 2 {
-		return nil, nil, fmt.Errorf("pdfsigning: invalid issuer and serial")
+		return nil, nil, errors.New("pdfsigning: invalid issuer and serial")
 	}
 	var serial *big.Int
 	if _, err := asn1.Unmarshal(children[1].Full, &serial); err != nil {

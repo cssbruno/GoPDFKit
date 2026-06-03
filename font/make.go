@@ -9,6 +9,7 @@ import (
 	"compress/zlib"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -149,7 +150,7 @@ func getInfoFromTrueType(fileStr string, msgWriter io.Writer, embed bool, encLis
 	}
 	if embed {
 		if !ttf.Embeddable {
-			err = fmt.Errorf("font license does not allow embedding")
+			err = errors.New("font license does not allow embedding")
 			return
 		}
 		info.Data, err = os.ReadFile(fileStr)
@@ -171,16 +172,16 @@ func getInfoFromOpenTypeCFF(fileStr string, msgWriter io.Writer, embed bool, enc
 		return
 	}
 	if !otf.PostScriptOutlines {
-		err = fmt.Errorf("OpenType/CFF font type requires PostScript outlines")
+		err = errors.New("OpenType/CFF font type requires PostScript outlines")
 		return
 	}
 	if embed {
 		if !otf.Embeddable {
-			err = fmt.Errorf("font license does not allow embedding")
+			err = errors.New("font license does not allow embedding")
 			return
 		}
 		if len(otf.CFFData) == 0 {
-			err = fmt.Errorf("OpenType/CFF font is missing CFF table")
+			err = errors.New("OpenType/CFF font is missing CFF table")
 			return
 		}
 		info.Data = otf.CFFData
@@ -262,7 +263,7 @@ func segmentRead(r io.Reader) (s segmentType, err error) {
 		return
 	}
 	if s.marker != 128 {
-		err = fmt.Errorf("font file is not a valid binary Type1")
+		err = errors.New("font file is not a valid binary Type1")
 		return
 	}
 	if err = binary.Read(r, binary.LittleEndian, &s.tp); err != nil {
@@ -272,7 +273,7 @@ func segmentRead(r io.Reader) (s segmentType, err error) {
 		return
 	}
 	if s.size > maxFontSourceBytes {
-		err = fmt.Errorf("Type1 font segment exceeds maximum size")
+		err = errors.New("Type1 font segment exceeds maximum size")
 		return
 	}
 	s.data = make([]byte, s.size)
@@ -280,8 +281,8 @@ func segmentRead(r io.Reader) (s segmentType, err error) {
 	return
 }
 
-// -rw-r--r-- 1 root root  9532 2010-04-22 11:27 /usr/share/fonts/type1/mathml/Symbol.afm
-// -rw-r--r-- 1 root root 37744 2010-04-22 11:27 /usr/share/fonts/type1/mathml/Symbol.pfb
+// -rw-r--r-- 1 root 9532 2010-04-22 11:27 /usr/share/fonts/type1/mathml/Symbol.afm
+// -rw-r--r-- 1 root 37744 2010-04-22 11:27 /usr/share/fonts/type1/mathml/Symbol.pfb
 
 // getInfoFromType1 returns information from a Type1 font.
 func getInfoFromType1(fileStr string, msgWriter io.Writer, embed bool, encList encListType) (info fontInfoType, err error) {
@@ -337,7 +338,7 @@ func getInfoFromType1(fileStr string, msgWriter io.Writer, embed bool, encList e
 			switch fields[0] {
 			case "C":
 				if len(fields) < 8 {
-					err = fmt.Errorf("malformed AFM character record")
+					err = errors.New("malformed AFM character record")
 					break
 				}
 				if wd, err = strconv.Atoi(fields[4]); err == nil {
@@ -362,7 +363,7 @@ func getInfoFromType1(fileStr string, msgWriter io.Writer, embed bool, encList e
 				info.IsFixedPitch = fields[1] == "true"
 			case "FontBBox":
 				if len(fields) < 5 {
-					err = fmt.Errorf("malformed AFM FontBBox record")
+					err = errors.New("malformed AFM FontBBox record")
 					break
 				}
 				if info.Desc.FontBBox.Xmin, err = strconv.Atoi(fields[1]); err == nil {
@@ -611,6 +612,6 @@ func openTypeFontType(fileStr string) (string, error) {
 	case "\x00\x01\x00\x00", "true":
 		return "TrueType", nil
 	default:
-		return "", fmt.Errorf("unrecognized OpenType file format")
+		return "", errors.New("unrecognized OpenType file format")
 	}
 }

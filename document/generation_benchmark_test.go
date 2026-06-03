@@ -64,11 +64,13 @@ func BenchmarkGenerationHTMLText(b *testing.B) {
 		p { margin: 0 0 4px 0; line-height: 1.25; }
 		.note { color: #123456; font-weight: bold; }
 	</style>`
+	var htmlBuilder strings.Builder
 	for i := 0; i < 80; i++ {
-		htmlStr += fmt.Sprintf(`<p><strong>Section %03d</strong> Operational HTML paragraph with `+
+		fmt.Fprintf(&htmlBuilder, `<p><strong>Section %03d</strong> Operational HTML paragraph with `+
 			`<em>inline emphasis</em>, <u>underlined text</u>, and `+
 			`<span class="note">styled text</span>.</p>`, i)
 	}
+	htmlStr += htmlBuilder.String()
 
 	benchmarkGeneratedPDF(b, func(pdf *document.Document) {
 		pdf.AddPage()

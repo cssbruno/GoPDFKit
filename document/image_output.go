@@ -5,6 +5,7 @@ package document
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"sort"
 )
@@ -66,7 +67,7 @@ func (f *Document) drawImageXObject(imageID string, x, y, w, h float64) {
 
 func (f *Document) imageOut(info *ImageInfo, x, y, w, h float64, allowNegativeX, flow bool, link int, linkStr string) {
 	if info == nil {
-		f.err = fmt.Errorf("missing image info")
+		f.err = errors.New("missing image info")
 		return
 	}
 	placement, ok := f.resolveImagePlacement(info, x, y, w, h, allowNegativeX, flow)
@@ -106,7 +107,7 @@ func (f *Document) putImportedTemplates() {
 				f.SetErrorf("invalid imported object replacement offset: %d", pos)
 				return
 			}
-			objIDPadded := fmt.Sprintf("%40s", fmt.Sprintf("%d", objID))
+			objIDPadded := fmt.Sprintf("%40d", objID)
 			objIDBytes := []byte(objIDPadded)
 			for j := pos; j < pos+40; j++ {
 				objsIDData[i][j] = objIDBytes[j-pos]

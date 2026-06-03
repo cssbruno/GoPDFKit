@@ -4,6 +4,7 @@
 package document
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -14,7 +15,7 @@ import (
 // that specifies the coordinates and extent of the page box individually.
 func (f *Document) SetPageBoxRec(t string, pb PageBox) {
 	if !finiteNumbers(pb.X, pb.Y, pb.Wd, pb.Ht) {
-		f.err = fmt.Errorf("invalid page box coordinates")
+		f.err = errors.New("invalid page box coordinates")
 		return
 	}
 	switch strings.ToLower(t) {
@@ -38,8 +39,8 @@ func (f *Document) SetPageBoxRec(t string, pb PageBox) {
 		f.err = fmt.Errorf("%s is not a valid page box type", t)
 		return
 	}
-	pb.X = pb.X * f.k
-	pb.Y = pb.Y * f.k
+	pb.X *= f.k
+	pb.Y *= f.k
 	pb.Wd = (pb.Wd * f.k) + pb.X
 	pb.Ht = (pb.Ht * f.k) + pb.Y
 	if f.page > 0 {

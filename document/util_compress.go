@@ -6,7 +6,7 @@ package document
 import (
 	"bytes"
 	"compress/zlib"
-	"fmt"
+	"errors"
 	"io"
 	"sync"
 )
@@ -73,7 +73,7 @@ func sliceUncompress(data []byte, limit ...int) (outData []byte, err error) {
 		if len(limit) > 0 && limit[0] >= 0 {
 			_, err = outBuf.ReadFrom(io.LimitReader(r, int64(limit[0])+1))
 			if err == nil && outBuf.Len() > limit[0] {
-				err = fmt.Errorf("uncompressed data exceeds expected size")
+				err = errors.New("uncompressed data exceeds expected size")
 			}
 		} else {
 			_, err = outBuf.ReadFrom(r)

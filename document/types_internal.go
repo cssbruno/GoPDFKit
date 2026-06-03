@@ -132,13 +132,14 @@ func (pa *phpOrderedIntMap) delete(key any) {
 	}
 	i := pa.getIndex(key)
 	if i >= 0 {
-		if i == 0 {
+		switch {
+		case i == 0:
 			pa.keySet = pa.keySet[1:]
 			pa.valueSet = pa.valueSet[1:]
-		} else if i == len(pa.keySet)-1 {
+		case i == len(pa.keySet)-1:
 			pa.keySet = pa.keySet[:len(pa.keySet)-1]
 			pa.valueSet = pa.valueSet[:len(pa.valueSet)-1]
-		} else {
+		default:
 			pa.keySet = append(pa.keySet[:i], pa.keySet[i+1:]...)
 			pa.valueSet = append(pa.valueSet[:i], pa.valueSet[i+1:]...)
 		}

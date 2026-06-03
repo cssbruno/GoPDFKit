@@ -103,10 +103,6 @@ func htmlTagEnd(s string) int {
 	return -1
 }
 
-func parseHTMLTag(raw string) (name string, attrs map[string]string, closeTag, selfClosing bool) {
-	return parseHTMLTagWithAttrCache(raw, nil)
-}
-
 func parseHTMLTagWithAttrCache(raw string, attrCache map[string]map[string]string) (name string, attrs map[string]string, closeTag, selfClosing bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || strings.HasPrefix(raw, "!") || strings.HasPrefix(raw, "?") {

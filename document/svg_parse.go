@@ -5,7 +5,9 @@ package document
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"sort"
@@ -14,6 +16,8 @@ import (
 )
 
 var pathCmdSub *strings.Replacer
+
+const maxSVGSourceBytes = 4 * 1024 * 1024
 
 func init() {
 	pathCmdSub = strings.NewReplacer(",", " ", "A", " A ", "a", " a ", "L", " L ", "l", " l ", "C", " C ", "c", " c ", "M", " M ", "m", " m ", "H", " H ", "h", " h ", "S", " S ", "s", " s ", "T", " T ", "t", " t ", "V", " V ", "v", " v ", "Q", " Q ", "q", " q ", "Z", " Z ", "z", " z ")
@@ -225,7 +229,7 @@ func svgArcDerivative(rx, ry, cosPhi, sinPhi, theta float64) (float64, float64) 
 
 func svgArcSegments(x1, y1, rx, ry, xAxisRotation float64, largeArc, sweep bool, x2, y2 float64) ([]SVGSegment, error) {
 	if !svgFinite(rx) || !svgFinite(ry) || !svgFinite(xAxisRotation) || !svgFinite(x2) || !svgFinite(y2) {
-		return nil, fmt.Errorf("invalid SVG arc: non-finite value")
+		return nil, errors.New("invalid SVG arc: non-finite value")
 	}
 	rx, ry = math.Abs(rx), math.Abs(ry)
 	if x1 == x2 && y1 == y2 {
@@ -747,7 +751,7 @@ func svgCollectDepth(node svgNode, style SVGStyle, transform svgMatrix, sig *SVG
 	}
 	if ok {
 		if !svgPathFinite(path) {
-			return fmt.Errorf("invalid SVG path: non-finite value")
+			return errors.New("invalid SVG path: non-finite value")
 		}
 		sig.Paths = append(sig.Paths, path)
 		sig.Segments = append(sig.Segments, path.Segments)
@@ -759,7 +763,7 @@ func svgCollectDepth(node svgNode, style SVGStyle, transform svgMatrix, sig *SVG
 	}
 	if ok {
 		if !svgTextFinite(text) {
-			return fmt.Errorf("invalid SVG text: non-finite value")
+			return errors.New("invalid SVG text: non-finite value")
 		}
 		sig.Texts = append(sig.Texts, text)
 		sig.Elements = append(sig.Elements, SVGElement{Kind: "text", Text: text})
@@ -770,7 +774,7 @@ func svgCollectDepth(node svgNode, style SVGStyle, transform svgMatrix, sig *SVG
 	}
 	if ok {
 		if !svgImageFinite(image) {
-			return fmt.Errorf("invalid SVG image: non-finite value")
+			return errors.New("invalid SVG image: non-finite value")
 		}
 		sig.Images = append(sig.Images, image)
 		sig.Elements = append(sig.Elements, SVGElement{Kind: "image", Image: image})
@@ -788,6 +792,9 @@ func svgCollectDepth(node svgNode, style SVGStyle, transform svgMatrix, sig *SVG
 // inherited presentation attributes are converted to data that SVGWrite can
 // render.
 func SVGParse(buf []byte) (sig SVG, err error) {
+	if len(buf) > maxSVGSourceBytes {
+		return SVG{}, errors.New("SVG source exceeds maximum size")
+	}
 	var src svgNode
 	err = xml.Unmarshal(buf, &src)
 	if err == nil {
@@ -809,9 +816,25 @@ func SVGParse(buf []byte) (sig SVG, err error) {
 // SVGFileParse parses an SVG file into a descriptor that SVGWrite can render.
 func SVGFileParse(svgFileStr string) (sig SVG, err error) {
 	var buf []byte
-	buf, err = os.ReadFile(svgFileStr)
+	buf, err = readSVGFile(svgFileStr)
 	if err == nil {
 		sig, err = SVGParse(buf)
 	}
 	return
+}
+
+func readSVGFile(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	if info, err := file.Stat(); err == nil && info.Mode().IsRegular() && info.Size() > maxSVGSourceBytes {
+		return nil, errors.New("SVG source exceeds maximum size")
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxSVGSourceBytes+1))
+	if err == nil && len(data) > maxSVGSourceBytes {
+		err = errors.New("SVG source exceeds maximum size")
+	}
+	return data, err
 }

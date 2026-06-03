@@ -5,6 +5,7 @@ package font
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,8 @@ import (
 )
 
 const maxOpenTypeTableBytes = 256 * 1024 * 1024
+
+var postScriptNameSanitizer = regexp.MustCompile(`[(){}<> /%[\]]`)
 
 // OpenType contains metrics and embedded font data from an OpenType font.
 type OpenType struct {
@@ -69,17 +72,17 @@ type ttfParser struct {
 }
 
 // ParseTTF extracts various metrics from a TrueType font file.
-func ParseTTF(fileStr string) (TtfRec TrueType, err error) {
+func ParseTTF(fileStr string) (ttfRec TrueType, err error) {
 	var otf OpenType
 	otf, err = ParseOpenType(fileStr)
 	if err != nil {
 		return
 	}
 	if otf.PostScriptOutlines {
-		err = fmt.Errorf("not a TrueType font: OpenType/CFF uses PostScript outlines")
+		err = errors.New("not a TrueType font: OpenType/CFF uses PostScript outlines")
 		return
 	}
-	TtfRec = TrueType{
+	ttfRec = TrueType{
 		Embeddable:         otf.Embeddable,
 		UnitsPerEm:         otf.UnitsPerEm,
 		PostScriptName:     otf.PostScriptName,
@@ -103,7 +106,7 @@ func ParseTTF(fileStr string) (TtfRec TrueType, err error) {
 
 // ParseOpenType extracts metrics from an OpenType font file. It supports both
 // TrueType outlines and CFF/PostScript outlines.
-func ParseOpenType(fileStr string) (OpenTypeRec OpenType, err error) {
+func ParseOpenType(fileStr string) (openTypeRec OpenType, err error) {
 	var t ttfParser
 	t.f, err = os.Open(fileStr)
 	if err != nil {
@@ -124,7 +127,7 @@ func ParseOpenType(fileStr string) (OpenTypeRec OpenType, err error) {
 		t.rec.PostScriptOutlines = true
 	case "\x00\x01\x00\x00", "true":
 	default:
-		err = fmt.Errorf("unrecognized file format")
+		err = errors.New("unrecognized file format")
 		return
 	}
 	numTables := int(t.ReadUShort())
@@ -165,7 +168,7 @@ func ParseOpenType(fileStr string) (OpenTypeRec OpenType, err error) {
 			return
 		}
 	}
-	OpenTypeRec = t.rec
+	openTypeRec = t.rec
 	return
 }
 
@@ -225,7 +228,7 @@ func (t *ttfParser) ParseHead() (err error) {
 	t.Skip(3 * 4) // version, fontRevision, checkSumAdjustment
 	magicNumber := t.ReadULong()
 	if magicNumber != 0x5F0F3CF5 {
-		err = fmt.Errorf("incorrect magic number")
+		err = errors.New("incorrect magic number")
 		return
 	}
 	t.Skip(2) // flags
@@ -260,7 +263,7 @@ func (t *ttfParser) ParseHmtx() (err error) {
 	err = t.Seek("hmtx")
 	if err == nil {
 		if t.numberOfHMetrics == 0 && t.numGlyphs > 0 {
-			return fmt.Errorf("invalid horizontal metrics count")
+			return errors.New("invalid horizontal metrics count")
 		}
 		t.rec.Widths = make([]uint16, 0, 8)
 		for j := uint16(0); j < t.numberOfHMetrics; j++ {
@@ -294,7 +297,7 @@ func (t *ttfParser) ParseCmap() (err error) {
 		}
 	}
 	if offset31 == 0 {
-		err = fmt.Errorf("no Unicode encoding found")
+		err = errors.New("no Unicode encoding found")
 		return
 	}
 	startCount := make([]uint16, 0, 8)
@@ -376,7 +379,7 @@ func (t *ttfParser) ParseName() (err error) {
 			offset := t.ReadUShort()
 			if nameID == 6 {
 				// PostScript name
-				if _, err = t.f.Seek(int64(tableOffset)+int64(stringOffset)+int64(offset), io.SeekStart); err != nil {
+				if _, err = t.f.Seek(tableOffset+int64(stringOffset)+int64(offset), io.SeekStart); err != nil {
 					return
 				}
 				var s string
@@ -385,15 +388,11 @@ func (t *ttfParser) ParseName() (err error) {
 					return
 				}
 				s = strings.ReplaceAll(s, "\x00", "")
-				var re *regexp.Regexp
-				if re, err = regexp.Compile(`[(){}<> /%[\]]`); err != nil {
-					return
-				}
-				t.rec.PostScriptName = re.ReplaceAllString(s, "")
+				t.rec.PostScriptName = postScriptNameSanitizer.ReplaceAllString(s, "")
 			}
 		}
 		if t.rec.PostScriptName == "" {
-			err = fmt.Errorf("the name PostScript was not found")
+			err = errors.New("the name PostScript was not found")
 		}
 	}
 	return

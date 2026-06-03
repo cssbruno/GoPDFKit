@@ -4,6 +4,7 @@
 package document
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -302,7 +303,7 @@ func svgTransform(value string) (svgMatrix, error) {
 		}
 		matrix = next.multiply(matrix)
 		if !matrix.finite() {
-			return svgIdentityMatrix(), fmt.Errorf("invalid SVG transform: non-finite result")
+			return svgIdentityMatrix(), errors.New("invalid SVG transform: non-finite result")
 		}
 		value = strings.TrimSpace(value[close+1:])
 	}
@@ -326,12 +327,12 @@ func svgTransformMatrix(name string, nums []float64) (svgMatrix, error) {
 	switch name {
 	case "matrix":
 		if len(nums) != 6 {
-			return svgIdentityMatrix(), fmt.Errorf("SVG matrix transform expects 6 arguments")
+			return svgIdentityMatrix(), errors.New("SVG matrix transform expects 6 arguments")
 		}
 		return svgMatrix{A: nums[0], B: nums[1], C: nums[2], D: nums[3], E: nums[4], F: nums[5]}, nil
 	case "translate":
 		if len(nums) != 1 && len(nums) != 2 {
-			return svgIdentityMatrix(), fmt.Errorf("SVG translate transform expects 1 or 2 arguments")
+			return svgIdentityMatrix(), errors.New("SVG translate transform expects 1 or 2 arguments")
 		}
 		ty := 0.0
 		if len(nums) == 2 {
@@ -340,7 +341,7 @@ func svgTransformMatrix(name string, nums []float64) (svgMatrix, error) {
 		return svgMatrix{A: 1, D: 1, E: nums[0], F: ty}, nil
 	case "scale":
 		if len(nums) != 1 && len(nums) != 2 {
-			return svgIdentityMatrix(), fmt.Errorf("SVG scale transform expects 1 or 2 arguments")
+			return svgIdentityMatrix(), errors.New("SVG scale transform expects 1 or 2 arguments")
 		}
 		sy := nums[0]
 		if len(nums) == 2 {
@@ -349,7 +350,7 @@ func svgTransformMatrix(name string, nums []float64) (svgMatrix, error) {
 		return svgMatrix{A: nums[0], D: sy}, nil
 	case "rotate":
 		if len(nums) != 1 && len(nums) != 3 {
-			return svgIdentityMatrix(), fmt.Errorf("SVG rotate transform expects 1 or 3 arguments")
+			return svgIdentityMatrix(), errors.New("SVG rotate transform expects 1 or 3 arguments")
 		}
 		radians := nums[0] * math.Pi / 180
 		cosine, sine := math.Cos(radians), math.Sin(radians)
@@ -362,12 +363,12 @@ func svgTransformMatrix(name string, nums []float64) (svgMatrix, error) {
 		return fromOrigin.multiply(rotation).multiply(toOrigin), nil
 	case "skewx":
 		if len(nums) != 1 {
-			return svgIdentityMatrix(), fmt.Errorf("SVG skewX transform expects 1 argument")
+			return svgIdentityMatrix(), errors.New("SVG skewX transform expects 1 argument")
 		}
 		return svgMatrix{A: 1, C: math.Tan(nums[0] * math.Pi / 180), D: 1}, nil
 	case "skewy":
 		if len(nums) != 1 {
-			return svgIdentityMatrix(), fmt.Errorf("SVG skewY transform expects 1 argument")
+			return svgIdentityMatrix(), errors.New("SVG skewY transform expects 1 argument")
 		}
 		return svgMatrix{A: 1, B: math.Tan(nums[0] * math.Pi / 180), D: 1}, nil
 	default:

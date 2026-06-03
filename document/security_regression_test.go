@@ -77,6 +77,46 @@ func TestSecurityPNGAlphaDecodedLimitReturnsError(t *testing.T) {
 	}
 }
 
+func TestSecurityPNGNonAlphaPixelLimitReturnsError(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("RegisterImageOptionsReader panicked: %v", r)
+		}
+	}()
+
+	_ = pdf.RegisterImageOptionsReader("large-rgb", ImageOptions{ImageType: "png"}, bytes.NewReader(securityPNG(
+		10000,
+		6000,
+		2,
+		securityPNGChunk("IDAT", securityZlibBytes([]byte{0})),
+		securityPNGChunk("IEND", nil),
+	)))
+	if pdf.Error() == nil {
+		t.Fatal("expected PNG pixel-count limit error")
+	}
+}
+
+func TestSecurityPNGDimensionLimitReturnsError(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("RegisterImageOptionsReader panicked: %v", r)
+		}
+	}()
+
+	_ = pdf.RegisterImageOptionsReader("wide-rgb", ImageOptions{ImageType: "png"}, bytes.NewReader(securityPNG(
+		uint32(maxImageDimension+1),
+		1,
+		2,
+		securityPNGChunk("IDAT", securityZlibBytes([]byte{0})),
+		securityPNGChunk("IEND", nil),
+	)))
+	if pdf.Error() == nil {
+		t.Fatal("expected PNG dimension limit error")
+	}
+}
+
 func TestSecurityOversizedGIFDimensionsRejected(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	defer func() {
@@ -88,6 +128,114 @@ func TestSecurityOversizedGIFDimensionsRejected(t *testing.T) {
 	_ = pdf.RegisterImageOptionsReader("huge-gif", ImageOptions{ImageType: "gif"}, bytes.NewReader(securityGIF(65535, 65535)))
 	if pdf.Error() == nil {
 		t.Fatal("expected GIF dimension limit error")
+	}
+}
+
+func TestSecurityMaskImageFileSizeLimit(t *testing.T) {
+	maskPath := filepath.Join(t.TempDir(), "oversized-mask.png")
+	file, err := os.Create(maskPath)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if err := file.Truncate(int64(maxImageSourceBytes) + 1); err != nil {
+		_ = file.Close()
+		t.Fatalf("Truncate() error = %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	pdf := New("P", "mm", "A4", "")
+	pdf.applyExternalImageMask(&ImageInfo{w: 1, h: 1}, maskPath, ImageOptions{ImageType: "png"})
+	if pdf.Error() == nil || !strings.Contains(pdf.Error().Error(), "image data exceeds maximum size") {
+		t.Fatalf("mask error = %v, want image data size limit", pdf.Error())
+	}
+}
+
+func TestSecurityPDFImportFileSizeLimit(t *testing.T) {
+	sourcePath := filepath.Join(t.TempDir(), "oversized.pdf")
+	file, err := os.Create(sourcePath)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if err := file.Truncate(int64(maxPDFImportSourceBytes) + 1); err != nil {
+		_ = file.Close()
+		t.Fatalf("Truncate() error = %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	pdf := New("P", "mm", "A4", "")
+	if page := pdf.ImportPage(sourcePath, 1, "MediaBox"); page != 0 {
+		t.Fatalf("ImportPage() page = %d, want 0", page)
+	}
+	if pdf.Error() == nil || !strings.Contains(pdf.Error().Error(), "PDF import source exceeds maximum size") {
+		t.Fatalf("ImportPage() error = %v, want PDF import size limit", pdf.Error())
+	}
+}
+
+func TestSecuritySVGSourceSizeLimit(t *testing.T) {
+	_, err := SVGParse([]byte(strings.Repeat(" ", maxSVGSourceBytes+1)))
+	if err == nil || !strings.Contains(err.Error(), "SVG source exceeds maximum size") {
+		t.Fatalf("SVGParse() error = %v, want SVG source size limit", err)
+	}
+}
+
+func TestSecurityThumbnailHugeDimensionsRejected(t *testing.T) {
+	_, _, err := GenerateThumbnail(bytes.NewReader(securityGIF(65535, 65535)), ThumbnailOptions{MaxWidth: 16, MaxHeight: 16})
+	if err == nil || !strings.Contains(err.Error(), "thumbnail dimensions exceed maximum image size") {
+		t.Fatalf("GenerateThumbnail() error = %v, want thumbnail dimension limit", err)
+	}
+}
+
+func TestSecurityFontDefinitionReaderSizeLimit(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.AddFontFromReader("bad", "", strings.NewReader(strings.Repeat(" ", maxFontDefinitionBytes+1)))
+	if pdf.Error() == nil || !strings.Contains(pdf.Error().Error(), "font data exceeds maximum size") {
+		t.Fatalf("AddFontFromReader() error = %v, want font data size limit", pdf.Error())
+	}
+}
+
+func TestSecurityPDFImportDecodedStreamLimit(t *testing.T) {
+	compressed := securityZlibBytes(bytes.Repeat([]byte{'A'}, maxPDFImportDecodedStreamBytes+1))
+	_, err := decodePDFStream(pdfDict{"Filter": pdfValue{kind: pdfValueName, name: "FlateDecode"}}, compressed)
+	if err == nil || !strings.Contains(err.Error(), "uncompressed data exceeds expected size") {
+		t.Fatalf("decodePDFStream() error = %v, want decoded stream size limit", err)
+	}
+}
+
+func TestSecurityPDFValueArrayLimit(t *testing.T) {
+	var input strings.Builder
+	input.WriteByte('[')
+	for range maxPDFImportArrayItems + 1 {
+		input.WriteString("0 ")
+	}
+	input.WriteByte(']')
+
+	_, err := newPDFValueParser([]byte(input.String())).parseValue()
+	if err == nil || !strings.Contains(err.Error(), "PDF array exceeds maximum size") {
+		t.Fatalf("parseValue() error = %v, want array size limit", err)
+	}
+}
+
+func TestSecurityFontCacheFileSizeLimit(t *testing.T) {
+	fontPath := filepath.Join(t.TempDir(), "oversized.ttf")
+	file, err := os.Create(fontPath)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if err := file.Truncate(int64(maxFontSourceBytes) + 1); err != nil {
+		_ = file.Close()
+		t.Fatalf("Truncate() error = %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	err = NewFontCache().AddUTF8Font("bad", "", fontPath)
+	if err == nil || !strings.Contains(err.Error(), "font data exceeds maximum size") {
+		t.Fatalf("AddUTF8Font() error = %v, want font data size limit", err)
 	}
 }
 
@@ -173,6 +321,23 @@ func TestSecurityInvalidTemplateDecodeRejected(t *testing.T) {
 	_, err = DeserializeTemplate(encoded)
 	if err == nil || !strings.Contains(err.Error(), "invalid template page index") {
 		t.Fatalf("DeserializeTemplate() error = %v, want invalid page index", err)
+	}
+}
+
+func TestSecuritySerializedTemplateSizeLimit(t *testing.T) {
+	_, err := DeserializeTemplate(bytes.Repeat([]byte{'x'}, maxTemplateSerializedBytes+1))
+	if err == nil || !strings.Contains(err.Error(), "serialized template exceeds maximum size") {
+		t.Fatalf("DeserializeTemplate() error = %v, want serialized template size limit", err)
+	}
+}
+
+func TestSecurityTemplatePageContentSizeLimit(t *testing.T) {
+	tpl := &DocumentTpl{
+		bytes: [][]byte{nil, bytes.Repeat([]byte{'q'}, maxTemplatePageBytes+1)},
+		page:  1,
+	}
+	if err := tpl.validate(); err == nil || !strings.Contains(err.Error(), "template page content exceeds maximum size") {
+		t.Fatalf("template validate error = %v, want page content size limit", err)
 	}
 }
 
@@ -462,7 +627,7 @@ func securityFontJSON(diff string) string {
 
 func securityPNG(width, height uint32, pdfColor byte, chunks ...[]byte) []byte {
 	var out bytes.Buffer
-	out.Write([]byte("\x89PNG\x0d\x0a\x1a\x0a"))
+	out.WriteString("\x89PNG\x0d\x0a\x1a\x0a")
 	var ihdr bytes.Buffer
 	_ = binary.Write(&ihdr, binary.BigEndian, width)
 	_ = binary.Write(&ihdr, binary.BigEndian, height)
@@ -508,7 +673,7 @@ func TestSecurityImageInfoValidationRejectsPDFSyntax(t *testing.T) {
 		cs:   "DeviceRGB",
 		bpc:  8,
 		f:    "FlateDecode",
-		dp:   fmt.Sprintf("/Predictor 15 /Colors 3 /BitsPerComponent 8 /Columns 1 %s", ">>"),
+		dp:   "/Predictor 15 /Colors 3 /BitsPerComponent 8 /Columns 1 " + ">>",
 	}
 	if err := info.validForPDF(); err == nil {
 		t.Fatal("expected invalid decode parameters error")

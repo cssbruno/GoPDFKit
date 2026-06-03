@@ -5,6 +5,7 @@ package document
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -40,7 +41,7 @@ func svgImageDataURI(href string) ([]byte, string, bool, error) {
 	}
 	media, data, ok := strings.Cut(href[5:], ",")
 	if !ok {
-		return nil, "", false, fmt.Errorf("invalid SVG image data URI")
+		return nil, "", false, errors.New("invalid SVG image data URI")
 	}
 	parts := strings.Split(media, ";")
 	imageType := svgImageTypeFromMime(parts[0])
@@ -55,18 +56,18 @@ func svgImageDataURI(href string) ([]byte, string, bool, error) {
 		}
 	}
 	if !base64Encoded {
-		return nil, "", false, fmt.Errorf("SVG image data URI must be base64 encoded")
+		return nil, "", false, errors.New("SVG image data URI must be base64 encoded")
 	}
 	data = strings.TrimSpace(data)
 	if base64.StdEncoding.DecodedLen(len(data)) > maxImageSourceBytes {
-		return nil, "", false, fmt.Errorf("SVG image data URI exceeds maximum size")
+		return nil, "", false, errors.New("SVG image data URI exceeds maximum size")
 	}
 	buf, err := base64.StdEncoding.DecodeString(data)
 	if err != nil {
 		return nil, "", false, fmt.Errorf("invalid SVG image data URI: %w", err)
 	}
 	if len(buf) > maxImageSourceBytes {
-		return nil, "", false, fmt.Errorf("SVG image data URI exceeds maximum size")
+		return nil, "", false, errors.New("SVG image data URI exceeds maximum size")
 	}
 	return buf, imageType, true, nil
 }

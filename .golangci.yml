@@ -1,0 +1,35 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - copyloopvar
+    - dupword
+    - durationcheck
+    - errcheck
+    - errchkjson
+    - errorlint
+    - gocritic
+    - govet
+    - ineffassign
+    - makezero
+    - mirror
+    - misspell
+    - nilerr
+    - nilnesserr
+    - noctx
+    - nosprintfhostport
+    - perfsprint
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - unconvert
+    - unused
+    - usestdlibvars
+    - wastedassign
+    - whitespace

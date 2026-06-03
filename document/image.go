@@ -4,6 +4,7 @@
 package document
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -118,7 +119,7 @@ func (f *Document) RegisterImageOptionsReader(imgName string, options ImageOptio
 		return
 	}
 	if options.ImageType == "" {
-		f.err = fmt.Errorf("image type should be specified if reading from custom reader")
+		f.err = errors.New("image type should be specified if reading from custom reader")
 		return
 	}
 	options.ImageType = strings.ToLower(options.ImageType)
@@ -141,7 +142,7 @@ func (f *Document) RegisterImageOptionsReader(imgName string, options ImageOptio
 		return
 	}
 	if info == nil {
-		f.err = fmt.Errorf("image parser returned no image info")
+		f.err = errors.New("image parser returned no image info")
 		return
 	}
 	if info.i, f.err = generateImageID(info); f.err != nil {

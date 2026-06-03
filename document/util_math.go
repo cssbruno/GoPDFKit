@@ -18,9 +18,6 @@ func round(f float64) int {
 func sprintf(fmtStr string, args ...any) string {
 	return fmt.Sprintf(fmtStr, args...)
 }
-func validImagePixelCount(width, height int) bool {
-	return width > 0 && height > 0 && width <= maxImagePixels/height
-}
 
 func finiteNumbers(values ...float64) bool {
 	for _, value := range values {

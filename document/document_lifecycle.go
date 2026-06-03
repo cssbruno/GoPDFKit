@@ -5,6 +5,7 @@ package document
 
 import (
 	"compress/zlib"
+	"errors"
 	"fmt"
 )
 
@@ -54,7 +55,7 @@ func (f *Document) SetDisplayMode(zoomStr, layoutStr string) {
 // compression flag. See SetCompression for more details. Compression is on by
 // default.
 func SetDefaultCompression(compress bool) {
-	gl.noCompress = !compress
+	_gl.noCompress = !compress
 }
 
 // SetCompression activates or deactivates page compression with zlib. When
@@ -134,9 +135,9 @@ func (f *Document) open() {
 func (f *Document) Close() {
 	if f.err == nil {
 		if f.clipNest > 0 {
-			f.err = fmt.Errorf("clip procedure must be explicitly ended")
+			f.err = errors.New("clip procedure must be explicitly ended")
 		} else if f.transformNest > 0 {
-			f.err = fmt.Errorf("transformation procedure must be explicitly ended")
+			f.err = errors.New("transformation procedure must be explicitly ended")
 		}
 	}
 	if f.err != nil {

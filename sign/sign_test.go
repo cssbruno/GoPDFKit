@@ -278,7 +278,7 @@ func TestCreatePKCS7VerifiesWithOpenSSL(t *testing.T) {
 		t.Fatalf("WriteFile(content) error = %v", err)
 	}
 
-	cmd := exec.Command("openssl", "cms", "-verify", "-binary", "-inform", "DER",
+	cmd := exec.CommandContext(t.Context(), "openssl", "cms", "-verify", "-binary", "-inform", "DER",
 		"-in", cmsPath, "-content", contentPath, "-CAfile", certPath, "-purpose", "any", "-out", outputPath)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -347,6 +347,12 @@ func TestVerifyPKCS7RejectsWrongCertificateUsage(t *testing.T) {
 	}
 	if _, err := VerifyDetachedPKCS7(cms, []byte("content"), truststore); err == nil {
 		t.Fatal("VerifyDetachedPKCS7() accepted non-document-signing certificate")
+	}
+}
+
+func TestVerifyPKCS7RejectsOversizedCMS(t *testing.T) {
+	if _, err := VerifyPKCS7(bytes.Repeat([]byte{0x30}, maxCMSPackageBytes+1), nil); err == nil {
+		t.Fatal("VerifyPKCS7() accepted oversized CMS package")
 	}
 }
 

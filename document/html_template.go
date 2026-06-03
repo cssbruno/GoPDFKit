@@ -4,6 +4,7 @@
 package document
 
 import (
+	"errors"
 	"fmt"
 	stdhtml "html"
 	"regexp"
@@ -104,7 +105,7 @@ func renderHTMLTemplateValue(value any) (string, error) {
 
 func renderHTMLTemplateImage(image HTMLTemplateImage) (string, error) {
 	if strings.TrimSpace(image.Source) == "" {
-		return "", fmt.Errorf("image source is required")
+		return "", errors.New("image source is required")
 	}
 	attrs := map[string]string{}
 	attrs["src"] = image.Source

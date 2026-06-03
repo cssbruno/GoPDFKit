@@ -5,6 +5,7 @@ package document
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -53,9 +54,20 @@ type pdfImageRegistrar interface {
 // plus the gopdfkit image type string.
 func GenerateThumbnail(r io.Reader, options ThumbnailOptions) ([]byte, string, error) {
 	if r == nil {
-		return nil, "", fmt.Errorf("thumbnail source reader is nil")
+		return nil, "", errors.New("thumbnail source reader is nil")
 	}
-	src, sourceFormat, err := image.Decode(r)
+	data, err := bufferFromReaderLimit(r, maxImageSourceBytes)
+	if err != nil {
+		return nil, "", err
+	}
+	config, sourceFormat, err := image.DecodeConfig(bytes.NewReader(data.Bytes()))
+	if err != nil {
+		return nil, "", fmt.Errorf("decode thumbnail source config: %w", err)
+	}
+	if err := validateImageDimensions(config.Width, config.Height); err != nil {
+		return nil, "", fmt.Errorf("thumbnail dimensions exceed maximum image size: %w", err)
+	}
+	src, sourceFormat, err := image.Decode(bytes.NewReader(data.Bytes()))
 	if err != nil {
 		return nil, "", fmt.Errorf("decode thumbnail source: %w", err)
 	}
@@ -66,7 +78,7 @@ func GenerateThumbnail(r io.Reader, options ThumbnailOptions) ([]byte, string, e
 // gopdfkit image type string.
 func GenerateThumbnailImage(src image.Image, sourceFormat string, options ThumbnailOptions) ([]byte, string, error) {
 	if src == nil {
-		return nil, "", fmt.Errorf("thumbnail source image is nil")
+		return nil, "", errors.New("thumbnail source image is nil")
 	}
 	format, quality, err := normalizeEncodeOptions(sourceFormat, options)
 	if err != nil {
@@ -96,10 +108,10 @@ func GenerateThumbnailImage(src image.Image, sourceFormat string, options Thumbn
 // name.
 func RegisterThumbnail(pdf pdfImageRegistrar, name string, r io.Reader, options ThumbnailOptions) (*ImageInfo, error) {
 	if pdf == nil {
-		return nil, fmt.Errorf("pdf registrar is nil")
+		return nil, errors.New("pdf registrar is nil")
 	}
 	if strings.TrimSpace(name) == "" {
-		err := fmt.Errorf("thumbnail image name is empty")
+		err := errors.New("thumbnail image name is empty")
 		pdf.SetError(err)
 		return nil, err
 	}
@@ -119,7 +131,7 @@ func (f *Document) RegisterThumbnail(name string, r io.Reader, options Thumbnail
 
 func resize(src image.Image, options ThumbnailOptions) (image.Image, error) {
 	if src == nil {
-		return nil, fmt.Errorf("thumbnail source image is nil")
+		return nil, errors.New("thumbnail source image is nil")
 	}
 	width, height, err := targetSize(src.Bounds(), options)
 	if err != nil {
@@ -130,7 +142,7 @@ func resize(src image.Image, options ThumbnailOptions) (image.Image, error) {
 
 func normalizeEncodeOptions(sourceFormat string, options ThumbnailOptions) (format string, jpegQuality int, err error) {
 	if options.JPEGQuality < 0 || options.JPEGQuality > 100 {
-		return "", 0, fmt.Errorf("thumbnail JPEG quality must be between 0 and 100")
+		return "", 0, errors.New("thumbnail JPEG quality must be between 0 and 100")
 	}
 	jpegQuality = options.JPEGQuality
 	if jpegQuality == 0 {
@@ -159,12 +171,12 @@ func normalizeEncodeOptions(sourceFormat string, options ThumbnailOptions) (form
 
 func targetSize(bounds image.Rectangle, options ThumbnailOptions) (width, height int, err error) {
 	if options.MaxWidth < 0 || options.MaxHeight < 0 {
-		return 0, 0, fmt.Errorf("thumbnail dimensions must be non-negative")
+		return 0, 0, errors.New("thumbnail dimensions must be non-negative")
 	}
 	sourceWidth := bounds.Dx()
 	sourceHeight := bounds.Dy()
 	if sourceWidth <= 0 || sourceHeight <= 0 {
-		return 0, 0, fmt.Errorf("thumbnail source image has invalid dimensions")
+		return 0, 0, errors.New("thumbnail source image has invalid dimensions")
 	}
 
 	maxWidth := options.MaxWidth

@@ -4,8 +4,8 @@
 package document
 
 import (
-	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -122,7 +122,11 @@ func (f *Document) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 			return
 		}
 		originalSize := ttfStat.Size()
-		utf8Bytes, err := os.ReadFile(fileStr)
+		if originalSize > maxFontSourceBytes {
+			f.SetError(errors.New("font data exceeds maximum size"))
+			return
+		}
+		utf8Bytes, err := readFontResourceFile(fileStr, maxFontSourceBytes)
 		if err != nil {
 			f.SetError(err)
 			return
@@ -198,7 +202,7 @@ func validateFontDefinition(info fontDefinition) error {
 		return fmt.Errorf("invalid font type: %s", info.Tp)
 	}
 	if info.Tp != "Core" && len(info.Cw) < 256 {
-		return fmt.Errorf("invalid font width table")
+		return errors.New("invalid font width table")
 	}
 	if info.File != "" {
 		if !validFontResourceName(info.File) {
@@ -207,23 +211,24 @@ func validateFontDefinition(info fontDefinition) error {
 		if len(info.File) < 2 {
 			return fmt.Errorf("invalid font resource name: %s", info.File)
 		}
-		if info.Tp == "TrueType" {
+		switch {
+		case info.Tp == "TrueType":
 			if info.OriginalSize < 0 {
-				return fmt.Errorf("invalid TrueType font size")
+				return errors.New("invalid TrueType font size")
 			}
-		} else if info.Tp == "OpenTypeCFF" {
+		case info.Tp == "OpenTypeCFF":
 			if info.OriginalSize < 0 {
-				return fmt.Errorf("invalid OpenType/CFF font size")
+				return errors.New("invalid OpenType/CFF font size")
 			}
-		} else if info.Size1 < 0 || info.Size2 < 0 {
-			return fmt.Errorf("invalid Type1 font size")
+		case info.Size1 < 0 || info.Size2 < 0:
+			return errors.New("invalid Type1 font size")
 		}
 	}
 	if info.Name != "" && !validPDFNameFragment(info.Name) {
 		return fmt.Errorf("invalid font name: %s", info.Name)
 	}
 	if info.Diff != "" && !validFontDiff(info.Diff) {
-		return fmt.Errorf("invalid font encoding differences")
+		return errors.New("invalid font encoding differences")
 	}
 	return nil
 }
@@ -274,8 +279,8 @@ func utf8FontDefinition(fontKey, fileStr string, utf8Bytes []byte) (fontDefiniti
 	if err := utf8File.parseFile(); err != nil {
 		return fontDefinition{}, err
 	}
-	desc := FontDescriptor{Ascent: int(utf8File.Ascent), Descent: int(utf8File.Descent), CapHeight: utf8File.CapHeight, Flags: utf8File.Flags, FontBBox: utf8File.Bbox, ItalicAngle: utf8File.ItalicAngle, StemV: utf8File.StemV, MissingWidth: round(utf8File.DefaultWidth)}
-	def := fontDefinition{Tp: "UTF8", Name: fontKey, Desc: desc, Up: int(round(utf8File.UnderlinePosition)), Ut: round(utf8File.UnderlineThickness), Cw: append([]int(nil), utf8File.CharWidths...), File: fileStr, utf8File: utf8File}
+	desc := FontDescriptor{Ascent: utf8File.Ascent, Descent: utf8File.Descent, CapHeight: utf8File.CapHeight, Flags: utf8File.Flags, FontBBox: utf8File.Bbox, ItalicAngle: utf8File.ItalicAngle, StemV: utf8File.StemV, MissingWidth: round(utf8File.DefaultWidth)}
+	def := fontDefinition{Tp: "UTF8", Name: fontKey, Desc: desc, Up: round(utf8File.UnderlinePosition), Ut: round(utf8File.UnderlineThickness), Cw: append([]int(nil), utf8File.CharWidths...), File: fileStr, utf8File: utf8File}
 	def.i, _ = generateFontID(def)
 	return def, nil
 }
@@ -338,6 +343,10 @@ func (f *Document) addFontFromBytes(familyStr, styleStr string, jsonFileBytes, z
 		return
 	}
 	if utf8Bytes != nil {
+		if err := validateFontDataSize(utf8Bytes, maxFontSourceBytes, "font data"); err != nil {
+			f.err = err
+			return
+		}
 		def, err := utf8FontDefinition(fontkey, "", utf8Bytes)
 		if err != nil {
 			f.SetError(err)
@@ -346,6 +355,14 @@ func (f *Document) addFontFromBytes(familyStr, styleStr string, jsonFileBytes, z
 		def.usedRunes = defaultUTF8UsedRunes(f.aliasNbPagesStr)
 		f.fonts[fontkey] = def
 	} else {
+		if err := validateFontDataSize(jsonFileBytes, maxFontDefinitionBytes, "font definition"); err != nil {
+			f.err = err
+			return
+		}
+		if err := validateFontDataSize(zFileBytes, maxFontSourceBytes, "font data"); err != nil {
+			f.err = err
+			return
+		}
 		var info fontDefinition
 		err := json.Unmarshal(jsonFileBytes, &info)
 		if err != nil {
@@ -445,13 +462,12 @@ func (f *Document) loadfont(r io.Reader) (def fontDefinition) {
 	if f.err != nil {
 		return
 	}
-	var buf bytes.Buffer
-	_, err := buf.ReadFrom(r)
+	data, err := readFontResourceReader(r, maxFontDefinitionBytes)
 	if err != nil {
 		f.err = err
 		return
 	}
-	err = json.Unmarshal(buf.Bytes(), &def)
+	err = json.Unmarshal(data, &def)
 	if err != nil {
 		f.err = err
 		return
@@ -616,7 +632,7 @@ func (f *Document) putfonts() {
 					return
 				}
 				if utf8FontStream == nil {
-					f.err = fmt.Errorf("unable to generate UTF-8 font subset")
+					f.err = errors.New("unable to generate UTF-8 font subset")
 					return
 				}
 				utf8FontSize := len(utf8FontStream)
@@ -649,8 +665,8 @@ func (f *Document) putfonts() {
 				s.printf(" /Descent %d", font.Desc.Descent)
 				s.printf(" /CapHeight %d", font.Desc.CapHeight)
 				v := font.Desc.Flags
-				v = v | 4
-				v = v &^ 32
+				v |= 4
+				v &^= 32
 				s.printf(" /Flags %d", v)
 				s.printf("/FontBBox [%d %d %d %d] ", font.Desc.FontBBox.Xmin, font.Desc.FontBBox.Ymin, font.Desc.FontBBox.Xmax, font.Desc.FontBBox.Ymax)
 				s.printf(" /ItalicAngle %d", font.Desc.ItalicAngle)
@@ -688,15 +704,15 @@ func (f *Document) putfonts() {
 	}
 }
 
-func (f *Document) generateCIDFontMap(font *fontDefinition, LastRune int) {
+func (f *Document) generateCIDFontMap(font *fontDefinition, lastRune int) {
 	if font == nil {
-		f.err = fmt.Errorf("missing font definition")
+		f.err = errors.New("missing font definition")
 		return
 	}
-	if LastRune >= len(font.Cw) {
-		LastRune = len(font.Cw) - 1
+	if lastRune >= len(font.Cw) {
+		lastRune = len(font.Cw) - 1
 	}
-	if LastRune < 1 {
+	if lastRune < 1 {
 		f.out("/W []")
 		return
 	}
@@ -707,7 +723,7 @@ func (f *Document) generateCIDFontMap(font *fontDefinition, LastRune int) {
 	prevWidth := -1
 	interval := false
 	startCid := 1
-	cwLen := LastRune + 1
+	cwLen := lastRune + 1
 	for cid := startCid; cid < cwLen; cid++ {
 		if font.Cw[cid] == 0x00 {
 			continue
@@ -822,7 +838,7 @@ func implode(sep string, arr []int) string {
 func arrayCountValues(mp []int) map[int]int {
 	answer := make(map[int]int)
 	for _, v := range mp {
-		answer[v] = answer[v] + 1
+		answer[v]++
 	}
 	return answer
 }
@@ -834,12 +850,12 @@ func (f *Document) loadFontFile(name string) ([]byte, error) {
 	if f.fontLoader != nil {
 		reader, err := f.fontLoader.Open(name)
 		if err == nil {
-			data, err := io.ReadAll(reader)
+			data, err := readFontResourceReader(reader, maxFontSourceBytes)
 			if closer, ok := reader.(io.Closer); ok {
 				_ = closer.Close()
 			}
 			return data, err
 		}
 	}
-	return os.ReadFile(joinFontPath(f.fontpath, name))
+	return readFontResourceFile(joinFontPath(f.fontpath, name), maxFontSourceBytes)
 }

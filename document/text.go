@@ -106,7 +106,7 @@ func (f *Document) write(h float64, txtStr string, link int, linkStr string) {
 		if f.isCurrentUTF8 {
 			c = srune[i]
 		} else {
-			c = rune(byte(s[i]))
+			c = rune(s[i])
 		}
 		if c == '\n' {
 			if f.isCurrentUTF8 {
@@ -240,8 +240,7 @@ func (f *Document) WriteAligned(width, lineHeight float64, textStr, alignStr str
 			lines = append(lines, string(line))
 		}
 	}
-	for _, lineBt := range lines {
-		lineStr := string(lineBt)
+	for _, lineStr := range lines {
 		lineWidth := f.GetStringWidth(lineStr)
 		switch alignStr {
 		case "C":
@@ -309,24 +308,11 @@ func (f *Document) SetUnderlineThickness(thickness float64) {
 	f.userUnderlineThickness = thickness
 }
 
-// Underline text
-func (f *Document) dounderline(x, y float64, txt string) string {
-	buf := make([]byte, 0, 64)
-	buf = f.appendUnderlineRect(buf, x, y, txt)
-	return string(buf)
-}
-
 func (f *Document) appendUnderlineRect(buf []byte, x, y float64, txt string) []byte {
 	up := float64(f.currentFont.Up)
 	ut := float64(f.currentFont.Ut) * f.userUnderlineThickness
 	w := f.GetStringWidth(txt) + f.ws*float64(blankCount(txt))
 	return appendPDFRectPaint(buf, x*f.k, (f.h-(y-up/1000*f.fontSize))*f.k, w*f.k, -ut/1000*f.fontSizePt, "f", false)
-}
-
-func (f *Document) dostrikeout(x, y float64, txt string) string {
-	buf := make([]byte, 0, 64)
-	buf = f.appendStrikeoutRect(buf, x, y, txt)
-	return string(buf)
 }
 
 func (f *Document) appendStrikeoutRect(buf []byte, x, y float64, txt string) []byte {

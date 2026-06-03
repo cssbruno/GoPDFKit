@@ -6,6 +6,7 @@ package sign
 import (
 	"bytes"
 	"encoding/asn1"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -83,7 +84,7 @@ func derLength(length int) []byte {
 
 func readDER(input []byte) (derValue, []byte, error) {
 	if len(input) < 2 {
-		return derValue{}, nil, fmt.Errorf("pdfsigning: truncated DER value")
+		return derValue{}, nil, errors.New("pdfsigning: truncated DER value")
 	}
 	tag := input[0]
 	lengthByte := input[1]
@@ -92,13 +93,13 @@ func readDER(input []byte) (derValue, []byte, error) {
 	if lengthByte&0x80 != 0 {
 		n := int(lengthByte & 0x7f)
 		if n == 0 {
-			return derValue{}, nil, fmt.Errorf("pdfsigning: indefinite DER length is not supported")
+			return derValue{}, nil, errors.New("pdfsigning: indefinite DER length is not supported")
 		}
 		if n > strconv.IntSize/8 || len(input) < 2+n {
-			return derValue{}, nil, fmt.Errorf("pdfsigning: invalid DER length")
+			return derValue{}, nil, errors.New("pdfsigning: invalid DER length")
 		}
 		if input[2] == 0 {
-			return derValue{}, nil, fmt.Errorf("pdfsigning: non-minimal DER length")
+			return derValue{}, nil, errors.New("pdfsigning: non-minimal DER length")
 		}
 		headerLen += n
 		length = 0
@@ -106,11 +107,11 @@ func readDER(input []byte) (derValue, []byte, error) {
 			length = length<<8 | int(b)
 		}
 		if length < 128 {
-			return derValue{}, nil, fmt.Errorf("pdfsigning: non-minimal DER length")
+			return derValue{}, nil, errors.New("pdfsigning: non-minimal DER length")
 		}
 	}
 	if length < 0 || headerLen > len(input) || length > len(input)-headerLen {
-		return derValue{}, nil, fmt.Errorf("pdfsigning: DER content exceeds input")
+		return derValue{}, nil, errors.New("pdfsigning: DER content exceeds input")
 	}
 	full := input[:headerLen+length]
 	value := derValue{

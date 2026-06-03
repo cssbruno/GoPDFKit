@@ -18,12 +18,12 @@ func TestFontmakerBuildsCalligraFont(t *testing.T) {
 	tempDir := t.TempDir()
 	binPath := filepath.Join(tempDir, "fontmaker")
 
-	build := exec.Command("go", "build", "-o", binPath, ".")
+	build := exec.CommandContext(t.Context(), "go", "build", "-o", binPath, ".")
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, output)
 	}
 
-	run := exec.Command(binPath,
+	run := exec.CommandContext(t.Context(), binPath,
 		"--dst="+tempDir,
 		"--embed",
 		"--enc=../../assets/static/font/cp1252.map",

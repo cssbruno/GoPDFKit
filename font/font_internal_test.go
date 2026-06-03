@@ -6,6 +6,7 @@ package font
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -26,7 +27,7 @@ func TestSegmentReadRejectsShortSegment(t *testing.T) {
 	if err == nil {
 		t.Fatal("segmentRead() accepted short segment")
 	}
-	if err != io.ErrUnexpectedEOF {
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("segmentRead() error = %v, want io.ErrUnexpectedEOF", err)
 	}
 }

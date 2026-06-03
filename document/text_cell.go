@@ -4,7 +4,7 @@
 package document
 
 import (
-	"fmt"
+	"errors"
 	"math"
 	"strings"
 )
@@ -68,7 +68,7 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 		return
 	}
 	if f.currentFont.Name == "" {
-		f.err = fmt.Errorf("font has not been set; unable to render text")
+		f.err = errors.New("font has not been set; unable to render text")
 		return
 	}
 	borderStr = strings.ToUpper(borderStr)

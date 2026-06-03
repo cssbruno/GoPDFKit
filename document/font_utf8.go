@@ -6,10 +6,12 @@ package document
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"slices"
 	"sort"
+	"strings"
 )
 
 // Composite glyph flags.
@@ -20,7 +22,7 @@ const symbolAllScale = 1 << 6
 const symbol2x2 = 1 << 7
 
 // CID map initialization.
-const toUnicode = "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo\n<</Registry (Adobe)\n/Ordering (UCS)\n/Supplement 0\n>> def\n/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n1 beginbfrange\n<0000> <FFFF> <0000>\nendbfrange\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend"
+const toUnicode = "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo\n<</Registry (Adobe)\n/Ordering (UCS)\n/Supplement 0\n>> def\n/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n1 beginbfrange\n<0000> <FFFF> <0000>\nendbfrange\nendcmap\nCMapName currentdict /CMap defineresource pop\nend"
 
 type utf8FontFile struct {
 	fileReader           *fileReader
@@ -67,7 +69,7 @@ func (fr *fileReader) Read(s int) []byte {
 	end := start + int64(s)
 	if start < 0 || end < start || end > int64(len(fr.array)) {
 		if fr.err == nil {
-			fr.err = fmt.Errorf("unexpected end of font data")
+			fr.err = errors.New("unexpected end of font data")
 		}
 		out := make([]byte, s)
 		if start < 0 {
@@ -96,14 +98,14 @@ func (fr *fileReader) seek(shift int64, flag int) (int64, error) {
 		next = int64(len(fr.array)) - shift
 	}
 	if next < 0 || next > int64(len(fr.array)) {
-		err := fmt.Errorf("font seek out of range")
+		err := errors.New("font seek out of range")
 		if fr.err == nil {
 			fr.err = err
 		}
 		return fr.readerPosition, err
 	}
 	fr.readerPosition = next
-	return int64(fr.readerPosition), nil
+	return fr.readerPosition, nil
 }
 
 func newUTF8Font(reader *fileReader) *utf8FontFile {
@@ -126,10 +128,10 @@ func (utf *utf8FontFile) parseFile() error {
 		return utf.fileReader.err
 	}
 	if codeType == 0x4F54544F {
-		return fmt.Errorf("OpenType/CFF fonts are not supported by AddUTF8Font; use font.Make and AddFont for single-byte encodings")
+		return errors.New("OpenType/CFF fonts are not supported by AddUTF8Font; use font.Make and AddFont for single-byte encodings")
 	}
 	if codeType == 0x74746366 {
-		return fmt.Errorf("OpenType font collections are not supported")
+		return errors.New("OpenType font collections are not supported")
 	}
 	if codeType != 0x00010000 && codeType != 0x74727565 {
 		return fmt.Errorf("not a TrueType-outline font: codeType=%v", codeType)
@@ -143,7 +145,6 @@ func (utf *utf8FontFile) parseFile() error {
 }
 
 func (utf *utf8FontFile) generateTableDescriptions() {
-
 	tablesCount := utf.readUint16()
 	_ = utf.readUint16()
 	_ = utf.readUint16()
@@ -186,7 +187,7 @@ func (utf *utf8FontFile) calcInt32(x, y []int) []int {
 		x[0] += 1 << 16
 	}
 	answer[0] = x[0] - y[0]
-	answer[0] = answer[0] & 0xFFFF
+	answer[0] &= 0xFFFF
 	return answer
 }
 
@@ -201,8 +202,8 @@ func (utf *utf8FontFile) generateChecksum(data []byte) []int {
 		answer[0] += (int(data[i]) << 8) + int(data[i+1])
 		answer[1] += (int(data[i+2]) << 8) + int(data[i+3])
 		answer[0] += answer[1] >> 16
-		answer[1] = answer[1] & 0xFFFF
-		answer[0] = answer[0] & 0xFFFF
+		answer[1] &= 0xFFFF
+		answer[0] &= 0xFFFF
 	}
 	return answer
 }
@@ -249,7 +250,7 @@ func (utf *utf8FontFile) getUint16(pos int) int {
 
 func (utf *utf8FontFile) splice(stream []byte, offset int, value []byte) []byte {
 	if offset < 0 || offset+len(value) > len(stream) {
-		utf.fileReader.err = fmt.Errorf("font table splice out of range")
+		utf.fileReader.err = errors.New("font table splice out of range")
 		return stream
 	}
 	stream = append([]byte{}, stream...)
@@ -340,11 +341,13 @@ func (utf *utf8FontFile) parseNAMETable() int {
 			}
 			size /= 2
 			currentName = ""
+			var currentNameSb343 strings.Builder
 			for size > 0 {
 				char := utf.readUint16()
-				currentName += string(rune(char))
+				currentNameSb343.WriteRune(rune(char))
 				size--
 			}
+			currentName += currentNameSb343.String()
 			utf.fileReader.readerPosition = oldPos
 			utf.seek(int(oldPos))
 		} else if system == 1 && code == 0 && local == 0 {
@@ -468,13 +471,13 @@ func (utf *utf8FontFile) parsePOSTTable(weight int) {
 	utf.Flags = 4
 
 	if utf.ItalicAngle != 0 {
-		utf.Flags = utf.Flags | 64
+		utf.Flags |= 64
 	}
 	if weight >= 600 {
-		utf.Flags = utf.Flags | 262144
+		utf.Flags |= 262144
 	}
 	if fixed != 0 {
-		utf.Flags = utf.Flags | 1
+		utf.Flags |= 1
 	}
 }
 
@@ -568,13 +571,12 @@ func (utf *utf8FontFile) parseSymbols(usedRunes map[int]int) (map[int]int, map[i
 		if _, OK := utf.charSymbolDictionary[char]; OK {
 			symbolCollection[utf.charSymbolDictionary[char]] = char
 			charSymbolPairCollection[char] = utf.charSymbolDictionary[char]
-
 		}
 		utf.LastRune = max(utf.LastRune, char)
 	}
 
 	if utf.tableDescriptions["glyf"] == nil {
-		utf.fileReader.err = fmt.Errorf("missing required font table: glyf")
+		utf.fileReader.err = errors.New("missing required font table: glyf")
 		return symbolCollection, charSymbolPairCollection, nil, nil
 	}
 	begin := utf.tableDescriptions["glyf"].position
@@ -630,10 +632,10 @@ func (utf *utf8FontFile) generateCMAPTable(cidSymbolPairCollection map[int]int, 
 	searchRange := 1
 	entrySelector := 0
 	for searchRange*2 <= segCount {
-		searchRange = searchRange * 2
-		entrySelector = entrySelector + 1
+		searchRange *= 2
+		entrySelector++
 	}
-	searchRange = searchRange * 2
+	searchRange *= 2
 	rangeShift := segCount*2 - searchRange
 	length := 16 + (8 * segCount) + (numSymbols + 1)
 	cmap := []int{0, 1, 3, 1, 0, 12, 4, length, 0, segCount * 2, searchRange, entrySelector, rangeShift}
@@ -662,7 +664,6 @@ func (utf *utf8FontFile) generateCMAPTable(cidSymbolPairCollection map[int]int, 
 	cmap = append(cmap, 1)
 	for range cidArray {
 		cmap = append(cmap, 0)
-
 	}
 	cmap = append(cmap, 0)
 	for _, start := range cidArrayKeys {
@@ -731,7 +732,7 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 		return nil
 	}
 	if len(postTable) < 16 {
-		utf.fileReader.err = fmt.Errorf("invalid post font table")
+		utf.fileReader.err = errors.New("invalid post font table")
 		return nil
 	}
 	postTable = append(append([]byte{0x00, 0x03, 0x00, 0x00}, postTable[4:16]...), []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}...)
@@ -764,7 +765,7 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 		data := symbolData[symbolPos : symbolPos+symbolLen]
 		var up int
 		if symbolLen > 0 && symbolLen < 2 {
-			utf.fileReader.err = fmt.Errorf("invalid glyph data length")
+			utf.fileReader.err = errors.New("invalid glyph data length")
 			return nil
 		}
 		if symbolLen >= 2 {
@@ -777,7 +778,7 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 			nComponentElements := 0
 			for (flags & symbolContinue) != 0 {
 				if posInSymbol+4 > len(data) {
-					utf.fileReader.err = fmt.Errorf("invalid composite glyph component")
+					utf.fileReader.err = errors.New("invalid composite glyph component")
 					return nil
 				}
 				nComponentElements++
@@ -787,7 +788,7 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 				symbolIdx := up
 				newSymbolIdx, ok := symbolArray[symbolIdx]
 				if !ok {
-					utf.fileReader.err = fmt.Errorf("invalid composite glyph index")
+					utf.fileReader.err = errors.New("invalid composite glyph index")
 					return nil
 				}
 				if _, OK := utf.symbolData[originalSymbolIdx]; !OK {
@@ -804,11 +805,12 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 				} else {
 					posInSymbol += 2
 				}
-				if (flags & symbolScale) != 0 {
+				switch {
+				case (flags & symbolScale) != 0:
 					posInSymbol += 2
-				} else if (flags & symbolAllScale) != 0 {
+				case (flags & symbolAllScale) != 0:
 					posInSymbol += 4
-				} else if (flags & symbol2x2) != 0 {
+				case (flags & symbol2x2) != 0:
 					posInSymbol += 8
 				}
 			}
@@ -869,13 +871,13 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 	return utf.assembleTables()
 }
 
-func (utf *utf8FontFile) getSymbols(originalSymbolIdx int, start *int, symbolSet map[int]int, SymbolsCollection map[int]int, SymbolsCollectionKeys []int) (*int, map[int]int, map[int]int, []int) {
+func (utf *utf8FontFile) getSymbols(originalSymbolIdx int, start *int, symbolSet map[int]int, symbolsCollection map[int]int, symbolsCollectionKeys []int) (*int, map[int]int, map[int]int, []int) {
 	symbolPos, symbolSize, ok := utf.glyphBounds(originalSymbolIdx, utf.getTableData("glyf"))
 	if !ok {
-		return start, symbolSet, SymbolsCollection, SymbolsCollectionKeys
+		return start, symbolSet, symbolsCollection, symbolsCollectionKeys
 	}
 	if symbolSize == 0 {
-		return start, symbolSet, SymbolsCollection, SymbolsCollectionKeys
+		return start, symbolSet, symbolsCollection, symbolsCollectionKeys
 	}
 	utf.seek(*start + symbolPos)
 
@@ -888,11 +890,11 @@ func (utf *utf8FontFile) getSymbols(originalSymbolIdx int, start *int, symbolSet
 			flags = utf.readUint16()
 			symbolIndex := utf.readUint16()
 			if _, OK := symbolSet[symbolIndex]; !OK {
-				symbolSet[symbolIndex] = len(SymbolsCollection)
-				SymbolsCollection[symbolIndex] = 1
-				SymbolsCollectionKeys = append(SymbolsCollectionKeys, symbolIndex)
+				symbolSet[symbolIndex] = len(symbolsCollection)
+				symbolsCollection[symbolIndex] = 1
+				symbolsCollectionKeys = append(symbolsCollectionKeys, symbolIndex)
 				oldPosition, _ := utf.fileReader.seek(0, 1)
-				_, _, _, SymbolsCollectionKeys = utf.getSymbols(symbolIndex, start, symbolSet, SymbolsCollection, SymbolsCollectionKeys)
+				_, _, _, symbolsCollectionKeys = utf.getSymbols(symbolIndex, start, symbolSet, symbolsCollection, symbolsCollectionKeys)
 				utf.seek(int(oldPosition))
 			}
 			if flags&symbolWords != 0 {
@@ -900,27 +902,28 @@ func (utf *utf8FontFile) getSymbols(originalSymbolIdx int, start *int, symbolSet
 			} else {
 				utf.skip(2)
 			}
-			if flags&symbolScale != 0 {
+			switch {
+			case flags&symbolScale != 0:
 				utf.skip(2)
-			} else if flags&symbolAllScale != 0 {
+			case flags&symbolAllScale != 0:
 				utf.skip(4)
-			} else if flags&symbol2x2 != 0 {
+			case flags&symbol2x2 != 0:
 				utf.skip(8)
 			}
 		}
 	}
-	return start, symbolSet, SymbolsCollection, SymbolsCollectionKeys
+	return start, symbolSet, symbolsCollection, symbolsCollectionKeys
 }
 
 func (utf *utf8FontFile) glyphBounds(glyphIdx int, glyfData []byte) (pos, length int, ok bool) {
 	if glyphIdx < 0 || glyphIdx+1 >= len(utf.symbolPosition) {
-		utf.fileReader.err = fmt.Errorf("invalid glyph index")
+		utf.fileReader.err = errors.New("invalid glyph index")
 		return 0, 0, false
 	}
 	pos = utf.symbolPosition[glyphIdx]
 	next := utf.symbolPosition[glyphIdx+1]
 	if pos < 0 || next < pos || next > len(glyfData) {
-		utf.fileReader.err = fmt.Errorf("invalid glyph bounds")
+		utf.fileReader.err = errors.New("invalid glyph bounds")
 		return 0, 0, false
 	}
 	return pos, next - pos, true
@@ -937,7 +940,6 @@ func (utf *utf8FontFile) parseHMTXTable(numberOfHMetrics, numSymbols int, symbol
 	for symbol := range numberOfHMetrics {
 		arrayWidths = arr[(symbol*2)+1]
 		if _, OK := symbolToChar[symbol]; OK || symbol == 0 {
-
 			if arrayWidths >= (1 << 15) {
 				arrayWidths = 0
 			}
@@ -1077,10 +1079,10 @@ func (utf *utf8FontFile) assembleTables() []byte {
 	findSize := 1
 	writer := 0
 	for findSize*2 <= tablesCount {
-		findSize = findSize * 2
-		writer = writer + 1
+		findSize *= 2
+		writer++
 	}
-	findSize = findSize * 16
+	findSize *= 16
 	rOffset := tablesCount*16 - findSize
 
 	answer = append(answer, packHeader(0x00010000, tablesCount, findSize, writer, rOffset)...)
@@ -1100,7 +1102,7 @@ func (utf *utf8FontFile) assembleTables() []byte {
 		answer = append(answer, pack2Uint16(checksum[0], checksum[1])...)
 		answer = append(answer, pack2Uint32(offset, len(tables[name]))...)
 		paddedLength := (len(tables[name]) + 3) &^ 3
-		offset = offset + paddedLength
+		offset += paddedLength
 	}
 
 	for _, key := range tablesNames {
@@ -1109,14 +1111,14 @@ func (utf *utf8FontFile) assembleTables() []byte {
 		answer = append(answer, data[:(len(data)&^3)]...)
 	}
 
-	checksum := utf.generateChecksum([]byte(answer))
+	checksum := utf.generateChecksum(answer)
 	checksum = utf.calcInt32([]int{0xB1B0, 0xAFBA}, checksum)
 	answer = utf.splice(answer, (begin + 8), pack2Uint16(checksum[0], checksum[1]))
 	return answer
 }
 
 func unpackUint16Array(data []byte) []int {
-	answer := make([]int, 1)
+	answer := make([]int, 1, len(data)/2+1)
 	r := bytes.NewReader(data)
 	bs := make([]byte, 2)
 	var e error
@@ -1130,7 +1132,7 @@ func unpackUint16Array(data []byte) []int {
 }
 
 func unpackUint32Array(data []byte) []int {
-	answer := make([]int, 1)
+	answer := make([]int, 1, len(data)/4+1)
 	r := bytes.NewReader(data)
 	bs := make([]byte, 4)
 	var e error
@@ -1147,10 +1149,10 @@ func unpackUint16(data []byte) int {
 	return int(binary.BigEndian.Uint16(data))
 }
 
-func packHeader(N uint32, n1, n2, n3, n4 int) []byte {
+func packHeader(n uint32, n1, n2, n3, n4 int) []byte {
 	answer := make([]byte, 0)
 	bs4 := make([]byte, 4)
-	binary.BigEndian.PutUint32(bs4, N)
+	binary.BigEndian.PutUint32(bs4, n)
 	answer = append(answer, bs4...)
 	bs := make([]byte, 2)
 	binary.BigEndian.PutUint16(bs, uint16(n1))

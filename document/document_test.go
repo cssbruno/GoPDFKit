@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -28,7 +29,7 @@ type closeErrorWriter struct {
 }
 
 func (w *closeErrorWriter) Close() error {
-	return fmt.Errorf("close failed")
+	return errors.New("close failed")
 }
 
 func init() {
@@ -38,7 +39,10 @@ func init() {
 func cleanup() {
 	_ = filepath.Walk(example.PdfDir(),
 		func(path string, info os.FileInfo, err error) error {
-			if err != nil || info == nil {
+			if err != nil {
+				return err
+			}
+			if info == nil {
 				return nil
 			}
 			if info.Mode().IsRegular() {
@@ -128,7 +132,6 @@ func TestIssue0193(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issue 193 error: %s", err)
 	}
-
 }
 
 func TestOutputAndCloseReturnsCloseError(t *testing.T) {
@@ -209,7 +212,7 @@ func TestAddUTF8FontRejectsPathTraversal(t *testing.T) {
 
 func testPNG(pdfColor byte, chunks ...[]byte) []byte {
 	var out bytes.Buffer
-	out.Write([]byte("\x89PNG\x0d\x0a\x1a\x0a"))
+	out.WriteString("\x89PNG\x0d\x0a\x1a\x0a")
 	var ihdr bytes.Buffer
 	_ = binary.Write(&ihdr, binary.BigEndian, uint32(1))
 	_ = binary.Write(&ihdr, binary.BigEndian, uint32(1))
@@ -765,7 +768,7 @@ func strDelimit(str string, sepstr string, sepcount int) string {
 	pos := len(str) - sepcount
 	for pos > 0 {
 		str = str[:pos] + sepstr + str[pos:]
-		pos = pos - sepcount
+		pos -= sepcount
 	}
 	return str
 }
@@ -2392,7 +2395,6 @@ func ExampleDocument_Polygon() {
 // displayed by the document reader allows layer visibility to be controlled
 // interactively.
 func ExampleDocument_AddLayer() {
-
 	pdf := document.New("P", "mm", "A4", "")
 	pdf.AddPage()
 	pdf.SetFont("Arial", "", 15)
@@ -2430,7 +2432,6 @@ func ExampleDocument_AddLayer() {
 // ExampleDocument_RegisterImageOptionsReader_flow demonstrates the use of an image
 // loaded from an io.Reader in flowing page content.
 func ExampleDocument_RegisterImageOptionsReader_flow() {
-
 	const (
 		margin   = 10
 		wd       = 210
@@ -2467,12 +2468,10 @@ func ExampleDocument_RegisterImageOptionsReader_flow() {
 	example.Summary(err, fileStr)
 	// Output:
 	// Successfully generated assets/generated/pdf/Document_RegisterImageOptionsReader_flow.pdf
-
 }
 
 // ExampleDocument_Beziergon demonstrates the Beziergon function.
 func ExampleDocument_Beziergon() {
-
 	const (
 		margin      = 10
 		wd          = 210
@@ -2556,7 +2555,6 @@ func ExampleDocument_Beziergon() {
 	example.Summary(err, fileStr)
 	// Output:
 	// Successfully generated assets/generated/pdf/Document_Beziergon.pdf
-
 }
 
 // ExampleDocument_SetFontLoader demonstrates loading a non-standard font using a generalized
@@ -2625,7 +2623,6 @@ func ExampleDocument_SetLineJoinStyle() {
 		pdf.LineTo((x0+x1)/2+offset, (y0+y1)/2)
 		pdf.LineTo(x1, y1)
 		pdf.DrawPath("D")
-
 	}
 	x := 35.0
 	caps := []string{"butt", "square", "round"}
@@ -2940,7 +2937,7 @@ func ExampleDocument_RegisterAlias() {
 	// by the current page number.
 	for i := 1; i <= numSections; i++ {
 		pdf.AddPage()
-		pdf.RegisterAlias(fmt.Sprintf("{mark %d}", i), fmt.Sprintf("%d", pdf.PageNo()))
+		pdf.RegisterAlias(fmt.Sprintf("{mark %d}", i), strconv.Itoa(pdf.PageNo()))
 		pdf.Write(10, fmt.Sprintf("Section %d, page %d of {nb}", i, pdf.PageNo()))
 	}
 
@@ -2974,7 +2971,7 @@ func ExampleDocument_RegisterAlias_utf8() {
 	// by the current page number.
 	for i := 1; i <= numSections; i++ {
 		pdf.AddPage()
-		pdf.RegisterAlias(fmt.Sprintf("{ĉi tiu marko %d}", i), fmt.Sprintf("%d", pdf.PageNo()))
+		pdf.RegisterAlias(fmt.Sprintf("{ĉi tiu marko %d}", i), strconv.Itoa(pdf.PageNo()))
 		pdf.Write(10, fmt.Sprintf("Sekcio %d, paĝo %d de {entute}", i, pdf.PageNo()))
 	}
 
@@ -3083,7 +3080,6 @@ func ExampleDocument_SetPageBox() {
 // ExampleDocument_SubWrite demonstrates subscripted and superscripted text
 // Adapted from http://www.fpdf.org/en/script/script61.php
 func ExampleDocument_SubWrite() {
-
 	const (
 		fontSize = 12
 		halfX    = 105
@@ -3156,18 +3152,18 @@ func ExampleDocument_SetPage() {
 	pageNums := []int{}
 	xMax := time[len(time)-1]
 	for i := range temperaturesFromSensors {
-		//Create a new page and graph for each sensor we want to graph.
+		// Create a new page and graph for each sensor we want to graph.
 		pdf.AddPage()
 		pdf.Ln(1)
-		//Custom label per sensor
+		// Custom label per sensor
 		pdf.WriteAligned(0, 0, "Temperature Sensor "+strconv.Itoa(i+1)+" (C) vs Time (min)", "C")
 		pdf.Ln(0.5)
 		graph := document.NewGrid(pdf.GetX(), pdf.GetY(), 20, 10)
 		graph.TickmarksContainX(0, xMax)
-		//Custom Y axis
+		// Custom Y axis
 		graph.TickmarksContainY(0, maxs[i])
 		graph.Grid(pdf)
-		//Save references and locations.
+		// Save references and locations.
 		graphs = append(graphs, graph)
 		pageNums = append(pageNums, pdf.PageNo())
 	}
@@ -3226,7 +3222,6 @@ func ExampleDocument_SetFillColor() {
 // ExampleDocument_TransformRotate demonstrates how to rotate text within a header
 // to make a watermark that appears on each page.
 func ExampleDocument_TransformRotate() {
-
 	loremStr := lorem() + "\n\n"
 	pdf := document.New("P", "mm", "A4", "")
 	margin := 25.0
@@ -3283,7 +3278,6 @@ func ExampleDocument_AddUTF8Font() {
 	fileStr = example.Filename("Document_AddUTF8Font")
 	txtStr, err = os.ReadFile(example.TextFile("utf-8test.txt"))
 	if err == nil {
-
 		pdf.SetFont("dejavu", "B", 17)
 		pdf.MultiCell(100, 8, "Text in different languages :", "", "C", false)
 		pdf.SetFont("dejavu", "", 14)
@@ -3292,13 +3286,11 @@ func ExampleDocument_AddUTF8Font() {
 
 		txtStr, err = os.ReadFile(example.TextFile("utf-8test2.txt"))
 		if err == nil {
-
 			pdf.SetFont("dejavu", "BI", 17)
 			pdf.MultiCell(100, 8, "Greek text with alignStr = \"J\":", "", "C", false)
 			pdf.SetFont("dejavu", "I", 14)
 			pdf.MultiCell(100, 5, string(txtStr), "", "J", false)
 			err = pdf.OutputFileAndClose(fileStr)
-
 		}
 	}
 	example.Summary(err, fileStr)
@@ -3431,7 +3423,6 @@ func ExampleDocument_SetUnderlineThickness() {
 
 // ExampleDocument_Cell_strikeout demonstrates striked-out text
 func ExampleDocument_Cell_strikeout() {
-
 	pdf := document.New("P", "mm", "A4", "") // 210mm x 297mm
 	pdf.AddPage()
 
@@ -3450,7 +3441,6 @@ func ExampleDocument_Cell_strikeout() {
 
 // ExampleDocument_SetTextRenderingMode demonstrates rendering modes in PDFs.
 func ExampleDocument_SetTextRenderingMode() {
-
 	pdf := document.New("P", "mm", "A4", "") // 210mm x 297mm
 	pdf.AddPage()
 	fontSz := float64(16)

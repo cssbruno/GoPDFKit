@@ -108,7 +108,7 @@ func (options Options) validate() error {
 		return ErrMissingCertificate
 	}
 	if !publicKeysEqual(options.Signer.Public(), options.Certificate.PublicKey) {
-		return fmt.Errorf("pdfsigning: signer public key does not match certificate")
+		return errors.New("pdfsigning: signer public key does not match certificate")
 	}
 	_, err := normalizeDigest(options.DigestAlgorithm)
 	return err
@@ -147,7 +147,7 @@ func signPDFContext(ctx pdfContext, options Options) ([]byte, error) {
 	byteRangeValue := formatByteRange(byteRange)
 	byteRangeOffset := bytes.Index(output[incrementStart:], []byte(byteRangePlaceholder))
 	if byteRangeOffset < 0 {
-		return nil, fmt.Errorf("pdfsigning: ByteRange placeholder not found")
+		return nil, errors.New("pdfsigning: ByteRange placeholder not found")
 	}
 	byteRangeOffset += incrementStart
 	copy(output[byteRangeOffset:byteRangeOffset+len(byteRangeValue)], byteRangeValue)
@@ -259,7 +259,7 @@ func findContentsRange(input []byte, placeholderHex string) (int, int, error) {
 	needle := []byte("/Contents <" + placeholderHex + ">")
 	idx := bytes.Index(input, needle)
 	if idx < 0 {
-		return 0, 0, fmt.Errorf("pdfsigning: signature contents placeholder not found")
+		return 0, 0, errors.New("pdfsigning: signature contents placeholder not found")
 	}
 	start := idx + len("/Contents ")
 	end := start + 1 + len(placeholderHex) + 1

@@ -323,7 +323,6 @@ func (g GridType) Grid(pdf *Document) {
 	xLen = len(g.xTicks)
 	yLen = len(g.yTicks)
 	if xLen > 1 && yLen > 1 {
-
 		st = StateGet(pdf)
 
 		line := func(x1, y1, x2, y2 float64, heavy bool) {
@@ -358,7 +357,7 @@ func (g GridType) Grid(pdf *Document) {
 		// Verticals along X axis
 		xDiv = g.xTicks[1] - g.xTicks[0]
 		if g.XDiv > 0 {
-			xDiv = xDiv / float64(g.XDiv)
+			xDiv /= float64(g.XDiv)
 		}
 		xDiv = g.Wd(xDiv)
 		for j, x := range g.xTicks {
@@ -375,7 +374,7 @@ func (g GridType) Grid(pdf *Document) {
 		// Horizontals along Y axis
 		yDiv = g.yTicks[1] - g.yTicks[0]
 		if g.YDiv > 0 {
-			yDiv = yDiv / float64(g.YDiv)
+			yDiv /= float64(g.YDiv)
 		}
 		yDiv = g.Ht(yDiv)
 		for j, y := range g.yTicks {
@@ -436,9 +435,7 @@ func (g GridType) Grid(pdf *Document) {
 
 		// Restore drawing attributes
 		st.Put(pdf)
-
 	}
-
 }
 
 // Plot plots a series of count line segments from xMin to xMax. It repeatedly
