@@ -47,6 +47,16 @@ func main() {
 	generateEventTicket()
 	generateMeetingMinutes()
 	generateLabelSheet()
+	generateEstimateQuote()
+	generateProductCatalog()
+	generateRestaurantMenu()
+	generateAcademicPaper()
+	generateInspectionReport()
+	generateTravelItinerary()
+	generateInventorySheet()
+	generateNewsletterLayout()
+	generateMedicalIntakeForm()
+	generateDeliveryManifest()
 }
 
 func newPDF(title string) *gopdfkit.Document {
@@ -1079,6 +1089,314 @@ func generateLabelSheet() {
 	}
 
 	save(pdf, "label-sheet.pdf")
+}
+
+func generateEstimateQuote() {
+	pdf := newPDF("Estimate Quote")
+	pdf.AddPage()
+	title(pdf, "Estimate QUO-2026-101", "Scope, line items, terms, and signature")
+	drawField(pdf, 16, 44, "Client", "Atlas Manufacturing")
+	drawField(pdf, 84, 44, "Valid Until", "2026-02-01")
+	drawField(pdf, 152, 44, "Prepared By", "GoPDFKit")
+
+	drawHeaderRow(pdf, 16, 88, []float64{84, 24, 30, 38}, []string{"Item", "Qty", "Unit", "Total"})
+	rows := [][]string{
+		{"PDF template audit", "1", "$750", "$750"},
+		{"Rendering gallery expansion", "1", "$1,200", "$1,200"},
+		{"Automated asset generation", "1", "$640", "$640"},
+		{"Developer handoff", "2", "$180", "$360"},
+	}
+	for i, row := range rows {
+		drawDataRow(pdf, 16, 96+float64(i)*9, []float64{84, 24, 30, 38}, row)
+	}
+	pdf.SetFont("Helvetica", "B", 13)
+	pdf.SetXY(124, 148)
+	pdf.CellFormat(32, 9, "Estimate", "", 0, "R", false, 0, "")
+	pdf.CellFormat(36, 9, "$2,950", "1", 1, "R", false, 0, "")
+	formLine(pdf, 16, 216, 78, "Accepted By")
+	formLine(pdf, 112, 216, 58, "Date")
+
+	save(pdf, "estimate-quote.pdf")
+}
+
+func generateProductCatalog() {
+	pdf := newPDF("Product Catalog")
+	pdf.AddPage()
+	title(pdf, "Product Catalog", "Repeated product cards with images, prices, and tags")
+	products := []struct {
+		name  string
+		price string
+		tag   string
+	}{
+		{"Starter License", "$49", "PDF core"},
+		{"Team License", "$199", "Shared use"},
+		{"Server License", "$499", "Automation"},
+		{"Template Pack", "$89", "Layouts"},
+		{"Font Bundle", "$39", "Unicode"},
+		{"Support Plan", "$149", "Priority"},
+	}
+	for i, product := range products {
+		col := i % 2
+		row := i / 2
+		x := 16.0 + float64(col)*91
+		y := 44.0 + float64(row)*58
+		pdf.SetFillColor(245, 248, 251)
+		pdf.SetDrawColor(210, 218, 226)
+		pdf.RoundedRect(x, y, 84, 48, 3, "1234", "DF")
+		pdf.SetFillColor(65+i*18, 112, 158)
+		pdf.Rect(x+6, y+7, 24, 24, "F")
+		pdf.SetFont("Helvetica", "B", 11)
+		pdf.SetTextColor(35, 45, 55)
+		pdf.Text(x+36, y+15, product.name)
+		pdf.SetFont("Helvetica", "", 8)
+		pdf.SetTextColor(90, 100, 110)
+		pdf.Text(x+36, y+24, product.tag)
+		pdf.SetFont("Helvetica", "B", 14)
+		pdf.SetTextColor(35, 70, 120)
+		pdf.Text(x+36, y+38, product.price)
+	}
+	pdf.SetTextColor(0, 0, 0)
+
+	save(pdf, "product-catalog.pdf")
+}
+
+func generateRestaurantMenu() {
+	pdf := newPDF("Restaurant Menu")
+	pdf.AddPage()
+	title(pdf, "Restaurant Menu", "Two-column menu with sections and prices")
+	sections := []struct {
+		x     float64
+		y     float64
+		name  string
+		items []string
+	}{
+		{16, 48, "Breakfast", []string{"Market omelet  12", "Sourdough toast  8", "Fruit bowl  9"}},
+		{112, 48, "Lunch", []string{"Grilled chicken  17", "Garden salad  13", "Tomato soup  10"}},
+		{16, 120, "Dinner", []string{"Short rib  28", "Roasted cod  25", "Mushroom risotto  21"}},
+		{112, 120, "Drinks", []string{"Espresso  4", "Iced tea  5", "Sparkling water  6"}},
+	}
+	for _, section := range sections {
+		pdf.SetFont("Helvetica", "B", 16)
+		pdf.SetTextColor(35, 70, 120)
+		pdf.Text(section.x, section.y, section.name)
+		pdf.SetDrawColor(210, 218, 226)
+		pdf.Line(section.x, section.y+4, section.x+74, section.y+4)
+		pdf.SetFont("Helvetica", "", 10)
+		pdf.SetTextColor(45, 55, 65)
+		for i, item := range section.items {
+			pdf.Text(section.x, section.y+16+float64(i)*11, item)
+		}
+	}
+	pdf.SetTextColor(0, 0, 0)
+
+	save(pdf, "restaurant-menu.pdf")
+}
+
+func generateAcademicPaper() {
+	pdf := newPDF("Academic Paper")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "B", 18)
+	pdf.SetTextColor(35, 45, 55)
+	pdf.SetXY(20, 24)
+	pdf.MultiCell(170, 8, "Deterministic PDF Rendering Fixtures for Go Libraries", "", "C", false)
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.SetTextColor(90, 100, 110)
+	pdf.SetXY(20, 43)
+	pdf.MultiCell(170, 5, "GoPDFKit Example Authors", "", "C", false)
+	pdf.SetTextColor(35, 45, 55)
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.Text(20, 64, "Abstract")
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.SetXY(20, 70)
+	pdf.MultiCell(170, 5, "This fixture demonstrates title blocks, abstract text, two-column body copy, figures, and references inside a compact academic-style layout.", "", "L", false)
+
+	body := "Generated PDFs are useful as regression fixtures because they exercise layout, metadata, fonts, tables, and vector drawing in one reproducible artifact."
+	for col := 0; col < 2; col++ {
+		x := 20.0 + float64(col)*88
+		pdf.SetFont("Helvetica", "B", 10)
+		pdf.Text(x, 98, fmt.Sprintf("%d. Section", col+1))
+		pdf.SetFont("Helvetica", "", 8)
+		pdf.SetXY(x, 104)
+		pdf.MultiCell(78, 4.5, strings.Repeat(body+" ", 4), "", "L", false)
+	}
+	pdf.SetFillColor(235, 241, 247)
+	pdf.Rect(60, 196, 90, 28, "F")
+	pdf.SetFont("Helvetica", "I", 8)
+	pdf.Text(68, 214, "Figure 1. Synthetic rendering fixture coverage")
+	pdf.SetFont("Helvetica", "", 8)
+	pdf.Text(20, 246, "[1] GoPDFKit generated PDF examples, 2026.")
+
+	save(pdf, "academic-paper.pdf")
+}
+
+func generateInspectionReport() {
+	pdf := newPDF("Inspection Report")
+	pdf.AddPage()
+	title(pdf, "Inspection Report", "Checklist, scoring, findings, and corrective actions")
+	drawField(pdf, 16, 44, "Site", "Warehouse 12")
+	drawField(pdf, 84, 44, "Inspector", "B. Silva")
+	drawField(pdf, 152, 44, "Score", "94%")
+	check(pdf, 20, 88, true, "Emergency exits clear")
+	check(pdf, 20, 102, true, "Electrical panels labeled")
+	check(pdf, 20, 116, false, "Forklift lane paint complete")
+	check(pdf, 20, 130, true, "Fire extinguishers inspected")
+	drawHeaderRow(pdf, 16, 158, []float64{70, 54, 52}, []string{"Finding", "Severity", "Action"})
+	rows := [][]string{
+		{"Lane paint worn", "Medium", "Repaint by Jan 09"},
+		{"Dock sign faded", "Low", "Replace sign"},
+		{"Rack labels missing", "Low", "Print labels"},
+	}
+	for i, row := range rows {
+		drawDataRow(pdf, 16, 166+float64(i)*9, []float64{70, 54, 52}, row)
+	}
+
+	save(pdf, "inspection-report.pdf")
+}
+
+func generateTravelItinerary() {
+	pdf := newPDF("Travel Itinerary")
+	pdf.AddPage()
+	title(pdf, "Travel Itinerary", "Timeline cards for flights, hotel, and meetings")
+	events := []struct {
+		time string
+		name string
+		note string
+	}{
+		{"07:30", "Depart Fortaleza", "Flight GPK-120 to Sao Paulo"},
+		{"11:20", "Arrive and transfer", "Car service to hotel"},
+		{"14:00", "Client workshop", "PDF rendering roadmap"},
+		{"19:30", "Dinner", "Team reservation"},
+	}
+	pdf.SetDrawColor(35, 70, 120)
+	pdf.Line(34, 58, 34, 188)
+	for i, event := range events {
+		y := 60.0 + float64(i)*34
+		pdf.SetFillColor(35, 70, 120)
+		pdf.Circle(34, y, 3, "F")
+		pdf.SetFont("Helvetica", "B", 11)
+		pdf.SetTextColor(35, 70, 120)
+		pdf.Text(44, y, event.time)
+		pdf.SetTextColor(35, 45, 55)
+		pdf.Text(70, y, event.name)
+		pdf.SetFont("Helvetica", "", 9)
+		pdf.SetTextColor(85, 95, 105)
+		pdf.Text(70, y+8, event.note)
+	}
+	pdf.SetTextColor(0, 0, 0)
+
+	save(pdf, "travel-itinerary.pdf")
+}
+
+func generateInventorySheet() {
+	pdf := newPDF("Inventory Sheet")
+	pdf.AddPageFormat("L", document.Size{Wd: 297, Ht: 210})
+	pdf.SetFont("Helvetica", "B", 18)
+	pdf.SetTextColor(35, 70, 120)
+	pdf.Text(18, 22, "Inventory Sheet")
+	pdf.SetTextColor(0, 0, 0)
+	drawHeaderRow(pdf, 18, 38, []float64{42, 84, 34, 34, 46}, []string{"SKU", "Item", "On Hand", "Reorder", "Location"})
+	rows := [][]string{
+		{"PDF-001", "A4 letterhead stock", "420", "150", "Aisle 1"},
+		{"PDF-002", "Thermal label roll", "86", "100", "Aisle 2"},
+		{"PDF-003", "Archive envelope", "210", "80", "Aisle 3"},
+		{"PDF-004", "Blue folder", "65", "120", "Aisle 4"},
+		{"PDF-005", "Secure mailer", "310", "100", "Aisle 5"},
+	}
+	for i, row := range rows {
+		drawDataRow(pdf, 18, 46+float64(i)*10, []float64{42, 84, 34, 34, 46}, row)
+	}
+
+	save(pdf, "inventory-sheet.pdf")
+}
+
+func generateNewsletterLayout() {
+	pdf := newPDF("Newsletter Layout")
+	pdf.AddPage()
+	pdf.SetFillColor(35, 70, 120)
+	pdf.Rect(0, 0, 210, 42, "F")
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetFont("Helvetica", "B", 22)
+	pdf.Text(16, 24, "GoPDFKit Monthly")
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.Text(16, 34, "Rendering notes, examples, and release work")
+	pdf.SetTextColor(0, 0, 0)
+	pdf.SetFillColor(238, 243, 248)
+	pdf.Rect(16, 54, 176, 58, "F")
+	pdf.SetFont("Helvetica", "B", 15)
+	pdf.Text(22, 72, "Feature: deterministic PDF assets")
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.SetXY(22, 82)
+	pdf.MultiCell(82, 5, "Generated fixtures make visual regressions easier to inspect and keep examples runnable for users.", "", "L", false)
+	pdf.SetFillColor(75, 128, 170)
+	pdf.Rect(118, 64, 58, 34, "F")
+	for col := 0; col < 2; col++ {
+		x := 16.0 + float64(col)*94
+		pdf.SetFont("Helvetica", "B", 12)
+		pdf.Text(x, 132, fmt.Sprintf("Update %d", col+1))
+		pdf.SetFont("Helvetica", "", 9)
+		pdf.SetXY(x, 140)
+		pdf.MultiCell(82, 5, strings.Repeat("Short news item about PDF rendering coverage and examples. ", 3), "", "L", false)
+	}
+
+	save(pdf, "newsletter-layout.pdf")
+}
+
+func generateMedicalIntakeForm() {
+	pdf := newPDF("Medical Intake Form")
+	pdf.AddPage()
+	title(pdf, "Medical Intake Form", "Form fields, checkboxes, and consent signature")
+	formLine(pdf, 16, 56, 80, "Patient Name")
+	formLine(pdf, 112, 56, 42, "Date of Birth")
+	formLine(pdf, 164, 56, 28, "Age")
+	formLine(pdf, 16, 82, 176, "Address")
+	check(pdf, 20, 112, false, "Allergies")
+	check(pdf, 20, 126, true, "Current medication")
+	check(pdf, 20, 140, false, "Prior surgery")
+	check(pdf, 110, 112, true, "Insurance verified")
+	check(pdf, 110, 126, false, "Requires follow-up")
+	pdf.SetFont("Helvetica", "B", 12)
+	pdf.Text(16, 170, "Notes")
+	pdf.SetDrawColor(160, 170, 180)
+	for i := 0; i < 5; i++ {
+		pdf.Line(16, 182+float64(i)*10, 192, 182+float64(i)*10)
+	}
+	formLine(pdf, 16, 246, 82, "Patient Signature")
+	formLine(pdf, 112, 246, 58, "Date")
+
+	save(pdf, "medical-intake-form.pdf")
+}
+
+func generateDeliveryManifest() {
+	pdf := newPDF("Delivery Manifest")
+	pdf.AddPage()
+	title(pdf, "Delivery Manifest", "Route summary with package table and barcode-like marks")
+	drawField(pdf, 16, 44, "Route", "NE-42")
+	drawField(pdf, 84, 44, "Driver", "M. Costa")
+	drawField(pdf, 152, 44, "Stops", "8")
+	drawHeaderRow(pdf, 16, 88, []float64{26, 70, 40, 40}, []string{"Stop", "Recipient", "Package", "Status"})
+	rows := [][]string{
+		{"1", "Harbor Books", "BX-1024", "Loaded"},
+		{"2", "Union Clinic", "MED-18", "Loaded"},
+		{"3", "North Labs", "LAB-77", "Loaded"},
+		{"4", "City Archive", "DOC-91", "Loaded"},
+		{"5", "Design Studio", "ART-05", "Loaded"},
+	}
+	for i, row := range rows {
+		drawDataRow(pdf, 16, 96+float64(i)*9, []float64{26, 70, 40, 40}, row)
+	}
+	for i := 0; i < 18; i++ {
+		x := 132.0 + float64(i)*2.8
+		h := 22.0
+		if i%3 == 0 {
+			h = 32
+		}
+		pdf.SetFillColor(30, 40, 50)
+		pdf.Rect(x, 168, 1.2, h, "F")
+	}
+	pdf.SetFont("Helvetica", "", 8)
+	pdf.Text(132, 206, "MANIFEST-NE-42")
+
+	save(pdf, "delivery-manifest.pdf")
 }
 
 func title(pdf *gopdfkit.Document, heading, subheading string) {
