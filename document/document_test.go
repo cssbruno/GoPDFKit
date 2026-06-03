@@ -42,12 +42,9 @@ func cleanup() {
 				return nil
 			}
 			if info.Mode().IsRegular() {
-				dir, _ := filepath.Split(path)
-				if filepath.Base(dir) != "reference" {
-					if len(path) > 3 {
-						if path[len(path)-4:] == ".pdf" {
-							_ = os.Remove(path)
-						}
+				if len(path) > 3 {
+					if path[len(path)-4:] == ".pdf" {
+						_ = os.Remove(path)
 					}
 				}
 			}

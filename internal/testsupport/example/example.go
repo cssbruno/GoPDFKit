@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/internal/testpdf"
 )
 
 var gopdfkitDir string
@@ -88,46 +87,11 @@ func Filename(baseStr string) string {
 	return PdfFile(baseStr + ".pdf")
 }
 
-// referenceCompare compares fileStr with its copy in the reference
-// subdirectory.
-//
-// It compares all bytes except the PDF /CreationDate value. The comparison
-// succeeds if both files are equivalent except for /CreationDate values, or if
-// the reference file does not exist.
-func referenceCompare(fileStr string) (err error) {
-	var refFileStr, refDirStr, dirStr, baseFileStr string
-	dirStr, baseFileStr = filepath.Split(fileStr)
-	refDirStr = filepath.Join(dirStr, "reference")
-	err = os.MkdirAll(refDirStr, 0o750)
-	if err == nil {
-		refFileStr = filepath.Join(refDirStr, baseFileStr)
-		err = testpdf.ComparePDFFiles(fileStr, refFileStr, false)
-	}
-	return
-}
-
 // Summary prints a predictable report for test examples.
 //
 // If err is nil, Summary normalizes path separators and prints a success
 // message for fileStr. Otherwise, it prints err.
 func Summary(err error, fileStr string) {
-	if err == nil {
-		fileStr = filepath.ToSlash(fileStr)
-		fmt.Printf("Successfully generated %s\n", fileStr)
-	} else {
-		fmt.Println(err)
-	}
-}
-
-// SummaryCompare prints a predictable report for test examples.
-//
-// If err is nil, SummaryCompare compares the generated file with its reference
-// copy. Matching files produce the same success message as Summary; mismatches
-// and non-nil errors are printed to standard output.
-func SummaryCompare(err error, fileStr string) {
-	if err == nil {
-		err = referenceCompare(fileStr)
-	}
 	if err == nil {
 		fileStr = filepath.ToSlash(fileStr)
 		fmt.Printf("Successfully generated %s\n", fileStr)
