@@ -7,9 +7,8 @@
 ![][logo]
 
 Package `gopdfkit` is the small convenience facade for a Go-native PDF document
-generator. The main implementation now lives in `github.com/cssbruno/gopdfkit/document`;
-independent helpers such as deterministic PDF comparison live in their own
-packages.
+generator. The main implementation lives in `github.com/cssbruno/gopdfkit/document`;
+focused helper packages cover fonts, imported pages, and signatures.
 
 This repository is the `github.com/cssbruno/gopdfkit` module. The `0.1` line is a
 breaking cleanup focused on a clearer package layout and shorter, feature-based
@@ -28,14 +27,13 @@ source files.
 * Document protection, attachments, metadata, JavaScript, and XMP metadata
 * Controlled HTML/CSS fragment rendering
 * Shared document model and renderer for structured reports/forms
-* Integrated barcode helpers
 * Integrated thumbnail helpers
 * Integrated PDF signing and verification helpers
 * CLI tools under `cmd/`
 
 The root `gopdfkit` package intentionally stays small. It exposes the beginner
-entry point and delegates to `document`, while feature packages are split out so
-larger applications can import the parts they need.
+entry point and delegates to `document`; advanced applications can import
+`document` directly for the full PDF API.
 
 ## Support Matrix
 
@@ -59,7 +57,6 @@ columns describe typical support rather than a guarantee for every library.
 | Templates and imported template objects | Yes | Varies | Varies |
 | Document protection, attachments, metadata, JavaScript, and XMP metadata | Yes | Varies | Varies |
 | PDF signing and verification helpers | Yes, in `sign` with document output helpers | Varies | Varies |
-| Barcode helpers | Yes, in `barcode` with document rendering helpers | Varies | Varies |
 
 ## Package Layout
 
@@ -67,23 +64,11 @@ The active implementation packages are:
 
 * `gopdfkit`: small facade for quick starts.
 * `document`: high-level PDF document API and current feature implementation.
-* `compare`: deterministic PDF byte comparison helpers.
 * `font`: font parsing and JSON font definition generation.
-* `barcode`: barcode encoding, registry, sizing, and scaled images.
 * `sign`: PDF signing and signature verification.
+* `importpdf`: small helpers for imported PDF pages.
 
-The repo also contains package entry points for the planned feature split:
-`img`, `draw`, `html`, `importpdf`, `pdfkit`, and `layout`.
-
-Barcode generation is available from `barcode`, with rendering helpers on `*document.Document`:
-
-```go
-key, err := barcode.QR("https://example.test/verify", barcode.High, barcode.Unicode)
-if err != nil {
-    return err
-}
-pdf.Barcode(key, 10, 10, 24, 24, false)
-```
+Test-only deterministic PDF helpers live under `internal/`.
 
 PDF signing is available from `sign`, and documents can be saved signed:
 
@@ -116,32 +101,57 @@ Advanced users can import `document` directly:
 pdf := document.New("P", "mm", "A4", "")
 ```
 
-Most runnable usage examples live as Go tests, especially in
-[`document/document_test.go`][document-test]. Running the tests writes generated PDFs under
-`assets/generated/pdf`.
+Runnable examples live under [`examples/`][examples]. Additional generated-PDF
+examples live as Go tests, especially in [`document/document_test.go`][document-test].
+Running the tests writes generated PDFs under `assets/generated/pdf`.
+
+```shell
+go run ./examples/hello-world
+go run ./examples/drawing
+go run ./examples/headers-footers
+go run ./examples/html-fragment
+go run ./examples/image-from-memory
+go run ./examples/import-page
+go run ./examples/protection-attachments
+go run ./examples/structured-report
+go run ./examples/sign-pdf
+go run ./examples/templates
+go run ./examples/thumbnail
+go run ./examples/utf8-font
+```
+
+The QR-code example is a separate module so barcode dependencies stay out of
+GoPDFKit:
+
+```shell
+cd examples/external-qr-code
+go run .
+```
 
 ## Repository Layout
 
-The repository intentionally does not have a top-level `examples/` directory.
-Examples are tests and shared test helpers, so they stay close to the behavior
-they validate.
+The repository has runnable command examples plus test examples that stay close
+to the behavior they validate.
 
 ```text
 document/           high-level PDF document API and current implementation
-compare/            deterministic PDF comparison helpers
-font/ img/ draw/    reserved package entry points for feature extraction
-html/ barcode/ sign/
-importpdf/ pdfkit/ layout/
+font/               font parsing and font definition generation
+importpdf/          imported PDF page helpers
+sign/               PDF signing and verification
 
 cmd/
   list/              generated-reference listing utility
   fontmaker/         font definition generator
 
+examples/            runnable usage examples
+
 assets/
   static/            checked-in fonts, images, and text fixtures
   generated/pdf/     generated PDFs and reference PDFs
 
-testsupport/example/    test/example support helpers
+internal/
+  testpdf/              deterministic PDF comparison helpers for tests
+  testsupport/example/  test/example support helpers
 
 doc/                 Markdown and generated documentation inputs/templates
 tools/               tool-only module for quality/security commands
@@ -217,8 +227,8 @@ Then call `AddFont()` and `SetFont()` from your PDF generation code.
 Running `go test ./...` generates PDFs in `assets/generated/pdf`. Reference PDFs
 are stored in `assets/generated/pdf/reference`.
 
-`testsupport/example` contains helpers used by tests to name generated files and,
-when enabled, compare generated PDFs against reference copies. Comparisons need
+`internal/testsupport/example` contains helpers used by tests to name generated
+files and compare generated PDFs against reference copies. Comparisons need
 deterministic object ordering and timestamps; tests use `SetCatalogSort()` and
 `SetCreationDate()` for that.
 
@@ -303,6 +313,7 @@ Dave Barnes, Brigham Thompson, Joe Westcott, and Benoit KUGLER.
 [ci]: https://github.com/cssbruno/gopdfkit/actions/workflows/ci.yml
 [dfont]: http://dejavu-fonts.org/
 [effective-go]: https://golang.org/doc/effective_go.html
+[examples]: examples
 [fpdf-site]: http://www.fpdf.org/
 [document-test]: https://github.com/cssbruno/gopdfkit/blob/master/document/document_test.go
 [github]: https://github.com/cssbruno/gopdfkit

@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
+
+package main
+
+import (
+	"github.com/cssbruno/gopdfkit"
+	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
+)
+
+func main() {
+	pdf := gopdfkit.New()
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "B", 18)
+	pdf.Cell(40, 10, "Hello from GoPDFKit")
+
+	if err := pdf.OutputFileAndClose(outpath.File("hello-world.pdf")); err != nil {
+		panic(err)
+	}
+}

@@ -5,9 +5,8 @@
 Package gopdfkit is the small convenience facade for a Go-native PDF document
 generator.
 
-The main implementation lives in github.com/cssbruno/gopdfkit/document.
-Independent helpers such as deterministic PDF comparison live in their own
-packages.
+The main implementation lives in github.com/cssbruno/gopdfkit/document. Focused
+helper packages cover fonts, imported pages, and signatures.
 
 This repository is the github.com/cssbruno/gopdfkit module. The 0.1 line is a
 breaking cleanup focused on a clearer package layout and shorter, feature-based
@@ -26,14 +25,13 @@ source files.
   - Document protection, attachments, metadata, JavaScript, and XMP metadata
   - Controlled HTML/CSS fragment rendering
   - Shared document model and renderer for structured reports/forms
-  - Integrated barcode helpers
   - Integrated thumbnail helpers
   - Integrated PDF signing and verification helpers
   - CLI tools under cmd/
 
-The root gopdfkit package intentionally stays small and delegates to document.
-Feature package entry points exist for font, img, draw, html, barcode, sign,
-importpdf, pdfkit, and layout.
+The root gopdfkit package intentionally stays small. It exposes the beginner
+entry point and delegates to document; advanced applications can import
+document directly for the full PDF API.
 
 ## Support Matrix
 
@@ -58,21 +56,11 @@ columns describe typical support rather than a guarantee for every library.
 	Document protection, attachments, metadata, JavaScript, and XMP metadata
 	                                                       Yes                    Varies                                       Varies
 	PDF signing and verification helpers                 Yes, in sign with document helpers                 Varies
-	Barcode helpers                                      Yes, in barcode with document helpers              Varies
 
 ## Package Layout
 
-The active implementation packages are gopdfkit, document, compare, font,
-barcode, and sign. The repo also contains package entry points for img, draw,
-html, importpdf, pdfkit, and layout.
-
-Barcode generation is available from `barcode`, with rendering helpers on `*document.Document`:
-
-	key, err := barcode.QR("https://example.test/verify", barcode.High, barcode.Unicode)
-	if err != nil {
-	    // handle error
-	}
-	pdf.Barcode(key, 10, 10, 24, 24, false)
+The active implementation packages are gopdfkit, document, font, sign, and
+importpdf. Test-only deterministic PDF helpers live under internal/.
 
 PDF signing is available from sign, and documents can be saved signed:
 
@@ -93,20 +81,41 @@ go get github.com/cssbruno/gopdfkit@latest
 	pdf.Cell(40, 10, "Hello, world")
 	err := pdf.OutputFileAndClose("hello.pdf")
 
-Most runnable usage examples live as Go tests, especially in document/document_test.go.
-Running the tests writes generated PDFs under assets/generated/pdf.
+Runnable examples live under examples/. Additional generated-PDF examples live
+as Go tests, especially in document/document_test.go. Running the tests writes
+generated PDFs under assets/generated/pdf.
+
+	go run ./examples/hello-world
+	go run ./examples/drawing
+	go run ./examples/headers-footers
+	go run ./examples/html-fragment
+	go run ./examples/image-from-memory
+	go run ./examples/import-page
+	go run ./examples/protection-attachments
+	go run ./examples/structured-report
+	go run ./examples/sign-pdf
+	go run ./examples/templates
+	go run ./examples/thumbnail
+	go run ./examples/utf8-font
+
+The QR-code example is a separate module so barcode dependencies stay out of
+GoPDFKit:
+
+	cd examples/external-qr-code
+	go run .
 
 ## Repository Layout
 
-The repository intentionally does not have a top-level examples/ directory.
-Examples are tests and shared test helpers, so they stay close to the behavior
-they validate.
+The repository has runnable command examples plus test examples that stay close
+to the behavior they validate.
 
   - cmd/list/: font/map listing utility
   - cmd/fontmaker/: font definition generator
+  - examples/: runnable usage examples
   - assets/static/: checked-in fonts, images, and text fixtures
   - assets/generated/pdf/: generated PDFs and reference PDFs
-  - testsupport/example/: test/example support helpers
+  - internal/testpdf/: deterministic PDF comparison helpers for tests
+  - internal/testsupport/example/: test/example support helpers
   - doc/: Markdown and generated documentation inputs/templates
   - tools/: tool-only module for quality/security commands
 
@@ -181,8 +190,8 @@ Then call AddFont() and SetFont() from your PDF generation code.
 Running go test ./... generates PDFs in assets/generated/pdf. Reference PDFs
 are stored in assets/generated/pdf/reference.
 
-testsupport/example contains helpers used by tests to name generated files and,
-when enabled, compare generated PDFs against reference copies. Comparisons need
+internal/testsupport/example contains helpers used by tests to name generated
+files and compare generated PDFs against reference copies. Comparisons need
 deterministic object ordering and timestamps; tests use SetCatalogSort() and
 SetCreationDate() for that.
 
