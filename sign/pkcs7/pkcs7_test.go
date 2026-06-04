@@ -4,6 +4,7 @@
 package pkcs7
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -39,6 +40,35 @@ func TestCreateAndVerifyDetached(t *testing.T) {
 	}
 	if !result.ValidSignature || !result.Detached {
 		t.Fatalf("VerifyDetached() result = %+v, want valid detached signature", result)
+	}
+}
+
+func TestAdobeRevocationInfoWrappers(t *testing.T) {
+	if !AdobeRevocationInfoArchivalOID().Equal(asn1.ObjectIdentifier{1, 2, 840, 113583, 1, 1, 8}) {
+		t.Fatalf("AdobeRevocationInfoArchivalOID() = %v", AdobeRevocationInfoArchivalOID())
+	}
+
+	ocspDER := []byte{0x30, 0x03, 0x02, 0x01, 0x01}
+	var info RevocationInfo
+	if err := info.AddOCSP(ocspDER); err != nil {
+		t.Fatalf("AddOCSP() error = %v", err)
+	}
+
+	encoded, err := asn1.Marshal(info)
+	if err != nil {
+		t.Fatalf("asn1.Marshal() error = %v", err)
+	}
+	decoded, err := DecodeAdobeRevocationInfo(asn1.RawValue{FullBytes: encoded})
+	if err != nil {
+		t.Fatalf("DecodeAdobeRevocationInfo() error = %v", err)
+	}
+	if len(decoded.OCSP) != 1 || !bytes.Equal(decoded.OCSP[0].FullBytes, ocspDER) {
+		t.Fatalf("DecodeAdobeRevocationInfo().OCSP = %#v, want %x", decoded.OCSP, ocspDER)
+	}
+
+	extracted, err := ExtractAdobeRevocationInfo([]byte("not cms"))
+	if err == nil || len(extracted.OCSP) != 0 {
+		t.Fatalf("ExtractAdobeRevocationInfo() = (%+v, %v), want error", extracted, err)
 	}
 }
 

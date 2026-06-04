@@ -227,11 +227,13 @@ cms, err := sign.CreateCMS(content, sign.CMSOptions{
 })
 ```
 
-PDF signature helpers can extract `/ByteRange` content, compute digests, embed
-an externally produced detached CMS signature, and inspect CMS signer metadata:
+PDF signature helpers can extract `/ByteRange` content, compute digests, embed an
+externally produced detached CMS signature, inspect CMS signer metadata, and read
+the Adobe revocation-info archival signed attribute used by PAdES workflows:
 
 ```go
 cms, encoding, err := sign.DecodeCMS(rawSignature)
+revInfo, err := sign.ExtractAdobeRevocationInfo(cms)
 prepared, err := sign.ExtractSignature(pdfBytes)
 signedPDF, err := sign.EmbedDetachedCMS(pdfBytes, cms)
 result, err := sign.VerifyDetachedCMS(cms, prepared.SignedContent, roots)

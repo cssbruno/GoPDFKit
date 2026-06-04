@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4.0 - 2026-06-04
+
+Minor release focused on reusable PAdES/CMS revocation-info helpers.
+
+### Added
+
+- `sign.RevocationInfo`, `sign.OtherRevocation`,
+  `sign.AdobeRevocationInfoArchivalOID`,
+  `sign.DecodeAdobeRevocationInfo`, and `sign.ExtractAdobeRevocationInfo`.
+- Matching `sign/pkcs7` wrappers for callers that still use PKCS #7 terminology.
+
 ## v0.3.0 - 2026-06-04
 
 Minor release focused on reusable QR-code generation for PDF verification

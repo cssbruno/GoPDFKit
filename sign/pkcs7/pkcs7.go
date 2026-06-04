@@ -24,6 +24,14 @@ type VerifyResult = sign.CMSVerifyResult
 // New code should use sign.CMSInfo.
 type Info = sign.CMSInfo
 
+// RevocationInfo is kept for callers that still use the historical PKCS #7 name.
+// New code should use sign.RevocationInfo.
+type RevocationInfo = sign.RevocationInfo
+
+// OtherRevocation is kept for callers that still use the historical PKCS #7 name.
+// New code should use sign.OtherRevocation.
+type OtherRevocation = sign.OtherRevocation
+
 // Create creates CMS SignedData.
 func Create(content []byte, options Options) ([]byte, error) {
 	return sign.CreateCMS(content, options)
@@ -52,6 +60,21 @@ func SignedAttributeValues(signature []byte, oid asn1.ObjectIdentifier) ([]asn1.
 // SignerCertificate returns the certificate referenced by the first SignerInfo.
 func SignerCertificate(signature []byte) (*x509.Certificate, error) {
 	return sign.SignerCertificate(signature)
+}
+
+// AdobeRevocationInfoArchivalOID returns the Adobe revocation-info archival OID.
+func AdobeRevocationInfoArchivalOID() asn1.ObjectIdentifier {
+	return sign.AdobeRevocationInfoArchivalOID()
+}
+
+// DecodeAdobeRevocationInfo decodes one Adobe revocation-info archival attribute value.
+func DecodeAdobeRevocationInfo(value asn1.RawValue) (RevocationInfo, error) {
+	return sign.DecodeAdobeRevocationInfo(value)
+}
+
+// ExtractAdobeRevocationInfo extracts Adobe revocation-info archival data from CMS SignedData.
+func ExtractAdobeRevocationInfo(signature []byte) (RevocationInfo, error) {
+	return sign.ExtractAdobeRevocationInfo(signature)
 }
 
 // EmbedDetached replaces the PDF /Contents hex string with signature.
