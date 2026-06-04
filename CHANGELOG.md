@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3.0 - 2026-06-04
+
+Minor release focused on reusable QR-code generation for PDF verification
+workflows.
+
+### Added
+
+- `document.QRCodePNG`, `document.QRCodeImageName`, and `Document.RegisterQRCodePNG`.
+
 ## v0.2.0 - 2026-06-04
 
 Minor release focused on CMS-first signing, PDF inspection, and reusable HTML

@@ -129,13 +129,7 @@ Runnable examples live under [`examples/`][examples]. They write PDFs to
 | UTF-8 font | `go run ./examples/utf8-font` | `utf8-font.pdf` |
 | Signing | `go run ./examples/sign-pdf` | `signed.pdf` |
 
-The QR-code example is a separate module so barcode dependencies stay out of
-the main module:
-
-```shell
-cd examples/external-qr-code
-go run .
-```
+Use `Document.RegisterQRCodePNG` for QR-code verification blocks.
 
 ## Packages
 

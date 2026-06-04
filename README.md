@@ -69,7 +69,8 @@ GoPDFKit currently supports:
 * Drawing primitives: lines, rectangles, rounded rectangles, arcs, Bezier
   curves, polygons, paths, clipping, transforms, transparency, gradients, spot
   colors, and layers
-* JPEG, PNG, GIF, WebP, SVG, data-image, and thumbnail workflows
+* JPEG, PNG, GIF, WebP, SVG, data-image, QR-code PNG generation, and thumbnail
+  workflows
 * Controlled HTML/CSS fragment rendering through `HTMLNew`, including text
   styles, spacing, borders, border radius, backgrounds, and simple box shadows
 * Templates and imported PDF pages
@@ -133,13 +134,7 @@ Runnable examples live under [`examples/`][examples]. They write PDFs to
 | UTF-8 font | `go run ./examples/utf8-font` | `utf8-font.pdf` |
 | Signing | `go run ./examples/sign-pdf` | `signed.pdf` |
 
-The QR-code example is a separate module so barcode dependencies stay out of
-the main module:
-
-```shell
-cd examples/external-qr-code
-go run .
-```
+Use `Document.RegisterQRCodePNG` for QR-code verification blocks.
 
 ## Packages
 
