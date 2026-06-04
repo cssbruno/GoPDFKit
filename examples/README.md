@@ -1,6 +1,12 @@
 # GoPDFKit Examples
 
-Each directory is a runnable example:
+Each directory is a runnable example. Generated PDFs are written under
+`assets/generated/pdf/examples`.
+
+For compact code snippets that show how to generate each workflow, see
+[`../doc/generation-examples.md`](../doc/generation-examples.md).
+
+## Run All Core Examples
 
 ```sh
 go run ./examples/hello-world
@@ -15,9 +21,9 @@ go run ./examples/html-fragment
 go run ./examples/html-images
 go run ./examples/html-tables
 go run ./examples/html-template
-go run ./examples/invoice
 go run ./examples/image-from-memory
 go run ./examples/import-page
+go run ./examples/invoice
 go run ./examples/merge-pdf-pages
 go run ./examples/pagination-document
 go run ./examples/pagination-table
@@ -26,10 +32,10 @@ go run ./examples/protect-pdf
 go run ./examples/report
 go run ./examples/rendering-gallery
 go run ./examples/rotate-pages
+go run ./examples/sign-pdf
 go run ./examples/split-reorder-pages
 go run ./examples/styled-paragraphs
 go run ./examples/structured-report
-go run ./examples/sign-pdf
 go run ./examples/table-report
 go run ./examples/template-overlay
 go run ./examples/templates
@@ -46,60 +52,51 @@ cd examples/external-qr-code
 go run .
 ```
 
-Generated PDFs are written under `assets/generated/pdf/examples`. The focused
-document workflow examples produce:
+## Output Index
 
-- `gopdfkit-report.pdf`
-- `gopdfkit-tables.pdf`
-- `invoice.pdf`
-- `styled-paragraphs.pdf`
-- `html-css-styles.pdf`
-- `html-fragment.pdf`
-- `html-images.pdf`
-- `html-tables.pdf`
-- `html-template.pdf`
-- `pagination-table.pdf`
-- `pagination-document.pdf`
-- `merged-pages.pdf`
-- `split-page-2.pdf`
-- `reordered-pages.pdf`
-- `rotated-pages.pdf`
-- `images-on-pages.pdf`
-- `compressed-optimized.pdf`
-- `uncompressed-debug.pdf`
-- `watermarked.pdf`
-- `four-up-pages.pdf`
-- `template-overlay.pdf`
-- `form-creation.pdf`
-- `protected-password.pdf`
+| Workflow | Command | Output |
+| --- | --- | --- |
+| Hello world | `go run ./examples/hello-world` | `hello-world.pdf` |
+| Add images to pages | `go run ./examples/add-images-to-pages` | `images-on-pages.pdf` |
+| Compression | `go run ./examples/compress-optimize-pdf` | `compressed-optimized.pdf`, `uncompressed-debug.pdf` |
+| Drawing primitives | `go run ./examples/drawing` | `drawing.pdf` |
+| Static form document | `go run ./examples/form-creation` | `form-creation.pdf` |
+| Four-up pages | `go run ./examples/four-up-pages` | `four-up-pages.pdf` |
+| Headers and footers | `go run ./examples/headers-footers` | `headers-footers.pdf` |
+| HTML CSS styles | `go run ./examples/html-css-styles` | `html-css-styles.pdf` |
+| HTML fragment | `go run ./examples/html-fragment` | `html-fragment.pdf` |
+| HTML images and SVG | `go run ./examples/html-images` | `html-images.pdf` |
+| HTML tables | `go run ./examples/html-tables` | `html-tables.pdf` |
+| HTML template values | `go run ./examples/html-template` | `html-template.pdf` |
+| Image from memory | `go run ./examples/image-from-memory` | `image-from-memory.pdf` |
+| Import page | `go run ./examples/import-page` | `import-page.pdf` |
+| Invoice | `go run ./examples/invoice` | `invoice.pdf` |
+| Merge pages | `go run ./examples/merge-pdf-pages` | `merged-pages.pdf` |
+| Document pagination | `go run ./examples/pagination-document` | `pagination-document.pdf` |
+| Manual table pagination | `go run ./examples/pagination-table` | `pagination-table.pdf` |
+| Password and attachments | `go run ./examples/protection-attachments` | `protection-attachments.pdf` |
+| Password protection | `go run ./examples/protect-pdf` | `protected-password.pdf` |
+| Report | `go run ./examples/report` | `gopdfkit-report.pdf` |
+| Rendering gallery | `go run ./examples/rendering-gallery` | many generated PDFs |
+| Rotate pages | `go run ./examples/rotate-pages` | `rotated-pages.pdf` |
+| Signing | `go run ./examples/sign-pdf` | `signed.pdf` |
+| Split and reorder pages | `go run ./examples/split-reorder-pages` | `split-page-2.pdf`, `reordered-pages.pdf` |
+| Styled paragraphs | `go run ./examples/styled-paragraphs` | `styled-paragraphs.pdf` |
+| Structured report | `go run ./examples/structured-report` | `structured-report.pdf` |
+| Table report | `go run ./examples/table-report` | `gopdfkit-tables.pdf` |
+| Template overlay | `go run ./examples/template-overlay` | `template-overlay.pdf` |
+| Reusable templates | `go run ./examples/templates` | `templates.pdf` |
+| Thumbnail | `go run ./examples/thumbnail` | `thumbnail.pdf` |
+| UTF-8 font | `go run ./examples/utf8-font` | `utf8-font.pdf` |
+| Watermark | `go run ./examples/watermark-pdf` | `watermarked.pdf` |
+| External QR code module | `cd examples/external-qr-code && go run .` | `qr-code.pdf` |
 
-Workflow coverage:
+## Feature Gaps
 
-- Create PDF reports: `go run ./examples/report`
-- Table PDF reports: `go run ./examples/table-report`
-- Invoice creation: `go run ./examples/invoice`
-- Styled paragraphs: `go run ./examples/styled-paragraphs`
-- HTML fragments: `go run ./examples/html-fragment`
-- HTML CSS styles with border radius and box shadows: `go run ./examples/html-css-styles`
-- HTML images, figures, and inline SVG: `go run ./examples/html-images`
-- HTML tables with generated rows and page flow: `go run ./examples/html-tables`
-- HTML templates with `{{key}}` values and image placeholders: `go run ./examples/html-template`
-- Manual table pagination: `go run ./examples/pagination-table`
-- Document-model pagination and explicit page breaks: `go run ./examples/pagination-document`
-- Merge PDF pages: `go run ./examples/merge-pdf-pages`
-- Split PDF pages and change page order: `go run ./examples/split-reorder-pages`
-- Rotate pages: `go run ./examples/rotate-pages`
-- Add images to pages: `go run ./examples/add-images-to-pages`
-- Compress/optimize generated PDF streams: `go run ./examples/compress-optimize-pdf`
-- Watermark PDF files: `go run ./examples/watermark-pdf`
-- Put 4 imported pages on 1 page: `go run ./examples/four-up-pages`
-- Load a PDF page template and draw modifications over it: `go run ./examples/template-overlay`
-- Create a static filled form PDF: `go run ./examples/form-creation`
-- Protect generated PDFs with a user/owner password: `go run ./examples/protect-pdf`
+These workflows are intentionally not covered because they are not implemented
+as general-purpose features:
 
-Current gaps:
-
-- Interactive AcroForm field creation is not implemented yet.
-- Filling and flattening existing interactive AcroForms is not implemented yet.
-- FDF import/merge is not implemented yet.
-- Unlocking/decrypting existing password-protected PDFs is not implemented yet.
+- Interactive AcroForm field creation
+- Filling or flattening existing interactive AcroForms
+- FDF import or merge
+- Unlocking or decrypting existing password-protected PDFs

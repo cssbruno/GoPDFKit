@@ -3,7 +3,7 @@ module github.com/cssbruno/gopdfkit/examples/external-qr-code
 go 1.26.4
 
 require (
-	github.com/boombuler/barcode v1.0.0
+	github.com/boombuler/barcode v1.1.0
 	github.com/cssbruno/gopdfkit v0.0.0
 )
 

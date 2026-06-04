@@ -69,7 +69,8 @@ GoPDFKit currently supports:
 * Drawing primitives: lines, rectangles, rounded rectangles, arcs, Bezier
   curves, polygons, paths, clipping, transforms, transparency, gradients, spot
   colors, and layers
-* JPEG, PNG, GIF, WebP, SVG, data-image, and thumbnail workflows
+* JPEG, PNG, GIF, WebP, SVG, data-image, QR-code PNG generation, and thumbnail
+  workflows
 * Controlled HTML/CSS fragment rendering through `HTMLNew`, including text
   styles, spacing, borders, border radius, backgrounds, and simple box shadows
 * Templates and imported PDF pages
@@ -102,20 +103,30 @@ advisory because PDF readers decide how strictly to enforce them.
 ## Examples
 
 Runnable examples live under [`examples/`][examples]. They write PDFs to
-`assets/generated/pdf/examples`.
+`assets/generated/pdf/examples`. For compact code snippets grouped by workflow,
+see [`generation-examples.md`][generation-examples].
 
 | Workflow | Command | Output |
 | --- | --- | --- |
 | Hello world | `go run ./examples/hello-world` | `hello-world.pdf` |
+| Drawing primitives | `go run ./examples/drawing` | `drawing.pdf` |
+| Headers and footers | `go run ./examples/headers-footers` | `headers-footers.pdf` |
 | Report | `go run ./examples/report` | `gopdfkit-report.pdf` |
+| Structured report | `go run ./examples/structured-report` | `structured-report.pdf` |
 | Table report | `go run ./examples/table-report` | `gopdfkit-tables.pdf` |
 | Invoice | `go run ./examples/invoice` | `invoice.pdf` |
 | Styled paragraphs | `go run ./examples/styled-paragraphs` | `styled-paragraphs.pdf` |
+| HTML fragment | `go run ./examples/html-fragment` | `html-fragment.pdf` |
 | HTML CSS styles | `go run ./examples/html-css-styles` | `html-css-styles.pdf` |
+| HTML images and SVG | `go run ./examples/html-images` | `html-images.pdf` |
+| HTML tables | `go run ./examples/html-tables` | `html-tables.pdf` |
+| HTML template values | `go run ./examples/html-template` | `html-template.pdf` |
 | Manual pagination | `go run ./examples/pagination-table` | `pagination-table.pdf` |
 | Document pagination | `go run ./examples/pagination-document` | `pagination-document.pdf` |
 | Images | `go run ./examples/add-images-to-pages` | `images-on-pages.pdf` |
+| Image from memory | `go run ./examples/image-from-memory` | `image-from-memory.pdf` |
 | Compression | `go run ./examples/compress-optimize-pdf` | `compressed-optimized.pdf`, `uncompressed-debug.pdf` |
+| Import page | `go run ./examples/import-page` | `import-page.pdf` |
 | Watermark | `go run ./examples/watermark-pdf` | `watermarked.pdf` |
 | Merge pages | `go run ./examples/merge-pdf-pages` | `merged-pages.pdf` |
 | Split and reorder pages | `go run ./examples/split-reorder-pages` | `split-page-2.pdf`, `reordered-pages.pdf` |
@@ -124,10 +135,13 @@ Runnable examples live under [`examples/`][examples]. They write PDFs to
 | Template overlay | `go run ./examples/template-overlay` | `template-overlay.pdf` |
 | Static form document | `go run ./examples/form-creation` | `form-creation.pdf` |
 | Password protection | `go run ./examples/protect-pdf` | `protected-password.pdf` |
+| Password and attachments | `go run ./examples/protection-attachments` | `protection-attachments.pdf` |
 | Templates | `go run ./examples/templates` | `templates.pdf` |
 | Thumbnail | `go run ./examples/thumbnail` | `thumbnail.pdf` |
 | UTF-8 font | `go run ./examples/utf8-font` | `utf8-font.pdf` |
 | Signing | `go run ./examples/sign-pdf` | `signed.pdf` |
+| Rendering gallery | `go run ./examples/rendering-gallery` | many generated PDFs |
+| External QR code module | `cd examples/external-qr-code && go run .` | `qr-code.pdf` |
 
 Use `Document.RegisterQRCodePNG` for QR-code verification blocks.
 
@@ -320,6 +334,7 @@ Dave Barnes, Brigham Thompson, Joe Westcott, and Benoit KUGLER.
 [ci]: https://github.com/cssbruno/gopdfkit/actions/workflows/ci.yml
 [examples]: ../examples
 [fpdf-site]: http://www.fpdf.org/
+[generation-examples]: generation-examples.md
 [godoc]: https://pkg.go.dev/github.com/cssbruno/gopdfkit
 [license]: https://raw.githubusercontent.com/cssbruno/gopdfkit/master/LICENSE
 [pdf-html-subset]: pdf-html-subset.md
