@@ -76,7 +76,7 @@ GoPDFKit currently supports:
 * Page workflows built from imported pages: merge, split, reorder, rotate,
   4-up layout, template overlay, and watermark overlay
 * Attachments, metadata, XMP metadata, JavaScript actions, password protection,
-  PDF signing, and signature verification
+  PDF signing, CMS signature verification, and lightweight PDF inspection
 
 ## Current Limits
 
@@ -88,7 +88,8 @@ These are not implemented as general-purpose features:
 * Interactive AcroForm field creation
 * Filling, flattening, or FDF-merging existing interactive forms
 * Unlocking, decrypting, or removing passwords from existing PDFs
-* Arbitrary PDF editing, text extraction, OCR, or content rewriting
+* Arbitrary PDF editing, OCR, or content rewriting
+* General-purpose semantic text extraction from every possible PDF encoding
 
 Imported page support is intentionally narrow: classic xref-table PDFs,
 unencrypted documents, and pages whose content streams are unfiltered or
@@ -143,7 +144,9 @@ gopdfkit   root package: default constructor and public aliases
 document   main PDF generation API
 font       font parsing and JSON font definition generation
 importpdf  small wrappers around imported-page APIs
-sign       PDF signing and signature verification
+inspect    lightweight PDF structure, stream, page, and text inspection
+sign       CMS-first PDF signing and signature verification
+sign/pkcs7 legacy PKCS #7 terminology wrappers around CMS APIs
 ```
 
 Useful repository directories:
@@ -215,7 +218,51 @@ err := pdf.OutputSignedFile("signed.pdf", sign.Options{
 })
 ```
 
-Signature verification helpers live in the `sign` package.
+The `sign` package uses CMS terminology and produces CMS SignedData:
+
+```go
+cms, err := sign.CreateCMS(content, sign.CMSOptions{
+	Signer:      signer,
+	Certificate: cert,
+	Detached:    true,
+})
+```
+
+PDF signature helpers can extract `/ByteRange` content, compute digests, embed
+an externally produced detached CMS signature, and inspect CMS signer metadata:
+
+```go
+cms, encoding, err := sign.DecodeCMS(rawSignature)
+prepared, err := sign.ExtractSignature(pdfBytes)
+signedPDF, err := sign.EmbedDetachedCMS(pdfBytes, cms)
+result, err := sign.VerifyDetachedCMS(cms, prepared.SignedContent, roots)
+cert, err := sign.SignerCertificate(cms)
+```
+
+For workflows that require exactly one PDF signature, use
+`ExtractSingleSignature`. Its ByteRange can be converted to the fixed
+`[4]int64` form and reused for digesting or extracting signed content:
+
+```go
+prepared, err := sign.ExtractSingleSignature(pdfBytes)
+byteRange, err := prepared.ByteRange64()
+digestHex, err := sign.DigestHexForByteRange(pdfBytes, byteRange, crypto.SHA256)
+content, err := sign.SignedContentForByteRange(pdfBytes, byteRange)
+```
+
+Legacy PKCS #7 terminology is kept separate in `sign/pkcs7`. New code should
+prefer the CMS names in `sign`.
+
+## Inspection
+
+Use `inspect` for lightweight PDF checks and text extraction from literal text
+operators:
+
+```go
+count, err := inspect.PageCount(pdfBytes)
+text, err := inspect.Text(pdfBytes)
+streams, err := inspect.DecodedStreams(pdfBytes)
+```
 
 ## Errors
 

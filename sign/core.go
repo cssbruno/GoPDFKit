@@ -154,7 +154,7 @@ func signPDFContext(ctx pdfContext, options Options) ([]byte, error) {
 	signedContent := make([]byte, 0, byteRange[1]+byteRange[3])
 	signedContent = append(signedContent, output[:contentsStart]...)
 	signedContent = append(signedContent, output[contentsEnd:]...)
-	cms, err := CreatePKCS7(signedContent, PKCS7Options{Signer: options.Signer, Certificate: options.Certificate, CertificateChain: options.CertificateChain, DigestAlgorithm: options.DigestAlgorithm, Detached: true, SigningTime: signingTime})
+	cms, err := CreateCMS(signedContent, CMSOptions{Signer: options.Signer, Certificate: options.Certificate, CertificateChain: options.CertificateChain, DigestAlgorithm: options.DigestAlgorithm, Detached: true, SigningTime: signingTime})
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func buildIncrement(ctx pdfContext, options Options, byteRangePlaceholder, conte
 }
 
 func signatureDictionary(options Options, byteRangePlaceholder, contentsPlaceholder string, signingTime time.Time) string {
-	fields := []string{"<< /Type /Sig", "/Filter /Adobe.PPKLite", "/SubFilter /adbe.pkcs7.detached", "/ByteRange " + byteRangePlaceholder, "/Contents <" + contentsPlaceholder + ">", "/M " + pdfString(pdfDate(signingTime))}
+	fields := []string{"<< /Type /Sig", "/Filter /Adobe.PPKLite", "/SubFilter /ETSI.CAdES.detached", "/ByteRange " + byteRangePlaceholder, "/Contents <" + contentsPlaceholder + ">", "/M " + pdfString(pdfDate(signingTime))}
 	if options.Name != "" {
 		fields = append(fields, "/Name "+pdfString(options.Name))
 	}

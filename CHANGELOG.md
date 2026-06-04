@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.2.0 - 2026-06-04
+
+Minor release focused on CMS-first signing, PDF inspection, and reusable HTML
+document helpers.
+
+### Added
+
+- CMS-first signing and verification APIs: `CreateCMS`, `VerifyCMS`,
+  `VerifyDetachedCMS`, CMS decoding, signer-certificate inspection, signed
+  attribute access, ByteRange helpers, detached CMS embedding, and digest
+  helpers.
+- `sign/pkcs7` as a separate legacy-terminology wrapper package around the CMS
+  APIs.
+- `inspect` package for lightweight PDF page count, page size, decoded stream,
+  and literal text inspection.
+- `document.ExtractHTMLFooterBlock` support for footer elements,
+  `data-pdf-footer`, and common footer marker classes.
+
+### Changed
+
+- PDF signing now writes the CMS/CAdES detached subfilter and uses CMS naming
+  in public docs.
+- Documentation now separates CMS-first APIs from legacy PKCS #7 terminology.
+
 ## v0.1.1 - 2026-06-03
 
 Patch release with performance fixes and internal robustness updates.

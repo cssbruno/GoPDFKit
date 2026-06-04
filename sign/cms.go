@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
-// This file signs and verifies PDF CMS/PKCS7 signatures.
+// This file signs and verifies PDF CMS signatures.
 package sign
 
 import (
@@ -40,8 +40,8 @@ var (
 
 const maxCMSPackageBytes = 16 * 1024 * 1024
 
-// PKCS7Options configures CMS/PKCS7 SignedData creation.
-type PKCS7Options struct {
+// CMSOptions configures CMS SignedData creation.
+type CMSOptions struct {
 	// Signer signs the CMS signed attributes.
 	Signer crypto.Signer
 	// Certificate is the signing certificate and must match Signer.
@@ -56,8 +56,8 @@ type PKCS7Options struct {
 	SigningTime time.Time
 }
 
-// PKCS7VerifyResult contains the relevant result of a CMS/PKCS7 verification.
-type PKCS7VerifyResult struct {
+// CMSVerifyResult contains the relevant result of a CMS verification.
+type CMSVerifyResult struct {
 	// Certificates contains the certificates embedded in the CMS payload.
 	Certificates []*x509.Certificate
 	// Signer is the certificate that produced the verified signature.
@@ -76,8 +76,8 @@ type PKCS7VerifyResult struct {
 	TrustedSigner bool
 }
 
-// CreatePKCS7 creates CMS SignedData using this package's own DER encoder.
-func CreatePKCS7(content []byte, options PKCS7Options) ([]byte, error) {
+// CreateCMS creates CMS SignedData using this package's own DER encoder.
+func CreateCMS(content []byte, options CMSOptions) ([]byte, error) {
 	if options.Signer == nil {
 		return nil, ErrMissingSigner
 	}
@@ -161,17 +161,17 @@ func derValueContent(encoded []byte) []byte {
 	return value.Content
 }
 
-// VerifyPKCS7 verifies attached CMS/PKCS7 SignedData.
-func VerifyPKCS7(signature []byte, truststore *x509.CertPool) (*PKCS7VerifyResult, error) {
-	return verifyPKCS7(signature, nil, truststore, false)
+// VerifyCMS verifies attached CMS SignedData.
+func VerifyCMS(signature []byte, truststore *x509.CertPool) (*CMSVerifyResult, error) {
+	return verifyCMS(signature, nil, truststore, false)
 }
 
-// VerifyDetachedPKCS7 verifies detached CMS/PKCS7 SignedData against content.
-func VerifyDetachedPKCS7(signature, content []byte, truststore *x509.CertPool) (*PKCS7VerifyResult, error) {
-	return verifyPKCS7(signature, content, truststore, true)
+// VerifyDetachedCMS verifies detached CMS SignedData against content.
+func VerifyDetachedCMS(signature, content []byte, truststore *x509.CertPool) (*CMSVerifyResult, error) {
+	return verifyCMS(signature, content, truststore, true)
 }
 
-func verifyPKCS7(signature []byte, detachedContent []byte, truststore *x509.CertPool, requireDetached bool) (*PKCS7VerifyResult, error) {
+func verifyCMS(signature []byte, detachedContent []byte, truststore *x509.CertPool, requireDetached bool) (*CMSVerifyResult, error) {
 	if len(signature) > maxCMSPackageBytes {
 		return nil, errors.New("pdfsigning: CMS package exceeds maximum size")
 	}
@@ -212,7 +212,7 @@ func verifyPKCS7(signature []byte, detachedContent []byte, truststore *x509.Cert
 	return verifySignedData(signedDataValue, detachedContent, truststore, requireDetached)
 }
 
-func verifySignedData(signedDataValue derValue, detachedContent []byte, truststore *x509.CertPool, requireDetached bool) (*PKCS7VerifyResult, error) {
+func verifySignedData(signedDataValue derValue, detachedContent []byte, truststore *x509.CertPool, requireDetached bool) (*CMSVerifyResult, error) {
 	if err := expectTag(signedDataValue, 0x30, "SignedData"); err != nil {
 		return nil, err
 	}
@@ -310,7 +310,7 @@ func parseCertificatesAndSigners(values []derValue) ([]*x509.Certificate, []derV
 	return certs, signers, nil
 }
 
-func verifySignerInfo(signerInfo derValue, certificates []*x509.Certificate, content []byte, truststore *x509.CertPool) (*PKCS7VerifyResult, error) {
+func verifySignerInfo(signerInfo derValue, certificates []*x509.Certificate, content []byte, truststore *x509.CertPool) (*CMSVerifyResult, error) {
 	if err := expectTag(signerInfo, 0x30, "SignerInfo"); err != nil {
 		return nil, err
 	}
@@ -380,7 +380,7 @@ func verifySignerInfo(signerInfo derValue, certificates []*x509.Certificate, con
 		trusted = true
 	}
 
-	return &PKCS7VerifyResult{
+	return &CMSVerifyResult{
 		Certificates:   certificates,
 		Signer:         signer,
 		Digest:         digest,

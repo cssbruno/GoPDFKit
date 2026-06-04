@@ -626,6 +626,23 @@ func findPDFName(input []byte, name string) int {
 	}
 }
 
+func countPDFName(input []byte, name string) int {
+	count := 0
+	start := 0
+	needle := []byte(name)
+	for {
+		idx := bytes.Index(input[start:], needle)
+		if idx < 0 {
+			return count
+		}
+		idx += start
+		if isPDFNameBoundary(input, idx, len(needle)) {
+			count++
+		}
+		start = idx + len(needle)
+	}
+}
+
 func findLastPDFName(input []byte, name string) int {
 	end := len(input)
 	needle := []byte(name)

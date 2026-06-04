@@ -8,9 +8,11 @@ import (
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -18,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -68,6 +71,9 @@ func TestBytesAndVerify(t *testing.T) {
 	if !bytes.Contains(signedPDF, []byte("/AcroForm")) {
 		t.Fatal("signed PDF does not contain an AcroForm")
 	}
+	if !bytes.Contains(signedPDF, []byte("/SubFilter /ETSI.CAdES.detached")) {
+		t.Fatal("signed PDF does not advertise a CMS/CAdES detached signature")
+	}
 
 	signature, err := Verify(signedPDF, truststore)
 	if err != nil {
@@ -81,6 +87,276 @@ func TestBytesAndVerify(t *testing.T) {
 	}
 	if !signature.CMS.TrustedSigner {
 		t.Fatal("CMS signer is not trusted")
+	}
+}
+
+func TestExtractSignatureAndEmbedDetachedCMS(t *testing.T) {
+	cert, signer := testSigner(t)
+	truststore := x509.NewCertPool()
+	truststore.AddCert(cert)
+
+	signedPDF, err := Bytes(testPDFBytes(t), Options{
+		Signer:          signer,
+		Certificate:     cert,
+		DigestAlgorithm: crypto.SHA256,
+		SigningTime:     time.Now().UTC(),
+		SignatureSize:   64 << 10,
+	})
+	if err != nil {
+		t.Fatalf("Bytes() error = %v", err)
+	}
+
+	extracted, err := ExtractSignature(signedPDF)
+	if err != nil {
+		t.Fatalf("ExtractSignature() error = %v", err)
+	}
+	if extracted.MaxSignatureBytes() < len(extracted.CMS) {
+		t.Fatalf("MaxSignatureBytes() = %d, CMS len = %d", extracted.MaxSignatureBytes(), len(extracted.CMS))
+	}
+
+	cms, err := CreateCMS(extracted.SignedContent, CMSOptions{
+		Signer:          signer,
+		Certificate:     cert,
+		DigestAlgorithm: crypto.SHA256,
+		Detached:        true,
+		SigningTime:     time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("CreateCMS() error = %v", err)
+	}
+
+	embedded, err := EmbedDetachedCMS(signedPDF, cms)
+	if err != nil {
+		t.Fatalf("EmbedDetachedCMS() error = %v", err)
+	}
+	if _, err := Verify(embedded, truststore); err != nil {
+		t.Fatalf("Verify(embedded) error = %v", err)
+	}
+
+	reextracted, err := ExtractSignature(embedded)
+	if err != nil {
+		t.Fatalf("ExtractSignature(embedded) error = %v", err)
+	}
+	if !bytes.Equal(reextracted.CMS, cms) {
+		t.Fatal("embedded CMS was not extracted exactly")
+	}
+}
+
+func TestDigestHexMatchesSignedContent(t *testing.T) {
+	cert, signer := testSigner(t)
+	signedPDF, err := Bytes(testPDFBytes(t), Options{
+		Signer:          signer,
+		Certificate:     cert,
+		DigestAlgorithm: crypto.SHA256,
+		SigningTime:     time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("Bytes() error = %v", err)
+	}
+
+	digestHex, err := DigestHex(signedPDF, crypto.SHA256)
+	if err != nil {
+		t.Fatalf("DigestHex() error = %v", err)
+	}
+	extracted, err := ExtractSignature(signedPDF)
+	if err != nil {
+		t.Fatalf("ExtractSignature() error = %v", err)
+	}
+	sum := sha256.Sum256(extracted.SignedContent)
+	if digestHex != hex.EncodeToString(sum[:]) {
+		t.Fatalf("DigestHex() = %s, want %s", digestHex, hex.EncodeToString(sum[:]))
+	}
+}
+
+func TestByteRangeHelpersAndExtractSingleSignature(t *testing.T) {
+	cert, signer := testSigner(t)
+	signedPDF, err := Bytes(testPDFBytes(t), Options{
+		Signer:          signer,
+		Certificate:     cert,
+		DigestAlgorithm: crypto.SHA256,
+		SigningTime:     time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("Bytes() error = %v", err)
+	}
+
+	if count := SignatureCount(signedPDF); count != 1 {
+		t.Fatalf("SignatureCount() = %d, want 1", count)
+	}
+
+	extracted, err := ExtractSingleSignature(signedPDF)
+	if err != nil {
+		t.Fatalf("ExtractSingleSignature() error = %v", err)
+	}
+
+	byteRange64, err := extracted.ByteRange64()
+	if err != nil {
+		t.Fatalf("ByteRange64() error = %v", err)
+	}
+
+	byteRangeInts, err := ByteRangeToInts(byteRange64)
+	if err != nil {
+		t.Fatalf("ByteRangeToInts() error = %v", err)
+	}
+	if !slices.Equal(byteRangeInts, extracted.ByteRange) {
+		t.Fatalf("ByteRangeToInts() = %v, want %v", byteRangeInts, extracted.ByteRange)
+	}
+
+	content, err := SignedContentForByteRange(signedPDF, byteRange64)
+	if err != nil {
+		t.Fatalf("SignedContentForByteRange() error = %v", err)
+	}
+	if !bytes.Equal(content, extracted.SignedContent) {
+		t.Fatal("SignedContentForByteRange() did not match extracted content")
+	}
+
+	digestHex, err := DigestHexForByteRange(signedPDF, byteRange64, crypto.SHA256)
+	if err != nil {
+		t.Fatalf("DigestHexForByteRange() error = %v", err)
+	}
+	sum := sha256.Sum256(extracted.SignedContent)
+	if digestHex != hex.EncodeToString(sum[:]) {
+		t.Fatalf("DigestHexForByteRange() = %s, want %s", digestHex, hex.EncodeToString(sum[:]))
+	}
+}
+
+func TestExtractSingleSignatureRejectsAmbiguousByteRanges(t *testing.T) {
+	pdf := []byte("%PDF-1.7\n1 0 obj\n<< /ByteRange [ 0 10 20 10 ] /Contents<00> >>\nendobj\n2 0 obj\n<< /ByteRange [ 0 10 20 10 ] /Contents<00> >>\nendobj\n")
+
+	if count := SignatureCount(pdf); count != 2 {
+		t.Fatalf("SignatureCount() = %d, want 2", count)
+	}
+
+	_, err := ExtractSingleSignature(pdf)
+	if err == nil || !strings.Contains(err.Error(), "ambiguous ByteRange markers") {
+		t.Fatalf("ExtractSingleSignature() error = %v, want ambiguous ByteRange error", err)
+	}
+}
+
+func TestDigestHexForByteRangeRejectsOverflow(t *testing.T) {
+	_, err := DigestHexForByteRange([]byte("pdf"), [4]int64{9223372036854775807, 1, 0, 0}, crypto.SHA256)
+	if err == nil || !strings.Contains(err.Error(), "ByteRange") {
+		t.Fatalf("DigestHexForByteRange() error = %v, want ByteRange error", err)
+	}
+}
+
+func TestDecodeCMS(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		input        string
+		want         string
+		wantEncoding string
+	}{
+		{
+			name:         "base64 std",
+			input:        "c2lnbmF0dXJl",
+			want:         "signature",
+			wantEncoding: "base64/std",
+		},
+		{
+			name:         "data url base64",
+			input:        "data:application/cms-signature;base64,c2lnbmF0dXJl",
+			want:         "signature",
+			wantEncoding: "data-url/base64/std",
+		},
+		{
+			name: "pem",
+			input: string(pem.EncodeToMemory(&pem.Block{
+				Type:  "CMS",
+				Bytes: []byte("signature"),
+			})),
+			want:         "signature",
+			wantEncoding: "pem",
+		},
+		{
+			name:         "whitespace",
+			input:        "c2ln\nbmF0dXJl\t",
+			want:         "signature",
+			wantEncoding: "base64/std",
+		},
+		{
+			name:         "raw base64",
+			input:        "dGVzdA",
+			want:         "test",
+			wantEncoding: "base64/raw",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			out, encoding, err := DecodeCMS(tt.input)
+			if err != nil {
+				t.Fatalf("DecodeCMS() error = %v", err)
+			}
+			if string(out) != tt.want {
+				t.Fatalf("DecodeCMS() = %q, want %q", string(out), tt.want)
+			}
+			if encoding != tt.wantEncoding {
+				t.Fatalf("encoding = %q, want %q", encoding, tt.wantEncoding)
+			}
+		})
+	}
+}
+
+func TestDecodeCMSRejectsEmptyInput(t *testing.T) {
+	t.Parallel()
+
+	_, encoding, err := DecodeCMS(" \n\t")
+	if err == nil {
+		t.Fatal("DecodeCMS() error = nil, want error")
+	}
+	if encoding != "empty" {
+		t.Fatalf("encoding = %q, want empty", encoding)
+	}
+}
+
+func TestInspectCMSReturnsSignerAndAttributes(t *testing.T) {
+	cert, signer := testSigner(t)
+	content := []byte("content for CMS inspection")
+	cms, err := CreateCMS(content, CMSOptions{
+		Signer:          signer,
+		Certificate:     cert,
+		DigestAlgorithm: crypto.SHA256,
+		Detached:        true,
+		SigningTime:     time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("CreateCMS() error = %v", err)
+	}
+
+	info, err := InspectCMS(cms)
+	if err != nil {
+		t.Fatalf("InspectCMS() error = %v", err)
+	}
+	if info.Signer == nil || !info.Signer.Equal(cert) {
+		t.Fatal("InspectCMS() did not return the signer certificate")
+	}
+	if len(info.SignedAttributes) == 0 {
+		t.Fatal("InspectCMS() returned no signed attributes")
+	}
+
+	signerCert, err := SignerCertificate(cms)
+	if err != nil {
+		t.Fatalf("SignerCertificate() error = %v", err)
+	}
+	if !signerCert.Equal(cert) {
+		t.Fatal("SignerCertificate() returned a different certificate")
+	}
+
+	values, err := SignedAttributeValues(cms, oidMessageDigest)
+	if err != nil {
+		t.Fatalf("SignedAttributeValues() error = %v", err)
+	}
+	if len(values) != 1 || values[0].Tag != asn1.TagOctetString {
+		t.Fatalf("messageDigest values = %#v, want one octet string", values)
+	}
+	sum := sha256.Sum256(content)
+	if !bytes.Equal(values[0].Bytes, sum[:]) {
+		t.Fatal("messageDigest attribute does not match content digest")
 	}
 }
 
@@ -205,53 +481,53 @@ func TestBytesRejectsHugeSignatureSize(t *testing.T) {
 	}
 }
 
-func TestCreateAndVerifyPKCS7(t *testing.T) {
+func TestCreateAndVerifyCMS(t *testing.T) {
 	cert, signer := testSigner(t)
 	content := []byte("signed content")
 	truststore := x509.NewCertPool()
 	truststore.AddCert(cert)
 
-	attached, err := CreatePKCS7(content, PKCS7Options{
+	attached, err := CreateCMS(content, CMSOptions{
 		Signer:          signer,
 		Certificate:     cert,
 		DigestAlgorithm: crypto.SHA256,
 	})
 	if err != nil {
-		t.Fatalf("CreatePKCS7() attached error = %v", err)
+		t.Fatalf("CreateCMS() attached error = %v", err)
 	}
-	parsed, err := VerifyPKCS7(attached, truststore)
+	parsed, err := VerifyCMS(attached, truststore)
 	if err != nil {
-		t.Fatalf("VerifyPKCS7() error = %v", err)
+		t.Fatalf("VerifyCMS() error = %v", err)
 	}
 	if !bytes.Equal(parsed.Content, content) {
 		t.Fatalf("verified content = %q, want %q", parsed.Content, content)
 	}
 
-	detached, err := CreatePKCS7(content, PKCS7Options{
+	detached, err := CreateCMS(content, CMSOptions{
 		Signer:          signer,
 		Certificate:     cert,
 		DigestAlgorithm: crypto.SHA256,
 		Detached:        true,
 	})
 	if err != nil {
-		t.Fatalf("CreatePKCS7() detached error = %v", err)
+		t.Fatalf("CreateCMS() detached error = %v", err)
 	}
-	detachedResult, err := VerifyDetachedPKCS7(detached, content, truststore)
+	detachedResult, err := VerifyDetachedCMS(detached, content, truststore)
 	if err != nil {
-		t.Fatalf("VerifyDetachedPKCS7() error = %v", err)
+		t.Fatalf("VerifyDetachedCMS() error = %v", err)
 	}
 	if !detachedResult.Detached {
 		t.Fatal("detached result was not marked detached")
 	}
 }
 
-func TestCreatePKCS7VerifiesWithOpenSSL(t *testing.T) {
+func TestCreateCMSVerifiesWithOpenSSL(t *testing.T) {
 	if _, err := exec.LookPath("openssl"); err != nil {
 		t.Skip("openssl is not available")
 	}
 	cert, signer := testSigner(t)
 	content := []byte("signed content verified by openssl")
-	cms, err := CreatePKCS7(content, PKCS7Options{
+	cms, err := CreateCMS(content, CMSOptions{
 		Signer:          signer,
 		Certificate:     cert,
 		DigestAlgorithm: crypto.SHA256,
@@ -259,7 +535,7 @@ func TestCreatePKCS7VerifiesWithOpenSSL(t *testing.T) {
 		SigningTime:     time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 	})
 	if err != nil {
-		t.Fatalf("CreatePKCS7() error = %v", err)
+		t.Fatalf("CreateCMS() error = %v", err)
 	}
 
 	dir := t.TempDir()
@@ -293,38 +569,38 @@ func TestCreatePKCS7VerifiesWithOpenSSL(t *testing.T) {
 	}
 }
 
-func TestVerifyDetachedPKCS7RejectsAttachedCMS(t *testing.T) {
+func TestVerifyDetachedCMSRejectsAttachedCMS(t *testing.T) {
 	cert, signer := testSigner(t)
 	truststore := x509.NewCertPool()
 	truststore.AddCert(cert)
-	attached, err := CreatePKCS7([]byte("embedded content"), PKCS7Options{
+	attached, err := CreateCMS([]byte("embedded content"), CMSOptions{
 		Signer:          signer,
 		Certificate:     cert,
 		DigestAlgorithm: crypto.SHA256,
 	})
 	if err != nil {
-		t.Fatalf("CreatePKCS7() error = %v", err)
+		t.Fatalf("CreateCMS() error = %v", err)
 	}
-	if _, err := VerifyDetachedPKCS7(attached, []byte("detached content"), truststore); err == nil {
-		t.Fatal("VerifyDetachedPKCS7() accepted attached CMS")
+	if _, err := VerifyDetachedCMS(attached, []byte("detached content"), truststore); err == nil {
+		t.Fatal("VerifyDetachedCMS() accepted attached CMS")
 	}
 }
 
-func TestCreatePKCS7RejectsMismatchedSignerCertificate(t *testing.T) {
+func TestCreateCMSRejectsMismatchedSignerCertificate(t *testing.T) {
 	cert, _ := testSigner(t)
 	_, otherSigner := testSigner(t)
-	_, err := CreatePKCS7([]byte("content"), PKCS7Options{
+	_, err := CreateCMS([]byte("content"), CMSOptions{
 		Signer:          otherSigner,
 		Certificate:     cert,
 		DigestAlgorithm: crypto.SHA256,
 		Detached:        true,
 	})
 	if err == nil {
-		t.Fatal("CreatePKCS7() accepted mismatched signer and certificate")
+		t.Fatal("CreateCMS() accepted mismatched signer and certificate")
 	}
 }
 
-func TestVerifyPKCS7RejectsWrongCertificateUsage(t *testing.T) {
+func TestVerifyCMSRejectsWrongCertificateUsage(t *testing.T) {
 	cert, signer := testSignerWithTemplate(t, &x509.Certificate{
 		SerialNumber: big.NewInt(10),
 		Subject: pkix.Name{
@@ -336,23 +612,23 @@ func TestVerifyPKCS7RejectsWrongCertificateUsage(t *testing.T) {
 	})
 	truststore := x509.NewCertPool()
 	truststore.AddCert(cert)
-	cms, err := CreatePKCS7([]byte("content"), PKCS7Options{
+	cms, err := CreateCMS([]byte("content"), CMSOptions{
 		Signer:          signer,
 		Certificate:     cert,
 		DigestAlgorithm: crypto.SHA256,
 		Detached:        true,
 	})
 	if err != nil {
-		t.Fatalf("CreatePKCS7() error = %v", err)
+		t.Fatalf("CreateCMS() error = %v", err)
 	}
-	if _, err := VerifyDetachedPKCS7(cms, []byte("content"), truststore); err == nil {
-		t.Fatal("VerifyDetachedPKCS7() accepted non-document-signing certificate")
+	if _, err := VerifyDetachedCMS(cms, []byte("content"), truststore); err == nil {
+		t.Fatal("VerifyDetachedCMS() accepted non-document-signing certificate")
 	}
 }
 
-func TestVerifyPKCS7RejectsOversizedCMS(t *testing.T) {
-	if _, err := VerifyPKCS7(bytes.Repeat([]byte{0x30}, maxCMSPackageBytes+1), nil); err == nil {
-		t.Fatal("VerifyPKCS7() accepted oversized CMS package")
+func TestVerifyCMSRejectsOversizedCMS(t *testing.T) {
+	if _, err := VerifyCMS(bytes.Repeat([]byte{0x30}, maxCMSPackageBytes+1), nil); err == nil {
+		t.Fatal("VerifyCMS() accepted oversized CMS package")
 	}
 }
 

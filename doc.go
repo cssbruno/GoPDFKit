@@ -37,7 +37,8 @@ headers, footers, drawing primitives, clipping, transforms, transparency,
 gradients, spot colors, layers, templates, imported PDF pages, images, SVG,
 WebP, controlled HTML fragments, thumbnails, attachments, metadata, XMP
 metadata, JavaScript actions, password protection, PDF signing, and signature
-verification.
+verification through CMS SignedData. The inspect package provides lightweight
+PDF structure, stream, page, and literal text inspection helpers.
 
 Imported-page examples cover merge, split, reorder, rotate, 4-up layout,
 template overlay, and watermark overlay by creating a new PDF from imported
@@ -48,8 +49,8 @@ pages.
 GoPDFKit does not implement full browser HTML/CSS layout, JavaScript page
 rendering, DOCX conversion, interactive AcroForm field creation, filling or
 flattening existing interactive forms, FDF merging, unlocking/decrypting
-existing password-protected PDFs, OCR, text extraction, or arbitrary PDF
-content rewriting.
+existing password-protected PDFs, OCR, arbitrary PDF content rewriting, or
+general-purpose semantic text extraction from every possible PDF encoding.
 
 Imported page support is intentionally narrow: classic xref-table PDFs,
 unencrypted documents, and pages whose content streams are unfiltered or
@@ -64,7 +65,9 @@ The main packages are:
   - document: main PDF generation API.
   - font: font parsing and JSON font definition generation.
   - importpdf: small wrappers around imported-page APIs.
-  - sign: PDF signing and signature verification.
+  - inspect: lightweight PDF structure, stream, page, and text inspection.
+  - sign: CMS-first PDF signing and signature verification.
+  - sign/pkcs7: legacy PKCS #7 terminology wrappers around CMS APIs.
 
 # Examples
 

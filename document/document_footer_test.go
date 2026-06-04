@@ -43,6 +43,37 @@ func TestExtractHTMLFooterBlockNoFooter(t *testing.T) {
 	}
 }
 
+func TestExtractHTMLFooterBlockWithFooterMarkers(t *testing.T) {
+	tests := []struct {
+		name string
+		html string
+	}{
+		{
+			name: "data attribute",
+			html: `<section><p>Body</p><div data-pdf-footer>Data footer</div></section>`,
+		},
+		{
+			name: "class marker",
+			html: `<section><p>Body</p><div class="document-footer">Class footer</div></section>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, footer := ExtractHTMLFooterBlock(tt.html)
+			if footer == nil {
+				t.Fatal("footer = nil, want FooterBlock")
+			}
+			if strings.Contains(body, "footer") {
+				t.Fatalf("body HTML = %q, want body without footer marker", body)
+			}
+			if len(footer.Blocks) != 1 {
+				t.Fatalf("footer blocks = %d, want 1", len(footer.Blocks))
+			}
+		})
+	}
+}
+
 func TestWriteDocumentRendersExtractedHTMLFooterBlock(t *testing.T) {
 	_, footer := ExtractHTMLFooterBlock(`<p>Body</p><footer>Extracted footer</footer>`)
 	pdf := New("P", "mm", "A4", "")
