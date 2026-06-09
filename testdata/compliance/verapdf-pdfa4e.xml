@@ -8,18 +8,18 @@
   <jobs>
     <job>
       <item size="59720">
-        <name>/work/artifacts/compliance/pdfa4f-attachment-metadata.pdf</name>
+        <name>/work/artifacts/compliance/pdfa4e-attachment-metadata.pdf</name>
       </item>
-      <validationReport jobEndStatus="normal" profileName="PDF/A-4f validation profile" statement="PDF file is compliant with Validation Profile requirements." isCompliant="true">
-        <details passedRules="109" failedRules="0" passedChecks="280" failedChecks="0"></details>
+      <validationReport jobEndStatus="normal" profileName="PDF/A-4e validation profile" statement="PDF file is compliant with Validation Profile requirements." isCompliant="true">
+        <details passedRules="109" failedRules="0" passedChecks="279" failedChecks="0"></details>
       </validationReport>
-      <duration start="1781041870191" finish="1781041870401">00:00:00.210</duration>
+      <duration start="1781041868948" finish="1781041869169">00:00:00.221</duration>
     </job>
   </jobs>
   <batchSummary totalJobs="1" failedToParse="0" encrypted="0" outOfMemory="0" veraExceptions="0">
     <validationReports compliant="1" nonCompliant="0" failedJobs="0">1</validationReports>
     <featureReports failedJobs="0">0</featureReports>
     <repairReports failedJobs="0">0</repairReports>
-    <duration start="1781041870145" finish="1781041870412">00:00:00.267</duration>
+    <duration start="1781041868910" finish="1781041869180">00:00:00.270</duration>
   </batchSummary>
 </report>

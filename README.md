@@ -49,6 +49,24 @@ include PDF output plus detached CMS signing; the benchmark certificate and key
 are prepared outside the timed loop. Compliance rows measure generation only;
 external veraPDF and Arlington validation are separate CI steps.
 
+## Apples-to-Apples gopdflib Harness
+
+The `benchmarks/gopdfsuit` module compares GoPDFKit against the in-process
+`github.com/chinmay-sawant/gopdfsuit/v5/pkg/gopdflib` API with one shared
+harness. Both libraries run on the same machine, use the same prepared workload
+data, write to the same in-memory PDF target, and use the same explicit worker
+counts.
+
+```shell
+make bench-gopdfsuit-ci
+```
+
+The comparable workloads are `table_180_rows`, `table_900_rows`, and
+`png_table_180_rows`, each run in `single` and `workers_40` modes. The harness
+validates that every output starts with a PDF header and contains an EOF marker.
+HTML and compliance rows are opt-in or excluded because the two libraries do not
+expose equivalent behavior for those cases.
+
 
 
 GoPDFKit is an MIT-licensed Go library for generating PDFs directly from Go
@@ -169,6 +187,7 @@ service:
 ```shell
 REQUIRE_COMPLIANCE_TOOLS=1 \
 SRGB_ICC=/usr/share/color/icc/colord/sRGB.icc \
+VERAPDF_DOCKER_IMAGE=verapdf/cli:v1.30.2 \
 VERAPDF='tools/verapdf-docker.sh 0' \
 PDFUA_CHECKER='tools/verapdf-docker.sh ua2' \
 ARLINGTON_CHECKER='tools/arlington-validate.sh' \
@@ -264,6 +283,31 @@ Use `document.RenderHTMLTemplate` when HTML fragments need `{{key}}`
 substitution. Plain values are escaped, `document.HTMLTemplateRaw` inserts
 trusted HTML, and `document.HTMLTemplateImage` inserts an `<img>` tag that can
 be sized and spaced with supported HTML/CSS.
+
+Use `document.CompileHTML` with `HTML.WriteCompiled` when the same fragment is
+rendered repeatedly. The compiled plan reuses tokenization, CSS selector
+matching, table parsing, inline SVG parsing, data URI image decoding, and cached
+block text. A `CompiledHTML` value is safe to reuse across documents and
+goroutines as long as callers do not mutate values returned by `Tokens()`.
+
+Compiled fragments expose lightweight diagnostics:
+
+```go
+compiled, err := document.CompileHTML(fragment)
+if err != nil {
+    return err
+}
+stats := compiled.Stats()
+issues := compiled.RecoveryIssues()
+dump := compiled.DebugDump()
+_, _, _ = stats, issues, dump
+```
+
+`Stats` reports reusable parse-product counts such as nodes, tables, images,
+inline SVGs, CSS rules, cached text, cached styles, and malformed-fragment
+recoveries. `RecoveryIssues` reports unclosed, misnested, or unexpected closing
+tags observed while building the private node model. `DebugDump` is intended for
+human diagnostics and should not be parsed as a stable wire format.
 
 See [`doc/pdf-html-subset.md`][pdf-html-subset] for the full contract.
 
@@ -376,7 +420,17 @@ Benchmarks:
 ```shell
 make bench
 make bench-ci
+make bench-gopdfsuit
+make bench-gopdfsuit-ci
 ```
+
+`make bench-gopdfsuit` runs the apples-to-apples comparison harness in
+`benchmarks/gopdfsuit`. That harness drives GoPDFKit and the in-process
+`github.com/chinmay-sawant/gopdfsuit/v5/pkg/gopdflib` API with the same workload
+data, in-memory PDF output target, and explicit single-worker and 40-worker
+modes. It intentionally does not include GoPdfSuit HTTP service or client
+transport overhead. Chrome-backed HTML conversion is opt-in because GoPDFKit's
+HTML renderer is an in-process subset while gopdflib uses Chrome/Chromium.
 
 Some test examples generate or refresh PDFs under `assets/generated/pdf`. The
 `document` test package also clears generated PDFs before its example tests run.

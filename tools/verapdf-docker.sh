@@ -2,6 +2,7 @@
 set -eu
 
 profile="${VERAPDF_PROFILE:-0}"
+image="${VERAPDF_DOCKER_IMAGE:-verapdf/cli:v1.30.2}"
 if [ "$#" -gt 1 ]; then
 	profile="$1"
 	shift
@@ -13,8 +14,9 @@ fi
 
 exec docker run --rm \
 	-v "$PWD:/work" \
+	-v /tmp:/tmp \
 	-w /work \
-	verapdf/cli \
+	"$image" \
 	--format text \
 	--verbose \
 	-f "$profile" \

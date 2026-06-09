@@ -537,6 +537,29 @@ func TestComplianceMetadataPDFARejectsJavaScript(t *testing.T) {
 	}
 }
 
+func TestComplianceMetadataPDFARejectsEncryption(t *testing.T) {
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFA: document.PDFAMode4})
+	if err := pdf.SetOutputIntent([]byte("test-icc-profile"), "sRGB IEC61966-2.1"); err != nil {
+		t.Fatalf("SetOutputIntent() error = %v", err)
+	}
+	pdf.AddUTF8Font("DejaVu", "", example.FontFile("DejaVuSansCondensed.ttf"))
+	pdf.SetProtection(document.CnProtectPrint, "reader", "owner")
+	pdf.AddPage()
+	pdf.SetFont("DejaVu", "", 12)
+	pdf.Cell(40, 10, "Encrypted")
+
+	var output bytes.Buffer
+	err := pdf.Output(&output)
+	if err == nil {
+		t.Fatal("Output() error = nil, want PDF/A encryption rejection")
+	}
+	if !strings.Contains(err.Error(), "encrypted") {
+		t.Fatalf("Output() error = %v, want encryption rejection", err)
+	}
+}
+
 func TestComplianceMetadataPDFARejectsCoreFonts(t *testing.T) {
 	pdf := document.New("P", "mm", "A4", "")
 	pdf.SetCompression(false)

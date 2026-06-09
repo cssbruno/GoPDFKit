@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.5.1 - 2026-06-09
+
+Patch release for the post-v0.5 compiled HTML performance work and benchmark
+repeatability.
+
+### Added
+
+- Deeper reusable compiled HTML parse products: private AST node indexes,
+  precomputed element declarations, cached block/table text, decoded data URI
+  images, malformed-fragment diagnostics, and public compiled-plan stats.
+- Selector-heavy, table-heavy, data-image-heavy, and malformed HTML generation
+  benchmarks with single-worker and 40-worker rows.
+- Separate `benchmarks/gopdfsuit` module for apples-to-apples benchmark runs
+  against `github.com/chinmay-sawant/gopdfsuit/v5` pinned to commit
+  `e61b05028120937d62408ca700d10a41f48e3899`.
+
+### Changed
+
+- `v0.5.0` remains on the original compliance release commit; the compiled HTML
+  AST/tokenizer performance work is intended for `v0.5.1`.
+
 ## v0.5.0 - 2026-06-09
 
 Minor release focused on PDF compliance metadata, tagged PDF output, external

@@ -76,7 +76,10 @@ else
 fi
 
 run_checker "PDF/UA" "${PDFUA_CHECKER:-}" "$out_dir/pdfua2-arlington-metadata-foundation.pdf"
-run_checker "Arlington" "${ARLINGTON_CHECKER:-}" "$out_dir/pdfua2-arlington-metadata-foundation.pdf"
+# Arlington is a PDF model/grammar check, so run it over every generated
+# compliance fixture rather than only the tagged PDF/UA fixture.
+# shellcheck disable=SC2086
+run_checker "Arlington" "${ARLINGTON_CHECKER:-}" $local_pdf_files
 
 if [ "$failed" -ne 0 ]; then
 	echo "compliance validation failed"

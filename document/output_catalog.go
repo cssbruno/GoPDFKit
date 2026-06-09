@@ -289,7 +289,7 @@ func (f *Document) omitInfoDictionary() bool {
 }
 
 func (f *Document) omitDeprecatedPDF2Entries() bool {
-	return f.compliance.Arlington
+	return f.compliance.PDFA != PDFAModeNone || f.compliance.Arlington
 }
 
 func (f *Document) fileIdentifier() string {

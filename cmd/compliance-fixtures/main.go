@@ -51,6 +51,7 @@ func main() {
 	}{
 		{name: "pdfa4-metadata.pdf", mode: document.PDFAMode4},
 		{name: "pdfa4f-attachment-metadata.pdf", mode: document.PDFAMode4F, attachment: true},
+		{name: "pdfa4e-attachment-metadata.pdf", mode: document.PDFAMode4E, attachment: true},
 	} {
 		path := filepath.Join(*outDir, fixture.name)
 		if err := generatePDFAFoundation(path, fontPath, boldFontPath, icc, fixture.mode, fixture.attachment); err != nil {

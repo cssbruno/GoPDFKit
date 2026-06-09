@@ -58,6 +58,9 @@ make compliance-validate \
   VERAPDF='tools/verapdf-docker.sh 0'
 ```
 
+`tools/verapdf-docker.sh` defaults to `verapdf/cli:v1.30.2`. Override
+`VERAPDF_DOCKER_IMAGE` when intentionally testing a different validator build.
+
 Before optional external tools run, the wrapper also executes
 `go run ./cmd/compliance-check` against generated fixtures. This local checker
 asserts that the expected PDF 2.0 header, metadata references, structure tree,
@@ -120,7 +123,7 @@ The veraPDF Arlington Docker image exposes a REST service. Start it, then point
 the wrapper at the service:
 
 ```shell
-docker run -d --rm --name gopdfkit-arlington -p 8080:8080 verapdf/arlington:latest
+docker run -d --rm --name gopdfkit-arlington -p 8080:8080 verapdf/arlington:v1.30.1
 make compliance-validate \
   ARLINGTON_CHECKER='tools/arlington-validate.sh' \
   ARLINGTON_URL='http://localhost:8080' \
@@ -136,11 +139,24 @@ Passing external validator baselines from the repository fixtures are stored in
 `testdata/compliance/`:
 
 * `verapdf-pdfa4.xml`
+* `verapdf-pdfa4e.xml`
 * `verapdf-pdfa4f.xml`
 * `verapdf-pdfua2.xml`
+* `arlington-pdfa4.json`
+* `arlington-pdfa4e.json`
+* `arlington-pdfa4f.json`
 * `arlington-pdf20.json`
 
 Regenerate them after compliance-output changes with the Docker wrappers above.
+The local helper below regenerates fixture PDFs and validator reports into
+`artifacts/compliance` using the same wrapper commands as CI:
+
+```shell
+SRGB_ICC=/usr/share/color/icc/colord/sRGB.icc make compliance-regenerate
+```
+
+CI uploads generated compliance PDFs and validator reports from
+`artifacts/compliance` as workflow artifacts, including failure cases.
 
 Store external findings in `document.ComplianceValidationReport`:
 

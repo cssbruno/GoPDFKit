@@ -5,8 +5,10 @@ package document_test
 
 import (
 	"bytes"
+	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/cssbruno/gopdfkit/document"
@@ -520,6 +522,51 @@ func TestHTMLWriteCompiledRendersRepeatedFragment(t *testing.T) {
 	}
 }
 
+func TestHTMLWriteCompiledConcurrentReuse(t *testing.T) {
+	compiled, err := document.CompileHTML(`<style>
+		.note { color: #112233; font-weight: bold; }
+		td { padding: 1px; border: 1px solid #333; }
+	</style><h2>Concurrent Fragment</h2><p class="note">Shared compiled plan</p><table><tr><td>Concurrent cell</td></tr></table>`)
+	if err != nil {
+		t.Fatalf("CompileHTML() error = %v", err)
+	}
+
+	const workers = 16
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			pdf := document.New("P", "mm", "A4", "")
+			pdf.SetCompression(false)
+			pdf.AddPage()
+			pdf.SetFont("Helvetica", "", 12)
+			_, lineHeight := pdf.GetFontSize()
+			html := pdf.HTMLNew()
+			html.WriteCompiled(lineHeight, compiled)
+
+			var output bytes.Buffer
+			if err := pdf.Output(&output); err != nil {
+				errs <- err
+				return
+			}
+			pdfText := output.String()
+			for _, want := range []string{"Concurrent Fragment", "Shared compiled plan", "Concurrent cell"} {
+				if !strings.Contains(pdfText, want) {
+					errs <- fmt.Errorf("generated PDF does not contain %q", want)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("concurrent WriteCompiled error = %v", err)
+	}
+}
+
 func TestCompileHTMLSkipsHiddenInlineSVG(t *testing.T) {
 	compiled, err := document.CompileHTML(`<head><svg><path d="bad path"/></svg></head><p>Visible</p>`)
 	if err != nil {
@@ -548,17 +595,47 @@ func TestCompileHTMLSkipsHiddenInlineSVG(t *testing.T) {
 }
 
 func TestCompileHTMLReportsMalformedRecovery(t *testing.T) {
-	compiled, err := document.CompileHTML(`<div><p>Open <strong>strong</p><span>tail`)
+	for name, fragment := range map[string]string{
+		"misnested":       `<div><p>Open <strong>strong</p><span>tail`,
+		"unexpectedClose": `<p>Text</section><em>tail</em>`,
+		"unclosedDeep":    `<section><article><p><span>tail`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			compiled, err := document.CompileHTML(fragment)
+			if err != nil {
+				t.Fatalf("CompileHTML() error = %v", err)
+			}
+			issues := compiled.RecoveryIssues()
+			if len(issues) == 0 {
+				t.Fatal("RecoveryIssues() is empty for malformed fragment")
+			}
+			stats := compiled.Stats()
+			if stats.Recovery != len(issues) {
+				t.Fatalf("Stats().Recovery = %d, want %d", stats.Recovery, len(issues))
+			}
+		})
+	}
+}
+
+func TestCompileHTMLHandlesMalformedAttributes(t *testing.T) {
+	compiled, err := document.CompileHTML(`<p class="note data-x='broken>tail</p>`)
 	if err != nil {
 		t.Fatalf("CompileHTML() error = %v", err)
 	}
-	issues := compiled.RecoveryIssues()
-	if len(issues) == 0 {
-		t.Fatal("RecoveryIssues() is empty for malformed fragment")
+	if stats := compiled.Stats(); stats.Tokens == 0 {
+		t.Fatalf("Stats() = %#v, want tokenizer to preserve malformed input as recoverable content", stats)
 	}
-	stats := compiled.Stats()
-	if stats.Recovery != len(issues) {
-		t.Fatalf("Stats().Recovery = %d, want %d", stats.Recovery, len(issues))
+
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	_, lineHeight := pdf.GetFontSize()
+	html := pdf.HTMLNew()
+	html.WriteCompiled(lineHeight, compiled)
+	var output bytes.Buffer
+	if err := pdf.Output(&output); err != nil {
+		t.Fatalf("Output() error = %v", err)
 	}
 }
 
