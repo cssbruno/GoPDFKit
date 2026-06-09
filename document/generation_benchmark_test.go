@@ -544,6 +544,38 @@ func BenchmarkGenerationPDFUA2ArlingtonCompiledHTMLConcurrentCPU(b *testing.B) {
 	benchmarkGeneratedPDFConcurrentCPU(b, benchmarkGenerationPDFUA2ArlingtonCompiledHTMLBuilder(b))
 }
 
+func BenchmarkGenerationHTMLSelectorHeavyCompiled(b *testing.B) {
+	benchmarkGeneratedPDF(b, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkSelectorHeavyHTML()))
+}
+
+func BenchmarkGenerationHTMLSelectorHeavyCompiledConcurrent40(b *testing.B) {
+	benchmarkGeneratedPDFConcurrent(b, 40, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkSelectorHeavyHTML()))
+}
+
+func BenchmarkGenerationHTMLTableHeavyCompiled(b *testing.B) {
+	benchmarkGeneratedPDF(b, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkTableHeavyHTML()))
+}
+
+func BenchmarkGenerationHTMLTableHeavyCompiledConcurrent40(b *testing.B) {
+	benchmarkGeneratedPDFConcurrent(b, 40, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkTableHeavyHTML()))
+}
+
+func BenchmarkGenerationHTMLDataImageHeavyCompiled(b *testing.B) {
+	benchmarkGeneratedPDF(b, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkDataImageHeavyHTML()))
+}
+
+func BenchmarkGenerationHTMLDataImageHeavyCompiledConcurrent40(b *testing.B) {
+	benchmarkGeneratedPDFConcurrent(b, 40, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkDataImageHeavyHTML()))
+}
+
+func BenchmarkGenerationHTMLMalformedCompiled(b *testing.B) {
+	benchmarkGeneratedPDF(b, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkMalformedHTML()))
+}
+
+func BenchmarkGenerationHTMLMalformedCompiledConcurrent40(b *testing.B) {
+	benchmarkGeneratedPDFConcurrent(b, 40, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkMalformedHTML()))
+}
+
 func BenchmarkGenerationSignedPDFA4FPDFUA2ArlingtonXMP(b *testing.B) {
 	benchmarkGeneratedSignedPDF(b, benchmarkGenerationPDFA4FPDFUA2ArlingtonXMPBuilder(b), benchmarkSignOptions(b))
 }
@@ -679,6 +711,20 @@ func benchmarkGenerationPDFUA2ArlingtonCompiledHTMLBuilder(b *testing.B) func(*d
 	}
 }
 
+func benchmarkGenerationCompiledHTMLBuilder(b *testing.B, htmlStr string) func(*document.Document) {
+	compiled, err := document.CompileHTML(htmlStr)
+	if err != nil {
+		b.Fatalf("CompileHTML() error = %v", err)
+	}
+	return func(pdf *document.Document) {
+		pdf.AddPage()
+		pdf.SetFont("Helvetica", "", 9)
+		_, lineHeight := pdf.GetFontSize()
+		html := pdf.HTMLNew()
+		html.WriteCompiled(lineHeight, compiled)
+	}
+}
+
 func benchmarkGenerationPDFA4FPDFUA2ArlingtonXMPBuilder(b *testing.B) func(*document.Document) {
 	cache := benchmarkComplianceFontCache(b)
 	compiled, err := document.CompileHTML(benchmarkTaggedHTML())
@@ -752,6 +798,56 @@ func benchmarkComplianceFontCache(b *testing.B) *document.FontCache {
 		b.Fatalf("AddUTF8FontFromBytes(bold italic) error = %v", err)
 	}
 	return cache
+}
+
+func benchmarkSelectorHeavyHTML() string {
+	var css strings.Builder
+	css.WriteString(`<style>`)
+	for i := 0; i < 36; i++ {
+		fmt.Fprintf(&css, `.report .group%d > p.item%d { color: #%02x%02x%02x; font-weight: bold; }`, i%6, i, 20+i, 80+i, 140+i)
+	}
+	css.WriteString(`</style><section class="report">`)
+	var body strings.Builder
+	for i := 0; i < 72; i++ {
+		fmt.Fprintf(&body, `<div class="group%d"><p id="row%d" class="item%d">Selector heavy row %03d with inline text.</p></div>`, i%6, i, i%36, i)
+	}
+	body.WriteString(`</section>`)
+	return css.String() + body.String()
+}
+
+func benchmarkTableHeavyHTML() string {
+	var out strings.Builder
+	out.WriteString(`<style>td,th{padding:2px;border:1px solid #555}.num{text-align:right}</style>`)
+	for table := 0; table < 4; table++ {
+		out.WriteString(`<table border="1" width="100%"><caption>Table heavy benchmark</caption><thead><tr><th>Code</th><th>Description</th><th>Value</th></tr></thead><tbody>`)
+		for row := 0; row < 36; row++ {
+			fmt.Fprintf(&out, `<tr><td>T%d-%03d</td><td><p>Compiled cell paragraph</p><ul><li>Nested item</li></ul></td><td class="num">%0.2f</td></tr>`, table, row, float64(row)*1.25)
+		}
+		out.WriteString(`</tbody></table>`)
+	}
+	return out.String()
+}
+
+func benchmarkDataImageHeavyHTML() string {
+	const pngDataURI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ" +
+		"AAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+	var out strings.Builder
+	for i := 0; i < 64; i++ {
+		fmt.Fprintf(&out, `<p>Compiled data image %02d</p><img src="%s" width="16" height="16" alt="pixel"/>`, i, pngDataURI)
+	}
+	return out.String()
+}
+
+func benchmarkMalformedHTML() string {
+	var out strings.Builder
+	out.WriteString(`<section><h2>Malformed compiled HTML`)
+	for i := 0; i < 80; i++ {
+		fmt.Fprintf(&out, `<p><strong>Row %03d <em>misnested</strong> text`, i)
+		if i%5 == 0 {
+			out.WriteString(`<ul><li>Open list item<li>Sibling`)
+		}
+	}
+	return out.String()
 }
 
 func benchmarkTaggedHTML() string {

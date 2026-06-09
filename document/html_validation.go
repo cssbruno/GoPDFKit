@@ -58,6 +58,13 @@ func (html *HTML) maxGeneratedPages() int {
 	return html.MaxGeneratedPages
 }
 
+func (html *HTML) maxDataImageBytes() int {
+	if html == nil || html.MaxDataImageBytes <= 0 {
+		return htmlDefaultMaxDataImageBytes
+	}
+	return html.MaxDataImageBytes
+}
+
 func (html *HTML) generatedPageCount() int {
 	if html == nil || html.pdf == nil {
 		return 0

@@ -4,13 +4,8 @@
 package document
 
 import (
-	"bytes"
-	"crypto/sha256"
-	"encoding/base64"
 	"errors"
-	"fmt"
 	"math"
-	"net/url"
 	"strconv"
 	"strings"
 )
@@ -106,7 +101,7 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 		html.pdf.SetErrorf("HTML input exceeds maximum size")
 		return
 	}
-	compiled, err := compileHTML(htmlStr, false)
+	compiled, err := compileHTMLWithDataImageLimit(htmlStr, false, html.maxDataImageBytes())
 	if err != nil {
 		html.pdf.SetError(err)
 		return
@@ -123,6 +118,10 @@ func (html *HTML) WriteCompiled(lineHt float64, compiled *CompiledHTML) {
 	}
 	if compiled.maxDepth > html.maxElementDepth() {
 		html.pdf.SetErrorf("HTML element depth exceeds maximum size")
+		return
+	}
+	if err := compiled.validateDataImageLimit(html.maxDataImageBytes()); err != nil {
+		html.pdf.SetError(err)
 		return
 	}
 	previousStartPageCount := html.renderStartPageCount
@@ -238,7 +237,7 @@ func (html *HTML) WriteCompiled(lineHt float64, compiled *CompiledHTML) {
 			lineBreak()
 		}
 	}
-	writeImage := func(attrs map[string]string, st htmlTextStyle) {
+	writeImage := func(tokenIndex int, attrs map[string]string, st htmlTextStyle) {
 		src := strings.TrimSpace(attrs["src"])
 		if src == "" {
 			writeText(attrs["alt"])
@@ -264,7 +263,7 @@ func (html *HTML) WriteCompiled(lineHt float64, compiled *CompiledHTML) {
 		boxWd, boxHt := wd, ht
 		maxWd, hasMaxWd := parseHTMLBoxLength(html.styleValue(attrs, "max-width"), html.pdf, availableWd)
 		maxHt, hasMaxHt := parseHTMLBoxLength(html.styleValue(attrs, "max-height"), html.pdf, pageHt)
-		name, options, err := html.htmlImageSource(src)
+		name, options, err := html.compiledHTMLImageSource(compiled, tokenIndex, src)
 		if err != nil {
 			html.pdf.SetError(err)
 			return
@@ -393,7 +392,7 @@ func (html *HTML) WriteCompiled(lineHt float64, compiled *CompiledHTML) {
 				lineBreak()
 				pushStyle = false
 			case "img":
-				writeImage(el.Attr, st)
+				writeImage(i, el.Attr, st)
 				pushStyle = false
 			case "table":
 				i = html.writeCompiledTable(compiled, i, lineHt, st, defaultColor, cssRules, elementStack)
@@ -485,8 +484,7 @@ func (html *HTML) WriteCompiled(lineHt float64, compiled *CompiledHTML) {
 				html.pdf.BeginStructure("LBody")
 				st.role = "LBody"
 			}
-			applyHTMLCSSRules(&st, el, cssRules, base.fontSize, base.lineHeight, html.pdf, elementStack...)
-			html.applyAttrs(&st, el.Attr, base.fontSize, base.lineHeight, html.pdf)
+			html.applyCompiledElementStyle(compiled, i, &st, el, cssRules, base.fontSize, base.lineHeight, elementStack...)
 			if openedList != nil {
 				listStack = append(listStack, htmlListStateFromElement(st, openedList.Attr, lineHt))
 			}
@@ -833,13 +831,8 @@ func isFiniteFloat(n float64) bool {
 func (html *HTML) htmlImageSource(src string) (string, ImageOptions, error) {
 	options := ImageOptions{ReadDpi: true}
 	if !strings.HasPrefix(strings.ToLower(src), "data:") {
-		if u, err := url.Parse(src); err == nil && u.Scheme != "" {
-			switch strings.ToLower(u.Scheme) {
-			case "http", "https":
-				return "", options, errors.New("remote HTML images are disabled")
-			case "file":
-				return "", options, errors.New("file URL HTML images are disabled")
-			}
+		if err := validateHTMLImageSource(src); err != nil {
+			return "", options, err
 		}
 		if !html.AllowLocalImages {
 			return "", options, errors.New("local HTML images are disabled")
@@ -849,48 +842,26 @@ func (html *HTML) htmlImageSource(src string) (string, ImageOptions, error) {
 	if cached, ok := html.dataImageCache[src]; ok {
 		return cached.name, cached.options, nil
 	}
-	media, data, ok := strings.Cut(src[5:], ",")
+	img, ok, err := compileHTMLDataImageSource(src, html.maxDataImageBytes())
+	if err != nil {
+		return "", options, err
+	}
 	if !ok {
 		return "", options, errors.New("invalid HTML image data URI")
 	}
-	parts := strings.Split(media, ";")
-	mimeType := strings.ToLower(strings.TrimSpace(parts[0]))
-	base64Encoded := false
-	for _, part := range parts[1:] {
-		if strings.EqualFold(strings.TrimSpace(part), "base64") {
-			base64Encoded = true
-		}
-	}
-	if !base64Encoded {
-		return "", options, errors.New("HTML image data URI must be base64 encoded")
-	}
-	imageType := htmlImageTypeFromMime(mimeType)
-	if imageType == "" {
-		return "", options, fmt.Errorf("unsupported HTML image type: %s", mimeType)
-	}
-	limit := html.MaxDataImageBytes
-	if limit <= 0 {
-		limit = htmlDefaultMaxDataImageBytes
-	}
-	if base64.StdEncoding.DecodedLen(len(data)) > limit {
-		return "", options, errors.New("HTML image data URI exceeds maximum size")
-	}
-	buf, err := base64.StdEncoding.DecodeString(data)
+	name, options, err := img.register(html.pdf)
 	if err != nil {
-		return "", options, fmt.Errorf("invalid HTML image data URI: %w", err)
-	}
-	if len(buf) > limit {
-		return "", options, errors.New("HTML image data URI exceeds maximum size")
-	}
-	sum := sha256.Sum256(buf)
-	name := fmt.Sprintf("html-data-image-%x", sum)
-	options.ImageType = imageType
-	html.pdf.RegisterImageOptionsReader(name, options, bytes.NewReader(buf))
-	if html.pdf.err != nil {
-		return "", options, html.pdf.err
+		return "", options, err
 	}
 	if html.dataImageCache != nil {
 		html.dataImageCache[src] = htmlImageSource{name: name, options: options}
 	}
 	return name, options, nil
+}
+
+func (html *HTML) compiledHTMLImageSource(compiled *CompiledHTML, tokenIndex int, src string) (string, ImageOptions, error) {
+	if img, ok := compiled.dataImage(tokenIndex); ok {
+		return img.register(html.pdf)
+	}
+	return html.htmlImageSource(src)
 }

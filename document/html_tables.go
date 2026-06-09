@@ -12,10 +12,16 @@ import (
 )
 
 type htmlTableType struct {
-	attrs         map[string]string
-	captionAttrs  map[string]string
-	captionTokens []HTMLSegmentType
-	rows          []htmlTableRow
+	attrs            map[string]string
+	start            int
+	end              int
+	captionStart     int
+	captionEnd       int
+	captionAttrs     map[string]string
+	captionTokens    []HTMLSegmentType
+	captionText      string
+	captionPreserved string
+	rows             []htmlTableRow
 }
 
 type htmlTableRow struct {
@@ -23,14 +29,23 @@ type htmlTableRow struct {
 	cells  []htmlTableCell
 	header bool
 	footer bool
+	start  int
+	end    int
 }
 
 type htmlTableCell struct {
-	attrs  map[string]string
-	tokens []HTMLSegmentType
-	text   string
-	tag    string
-	header bool
+	attrs         map[string]string
+	tokens        []HTMLSegmentType
+	text          string
+	textPreserved string
+	tag           string
+	header        bool
+	start         int
+	end           int
+	colspan       int
+	rowspan       int
+	widthHint     string
+	alignHint     string
 }
 
 type htmlTableLayoutRow struct {
@@ -433,7 +448,7 @@ func htmlTableCellScope(role string, row htmlTableRow, placement htmlTableCellPl
 }
 
 func parseHTMLTable(tokens []HTMLSegmentType, start int) (htmlTableType, int) {
-	table := htmlTableType{attrs: tokens[start].Attr, rows: make([]htmlTableRow, 0, htmlTableRowCount(tokens, start+1))}
+	table := htmlTableType{attrs: tokens[start].Attr, start: start, end: start, rows: make([]htmlTableRow, 0, htmlTableRowCount(tokens, start+1))}
 	var row *htmlTableRow
 	section := ""
 	for i := start + 1; i < len(tokens); i++ {
@@ -445,13 +460,18 @@ func parseHTMLTable(tokens []HTMLSegmentType, start int) (htmlTableType, int) {
 			section = ""
 		case el.Cat == 'O' && el.Str == "caption":
 			captionTokens, end := htmlCollectCaptionTokens(tokens, i+1)
+			table.captionStart = i
+			table.captionEnd = end
 			table.captionAttrs = el.Attr
 			table.captionTokens = captionTokens
+			table.captionText = htmlPlainTextWithMode(captionTokens, false)
+			table.captionPreserved = htmlPlainTextWithMode(captionTokens, true)
 			i = end
 		case el.Cat == 'O' && el.Str == "tr":
-			row = &htmlTableRow{attrs: el.Attr, cells: make([]htmlTableCell, 0, htmlTableRowCellCount(tokens, i+1)), header: section == "thead", footer: section == "tfoot"}
+			row = &htmlTableRow{attrs: el.Attr, cells: make([]htmlTableCell, 0, htmlTableRowCellCount(tokens, i+1)), header: section == "thead", footer: section == "tfoot", start: i}
 		case el.Cat == 'C' && el.Str == "tr":
 			if row != nil {
+				row.end = i
 				table.rows = append(table.rows, *row)
 				row = nil
 			}
@@ -460,16 +480,32 @@ func parseHTMLTable(tokens []HTMLSegmentType, start int) (htmlTableType, int) {
 				row = &htmlTableRow{cells: make([]htmlTableCell, 0, 1)}
 			}
 			cellTokens, end := htmlCollectCellTokens(tokens, i+1)
-			row.cells = append(row.cells, htmlTableCell{attrs: el.Attr, tokens: cellTokens, text: htmlPlainText(cellTokens), tag: el.Str, header: el.Str == "th"})
+			row.cells = append(row.cells, htmlTableCell{
+				attrs:         el.Attr,
+				tokens:        cellTokens,
+				text:          htmlPlainTextWithMode(cellTokens, false),
+				textPreserved: htmlPlainTextWithMode(cellTokens, true),
+				tag:           el.Str,
+				header:        el.Str == "th",
+				start:         i,
+				end:           end,
+				colspan:       htmlTableColspan(el.Attr),
+				rowspan:       htmlTableRowspan(el.Attr),
+				widthHint:     firstNonEmpty(htmlStyleValue(el.Attr, "width"), el.Attr["width"]),
+				alignHint:     firstNonEmpty(htmlStyleValue(el.Attr, "text-align"), el.Attr["align"]),
+			})
 			i = end
 		case el.Cat == 'C' && el.Str == "table":
 			if row != nil {
+				row.end = i
 				table.rows = append(table.rows, *row)
 			}
+			table.end = i
 			table.rows = htmlTableRowsWithFooterLast(table.rows)
 			return table, i
 		}
 	}
+	table.end = len(tokens) - 1
 	return table, start
 }
 
@@ -628,11 +664,11 @@ func htmlTableLayoutRows(rows []htmlTableRow) []htmlTableLayoutRow {
 			if col >= htmlMaxTableColumns {
 				break
 			}
-			colspan := htmlTableColspan(cell.attrs)
+			colspan := cell.colspan
 			if col+colspan > htmlMaxTableColumns {
 				colspan = htmlMaxTableColumns - col
 			}
-			rowspan := htmlTableRowspan(cell.attrs)
+			rowspan := cell.rowspan
 			endCol := col + colspan
 			if endCol > len(occupied) {
 				oldLen := len(occupied)
@@ -710,7 +746,11 @@ func htmlTableColumnWidthsWithStyleValue(rows []htmlTableLayoutRow, count int, t
 			cellDef := row.row.cells[cell.cellIndex]
 			minWd := htmlTableCellMinWidth(cellDef, pdf)
 			htmlApplyTableSpanMinimum(minWidths, cell.col, span, minWd)
-			if wd, ok := parseHTMLBoxLength(firstNonEmpty(styleValue(cellDef.attrs, "width"), cellDef.attrs["width"]), pdf, tableWd); ok {
+			widthHint := cellDef.widthHint
+			if widthHint == "" {
+				widthHint = firstNonEmpty(styleValue(cellDef.attrs, "width"), cellDef.attrs["width"])
+			}
+			if wd, ok := parseHTMLBoxLength(widthHint, pdf, tableWd); ok {
 				htmlApplyTableSpanWidth(widths, specified, cell.col, span, wd)
 			}
 		}
@@ -793,7 +833,7 @@ func htmlTableCellMinWidth(cell htmlTableCell, pdf *Document) float64 {
 
 func htmlTableCellText(cell htmlTableCell, preserveWhitespace bool) string {
 	if preserveWhitespace {
-		return htmlPlainTextWithMode(cell.tokens, true)
+		return cell.textPreserved
 	}
 	return cell.text
 }
@@ -982,7 +1022,10 @@ func (html *HTML) tableCaptionHeight(table htmlTableType, tableWd, lineHt float6
 	applyHTMLCSSRules(&style, captionEl, cssRules, inherited.fontSize, inherited.lineHeight, html.pdf, tableAncestors...)
 	html.applyAttrs(&style, table.captionAttrs, inherited.fontSize, inherited.lineHeight, html.pdf)
 	html.applyTextStyle(style, fallback)
-	text := htmlPlainTextWithMode(table.captionTokens, style.preserveWhitespace)
+	text := table.captionText
+	if style.preserveWhitespace {
+		text = table.captionPreserved
+	}
 	if strings.TrimSpace(text) == "" {
 		return 0
 	}
@@ -998,7 +1041,10 @@ func (html *HTML) renderTableCaption(table htmlTableType, x, tableWd, lineHt flo
 	applyHTMLCSSRules(&style, captionEl, cssRules, inherited.fontSize, inherited.lineHeight, html.pdf, tableAncestors...)
 	html.applyAttrs(&style, table.captionAttrs, inherited.fontSize, inherited.lineHeight, html.pdf)
 	html.applyTextStyle(style, fallback)
-	text := htmlPlainTextWithMode(table.captionTokens, style.preserveWhitespace)
+	text := table.captionText
+	if style.preserveWhitespace {
+		text = table.captionPreserved
+	}
 	if strings.TrimSpace(text) == "" {
 		return
 	}

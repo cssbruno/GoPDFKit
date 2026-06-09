@@ -1007,6 +1007,16 @@ func (html *HTML) applyAttrs(st *htmlTextStyle, attrs map[string]string, baseFon
 	applyHTMLAttrsWithStyle(st, attrs, html.styleDeclarations(attrs), baseFontSize, baseLineHeight, pdf)
 }
 
+func (html *HTML) applyCompiledElementStyle(compiled *CompiledHTML, tokenIndex int, st *htmlTextStyle, el HTMLSegmentType, cssRules []htmlCSSRule, baseFontSize, baseLineHeight float64, ancestors ...HTMLSegmentType) {
+	if declarations, ok := compiled.declarations(tokenIndex); ok {
+		applyHTMLStyleDeclarations(st, declarations, baseFontSize, baseLineHeight, html.pdf)
+		applyHTMLAttrsWithStyle(st, el.Attr, html.styleDeclarations(el.Attr), baseFontSize, baseLineHeight, html.pdf)
+		return
+	}
+	applyHTMLCSSRules(st, el, cssRules, baseFontSize, baseLineHeight, html.pdf, ancestors...)
+	html.applyAttrs(st, el.Attr, baseFontSize, baseLineHeight, html.pdf)
+}
+
 func applyHTMLAttrsWithStyle(st *htmlTextStyle, attrs map[string]string, style map[string]string, baseFontSize, baseLineHeight float64, pdf *Document) {
 	if attrs == nil {
 		return

@@ -10,7 +10,7 @@ Local benchmark run on `12th Gen Intel(R) Core(TM) i7-12700` with 20 logical
 CPUs. Results are medians from:
 
 ```shell
-go test ./document -run '^$' -bench 'BenchmarkGeneration(BaselineNoCompliance.*|Images.*|PDFA4FCompliance.*|PDFUA2ArlingtonCompiledHTML.*|SignedPDFA4FPDFUA2ArlingtonXMP.*)$' -benchmem -count=3
+go test ./document -run '^$' -bench 'BenchmarkGeneration(BaselineNoCompliance.*|Images.*|PDFA4FCompliance.*|PDFUA2ArlingtonCompiledHTML.*|SignedPDFA4FPDFUA2ArlingtonXMP.*|HTML(SelectorHeavyCompiled|TableHeavyCompiled|DataImageHeavyCompiled|MalformedCompiled).*)$' -benchmem -count=3
 ```
 
 | Workload | Mode | ns/PDF | PDF/sec | Memory/PDF | Allocs/PDF |
@@ -29,6 +29,14 @@ go test ./document -run '^$' -bench 'BenchmarkGeneration(BaselineNoCompliance.*|
 | PDF/UA-2 + Arlington tagged compiled HTML | 100% CPU | 764,041 | 1,309 | 12,095,492 B | 34,785 |
 | Signed PDF/A-4f + PDF/UA-2 + Arlington + XMP XML metadata | Single worker | 6,824,408 | 147 | 11,877,863 B | 35,144 |
 | Signed PDF/A-4f + PDF/UA-2 + Arlington + XMP XML metadata | 100% CPU | 833,561 | 1,200 | 12,621,359 B | 35,159 |
+| Selector-heavy compiled HTML | Single worker | 635,650 | 1,573 | 207,433 B | 1,615 |
+| Selector-heavy compiled HTML | 40 workers | 127,062 | 7,870 | 211,776 B | 1,628 |
+| Table-heavy compiled HTML | Single worker | 968,191 | 1,033 | 826,387 B | 1,899 |
+| Table-heavy compiled HTML | 40 workers | 174,264 | 5,738 | 826,360 B | 1,903 |
+| Data-image-heavy compiled HTML | Single worker | 257,365 | 3,886 | 263,682 B | 1,059 |
+| Data-image-heavy compiled HTML | 40 workers | 36,791 | 27,181 | 168,223 B | 1,056 |
+| Malformed compiled HTML recovery | Single worker | 340,485 | 2,937 | 296,380 B | 1,196 |
+| Malformed compiled HTML recovery | 40 workers | 101,023 | 9,899 | 299,271 B | 1,206 |
 | Four uncached images | Single worker | 1,311,764 | 762 | 1,971,071 B | 1,470 |
 | Four uncached images | 100% CPU | 182,279 | 5,486 | 1,838,310 B | 1,460 |
 | Four cached images | Single worker | 63,990 | 15,627 | 70,630 B | 275 |

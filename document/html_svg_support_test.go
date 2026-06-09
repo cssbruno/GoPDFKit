@@ -490,6 +490,13 @@ func TestHTMLWriteCompiledRendersRepeatedFragment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompileHTML() error = %v", err)
 	}
+	stats := compiled.Stats()
+	if stats.Nodes == 0 || stats.Tables != 1 || stats.InlineSVGs != 1 || stats.CSSRules == 0 || stats.CachedText == 0 {
+		t.Fatalf("compiled stats = %#v, want populated node/table/svg/css/text counts", stats)
+	}
+	if dump := compiled.DebugDump(); !strings.Contains(dump, "table token=") || !strings.Contains(dump, "svg token=") {
+		t.Fatalf("DebugDump() = %q, want table and svg nodes", dump)
+	}
 
 	for i := 0; i < 2; i++ {
 		pdf := document.New("P", "mm", "A4", "")
@@ -537,6 +544,45 @@ func TestCompileHTMLSkipsHiddenInlineSVG(t *testing.T) {
 	}
 	if strings.Contains(pdfText, "bad path") {
 		t.Fatal("generated PDF leaked hidden SVG text")
+	}
+}
+
+func TestCompileHTMLReportsMalformedRecovery(t *testing.T) {
+	compiled, err := document.CompileHTML(`<div><p>Open <strong>strong</p><span>tail`)
+	if err != nil {
+		t.Fatalf("CompileHTML() error = %v", err)
+	}
+	issues := compiled.RecoveryIssues()
+	if len(issues) == 0 {
+		t.Fatal("RecoveryIssues() is empty for malformed fragment")
+	}
+	stats := compiled.Stats()
+	if stats.Recovery != len(issues) {
+		t.Fatalf("Stats().Recovery = %d, want %d", stats.Recovery, len(issues))
+	}
+}
+
+func TestWriteCompiledEnforcesCustomDataImageLimit(t *testing.T) {
+	compiled, err := document.CompileHTML(`<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ` +
+		`AAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="/>`)
+	if err != nil {
+		t.Fatalf("CompileHTML() error = %v", err)
+	}
+	if stats := compiled.Stats(); stats.Images != 1 {
+		t.Fatalf("compiled image count = %d, want 1", stats.Images)
+	}
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	_, lineHeight := pdf.GetFontSize()
+	html := pdf.HTMLNew()
+	html.MaxDataImageBytes = 1
+	html.WriteCompiled(lineHeight, compiled)
+	if !pdf.Err() {
+		t.Fatal("WriteCompiled with custom MaxDataImageBytes error = nil")
+	}
+	if !strings.Contains(pdf.Error().Error(), "exceeds maximum size") {
+		t.Fatalf("WriteCompiled error = %v, want maximum size", pdf.Error())
 	}
 }
 

@@ -6,7 +6,6 @@ package document
 import (
 	stdhtml "html"
 	"strings"
-	"unicode"
 )
 
 // HTMLSegmentType identifies one token from a supported HTML fragment: literal
@@ -104,31 +103,33 @@ func htmlTagEnd(s string) int {
 }
 
 func parseHTMLTagWithAttrCache(raw string, attrCache map[string]map[string]string) (name string, attrs map[string]string, closeTag, selfClosing bool) {
-	raw = strings.TrimSpace(raw)
+	raw = htmlTrimSpace(raw)
 	if raw == "" || strings.HasPrefix(raw, "!") || strings.HasPrefix(raw, "?") {
 		return "", nil, false, false
 	}
 	if strings.HasPrefix(raw, "/") {
 		closeTag = true
-		raw = strings.TrimSpace(raw[1:])
+		raw = htmlTrimSpace(raw[1:])
 	}
 	if strings.HasSuffix(raw, "/") {
 		selfClosing = true
-		raw = strings.TrimSpace(raw[:len(raw)-1])
+		raw = htmlTrimSpace(raw[:len(raw)-1])
 	}
 	nameEnd := 0
 	for nameEnd < len(raw) {
-		r := rune(raw[nameEnd])
-		if unicode.IsSpace(r) {
+		if htmlIsSpace(raw[nameEnd]) {
 			break
 		}
 		nameEnd++
 	}
-	name = strings.ToLower(raw[:nameEnd])
+	name = internHTMLName(strings.ToLower(raw[:nameEnd]))
 	if closeTag || nameEnd >= len(raw) {
 		return name, nil, closeTag, selfClosing
 	}
-	attrRaw := raw[nameEnd:]
+	attrRaw := htmlTrimSpace(raw[nameEnd:])
+	if attrRaw == "" {
+		return name, nil, closeTag, selfClosing
+	}
 	if attrCache != nil {
 		if cached, ok := attrCache[attrRaw]; ok {
 			return name, cached, closeTag, selfClosing
@@ -142,48 +143,89 @@ func parseHTMLTagWithAttrCache(raw string, attrCache map[string]map[string]strin
 }
 
 func parseHTMLAttrs(raw string) map[string]string {
+	raw = htmlTrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
 	attrs := make(map[string]string, strings.Count(raw, "="))
-	for len(raw) > 0 {
-		raw = strings.TrimLeftFunc(raw, unicode.IsSpace)
-		if raw == "" {
+	pos := 0
+	for pos < len(raw) {
+		pos = htmlSkipSpace(raw, pos)
+		if pos >= len(raw) {
 			break
 		}
-		nameEnd := 0
-		for nameEnd < len(raw) {
-			r := rune(raw[nameEnd])
-			if unicode.IsSpace(r) || raw[nameEnd] == '=' {
+		nameStart := pos
+		for pos < len(raw) {
+			if htmlIsSpace(raw[pos]) || raw[pos] == '=' {
 				break
 			}
-			nameEnd++
+			pos++
 		}
-		name := strings.ToLower(raw[:nameEnd])
-		raw = strings.TrimLeftFunc(raw[nameEnd:], unicode.IsSpace)
+		name := internHTMLName(strings.ToLower(raw[nameStart:pos]))
+		pos = htmlSkipSpace(raw, pos)
 		value := ""
-		if strings.HasPrefix(raw, "=") {
-			raw = strings.TrimLeftFunc(raw[1:], unicode.IsSpace)
-			if strings.HasPrefix(raw, `"`) || strings.HasPrefix(raw, `'`) {
-				quote := raw[0]
-				raw = raw[1:]
-				valueEnd := strings.IndexByte(raw, quote)
-				if valueEnd < 0 {
-					value = raw
-					raw = ""
-				} else {
-					value = raw[:valueEnd]
-					raw = raw[valueEnd+1:]
+		if pos < len(raw) && raw[pos] == '=' {
+			pos++
+			pos = htmlSkipSpace(raw, pos)
+			if pos < len(raw) && (raw[pos] == '"' || raw[pos] == '\'') {
+				quote := raw[pos]
+				pos++
+				valueStart := pos
+				for pos < len(raw) && raw[pos] != quote {
+					pos++
+				}
+				value = raw[valueStart:pos]
+				if pos < len(raw) {
+					pos++
 				}
 			} else {
-				valueEnd := 0
-				for valueEnd < len(raw) && !unicode.IsSpace(rune(raw[valueEnd])) {
-					valueEnd++
+				valueStart := pos
+				for pos < len(raw) && !htmlIsSpace(raw[pos]) {
+					pos++
 				}
-				value = raw[:valueEnd]
-				raw = raw[valueEnd:]
+				value = raw[valueStart:pos]
 			}
 		}
 		if name != "" {
 			attrs[name] = htmlUnescapeString(value)
 		}
 	}
+	if len(attrs) == 0 {
+		return nil
+	}
 	return attrs
+}
+
+func htmlIsSpace(c byte) bool {
+	switch c {
+	case ' ', '\n', '\r', '\t', '\f':
+		return true
+	default:
+		return false
+	}
+}
+
+func htmlSkipSpace(s string, pos int) int {
+	for pos < len(s) && htmlIsSpace(s[pos]) {
+		pos++
+	}
+	return pos
+}
+
+func htmlTrimSpace(s string) string {
+	start := htmlSkipSpace(s, 0)
+	end := len(s)
+	for end > start && htmlIsSpace(s[end-1]) {
+		end--
+	}
+	return s[start:end]
+}
+
+func internHTMLName(name string) string {
+	switch name {
+	case "a", "align", "alt", "article", "b", "body", "border", "br", "caption", "cellpadding", "center", "class", "code", "color", "colspan", "data-pdf-footer", "dd", "del", "div", "dl", "dt", "em", "figcaption", "figure", "footer", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "height", "href", "hr", "i", "id", "img", "ins", "kbd", "li", "ol", "p", "pre", "right", "rowspan", "s", "samp", "script", "section", "size", "src", "strike", "strong", "style", "sub", "sup", "svg", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "u", "ul", "valign", "width":
+		return name
+	default:
+		return name
+	}
 }
