@@ -100,13 +100,12 @@ func (f *Document) SetFont(familyStr, styleStr string, size float64) {
 			fontKey = familyStr + styleStr
 			_, ok = f.fonts[fontKey]
 			if !ok {
-				rdr := f.coreFontReader(familyStr, styleStr)
-				if f.err == nil {
-					f.AddFontFromReader(familyStr, styleStr, rdr)
-				}
-				if f.err != nil {
+				def, err := loadCoreFontDef(fontKey)
+				if err != nil {
+					f.err = err
 					return
 				}
+				f.fonts[fontKey] = def
 			}
 		} else {
 			f.err = fmt.Errorf("undefined font: %s %s", familyStr, styleStr)

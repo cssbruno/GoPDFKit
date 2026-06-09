@@ -25,3 +25,4 @@ coverage.html
 # macOS
 .DS_Store
 PDF_HTML_RENDERING_GAPS.md
+.claude/

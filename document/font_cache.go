@@ -18,8 +18,9 @@ type FontCache struct {
 }
 
 type cachedUTF8Font struct {
-	def  fontDefinition
-	data []byte
+	def    fontDefinition
+	data   []byte
+	static *utf8StaticTables
 }
 
 // NewFontCache returns an empty reusable UTF-8 font cache.
@@ -62,11 +63,18 @@ func (c *FontCache) AddUTF8FontFromBytes(family, style string, data []byte) erro
 		return err
 	}
 	def.utf8File = nil
+	// Parse the font-only tables once here so every document that embeds this
+	// cached font reuses them read-only instead of re-parsing per document.
+	stored := append([]byte(nil), data...)
+	static, err := buildUTF8StaticTables(stored)
+	if err != nil {
+		return err
+	}
 	c.mu.Lock()
 	if c.fonts == nil {
 		c.fonts = make(map[string]cachedUTF8Font)
 	}
-	c.fonts[key] = cachedUTF8Font{def: def, data: append([]byte(nil), data...)}
+	c.fonts[key] = cachedUTF8Font{def: def, data: stored, static: static}
 	c.mu.Unlock()
 	return nil
 }
@@ -123,6 +131,7 @@ func (c cachedUTF8Font) newUTF8Font() *utf8FontFile {
 	}
 	reader := fileReader{array: c.data}
 	utf := newUTF8Font(&reader)
+	utf.static = c.static
 	utf.Ascent = c.def.Desc.Ascent
 	utf.Descent = c.def.Desc.Descent
 	utf.CapHeight = c.def.Desc.CapHeight

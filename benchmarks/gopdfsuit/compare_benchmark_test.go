@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"image/png"
 	"os"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -132,6 +133,8 @@ func benchmarkEngineWorkload(b *testing.B, engine benchmarkEngine, wl workload, 
 		totalBytes.Add(int64(target.buf.Len()))
 	}
 
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
 	b.ResetTimer()
 	start := time.Now()
 	if workers == 1 {
@@ -166,6 +169,17 @@ func benchmarkEngineWorkload(b *testing.B, engine benchmarkEngine, wl workload, 
 		b.ReportMetric(float64(totalBytes.Load())/float64(b.N), "pdf_bytes")
 		b.ReportMetric(float64(b.N)/elapsed.Seconds(), "pdf/s")
 	}
+	reportBenchmarkTotalAllocMB(b, before.TotalAlloc)
+}
+
+func reportBenchmarkTotalAllocMB(b *testing.B, beforeTotalAlloc uint64) {
+	b.Helper()
+	var after runtime.MemStats
+	runtime.ReadMemStats(&after)
+	if after.TotalAlloc < beforeTotalAlloc {
+		return
+	}
+	b.ReportMetric(float64(after.TotalAlloc-beforeTotalAlloc)/(1024*1024), "total_MB")
 }
 
 func benchmarkModes() []struct {
@@ -176,7 +190,6 @@ func benchmarkModes() []struct {
 		name    string
 		workers int
 	}{
-		{name: "single", workers: 1},
 		{name: "workers_40", workers: workerCount40},
 	}
 }
@@ -577,7 +590,11 @@ func BenchmarkGoPDFLibHTMLChrome(b *testing.B) {
 func benchmarkOptionalHTML(b *testing.B, engine string, render func(*pdfTarget) error) {
 	b.ReportAllocs()
 	b.ReportMetric(1, "workers")
+	var totalBytes atomic.Int64
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
 	b.ResetTimer()
+	start := time.Now()
 	for i := 0; i < b.N; i++ {
 		var target pdfTarget
 		if err := render(&target); err != nil {
@@ -586,7 +603,15 @@ func benchmarkOptionalHTML(b *testing.B, engine string, render func(*pdfTarget) 
 		if err := assertPDF(target.buf.Bytes()); err != nil {
 			b.Fatalf("%s HTML generated invalid PDF: %v", engine, err)
 		}
+		totalBytes.Add(int64(target.buf.Len()))
 	}
+	elapsed := time.Since(start)
+	b.StopTimer()
+	if b.N > 0 {
+		b.ReportMetric(float64(totalBytes.Load())/float64(b.N), "pdf_bytes")
+		b.ReportMetric(float64(b.N)/elapsed.Seconds(), "pdf/s")
+	}
+	reportBenchmarkTotalAllocMB(b, before.TotalAlloc)
 }
 
 func renderGoPDFKitHTML(target *pdfTarget) error {

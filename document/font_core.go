@@ -6,8 +6,47 @@ package document
 // Embedded standard font metrics and encoding maps.
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
+	"sync"
 )
+
+// coreFontDefCache holds the parsed, validated definition for each embedded
+// core font keyed by family+style (e.g. "courierBI"). The embedded font
+// definitions are constant, so the JSON decode, validation and font-ID hash
+// only need to run once per process instead of once per Document. The cached
+// value is shared by value-copy: the read-only Cw slice is shared safely
+// (it is never mutated), while the per-document fields (N, DiffN) are set on
+// the copy stored in each Document's font map.
+var coreFontDefCache sync.Map // map[string]fontDefinition
+
+// loadCoreFontDef returns the cached parsed definition for an embedded core
+// font, parsing and validating it on first use. The returned definition has
+// its font ID (i) populated and is safe to copy into a Document's font map.
+func loadCoreFontDef(key string) (fontDefinition, error) {
+	if v, ok := coreFontDefCache.Load(key); ok {
+		return v.(fontDefinition), nil
+	}
+	str, ok := embeddedFontList[key]
+	if !ok {
+		return fontDefinition{}, fmt.Errorf("could not locate %q among embedded core font definition files", key)
+	}
+	var def fontDefinition
+	if err := json.Unmarshal([]byte(str), &def); err != nil {
+		return fontDefinition{}, err
+	}
+	if err := validateFontDefinition(def); err != nil {
+		return fontDefinition{}, err
+	}
+	id, err := generateFontID(def)
+	if err != nil {
+		return fontDefinition{}, err
+	}
+	def.i = id
+	actual, _ := coreFontDefCache.LoadOrStore(key, def)
+	return actual.(fontDefinition), nil
+}
 
 var embeddedFontList = map[string]string{
 	"courierBI":    `{"Tp":"Core","Name":"Courier-BoldOblique","Up":-100,"Ut":50,"I":256,"Cw":[600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600]}`,

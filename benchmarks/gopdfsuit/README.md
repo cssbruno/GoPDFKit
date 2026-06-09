@@ -26,8 +26,8 @@ through public API:
 - `png_rows_60`
 
 Each workload is run in `single` and `workers_40` modes. The harness reports
-`workers`, `pdf_bytes`, and `pdf/s` custom metrics in addition to the standard
-Go benchmark timing and allocation metrics.
+`workers`, `pdf_bytes`, `pdf/s`, and `total_MB` custom metrics in addition to
+the standard Go benchmark timing and allocation metrics.
 
 HTML conversion is included as an opt-in benchmark because the implementations
 are not equivalent: GoPDFKit renders its supported HTML subset in-process, while

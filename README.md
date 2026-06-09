@@ -13,8 +13,16 @@ CPUs. Results are medians from:
 go test ./document -run '^$' -bench 'BenchmarkGeneration(BaselineNoCompliance.*|Images.*|PDFA4FCompliance.*|PDFUA2ArlingtonCompiledHTML.*|SignedPDFA4FPDFUA2ArlingtonXMP.*|HTML(SelectorHeavyCompiled|TableHeavyCompiled|DataImageHeavyCompiled|MalformedCompiled).*)$' -benchmem -count=3
 ```
 
+For a generation-only suite without HTML examples:
+
+```shell
+make bench-generation-core-ci
+```
+
 | Workload | Mode | ns/PDF | PDF/sec | Memory/PDF | Allocs/PDF |
 | --- | ---: | ---: | ---: | ---: | ---: |
+| Baseline no-compliance, no image | Single worker | 349,084 | 2,864 | 448,603 B | 1,410 |
+| Baseline no-compliance, no image | 40 workers | 43,333 | 23,077 | 447,385 B | 1,408 |
 | Baseline no-compliance, uncached image | Single worker | 932,906 | 1,072 | 1,117,652 B | 1,703 |
 | Baseline no-compliance, uncached image | 100% CPU | 89,024 | 11,233 | 874,016 B | 1,690 |
 | Baseline no-compliance, cached image | Single worker | 517,280 | 1,933 | 825,700 B | 1,564 |
@@ -47,7 +55,9 @@ they measure concurrent PDF generation throughput across all logical CPUs
 available to the Go process. Signed rows
 include PDF output plus detached CMS signing; the benchmark certificate and key
 are prepared outside the timed loop. Compliance rows measure generation only;
-external veraPDF and Arlington validation are separate CI steps.
+external veraPDF and Arlington validation are separate CI steps. The raw Go
+benchmark output also includes a `total_MB` metric for total bytes allocated
+during the timed loop.
 
 Additional compiled HTML/parser medians from:
 
@@ -89,7 +99,8 @@ each run in `single` and `workers_40` modes. The harness validates that every
 output starts with a PDF header, contains an EOF marker, and is importable by
 GoPDFKit's lightweight inspector. HTML and compliance rows are opt-in or
 excluded because the two libraries do not expose equivalent behavior for those
-cases.
+cases. Raw benchmark rows include `pdf/s`, `pdf_bytes`, `workers`, and
+`total_MB`.
 
 Local median results from `make bench-gopdfsuit-ci`:
 
@@ -477,9 +488,15 @@ Benchmarks:
 ```shell
 make bench
 make bench-ci
+make bench-generation-core
+make bench-generation-core-ci
 make bench-gopdfsuit
 make bench-gopdfsuit-ci
 ```
+
+`make bench-generation-core` runs non-HTML generation benchmarks only: baseline,
+text, UTF-8 text, images, SVG, templates, imported pages, protection, and
+attachments.
 
 `make bench-gopdfsuit` runs the apples-to-apples comparison harness in
 `benchmarks/gopdfsuit`. That harness drives GoPDFKit and the in-process

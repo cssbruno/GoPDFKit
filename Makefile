@@ -14,8 +14,9 @@ GOVULNCHECK := $(TOOLS_BIN)/govulncheck
 GOSEC_EXCLUDES ?= G115,G304,G401,G405,G501,G503,G505,G703
 COMPLIANCE_OUT ?= artifacts/compliance
 GOPDFSUIT_BENCH_DIR ?= benchmarks/gopdfsuit
+GENERATION_CORE_BENCH ?= BenchmarkGeneration(BaselineNoCompliance.*|Text(Concurrent40)?|LongText(Concurrent40)?|UTF8Text.*|TextCompressionLevel.*|Images.*|SVG(Concurrent40)?|Templates(Concurrent40)?|ImportedPDFPages(Concurrent40)?|Protection(Concurrent40)?|Attachments(Concurrent40)?)$
 
-.PHONY: all documentation cov test vet fmt-check check tools tools-clean lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-gopdfsuit bench-gopdfsuit-ci compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate clean
+.PHONY: all documentation cov test vet fmt-check check tools tools-clean lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-gopdfsuit bench-gopdfsuit-ci compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate clean
 
 cov : all
 	go test $(GO_PACKAGES) -coverprofile=coverage && go tool cover -html=coverage -o=coverage.html
@@ -109,6 +110,13 @@ bench :
 bench-ci :
 	mkdir -p artifacts
 	go test $(GO_PACKAGES) -run '^$$' -bench . -benchmem -count=3 | tee artifacts/benchmarks.txt
+
+bench-generation-core :
+	go test ./document -run '^$$' -bench '$(GENERATION_CORE_BENCH)' -benchmem
+
+bench-generation-core-ci :
+	mkdir -p artifacts
+	go test ./document -run '^$$' -bench '$(GENERATION_CORE_BENCH)' -benchmem -count=3 | tee artifacts/generation-core-benchmarks.txt
 
 bench-gopdfsuit :
 	cd $(GOPDFSUIT_BENCH_DIR) && go test -run '^TestComparableOutputsArePDF$$' -bench 'Benchmark(GoPDFKit|GoPDFLib)' -benchmem
