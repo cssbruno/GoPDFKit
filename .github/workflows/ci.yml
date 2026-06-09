@@ -22,8 +22,47 @@ jobs:
       - name: Check
         run: make check
 
+      - name: Race test
+        run: go test -race ./...
+
+      - name: Vulnerability check
+        run: make govulncheck
+
+  compliance-smoke:
+    name: Compliance Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: tools/go.mod
+          cache: true
+
       - name: Compliance fixture smoke test
         run: make compliance-validate
+
+      - name: Upload compliance smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compliance-smoke-artifacts
+          path: artifacts/compliance
+
+  compliance-strict:
+    name: Compliance Strict
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: tools/go.mod
+          cache: true
 
       - name: Install compliance dependencies
         run: |
@@ -57,6 +96,12 @@ jobs:
           ARLINGTON_REPORT_DIR: artifacts/compliance
         run: make compliance-validate
 
+      - name: Compare compliance baselines
+        env:
+          COMPLIANCE_OUT: artifacts/compliance
+          VERAPDF_DOCKER_IMAGE: verapdf/cli:v1.30.2
+        run: make compliance-baseline-check
+
       - name: Stop Arlington checker
         if: always()
         run: docker rm -f gopdfkit-arlington || true
@@ -67,12 +112,6 @@ jobs:
         with:
           name: compliance-artifacts
           path: artifacts/compliance
-
-      - name: Race test
-        run: go test -race ./...
-
-      - name: Vulnerability check
-        run: make govulncheck
 
   benchmarks:
     name: Generation Benchmarks

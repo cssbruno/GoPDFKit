@@ -49,6 +49,39 @@ func TestBytesRejectsSHA1Digest(t *testing.T) {
 	}
 }
 
+func TestBytesSupportsAdobePKCS7DetachedSubFilter(t *testing.T) {
+	cert, signer := testSigner(t)
+	signedPDF, err := Bytes(testPDFBytes(t), Options{
+		Signer:          signer,
+		Certificate:     cert,
+		DigestAlgorithm: crypto.SHA256,
+		SubFilter:       SubFilterAdobePKCS7Detached,
+		SigningTime:     time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("Bytes() error = %v", err)
+	}
+	if !bytes.Contains(signedPDF, []byte("/SubFilter /adbe.pkcs7.detached")) {
+		t.Fatal("signed PDF does not contain requested Adobe PKCS#7 detached SubFilter")
+	}
+	if bytes.Contains(signedPDF, []byte("/Extensions << /ESIC")) {
+		t.Fatal("Adobe PKCS#7 detached signature should not add the PAdES extension marker")
+	}
+}
+
+func TestBytesRejectsUnsupportedSubFilter(t *testing.T) {
+	cert, signer := testSigner(t)
+	_, err := Bytes(testPDFBytes(t), Options{
+		Signer:          signer,
+		Certificate:     cert,
+		DigestAlgorithm: crypto.SHA256,
+		SubFilter:       "unsupported",
+	})
+	if err == nil || !strings.Contains(err.Error(), "unsupported SubFilter") {
+		t.Fatalf("Bytes() error = %v, want unsupported SubFilter error", err)
+	}
+}
+
 func TestBytesAndVerify(t *testing.T) {
 	cert, signer := testSigner(t)
 	truststore := x509.NewCertPool()
@@ -73,6 +106,9 @@ func TestBytesAndVerify(t *testing.T) {
 	}
 	if !bytes.Contains(signedPDF, []byte("/SubFilter /ETSI.CAdES.detached")) {
 		t.Fatal("signed PDF does not advertise a CMS/CAdES detached signature")
+	}
+	if !bytes.Contains(signedPDF, []byte("/Extensions << /ESIC << /BaseVersion /1.7 /ExtensionLevel 1 >> >>")) {
+		t.Fatal("signed PDF does not advertise the ETSI PAdES developer extension")
 	}
 
 	signature, err := Verify(signedPDF, truststore)

@@ -11,13 +11,13 @@
   "version" : "1.30.1",
   "buildDate" : 1776373560000
 }]},"jobs":[{"itemDetails":{
-  "name" : "pdfua2-arlington-metadata-foundation.pdf",
-  "size" : 51714
+  "name" : "pdfa4f-pdfua2-arlington-signed.pdf",
+  "size" : 207757
 },"arlingtonResult":[ {
   "details" : {
     "passedRules" : 9022,
     "failedRules" : 0,
-    "passedChecks" : 4039,
+    "passedChecks" : 4302,
     "failedChecks" : 0,
     "ruleSummaries" : [ ]
   },
@@ -26,16 +26,16 @@
   "statement" : "PDF file is compliant with Profile requirements.",
   "compliant" : true
 } ],"processingTime":{
-  "start" : 1781044617363,
-  "finish" : 1781044617679,
-  "difference" : 316,
-  "duration" : "00:00:00.316"
+  "start" : 1781044616987,
+  "finish" : 1781044617340,
+  "difference" : 353,
+  "duration" : "00:00:00.353"
 }}],"batchSummary":{
   "duration" : {
-    "start" : 1781044617361,
-    "finish" : 1781044617682,
-    "difference" : 321,
-    "duration" : "00:00:00.321"
+    "start" : 1781044616984,
+    "finish" : 1781044617342,
+    "difference" : 358,
+    "duration" : "00:00:00.358"
   },
   "totalJobs" : 1,
   "outOfMemory" : 0,

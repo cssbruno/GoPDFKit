@@ -26,6 +26,13 @@ const (
 	refPatternFormat      = `%s\s+(\d+)\s+(\d+)\s+R`
 )
 
+const (
+	// SubFilterETSI_CAdESDetached advertises a CAdES detached PDF signature.
+	SubFilterETSI_CAdESDetached = "ETSI.CAdES.detached"
+	// SubFilterAdobePKCS7Detached advertises a detached PKCS#7/CMS PDF signature.
+	SubFilterAdobePKCS7Detached = "adbe.pkcs7.detached"
+)
+
 var (
 	// ErrMissingInput is returned when a PDF input path or byte slice is empty.
 	ErrMissingInput = errors.New("pdfsigning: input is required")
@@ -55,6 +62,9 @@ type Options struct {
 	Reason string
 	// ContactInfo is signer contact information stored in the signature dictionary.
 	ContactInfo string
+	// SubFilter selects the PDF signature SubFilter. A zero value uses
+	// ETSI.CAdES.detached for backward-compatible PAdES-oriented output.
+	SubFilter string
 	// FieldName is the PDF signature field name. A zero value uses "Signature1".
 	FieldName string
 	// SigningTime sets the signature timestamp. A zero value uses now.
@@ -110,8 +120,22 @@ func (options Options) validate() error {
 	if !publicKeysEqual(options.Signer.Public(), options.Certificate.PublicKey) {
 		return errors.New("pdfsigning: signer public key does not match certificate")
 	}
+	if _, err := normalizeSubFilter(options.SubFilter); err != nil {
+		return err
+	}
 	_, err := normalizeDigest(options.DigestAlgorithm)
 	return err
+}
+
+func normalizeSubFilter(subFilter string) (string, error) {
+	switch subFilter {
+	case "":
+		return SubFilterETSI_CAdESDetached, nil
+	case SubFilterETSI_CAdESDetached, SubFilterAdobePKCS7Detached:
+		return subFilter, nil
+	default:
+		return "", fmt.Errorf("pdfsigning: unsupported SubFilter: %s", subFilter)
+	}
 }
 
 func signPDFContext(ctx pdfContext, options Options) ([]byte, error) {
@@ -180,6 +204,12 @@ func buildIncrement(ctx pdfContext, options Options, byteRangePlaceholder, conte
 	acroObject := ctx.Size
 	fieldObject := ctx.Size + 1
 	signatureObject := ctx.Size + 2
+	if subFilter, _ := normalizeSubFilter(options.SubFilter); subFilter == SubFilterETSI_CAdESDetached {
+		rootDict, err = addPAdESExtension(rootDict)
+		if err != nil {
+			return nil, err
+		}
+	}
 	rootDict, err = addDictEntry(rootDict, "/AcroForm", fmt.Sprintf("%d 0 R", acroObject))
 	if err != nil {
 		return nil, err
@@ -218,8 +248,16 @@ func buildIncrement(ctx pdfContext, options Options, byteRangePlaceholder, conte
 	return buf.Bytes(), nil
 }
 
+func addPAdESExtension(rootDict []byte) ([]byte, error) {
+	if findPDFName(rootDict, "/Extensions") >= 0 {
+		return rootDict, nil
+	}
+	return addDictEntry(rootDict, "/Extensions", "<< /ESIC << /BaseVersion /1.7 /ExtensionLevel 1 >> >>")
+}
+
 func signatureDictionary(options Options, byteRangePlaceholder, contentsPlaceholder string, signingTime time.Time) string {
-	fields := []string{"<< /Type /Sig", "/Filter /Adobe.PPKLite", "/SubFilter /ETSI.CAdES.detached", "/ByteRange " + byteRangePlaceholder, "/Contents <" + contentsPlaceholder + ">", "/M " + pdfString(pdfDate(signingTime))}
+	subFilter, _ := normalizeSubFilter(options.SubFilter)
+	fields := []string{"<< /Type /Sig", "/Filter /Adobe.PPKLite", "/SubFilter /" + subFilter, "/ByteRange " + byteRangePlaceholder, "/Contents <" + contentsPlaceholder + ">", "/M " + pdfString(pdfDate(signingTime))}
 	if options.Name != "" {
 		fields = append(fields, "/Name "+pdfString(options.Name))
 	}

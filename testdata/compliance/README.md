@@ -2,7 +2,8 @@
 
 These reports are generated from `cmd/compliance-fixtures` with:
 
-* veraPDF CLI 1.30.2 for PDF/A-4, PDF/A-4e, PDF/A-4f, and PDF/UA-2
+* veraPDF CLI 1.30.2 for PDF/A-4, PDF/A-4e, PDF/A-4f, signed PDF/A-4f,
+  PDF/UA-2, and signed PDF/UA-2
 * veraPDF Arlington REST 1.30.1 for the Arlington PDF 2.0 profile against all
   generated compliance fixtures
 * `/usr/share/color/icc/colord/sRGB.icc` as the real sRGB ICC output profile

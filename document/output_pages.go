@@ -168,7 +168,7 @@ func (f *Document) putpages() {
 
 func (f *Document) putLinkAnnotation(pl pageLink, pagesObjectNumbers []int, defaultPageHeight float64) {
 	f.newobj()
-	f.outf("<< /Type /Annot /Subtype /Link /Rect [%.2f %.2f %.2f %.2f] /Border [0 0 0]", pl.x, pl.y, pl.x+pl.wd, pl.y-pl.ht)
+	f.outf("<< /Type /Annot /Subtype /Link /Rect [%.2f %.2f %.2f %.2f] /Border [0 0 0] /F 4", pl.x, pl.y, pl.x+pl.wd, pl.y-pl.ht)
 	if pl.structParent >= 0 {
 		f.outf("/StructParent %d", pl.structParent)
 	}

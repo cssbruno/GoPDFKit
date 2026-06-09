@@ -131,6 +131,8 @@ func TestPDFUA2TaggedPDFStructureTreeAndMarkedContent(t *testing.T) {
 		"/MCID 1",
 		"/MCID 2",
 		"/Nums [0 [",
+		"/Subtype /Link /Rect",
+		"/F 4",
 		"/Alt (",
 		string([]byte{0xfe, 0xff, 0x00, 'G', 0x00, 'o'}),
 	} {

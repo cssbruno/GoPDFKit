@@ -75,7 +75,18 @@ else
 	echo "skip: PDF/A fixtures were not generated; set SRGB_ICC to a real sRGB ICC profile"
 fi
 
-run_checker "PDF/UA" "${PDFUA_CHECKER:-}" "$out_dir/pdfua2-arlington-metadata-foundation.pdf"
+pdfua_files=""
+for pdf in "$out_dir"/*pdfua2*.pdf; do
+	if [ -f "$pdf" ]; then
+		pdfua_files="$pdfua_files $pdf"
+	fi
+done
+if [ -n "$pdfua_files" ]; then
+	# shellcheck disable=SC2086
+	run_checker "PDF/UA" "${PDFUA_CHECKER:-}" $pdfua_files
+else
+	echo "skip: PDF/UA fixtures were not generated"
+fi
 # Arlington is a PDF model/grammar check, so run it over every generated
 # compliance fixture rather than only the tagged PDF/UA fixture.
 # shellcheck disable=SC2086

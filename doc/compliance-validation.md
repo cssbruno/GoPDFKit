@@ -142,10 +142,13 @@ Passing external validator baselines from the repository fixtures are stored in
 * `verapdf-pdfa4e.xml`
 * `verapdf-pdfa4f.xml`
 * `verapdf-pdfua2.xml`
+* `verapdf-signed-pdfa4f-pdfua2-arlington.xml`
+* `verapdf-signed-pdfua2.xml`
 * `arlington-pdfa4.json`
 * `arlington-pdfa4e.json`
 * `arlington-pdfa4f.json`
 * `arlington-pdf20.json`
+* `arlington-signed-pdfa4f-pdfua2.json`
 
 Regenerate them after compliance-output changes with the Docker wrappers above.
 The local helper below regenerates fixture PDFs and validator reports into
@@ -155,8 +158,17 @@ The local helper below regenerates fixture PDFs and validator reports into
 SRGB_ICC=/usr/share/color/icc/colord/sRGB.icc make compliance-regenerate
 ```
 
+Compare the current generated validator output against committed baselines with:
+
+```shell
+COMPLIANCE_OUT=artifacts/compliance make compliance-baseline-check
+```
+
 CI uploads generated compliance PDFs and validator reports from
-`artifacts/compliance` as workflow artifacts, including failure cases.
+`artifacts/compliance` as workflow artifacts, including failure cases. The
+workflow has separate `Compliance Smoke` and `Compliance Strict` jobs; protected
+branches should require `Compliance Strict` before merging because that job runs
+the external validators and baseline comparison.
 
 Store external findings in `document.ComplianceValidationReport`:
 

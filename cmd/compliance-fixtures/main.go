@@ -6,13 +6,22 @@
 package main
 
 import (
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"flag"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/cssbruno/gopdfkit/document"
+	"github.com/cssbruno/gopdfkit/sign"
 )
 
 func main() {
@@ -59,6 +68,12 @@ func main() {
 		}
 		fmt.Printf("generated %s\n", path)
 	}
+
+	path = filepath.Join(*outDir, "pdfa4f-pdfua2-arlington-signed.pdf")
+	if err := generateSignedComplianceFoundation(path, root, fontPath, boldFontPath, icc); err != nil {
+		exitErr(err)
+	}
+	fmt.Printf("generated %s\n", path)
 }
 
 func repoRoot() (string, error) {
@@ -97,7 +112,7 @@ func generatePDFUAArlingtonFoundation(path, root, fontPath, boldFontPath string)
 	}, 0, "")
 	pdf.Ln(18)
 	html := pdf.HTMLNew()
-	html.Write(6, `<ul><li>Tagged list label and body</li><li>Second semantic item</li></ul><table border="1"><caption>Tagged table caption</caption><tr><th>Name</th><th>Status</th><th>Detail</th></tr><tr><th scope="row" rowspan="2">Structure tree</th><td colspan="2"><p>Generated</p><div>Mixed block content</div><ul><li>Generated<ul><li>Nested table-cell list</li></ul></li></ul><table border="1"><tr><td>Nested table cell</td></tr></table></td></tr><tr><td>Parent tree</td><td>OK</td></tr></table>`)
+	html.Write(6, complianceTaggedHTMLFragment())
 	pdf.Line(10, pdf.GetY()+4, 80, pdf.GetY()+4)
 	return pdf.OutputFileAndClose(path)
 }
@@ -126,6 +141,92 @@ func generatePDFAFoundation(path, fontPath, boldFontPath string, icc []byte, mod
 	pdf.SetFont("DejaVu", "", 12)
 	pdf.MultiCell(0, 6, "This file exercises GoPDFKit PDF/A-4 metadata, catalog output intent, and embedded UTF-8 font generation.", "", "L", false)
 	return pdf.OutputFileAndClose(path)
+}
+
+func generateSignedComplianceFoundation(path, root, fontPath, boldFontPath string, icc []byte) error {
+	pdf := baseDocument(fontPath, boldFontPath)
+	pdf.SetTitle("Signed PDF/A-4f PDF/UA-2 Arlington metadata foundation", false)
+	pdf.SetSubject("Generated signed compliance fixture for PDF/A-4f, PDF/UA-2, Arlington, and XMP metadata validation", false)
+	pdf.SetAuthor("GoPDFKit compliance fixtures", false)
+	pdf.SetComplianceMetadata(document.ComplianceMetadata{
+		PDFA:       document.PDFAMode4F,
+		PDFUA2:     true,
+		Arlington:  true,
+		Lang:       "en-US",
+		Title:      "Signed PDF/A-4f PDF/UA-2 Arlington metadata foundation",
+		Identifier: "urn:uuid:gopdfkit-signed-pdfa4f-pdfua2-arlington-foundation",
+	})
+	if err := pdf.SetOutputIntent(icc, "sRGB IEC61966-2.1"); err != nil {
+		return err
+	}
+	pdf.SetAttachments([]document.Attachment{{
+		Filename:       "signed-note.txt",
+		Description:    "Signed PDF/A-4f attachment fixture",
+		MIMEType:       "text/plain",
+		AFRelationship: "Data",
+		Content:        []byte("Attachment used to exercise signed PDF/A-4f compliance generation."),
+	}})
+	pdf.AddPage()
+	pdf.SetFont("DejaVu", "", 12)
+	pdf.SetNextTextRole("H1")
+	pdf.CellFormat(0, 8, "Signed compliance fixture", "", 1, "L", false, 0, "")
+	pdf.SetNextTextRole("P")
+	pdf.MultiCell(0, 6, "This signed fixture exercises PDF/A-4f metadata, PDF/UA-2 tagged content, Arlington model checks, XMP metadata, attachments, output intents, and detached CMS signing.", "", "L", false)
+	pdf.SetNextTextRole("Link")
+	pdf.CellFormat(0, 7, "Signed fixture reference link", "", 1, "L", false, 0, "https://example.com/gopdfkit/signed")
+	pdf.ImageOptions(filepath.Join(root, "assets", "static", "image", "logo.png"), 10, pdf.GetY()+2, 20, 0, false, document.ImageOptions{
+		ImageType: "png",
+		AltText:   "GoPDFKit logo",
+	}, 0, "")
+	pdf.Ln(16)
+	html := pdf.HTMLNew()
+	html.Write(6, complianceTaggedHTMLFragment())
+	pdf.Line(10, pdf.GetY()+4, 80, pdf.GetY()+4)
+
+	cert, signer, err := complianceSigner()
+	if err != nil {
+		return err
+	}
+	return pdf.OutputSignedFile(path, sign.Options{
+		Signer:          signer,
+		Certificate:     cert,
+		DigestAlgorithm: crypto.SHA256,
+		SubFilter:       sign.SubFilterAdobePKCS7Detached,
+		Name:            "GoPDFKit Compliance Signer",
+		Reason:          "Compliance fixture",
+		Location:        "CI",
+		SigningTime:     time.Unix(1_704_067_200, 0).UTC(),
+		SignatureSize:   64 << 10,
+	})
+}
+
+func complianceSigner() (*x509.Certificate, crypto.Signer, error) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, nil, fmt.Errorf("generate signing key: %w", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "GoPDFKit Compliance Signer"},
+		NotBefore:             time.Unix(1_704_067_200, 0).UTC().Add(-time.Hour),
+		NotAfter:              time.Unix(1_704_067_200, 0).UTC().Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageContentCommitment,
+		UnknownExtKeyUsage:    []asn1.ObjectIdentifier{{1, 3, 6, 1, 5, 5, 7, 3, 36}},
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, key.Public(), key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create signing certificate: %w", err)
+	}
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		return nil, nil, fmt.Errorf("parse signing certificate: %w", err)
+	}
+	return cert, key, nil
+}
+
+func complianceTaggedHTMLFragment() string {
+	return `<ul><li>Tagged list label and body</li><li>Second semantic item</li></ul><table border="1"><caption>Tagged table caption</caption><tr><th>Name</th><th>Status</th><th>Detail</th></tr><tr><th scope="row" rowspan="2">Structure tree</th><td colspan="2"><p>Generated</p><div>Mixed block content</div><ul><li>Generated<ul><li>Nested table-cell list</li></ul></li></ul><table border="1"><tr><td>Nested table cell</td></tr></table></td></tr><tr><td>Parent tree</td><td>OK</td></tr></table>`
 }
 
 func baseDocument(fontPath, boldFontPath string) *document.Document {
