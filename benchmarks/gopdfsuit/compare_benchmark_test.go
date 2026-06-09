@@ -26,10 +26,20 @@ const (
 	footerText    = "Shared PDF benchmark"
 )
 
+const (
+	workloadText      = "text"
+	workloadTable     = "table"
+	workloadInvoice   = "invoice"
+	workloadFullImage = "full_image"
+	workloadImageRows = "image_rows"
+)
+
 type workload struct {
 	name        string
+	kind        string
 	title       string
 	rows        []rowData
+	textLines   []string
 	pngData     []byte
 	pngBase64   string
 	pngWidthPt  float64
@@ -175,16 +185,30 @@ func workloads(tb testing.TB) []workload {
 	tb.Helper()
 	image := loadBenchmarkPNG(tb)
 	return []workload{
-		{name: "table_180_rows", title: "Shared table benchmark", rows: sharedRows(180)},
-		{name: "table_900_rows", title: "Shared multipage table benchmark", rows: sharedRows(900)},
+		{name: "text_short", kind: workloadText, title: "Shared short text benchmark", textLines: sharedTextLines(12)},
+		{name: "text_240_lines", kind: workloadText, title: "Shared multipage text benchmark", textLines: sharedTextLines(240)},
+		{name: "table_180_rows", kind: workloadTable, title: "Shared table benchmark", rows: sharedRows(180)},
+		{name: "table_900_rows", kind: workloadTable, title: "Shared multipage table benchmark", rows: sharedRows(900)},
+		{name: "invoice_40_rows", kind: workloadInvoice, title: "Shared invoice benchmark", rows: invoiceRows(40)},
 		{
 			name:        "png_table_180_rows",
+			kind:        workloadFullImage,
 			title:       "Shared image and table benchmark",
 			rows:        sharedRows(180),
 			pngData:     image.data,
 			pngBase64:   image.base64,
 			pngWidthPt:  image.widthPt,
 			pngHeightPt: image.heightPt,
+		},
+		{
+			name:        "png_rows_60",
+			kind:        workloadImageRows,
+			title:       "Shared table image rows benchmark",
+			rows:        sharedRows(60),
+			pngData:     image.data,
+			pngBase64:   image.base64,
+			pngWidthPt:  28,
+			pngHeightPt: image.heightPt * 28 / image.widthPt,
 		},
 	}
 }
@@ -218,28 +242,89 @@ func renderGoPDFKit(wl workload, target *pdfTarget) error {
 	pdf.SetFont("Helvetica", "B", 16)
 	pdf.CellFormat(0, 22, wl.title, "", 1, "C", false, 0, "")
 
-	if len(wl.pngData) > 0 {
-		options := document.ImageOptions{ImageType: "png"}
-		pdf.RegisterImageOptionsReader("shared-benchmark-png", options, bytes.NewReader(wl.pngData))
-		pdf.ImageOptions("shared-benchmark-png", pageMarginPt, pdf.GetY()+8, wl.pngWidthPt, 0, false, options, 0, "")
-		pdf.Ln(wl.pngHeightPt + 8)
-	}
-
-	pdf.SetFont("Helvetica", "B", 9)
-	pdf.CellFormat(90, rowHeightPt, "Code", "1", 0, "L", false, 0, "")
-	pdf.CellFormat(330, rowHeightPt, "Description", "1", 0, "L", false, 0, "")
-	pdf.CellFormat(103, rowHeightPt, "Value", "1", 1, "R", false, 0, "")
-	pdf.SetFont("Helvetica", "", 9)
-	for _, row := range wl.rows {
-		pdf.CellFormat(90, rowHeightPt, row.code, "1", 0, "L", false, 0, "")
-		pdf.CellFormat(330, rowHeightPt, row.description, "1", 0, "L", false, 0, "")
-		pdf.CellFormat(103, rowHeightPt, row.value, "1", 1, "R", false, 0, "")
+	switch wl.kind {
+	case workloadText:
+		renderGoPDFKitText(pdf, wl)
+	case workloadInvoice:
+		renderGoPDFKitInvoice(pdf, wl)
+	case workloadFullImage:
+		renderGoPDFKitFullImage(pdf, wl)
+		renderGoPDFKitTable(pdf, wl.rows)
+	case workloadImageRows:
+		renderGoPDFKitImageRows(pdf, wl)
+	default:
+		renderGoPDFKitTable(pdf, wl.rows)
 	}
 
 	if err := pdf.Output(&target.buf); err != nil {
 		return fmt.Errorf("gopdfkit output: %w", err)
 	}
 	return nil
+}
+
+func renderGoPDFKitText(pdf *document.Document, wl workload) {
+	pdf.SetFont("Helvetica", "", 10)
+	for _, line := range wl.textLines {
+		pdf.MultiCell(0, 14, line, "", "L", false)
+	}
+}
+
+func renderGoPDFKitFullImage(pdf *document.Document, wl workload) {
+	if len(wl.pngData) == 0 {
+		return
+	}
+	options := document.ImageOptions{ImageType: "png"}
+	pdf.RegisterImageOptionsReader("shared-benchmark-png", options, bytes.NewReader(wl.pngData))
+	pdf.ImageOptions("shared-benchmark-png", pageMarginPt, pdf.GetY()+8, wl.pngWidthPt, 0, false, options, 0, "")
+	pdf.Ln(wl.pngHeightPt + 8)
+}
+
+func renderGoPDFKitTable(pdf *document.Document, rows []rowData) {
+	pdf.SetFont("Helvetica", "B", 9)
+	pdf.CellFormat(90, rowHeightPt, "Code", "1", 0, "L", false, 0, "")
+	pdf.CellFormat(330, rowHeightPt, "Description", "1", 0, "L", false, 0, "")
+	pdf.CellFormat(103, rowHeightPt, "Value", "1", 1, "R", false, 0, "")
+	pdf.SetFont("Helvetica", "", 9)
+	for _, row := range rows {
+		pdf.CellFormat(90, rowHeightPt, row.code, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(330, rowHeightPt, row.description, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(103, rowHeightPt, row.value, "1", 1, "R", false, 0, "")
+	}
+}
+
+func renderGoPDFKitInvoice(pdf *document.Document, wl workload) {
+	renderGoPDFKitTable(pdf, wl.rows)
+	pdf.SetFont("Helvetica", "B", 10)
+	pdf.CellFormat(420, rowHeightPt, "Subtotal", "1", 0, "R", false, 0, "")
+	pdf.CellFormat(103, rowHeightPt, invoiceTotal(wl.rows), "1", 1, "R", false, 0, "")
+	pdf.CellFormat(420, rowHeightPt, "Tax", "1", 0, "R", false, 0, "")
+	pdf.CellFormat(103, rowHeightPt, "81.42", "1", 1, "R", false, 0, "")
+	pdf.CellFormat(420, rowHeightPt, "Total", "1", 0, "R", false, 0, "")
+	pdf.CellFormat(103, rowHeightPt, "977.04", "1", 1, "R", false, 0, "")
+}
+
+func renderGoPDFKitImageRows(pdf *document.Document, wl workload) {
+	if len(wl.pngData) > 0 {
+		options := document.ImageOptions{ImageType: "png"}
+		pdf.RegisterImageOptionsReader("shared-benchmark-png", options, bytes.NewReader(wl.pngData))
+	}
+	pdf.SetFont("Helvetica", "B", 9)
+	pdf.CellFormat(54, rowHeightPt, "Image", "1", 0, "L", false, 0, "")
+	pdf.CellFormat(90, rowHeightPt, "Code", "1", 0, "L", false, 0, "")
+	pdf.CellFormat(330, rowHeightPt, "Description", "1", 0, "L", false, 0, "")
+	pdf.CellFormat(49, rowHeightPt, "Value", "1", 1, "R", false, 0, "")
+	pdf.SetFont("Helvetica", "", 9)
+	for _, row := range wl.rows {
+		x, y := pdf.GetX(), pdf.GetY()
+		pdf.CellFormat(54, 32, "", "1", 0, "L", false, 0, "")
+		if len(wl.pngData) > 0 {
+			pdf.ImageOptions("shared-benchmark-png", x+4, y+4, 24, 0, false, document.ImageOptions{ImageType: "png"}, 0, "")
+		}
+		pdf.CellFormat(90, rowHeightPt, row.code, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(330, rowHeightPt, row.description, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(49, rowHeightPt, row.value, "1", 1, "R", false, 0, "")
+		pdf.SetY(y + 32)
+	}
 }
 
 func renderGoPDFLib(wl workload, target *pdfTarget) error {
@@ -254,25 +339,30 @@ func renderGoPDFLib(wl workload, target *pdfTarget) error {
 
 func gopdfSuitTemplate(wl workload) gopdflib.PDFTemplate {
 	embedFonts := false
-	table := gopdflib.Table{
-		MaxColumns:   3,
-		ColumnWidths: []float64{90, 330, 103},
-		Rows:         make([]gopdflib.Row, 0, len(wl.rows)+1),
-	}
-	table.Rows = append(table.Rows, gopdflib.Row{Row: []gopdflib.Cell{
-		gopdfSuitCell("Helvetica:9:100:left:1:1:1:1", "Code"),
-		gopdfSuitCell("Helvetica:9:100:left:1:1:1:1", "Description"),
-		gopdfSuitCell("Helvetica:9:100:right:1:1:1:1", "Value"),
-	}})
-	for _, row := range wl.rows {
-		table.Rows = append(table.Rows, gopdflib.Row{Row: []gopdflib.Cell{
-			gopdfSuitCell("Helvetica:9:000:left:1:1:1:1", row.code),
-			gopdfSuitCell("Helvetica:9:000:left:1:1:1:1", row.description),
-			gopdfSuitCell("Helvetica:9:000:right:1:1:1:1", row.value),
-		}})
+	elements := []gopdflib.Element{}
+	switch wl.kind {
+	case workloadText:
+		elements = append(elements, gopdflib.Element{Type: "table", Table: gopdfSuitTextTable(wl)})
+	case workloadInvoice:
+		elements = append(elements, gopdflib.Element{Type: "table", Table: gopdfSuitTable(wl.rows)})
+		elements = append(elements, gopdflib.Element{Type: "table", Table: gopdfSuitTotalsTable(wl.rows)})
+	case workloadFullImage:
+		if wl.pngBase64 != "" {
+			elements = append(elements, gopdflib.Element{Type: "image", Image: &gopdflib.Image{
+				ImageName: "shared-benchmark-png",
+				ImageData: wl.pngBase64,
+				Width:     wl.pngWidthPt,
+				Height:    wl.pngHeightPt,
+			}})
+		}
+		elements = append(elements, gopdflib.Element{Type: "table", Table: gopdfSuitTable(wl.rows)})
+	case workloadImageRows:
+		elements = append(elements, gopdflib.Element{Type: "table", Table: gopdfSuitImageRowsTable(wl)})
+	default:
+		elements = append(elements, gopdflib.Element{Type: "table", Table: gopdfSuitTable(wl.rows)})
 	}
 
-	template := gopdflib.PDFTemplate{
+	return gopdflib.PDFTemplate{
 		Config: gopdflib.Config{
 			Page:          "A4",
 			PageAlignment: 1,
@@ -288,28 +378,97 @@ func gopdfSuitTemplate(wl workload) gopdflib.PDFTemplate {
 			Font: "Helvetica:8:000:left",
 			Text: footerText,
 		},
-		Elements: []gopdflib.Element{{Type: "table", Table: &table}},
+		Elements: elements,
 	}
-	if wl.pngBase64 != "" {
-		template.Elements = []gopdflib.Element{
-			{
-				Type: "image",
-				Image: &gopdflib.Image{
-					ImageName: "shared-benchmark-png",
-					ImageData: wl.pngBase64,
-					Width:     wl.pngWidthPt,
-					Height:    wl.pngHeightPt,
-				},
-			},
-			{Type: "table", Table: &table},
-		}
+}
+
+func gopdfSuitTable(rows []rowData) *gopdflib.Table {
+	table := gopdflib.Table{
+		MaxColumns:   3,
+		ColumnWidths: []float64{90, 330, 103},
+		Rows:         make([]gopdflib.Row, 0, len(rows)+1),
 	}
-	return template
+	table.Rows = append(table.Rows, gopdflib.Row{Row: []gopdflib.Cell{
+		gopdfSuitCell("Helvetica:9:100:left:1:1:1:1", "Code"),
+		gopdfSuitCell("Helvetica:9:100:left:1:1:1:1", "Description"),
+		gopdfSuitCell("Helvetica:9:100:right:1:1:1:1", "Value"),
+	}})
+	for _, row := range rows {
+		table.Rows = append(table.Rows, gopdflib.Row{Row: []gopdflib.Cell{
+			gopdfSuitCell("Helvetica:9:000:left:1:1:1:1", row.code),
+			gopdfSuitCell("Helvetica:9:000:left:1:1:1:1", row.description),
+			gopdfSuitCell("Helvetica:9:000:right:1:1:1:1", row.value),
+		}})
+	}
+	return &table
+}
+
+func gopdfSuitTextTable(wl workload) *gopdflib.Table {
+	rows := make([]gopdflib.Row, 0, len(wl.textLines))
+	wrap := true
+	for _, line := range wl.textLines {
+		rows = append(rows, gopdflib.Row{Row: []gopdflib.Cell{{
+			Props:  "Helvetica:10:000:left:0:0:0:0",
+			Text:   line,
+			Wrap:   &wrap,
+			Height: floatPtr(18),
+		}}})
+	}
+	return &gopdflib.Table{MaxColumns: 1, ColumnWidths: []float64{1}, Rows: rows}
+}
+
+func gopdfSuitTotalsTable(rows []rowData) *gopdflib.Table {
+	return &gopdflib.Table{
+		MaxColumns:   2,
+		ColumnWidths: []float64{420, 103},
+		Rows: []gopdflib.Row{
+			{Row: []gopdflib.Cell{
+				gopdfSuitCell("Helvetica:10:100:right:1:1:1:1", "Subtotal"),
+				gopdfSuitCell("Helvetica:10:100:right:1:1:1:1", invoiceTotal(rows)),
+			}},
+			{Row: []gopdflib.Cell{
+				gopdfSuitCell("Helvetica:10:100:right:1:1:1:1", "Tax"),
+				gopdfSuitCell("Helvetica:10:100:right:1:1:1:1", "81.42"),
+			}},
+			{Row: []gopdflib.Cell{
+				gopdfSuitCell("Helvetica:10:100:right:1:1:1:1", "Total"),
+				gopdfSuitCell("Helvetica:10:100:right:1:1:1:1", "977.04"),
+			}},
+		},
+	}
+}
+
+func gopdfSuitImageRowsTable(wl workload) *gopdflib.Table {
+	table := gopdflib.Table{
+		MaxColumns:   4,
+		ColumnWidths: []float64{54, 90, 330, 49},
+		Rows:         make([]gopdflib.Row, 0, len(wl.rows)+1),
+	}
+	table.Rows = append(table.Rows, gopdflib.Row{Row: []gopdflib.Cell{
+		gopdfSuitCell("Helvetica:9:100:left:1:1:1:1", "Image"),
+		gopdfSuitCell("Helvetica:9:100:left:1:1:1:1", "Code"),
+		gopdfSuitCell("Helvetica:9:100:left:1:1:1:1", "Description"),
+		gopdfSuitCell("Helvetica:9:100:right:1:1:1:1", "Value"),
+	}})
+	for _, row := range wl.rows {
+		image := &gopdflib.Image{ImageName: "shared-benchmark-png", ImageData: wl.pngBase64, Width: 24, Height: wl.pngHeightPt}
+		table.Rows = append(table.Rows, gopdflib.Row{Row: []gopdflib.Cell{
+			{Props: "Helvetica:9:000:left:1:1:1:1", Image: image, Height: floatPtr(32)},
+			gopdfSuitCell("Helvetica:9:000:left:1:1:1:1", row.code),
+			gopdfSuitCell("Helvetica:9:000:left:1:1:1:1", row.description),
+			gopdfSuitCell("Helvetica:9:000:right:1:1:1:1", row.value),
+		}})
+	}
+	return &table
 }
 
 func gopdfSuitCell(props, text string) gopdflib.Cell {
 	height := rowHeightPt
 	return gopdflib.Cell{Props: props, Text: text, Height: &height}
+}
+
+func floatPtr(v float64) *float64 {
+	return &v
 }
 
 func sharedRows(count int) []rowData {
@@ -322,6 +481,37 @@ func sharedRows(count int) []rowData {
 		})
 	}
 	return rows
+}
+
+func invoiceRows(count int) []rowData {
+	rows := make([]rowData, 0, count)
+	for row := 0; row < count; row++ {
+		rows = append(rows, rowData{
+			code:        fmt.Sprintf("INV-%03d", row+1),
+			description: fmt.Sprintf("Professional services line %03d", row+1),
+			value:       fmt.Sprintf("%0.2f", float64(row+1)*1.09),
+		})
+	}
+	return rows
+}
+
+func invoiceTotal(rows []rowData) string {
+	var total float64
+	for idx := range rows {
+		total += float64(idx+1) * 1.09
+	}
+	return fmt.Sprintf("%0.2f", total)
+}
+
+func sharedTextLines(count int) []string {
+	lines := make([]string, 0, count)
+	for line := 0; line < count; line++ {
+		lines = append(lines, fmt.Sprintf(
+			"Paragraph %03d: shared benchmark text with predictable length, punctuation, and line flow for both PDF libraries.",
+			line+1,
+		))
+	}
+	return lines
 }
 
 type benchmarkImage struct {
