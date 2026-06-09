@@ -21,8 +21,20 @@ const symbolContinue = 1 << 5
 const symbolAllScale = 1 << 6
 const symbol2x2 = 1 << 7
 
-// CID map initialization.
-const toUnicode = "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo\n<</Registry (Adobe)\n/Ordering (UCS)\n/Supplement 0\n>> def\n/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n1 beginbfrange\n<0000> <FFFF> <0000>\nendbfrange\nendcmap\nCMapName currentdict /CMap defineresource pop\nend"
+func utf8ToUnicodeCMap() string {
+	var out strings.Builder
+	out.WriteString("/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo\n")
+	out.WriteString("<</Registry (Adobe)\n/Ordering (UCS)\n/Supplement 0\n>> def\n")
+	out.WriteString("/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n")
+	out.WriteString("1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n")
+	out.WriteString("256 beginbfrange\n")
+	for start := 0; start <= 0xff00; start += 0x100 {
+		end := start + 0xff
+		out.WriteString(fmt.Sprintf("<%04X> <%04X> <%04X>\n", start, end, start))
+	}
+	out.WriteString("endbfrange\nendcmap\nCMapName currentdict /CMap defineresource pop\nend")
+	return out.String()
+}
 
 type utf8FontFile struct {
 	fileReader           *fileReader

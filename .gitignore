@@ -1,5 +1,6 @@
 *.0
 coverage
+artifacts/
 assets/static/font/CalligrapherRegular.json
 assets/static/font/CalligrapherRegular.z
 assets/static/font/Ubuntu-*

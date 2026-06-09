@@ -576,6 +576,26 @@ func TestHTMLParseTableCaptionAndFooterRows(t *testing.T) {
 	}
 }
 
+func TestHTMLParseNestedTableStaysInsideParentCell(t *testing.T) {
+	tokens := HTMLTokenize(`<table><tr><td>Outer<table><tr><td>Inner</td></tr></table></td><td>Sibling</td></tr></table>`)
+	table, end := parseHTMLTable(tokens, 0)
+	if end == 0 {
+		t.Fatal("parseHTMLTable did not find closing table")
+	}
+	if len(table.rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(table.rows))
+	}
+	if len(table.rows[0].cells) != 2 {
+		t.Fatalf("len(cells) = %d, want 2", len(table.rows[0].cells))
+	}
+	if text := htmlPlainText(table.rows[0].cells[0].tokens); !strings.Contains(text, "Outer") || !strings.Contains(text, "Inner") {
+		t.Fatalf("first cell text = %q, want nested table text inside parent cell", text)
+	}
+	if got := strings.TrimSpace(table.rows[0].cells[1].text); got != "Sibling" {
+		t.Fatalf("second cell text = %q, want Sibling", got)
+	}
+}
+
 func TestHTMLWriteTableCaptionAndFooter(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	pdf.SetCompression(false)

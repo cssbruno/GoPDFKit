@@ -12,8 +12,9 @@ NILAWAY := $(TOOLS_BIN)/nilaway
 GOSEC := $(TOOLS_BIN)/gosec
 GOVULNCHECK := $(TOOLS_BIN)/govulncheck
 GOSEC_EXCLUDES ?= G115,G304,G401,G405,G501,G503,G505,G703
+COMPLIANCE_OUT ?= artifacts/compliance
 
-.PHONY: all documentation cov test vet fmt-check check tools tools-clean lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci clean
+.PHONY: all documentation cov test vet fmt-check check tools tools-clean lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci compliance-fixtures compliance-validate clean
 
 cov : all
 	go test $(GO_PACKAGES) -coverprofile=coverage && go tool cover -html=coverage -o=coverage.html
@@ -107,6 +108,12 @@ bench :
 bench-ci :
 	mkdir -p artifacts
 	go test $(GO_PACKAGES) -run '^$$' -bench . -benchmem -count=3 | tee artifacts/benchmarks.txt
+
+compliance-fixtures :
+	go run ./cmd/compliance-fixtures -out "$(COMPLIANCE_OUT)" $(if $(SRGB_ICC),-icc "$(SRGB_ICC)")
+
+compliance-validate :
+	COMPLIANCE_OUT="$(COMPLIANCE_OUT)" SRGB_ICC="$(SRGB_ICC)" VERAPDF="$(VERAPDF)" PDFUA_CHECKER="$(PDFUA_CHECKER)" ARLINGTON_CHECKER="$(ARLINGTON_CHECKER)" ARLINGTON_URL="$(ARLINGTON_URL)" ARLINGTON_PROFILE="$(ARLINGTON_PROFILE)" ARLINGTON_REPORT_DIR="$(ARLINGTON_REPORT_DIR)" REQUIRE_COMPLIANCE_TOOLS="$(REQUIRE_COMPLIANCE_TOOLS)" sh tools/compliance-validate.sh
 
 clean :
 	rm -f coverage.html coverage doc/index.html

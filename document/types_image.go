@@ -34,6 +34,28 @@ type ImageInfo struct {
 	i     string  // SHA-1 checksum of the above values
 }
 
+func (info *ImageInfo) clone() *ImageInfo {
+	if info == nil {
+		return nil
+	}
+	clone := *info
+	clone.data = append([]byte(nil), info.data...)
+	clone.smask = append([]byte(nil), info.smask...)
+	clone.pal = append([]byte(nil), info.pal...)
+	clone.trns = append([]int(nil), info.trns...)
+	clone.n = 0
+	return &clone
+}
+
+func (info *ImageInfo) cloneMetadata() *ImageInfo {
+	if info == nil {
+		return nil
+	}
+	clone := *info
+	clone.n = 0
+	return &clone
+}
+
 func generateImageID(info *ImageInfo) (string, error) {
 	if info == nil {
 		return "", errors.New("image info is nil")

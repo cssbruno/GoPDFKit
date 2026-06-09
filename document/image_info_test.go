@@ -52,6 +52,46 @@ func TestRegisterImageOptionsReaderSupportsWebP(t *testing.T) {
 	}
 }
 
+func TestImageCacheRegistersImageAcrossDocuments(t *testing.T) {
+	cache := NewImageCache()
+	if _, err := cache.RegisterImageOptionsReader("pixel", ImageOptions{ImageType: "png"}, bytes.NewReader(decodeTinyPNG(t))); err != nil {
+		t.Fatalf("RegisterImageOptionsReader(cache) error = %v", err)
+	}
+
+	for i := 0; i < 2; i++ {
+		pdf := New("P", "mm", "A4", "")
+		pdf.SetCompression(false)
+		pdf.AddPage()
+		pdf.ImageFromCache("pixel", cache, 10, 10, 5, 5, false, ImageOptions{}, 0, "")
+		var out bytes.Buffer
+		if err := pdf.Output(&out); err != nil {
+			t.Fatalf("Output(%d) error = %v", i, err)
+		}
+		if !strings.Contains(out.String(), "/Subtype /Image") {
+			t.Fatalf("generated PDF %d missing image object", i)
+		}
+	}
+}
+
+func TestImageFromCacheMissingEntrySetsDocumentError(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.ImageFromCache("missing", NewImageCache(), 0, 0, 1, 1, false, ImageOptions{}, 0, "")
+	if err := pdf.Error(); err == nil {
+		t.Fatal("ImageFromCache missing entry error = nil")
+	}
+}
+
+func decodeTinyPNG(t *testing.T) []byte {
+	t.Helper()
+	const tinyPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ" +
+		"AAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+	data, err := base64.StdEncoding.DecodeString(tinyPNG)
+	if err != nil {
+		t.Fatalf("decode PNG fixture: %v", err)
+	}
+	return data
+}
+
 func decodeTinyWebP(t *testing.T) []byte {
 	t.Helper()
 	const tinyWebP = "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA"

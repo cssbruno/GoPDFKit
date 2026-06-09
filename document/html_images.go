@@ -63,6 +63,18 @@ func (html *HTML) writeInlineSVG(tokens []HTMLSegmentType, start int, lineHt flo
 			html.inlineSVGCache[svgText] = svg
 		}
 	}
+	return html.writeSVGObject(svg, end, tokens[start].Attr, lineHt, st)
+}
+
+func (html *HTML) writeCompiledInlineSVG(compiled *CompiledHTML, tokens []HTMLSegmentType, start int, lineHt float64, st htmlTextStyle) int {
+	svg, end, ok := compiled.inlineSVG(start)
+	if !ok {
+		return html.writeInlineSVG(tokens, start, lineHt, st)
+	}
+	return html.writeSVGObject(svg, end, tokens[start].Attr, lineHt, st)
+}
+
+func (html *HTML) writeSVGObject(svg SVG, end int, attrs map[string]string, lineHt float64, st htmlTextStyle) int {
 	if svg.Wd <= 0 || svg.Ht <= 0 {
 		return end
 	}
@@ -72,7 +84,6 @@ func (html *HTML) writeInlineSVG(tokens []HTMLSegmentType, start int, lineHt flo
 	}
 	availableWd := pdf.w - pdf.rMargin - pdf.GetX()
 	pageHt := pdf.h - pdf.bMargin - pdf.GetY()
-	attrs := tokens[start].Attr
 	targetWd, hasWd := parseHTMLBoxLength(firstNonEmpty(html.styleValue(attrs, "width"), attrs["width"]), pdf, availableWd)
 	targetHt, hasHt := parseHTMLBoxLength(firstNonEmpty(html.styleValue(attrs, "height"), attrs["height"]), pdf, pageHt)
 	if !hasWd || targetWd <= 0 {
@@ -94,12 +105,63 @@ func (html *HTML) writeInlineSVG(tokens []HTMLSegmentType, start int, lineHt flo
 		}
 		x, y = pdf.GetXY()
 	}
+	textRole := st.role
+	linkStructure := st.href != "" && svgHasVisibleText(svg)
+	if st.href != "" {
+		textRole = taggedRoleLink
+	}
+	if textRole != "" {
+		svg = svgWithTextRole(svg, textRole)
+	}
+	if linkStructure {
+		pdf.BeginStructure(taggedRoleLink)
+	}
 	pdf.SVGWrite(&svg, scale)
 	if st.href != "" {
 		pdf.LinkString(x, y, actualWd, actualHt, st.href)
 	}
+	if linkStructure {
+		pdf.EndStructure()
+	}
 	pdf.SetXY(pdf.lMargin, y+actualHt)
 	return end
+}
+
+func svgWithTextRole(svg SVG, role string) SVG {
+	role = normalizeTaggedRole(role)
+	if role == "" {
+		return svg
+	}
+	if len(svg.Texts) > 0 {
+		svg.Texts = append([]SVGText(nil), svg.Texts...)
+		for i := range svg.Texts {
+			svg.Texts[i].Role = role
+		}
+	}
+	if len(svg.Elements) > 0 {
+		svg.Elements = append([]SVGElement(nil), svg.Elements...)
+		for i := range svg.Elements {
+			if svg.Elements[i].Kind == "text" {
+				svg.Elements[i].Text.Role = role
+			}
+		}
+	}
+	return svg
+}
+
+func svgHasVisibleText(svg SVG) bool {
+	for _, text := range svg.Texts {
+		if text.Text != "" && !text.Style.Hidden && !text.Style.Fill.None {
+			return true
+		}
+	}
+	for _, element := range svg.Elements {
+		text := element.Text
+		if element.Kind == "text" && text.Text != "" && !text.Style.Hidden && !text.Style.Fill.None {
+			return true
+		}
+	}
+	return false
 }
 
 func htmlResolvedImageSize(info *ImageInfo, pdf *Document, wd, ht float64) (float64, float64) {

@@ -68,10 +68,24 @@ const htmlMaxTableColumns = 1024
 
 func (html *HTML) writeTable(tokens []HTMLSegmentType, start int, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) int {
 	table, end := parseHTMLTable(tokens, start)
+	return html.writeParsedTable(table, end, lineHt, inherited, fallback, cssRules, ancestors)
+}
+
+func (html *HTML) writeCompiledTable(compiled *CompiledHTML, start int, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) int {
+	table, end, ok := compiled.table(start)
+	if !ok {
+		return html.writeTable(compiled.tokens, start, lineHt, inherited, fallback, cssRules, ancestors)
+	}
+	return html.writeParsedTable(table, end, lineHt, inherited, fallback, cssRules, ancestors)
+}
+
+func (html *HTML) writeParsedTable(table htmlTableType, end int, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) int {
 	if len(table.rows) == 0 {
 		return end
 	}
 	pdf := html.pdf
+	pdf.BeginStructure("Table")
+	defer pdf.EndStructure()
 	if len(table.rows) > html.maxTableRows() {
 		pdf.SetErrorf("HTML table row count exceeds maximum size")
 		return end
@@ -135,9 +149,20 @@ func (html *HTML) writeTable(tokens []HTMLSegmentType, start int, lineHt float64
 		html.renderTableCaption(table, startX, tableWd, lineHt, inherited, fallback, cssRules, tableAncestors)
 	}
 	renderRow := func(measuredRow htmlTableMeasuredRow, rowHt float64, forceTopBorder bool) float64 {
+		pdf.BeginStructure("TR")
+		defer pdf.EndStructure()
 		y := pdf.GetY()
 		for _, measuredCell := range measuredRow.cells {
+			cellRole := "TD"
+			if measuredCell.placement.cellIndex >= 0 && measuredCell.placement.cellIndex < len(measuredRow.row.row.cells) && measuredRow.row.row.cells[measuredCell.placement.cellIndex].header {
+				cellRole = "TH"
+			}
 			placement := measuredCell.placement
+			pdf.beginTableCellStructure(cellRole, taggedTableAttributes{
+				Scope:   htmlTableCellScope(cellRole, measuredRow.row.row, placement),
+				RowSpan: placement.rowspan,
+				ColSpan: placement.colspan,
+			})
 			x := startX + htmlTableSpanWidth(colWidths, 0, placement.col)
 			wd := htmlTableSpanWidth(colWidths, placement.col, placement.colspan)
 			cellHt := rowHt
@@ -155,8 +180,10 @@ func (html *HTML) writeTable(tokens []HTMLSegmentType, start int, lineHt float64
 			html.applyTextStyle(measuredCell.style, fallback)
 			textY := y + measuredCell.padding.top + htmlTableVerticalOffset(htmlMaxFloat(cellHt-measuredCell.padding.top-measuredCell.padding.bottom, 0), measuredCell.textHt, measuredCell.style.verticalAlign)
 			pdf.SetXY(x+measuredCell.padding.left, textY)
-			pdf.MultiCell(measuredCell.contentWd, htmlEffectiveLineHeight(measuredCell.style, lineHt), measuredCell.text, "", measuredCell.align, false)
+			cell := measuredRow.row.row.cells[placement.cellIndex]
+			html.renderTableCellContent(cell, measuredCell, cellRole, lineHt, fallback)
 			pdf.SetXY(x, y)
+			pdf.EndStructure()
 		}
 		pdf.SetXY(startX, y+rowHt)
 		return rowHt
@@ -205,6 +232,204 @@ func (html *HTML) writeTable(tokens []HTMLSegmentType, start int, lineHt float64
 		}
 	}
 	return end
+}
+
+func (html *HTML) renderTableCellContent(cell htmlTableCell, measuredCell htmlTableMeasuredCell, cellRole string, lineHt float64, fallback CSSColorType) {
+	if !htmlTableCellContainsStructuredContent(cell.tokens) {
+		html.pdf.SetNextTextRole(cellRole)
+		html.pdf.MultiCell(measuredCell.contentWd, htmlEffectiveLineHeight(measuredCell.style, lineHt), measuredCell.text, "", measuredCell.align, false)
+		return
+	}
+	html.renderTableCellStructuredTokens(cell.tokens, measuredCell, cellRole, lineHt, fallback)
+}
+
+type htmlTableCellListContext struct {
+	bodyX  float64
+	bodyWd float64
+	startY float64
+}
+
+func (html *HTML) renderTableCellStructuredTokens(tokens []HTMLSegmentType, measuredCell htmlTableMeasuredCell, cellRole string, lineHt float64, fallback CSSColorType) {
+	pdf := html.pdf
+	baseX := pdf.GetX()
+	baseWd := measuredCell.contentWd
+	effectiveLineHt := htmlEffectiveLineHeight(measuredCell.style, lineHt)
+	oldLeft, oldRight := pdf.lMargin, pdf.rMargin
+	defer func() {
+		pdf.lMargin, pdf.rMargin = oldLeft, oldRight
+	}()
+	writeText := func(role, text string, x, wd float64) {
+		text = strings.TrimSpace(collapseHTMLWhitespace(text))
+		if text == "" || wd <= 0 {
+			return
+		}
+		pdf.lMargin = x
+		pdf.rMargin = pdf.w - x - wd
+		pdf.SetX(x)
+		pdf.SetNextTextRole(role)
+		pdf.MultiCell(wd, effectiveLineHt, text, "", measuredCell.align, false)
+	}
+	var lists []htmlListState
+	var items []htmlTableCellListContext
+	var blockRoles []string
+	currentTextRole := func() string {
+		if len(blockRoles) > 0 {
+			return blockRoles[len(blockRoles)-1]
+		}
+		return cellRole
+	}
+	for i := 0; i < len(tokens); i++ {
+		token := tokens[i]
+		switch token.Cat {
+		case 'T':
+			if len(items) > 0 {
+				item := items[len(items)-1]
+				writeText("LBody", token.Str, item.bodyX, item.bodyWd)
+			} else {
+				writeText(currentTextRole(), token.Str, baseX, baseWd)
+			}
+		case 'O':
+			switch token.Str {
+			case "table":
+				pdf.lMargin = baseX
+				pdf.rMargin = pdf.w - baseX - baseWd
+				pdf.SetX(baseX)
+				i = html.writeTable(tokens, i, effectiveLineHt, measuredCell.style, fallback, nil, nil)
+				pdf.SetX(baseX)
+			case "p", "div", "section", "article", "header", "footer":
+				pdf.BeginStructure("P")
+				blockRoles = append(blockRoles, "P")
+			case "ul", "ol":
+				st := measuredCell.style
+				st.list = token.Str
+				lists = append(lists, htmlListStateFromElement(st, token.Attr, effectiveLineHt))
+				pdf.BeginStructure("L")
+			case "li":
+				if len(lists) == 0 {
+					continue
+				}
+				list := &lists[len(lists)-1]
+				list.counter++
+				indent := list.indent
+				if indent <= 0 {
+					indent = effectiveLineHt * 1.5
+				}
+				depth := len(lists) - 1
+				markerX := baseX + float64(depth)*indent
+				if markerX > baseX+baseWd {
+					markerX = baseX + baseWd
+				}
+				markerWd := minFloat(indent-1, baseWd*0.4)
+				if markerWd < 0 {
+					markerWd = 0
+				}
+				bodyX := markerX + markerWd + 1
+				bodyWd := baseWd - (bodyX - baseX)
+				if bodyWd < effectiveLineHt {
+					bodyX = markerX
+					bodyWd = baseWd - (bodyX - baseX)
+				}
+				y := pdf.GetY()
+				pdf.BeginStructure("LI")
+				pdf.SetXY(markerX, y)
+				pdf.SetNextTextRole("Lbl")
+				pdf.CellFormat(markerWd, effectiveLineHt, list.marker(), "", 0, "R", false, 0, "")
+				pdf.BeginStructure("LBody")
+				pdf.SetXY(bodyX, y)
+				items = append(items, htmlTableCellListContext{bodyX: bodyX, bodyWd: bodyWd, startY: y})
+			case "br":
+				pdf.Ln(effectiveLineHt)
+			}
+		case 'C':
+			switch token.Str {
+			case "p", "div", "section", "article", "header", "footer":
+				if len(blockRoles) > 0 {
+					blockRoles = blockRoles[:len(blockRoles)-1]
+					pdf.EndStructure()
+				}
+				pdf.Ln(effectiveLineHt)
+			case "li":
+				if len(items) == 0 {
+					continue
+				}
+				item := items[len(items)-1]
+				items = items[:len(items)-1]
+				if pdf.GetY() <= item.startY {
+					pdf.SetY(item.startY + effectiveLineHt)
+				}
+				pdf.EndStructure()
+				pdf.EndStructure()
+				if len(items) > 0 {
+					parent := items[len(items)-1]
+					pdf.SetX(parent.bodyX)
+				} else {
+					pdf.SetX(baseX)
+				}
+			case "ul", "ol":
+				if len(lists) > 0 {
+					lists = lists[:len(lists)-1]
+				}
+				pdf.EndStructure()
+			case "figure", "figcaption", "dt", "dd":
+				pdf.Ln(effectiveLineHt)
+			}
+		}
+	}
+	for len(blockRoles) > 0 {
+		blockRoles = blockRoles[:len(blockRoles)-1]
+		pdf.EndStructure()
+	}
+	for len(items) > 0 {
+		item := items[len(items)-1]
+		items = items[:len(items)-1]
+		if pdf.GetY() <= item.startY {
+			pdf.SetY(item.startY + effectiveLineHt)
+		}
+		pdf.EndStructure()
+		pdf.EndStructure()
+	}
+	for len(lists) > 0 {
+		lists = lists[:len(lists)-1]
+		pdf.EndStructure()
+	}
+}
+
+func htmlTableCellContainsStructuredContent(tokens []HTMLSegmentType) bool {
+	for _, token := range tokens {
+		if token.Cat == 'O' && htmlTableCellStructuredTag(token.Str) {
+			return true
+		}
+	}
+	return false
+}
+
+func htmlTableCellStructuredTag(tag string) bool {
+	switch tag {
+	case "ul", "ol", "table", "p", "div", "section", "article", "header", "footer":
+		return true
+	default:
+		return false
+	}
+}
+
+func htmlTableCellScope(role string, row htmlTableRow, placement htmlTableCellPlacement) string {
+	if role != "TH" {
+		return ""
+	}
+	if scope := strings.ToLower(strings.TrimSpace(row.cells[placement.cellIndex].attrs["scope"])); scope != "" {
+		switch scope {
+		case "row":
+			return "Row"
+		case "col", "column":
+			return "Column"
+		case "rowgroup", "colgroup":
+			return "Both"
+		}
+	}
+	if row.header || placement.row == 0 {
+		return "Column"
+	}
+	return "Row"
 }
 
 func parseHTMLTable(tokens []HTMLSegmentType, start int) (htmlTableType, int) {
@@ -308,8 +533,17 @@ func htmlTableHeaderMeasuredRows(rows []htmlTableMeasuredRow) []htmlTableMeasure
 }
 
 func htmlCollectCellTokens(tokens []HTMLSegmentType, start int) ([]HTMLSegmentType, int) {
+	tableDepth := 0
 	for i := start; i < len(tokens); i++ {
-		if tokens[i].Cat == 'C' && (tokens[i].Str == "td" || tokens[i].Str == "th") {
+		if tokens[i].Cat == 'O' && tokens[i].Str == "table" {
+			tableDepth++
+			continue
+		}
+		if tokens[i].Cat == 'C' && tokens[i].Str == "table" && tableDepth > 0 {
+			tableDepth--
+			continue
+		}
+		if tableDepth == 0 && tokens[i].Cat == 'C' && (tokens[i].Str == "td" || tokens[i].Str == "th") {
 			return tokens[start:i], i
 		}
 	}
@@ -318,11 +552,20 @@ func htmlCollectCellTokens(tokens []HTMLSegmentType, start int) ([]HTMLSegmentTy
 
 func htmlTableRowCellCount(tokens []HTMLSegmentType, start int) int {
 	count := 0
+	tableDepth := 0
 	for i := start; i < len(tokens); i++ {
-		if tokens[i].Cat == 'C' && tokens[i].Str == "tr" {
+		if tokens[i].Cat == 'O' && tokens[i].Str == "table" {
+			tableDepth++
+			continue
+		}
+		if tokens[i].Cat == 'C' && tokens[i].Str == "table" && tableDepth > 0 {
+			tableDepth--
+			continue
+		}
+		if tableDepth == 0 && tokens[i].Cat == 'C' && tokens[i].Str == "tr" {
 			return count
 		}
-		if tokens[i].Cat == 'O' && (tokens[i].Str == "td" || tokens[i].Str == "th") {
+		if tableDepth == 0 && tokens[i].Cat == 'O' && (tokens[i].Str == "td" || tokens[i].Str == "th") {
 			count++
 		}
 	}
@@ -331,11 +574,23 @@ func htmlTableRowCellCount(tokens []HTMLSegmentType, start int) int {
 
 func htmlTableRowCount(tokens []HTMLSegmentType, start int) int {
 	count := 0
+	tableDepth := 0
 	for i := start; i < len(tokens); i++ {
+		if tokens[i].Cat == 'O' && tokens[i].Str == "table" {
+			tableDepth++
+			continue
+		}
 		if tokens[i].Cat == 'C' && tokens[i].Str == "table" {
+			if tableDepth == 0 {
+				return count
+			}
+			tableDepth--
+			continue
+		}
+		if tableDepth == 0 && tokens[i].Cat == 'C' && tokens[i].Str == "table" {
 			return count
 		}
-		if tokens[i].Cat == 'O' && tokens[i].Str == "tr" {
+		if tableDepth == 0 && tokens[i].Cat == 'O' && tokens[i].Str == "tr" {
 			count++
 		}
 	}
@@ -343,8 +598,17 @@ func htmlTableRowCount(tokens []HTMLSegmentType, start int) int {
 }
 
 func htmlCollectCaptionTokens(tokens []HTMLSegmentType, start int) ([]HTMLSegmentType, int) {
+	tableDepth := 0
 	for i := start; i < len(tokens); i++ {
-		if tokens[i].Cat == 'C' && tokens[i].Str == "caption" {
+		if tokens[i].Cat == 'O' && tokens[i].Str == "table" {
+			tableDepth++
+			continue
+		}
+		if tokens[i].Cat == 'C' && tokens[i].Str == "table" && tableDepth > 0 {
+			tableDepth--
+			continue
+		}
+		if tableDepth == 0 && tokens[i].Cat == 'C' && tokens[i].Str == "caption" {
 			return tokens[start:i], i
 		}
 	}
@@ -739,6 +1003,7 @@ func (html *HTML) renderTableCaption(table htmlTableType, x, tableWd, lineHt flo
 		return
 	}
 	html.pdf.SetX(x)
+	html.pdf.SetNextTextRole("Caption")
 	html.pdf.MultiCell(tableWd, htmlEffectiveLineHeight(style, lineHt), text, "", style.align, false)
 	html.pdf.Ln(htmlEffectiveLineHeight(style, lineHt) * 0.5)
 }

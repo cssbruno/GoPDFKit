@@ -133,7 +133,7 @@ func (f *Document) svgWriteImage(originX, originY, scale float64, image SVGImage
 	}
 	sum := sha256.Sum256(image.Data)
 	name := fmt.Sprintf("svg-image-%s-%x", image.ImageType, sum)
-	options := ImageOptions{ImageType: image.ImageType, ReadDpi: true}
+	options := ImageOptions{ImageType: image.ImageType, ReadDpi: true, Artifact: true}
 	f.RegisterImageOptionsReader(name, options, bytes.NewReader(image.Data))
 	if !f.Ok() {
 		return
@@ -593,6 +593,9 @@ func (f *Document) svgWriteText(originX, originY, scale float64, text SVGText) {
 		x -= f.GetStringWidth(text.Text) / 2
 	case "end":
 		x -= f.GetStringWidth(text.Text)
+	}
+	if text.Role != "" {
+		f.SetNextTextRole(text.Role)
 	}
 	f.Text(x, y, text.Text)
 }

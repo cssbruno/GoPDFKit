@@ -97,6 +97,11 @@ func (html *HTML) cachedStyleDeclarations(style string) map[string]string {
 	if strings.TrimSpace(style) == "" || !strings.Contains(style, ":") {
 		return nil
 	}
+	if html != nil && html.compiledStyleCache != nil {
+		if declarations, ok := html.compiledStyleCache[style]; ok {
+			return declarations
+		}
+	}
 	if html == nil || !html.renderCacheActive {
 		return parseStyleDeclarations(style)
 	}

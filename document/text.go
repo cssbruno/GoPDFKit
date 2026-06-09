@@ -10,6 +10,7 @@ import "strings"
 // precisely on the page, but it is usually easier to use Cell(), MultiCell()
 // or Write(), which are the standard methods for printing text.
 func (f *Document) Text(x, y float64, txtStr string) {
+	tag := f.consumeNextTextTag(false)
 	var txt2 string
 	if f.isCurrentUTF8 {
 		if f.isRTL {
@@ -46,7 +47,7 @@ func (f *Document) Text(x, y float64, txtStr string) {
 	if f.colorFlag {
 		buf = append(buf, " Q"...)
 	}
-	f.outbytes(buf)
+	f.outbytes(f.wrapTaggedContent(buf, tag))
 }
 
 // SetWordSpacing sets spacing between words of following text. See the

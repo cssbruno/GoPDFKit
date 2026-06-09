@@ -1,0 +1,553 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 cssBruno
+
+package document
+
+import "strings"
+
+const (
+	taggedRoleP      = "P"
+	taggedRoleFigure = "Figure"
+	taggedRoleLink   = "Link"
+)
+
+type taggedPDFState struct {
+	enabled           bool
+	structTreeRootObj int
+	parentTreeObj     int
+	documentElemObj   int
+	namespaceObj      int
+	nextStructParent  int
+	pageStructParents []int
+	pageObjNums       []int
+	pageElems         [][]*taggedElement
+	elems             []*taggedElement
+	stack             []*taggedElement
+	nextText          taggedContentOptions
+	parentTreeObjects []taggedParentTreeObject
+	pendingLinkElem   *taggedElement
+	pathArtifactOpen  bool
+	artifactDepth     int
+}
+
+type taggedElement struct {
+	ObjNum   int
+	Page     int
+	MCID     int
+	Role     string
+	Alt      string
+	ObjRef   int
+	Parent   *taggedElement
+	Table    taggedTableAttributes
+	Marked   []taggedMarkedContent
+	Children []*taggedElement
+}
+
+type taggedTableAttributes struct {
+	Scope   string
+	RowSpan int
+	ColSpan int
+}
+
+type taggedMarkedContent struct {
+	Page int
+	MCID int
+}
+
+type taggedParentTreeObject struct {
+	Key  int
+	Elem *taggedElement
+}
+
+type taggedContentOptions struct {
+	Role     string
+	AltText  string
+	Artifact bool
+}
+
+// EnableTaggedPDF enables structure-tree and marked-content output. PDF/UA-2
+// metadata enables this automatically.
+func (f *Document) EnableTaggedPDF() {
+	f.tagged.enabled = true
+	f.setMinimumPDFVersion("2.0")
+}
+
+// SetNextTextRole sets the structure role for the next text operation. Common
+// values are P, H1-H6, L, LI, Lbl, LBody, Caption, Span, and Link.
+func (f *Document) SetNextTextRole(role string) {
+	role = normalizeTaggedRole(role)
+	if role == "" {
+		f.SetErrorf("invalid tagged PDF role")
+		return
+	}
+	f.tagged.nextText = taggedContentOptions{Role: role}
+}
+
+// SetNextTextArtifact marks the next text operation as an artifact.
+func (f *Document) SetNextTextArtifact() {
+	f.tagged.nextText = taggedContentOptions{Artifact: true}
+}
+
+// BeginStructure starts a tagged PDF structure container. Containers define
+// reading order and semantic grouping for subsequent marked content.
+func (f *Document) BeginStructure(role string) {
+	if !f.tagged.enabled {
+		return
+	}
+	role = normalizeTaggedRole(role)
+	if role == "" {
+		f.SetErrorf("invalid tagged PDF role")
+		return
+	}
+	elem := &taggedElement{Role: role, MCID: -1}
+	if parent := f.currentStructureParent(); parent != nil {
+		elem.Parent = parent
+		parent.Children = append(parent.Children, elem)
+	}
+	f.tagged.elems = append(f.tagged.elems, elem)
+	f.tagged.stack = append(f.tagged.stack, elem)
+}
+
+func (f *Document) beginTableCellStructure(role string, attrs taggedTableAttributes) {
+	if !f.tagged.enabled {
+		return
+	}
+	f.BeginStructure(role)
+	if len(f.tagged.stack) == 0 {
+		return
+	}
+	elem := f.tagged.stack[len(f.tagged.stack)-1]
+	elem.Table = normalizeTaggedTableAttributes(role, attrs)
+}
+
+// EndStructure closes the most recent structure container.
+func (f *Document) EndStructure() {
+	if !f.tagged.enabled {
+		return
+	}
+	if len(f.tagged.stack) == 0 {
+		f.SetErrorf("tagged PDF structure stack is empty")
+		return
+	}
+	f.tagged.stack = f.tagged.stack[:len(f.tagged.stack)-1]
+}
+
+// BeginArtifact marks subsequent low-level drawing operations as artifact
+// content until EndArtifact is called.
+func (f *Document) BeginArtifact() {
+	if f.tagged.enabled {
+		if f.tagged.artifactDepth == 0 {
+			f.outbytes(f.beginTaggedContent(taggedContentOptions{Artifact: true}))
+		}
+		f.tagged.artifactDepth++
+	}
+}
+
+// EndArtifact closes an artifact content span started with BeginArtifact.
+func (f *Document) EndArtifact() {
+	if f.tagged.enabled {
+		if f.tagged.artifactDepth <= 0 {
+			f.SetErrorf("tagged PDF artifact stack is empty")
+			return
+		}
+		f.tagged.artifactDepth--
+		if f.tagged.artifactDepth == 0 {
+			f.out("EMC")
+		}
+	}
+}
+
+func (f *Document) beginPathArtifact() {
+	if f.tagged.enabled && !f.tagged.pathArtifactOpen {
+		f.BeginArtifact()
+		f.tagged.pathArtifactOpen = true
+	}
+}
+
+func (f *Document) endPathArtifact() {
+	if f.tagged.enabled && f.tagged.pathArtifactOpen {
+		f.tagged.pathArtifactOpen = false
+		f.EndArtifact()
+	}
+}
+
+func (f *Document) taggedBeginPage(page int) {
+	if !f.tagged.enabled {
+		return
+	}
+	f.tagged.pageStructParents = ensureIntSliceLen(f.tagged.pageStructParents, page+1)
+	f.tagged.pageElems = ensureTaggedPageElemsLen(f.tagged.pageElems, page+1)
+	if f.tagged.pageStructParents[page] < 0 && len(f.tagged.pageElems[page]) == 0 {
+		f.tagged.pageStructParents[page] = f.tagged.nextStructParent
+		f.tagged.nextStructParent++
+	}
+}
+
+func (f *Document) taggedPageStructParents(page int) int {
+	if !f.tagged.enabled || page <= 0 || page >= len(f.tagged.pageStructParents) {
+		return -1
+	}
+	return f.tagged.pageStructParents[page]
+}
+
+func (f *Document) consumeNextTextTag(link bool) taggedContentOptions {
+	tag := f.tagged.nextText
+	f.tagged.nextText = taggedContentOptions{}
+	if !f.tagged.enabled {
+		return taggedContentOptions{}
+	}
+	if tag.Artifact {
+		return tag
+	}
+	if tag.Role == "" {
+		if link {
+			tag.Role = taggedRoleLink
+		} else {
+			tag.Role = taggedRoleP
+		}
+	}
+	tag.Role = normalizeTaggedRole(tag.Role)
+	if tag.Role == "" {
+		tag.Role = taggedRoleP
+	}
+	return tag
+}
+
+func (f *Document) validateTaggedImageOptions(tag taggedContentOptions) bool {
+	if !f.tagged.enabled || tag.Artifact {
+		return true
+	}
+	if strings.TrimSpace(tag.AltText) == "" {
+		f.SetErrorf("tagged PDF images require alternate text or Artifact=true")
+		return false
+	}
+	return true
+}
+
+func (f *Document) wrapTaggedContent(content []byte, tag taggedContentOptions) []byte {
+	if !f.tagged.enabled || len(content) == 0 {
+		return content
+	}
+	if tag.Artifact && f.tagged.artifactDepth > 0 {
+		return content
+	}
+	begin := f.beginTaggedContent(tag)
+	if len(begin) == 0 {
+		return content
+	}
+	out := make([]byte, 0, len(begin)+len(content)+8)
+	out = append(out, begin...)
+	out = append(out, content...)
+	if len(out) > 0 && out[len(out)-1] != '\n' {
+		out = append(out, '\n')
+	}
+	out = append(out, "EMC"...)
+	return out
+}
+
+func (f *Document) beginTaggedContent(tag taggedContentOptions) []byte {
+	if !f.tagged.enabled {
+		return nil
+	}
+	if tag.Artifact {
+		return []byte("/Artifact BMC\n")
+	}
+	role := normalizeTaggedRole(tag.Role)
+	if role == "" {
+		role = taggedRoleP
+	}
+	elem, mcid := f.registerTaggedElement(role, tag.AltText)
+	if role == taggedRoleLink {
+		f.tagged.pendingLinkElem = elem
+	}
+	return []byte(sprintf("/%s <</MCID %d>> BDC\n", role, mcid))
+}
+
+func (f *Document) registerTaggedElement(role, alt string) (*taggedElement, int) {
+	page := f.page
+	if page <= 0 {
+		return &taggedElement{Role: role, MCID: 0}, 0
+	}
+	alt = strings.TrimSpace(alt)
+	f.tagged.pageStructParents = ensureIntSliceLen(f.tagged.pageStructParents, page+1)
+	f.tagged.pageElems = ensureTaggedPageElemsLen(f.tagged.pageElems, page+1)
+	if f.tagged.pageStructParents[page] < 0 && len(f.tagged.pageElems[page]) == 0 {
+		f.tagged.pageStructParents[page] = f.tagged.nextStructParent
+		f.tagged.nextStructParent++
+	}
+	mcid := len(f.tagged.pageElems[page])
+	if parent := f.currentStructureParent(); parent != nil && parent.Role == role && alt == "" {
+		parent.Marked = append(parent.Marked, taggedMarkedContent{Page: page, MCID: mcid})
+		f.tagged.pageElems[page] = append(f.tagged.pageElems[page], parent)
+		return parent, mcid
+	}
+	elem := &taggedElement{Page: page, MCID: mcid, Role: role, Alt: strings.TrimSpace(alt)}
+	if parent := f.currentStructureParent(); parent != nil {
+		elem.Parent = parent
+		parent.Children = append(parent.Children, elem)
+	}
+	f.tagged.pageElems[page] = append(f.tagged.pageElems[page], elem)
+	f.tagged.elems = append(f.tagged.elems, elem)
+	return elem, mcid
+}
+
+func (f *Document) currentStructureParent() *taggedElement {
+	if len(f.tagged.stack) == 0 {
+		return nil
+	}
+	return f.tagged.stack[len(f.tagged.stack)-1]
+}
+
+func (f *Document) taggedLinkAnnotation() (*taggedElement, int) {
+	if !f.tagged.enabled {
+		return nil, -1
+	}
+	elem := f.tagged.pendingLinkElem
+	f.tagged.pendingLinkElem = nil
+	if elem == nil {
+		elem = &taggedElement{Page: f.page, MCID: -1, Role: taggedRoleLink}
+		if parent := f.currentStructureParent(); parent != nil {
+			elem.Parent = parent
+			parent.Children = append(parent.Children, elem)
+		}
+		f.tagged.elems = append(f.tagged.elems, elem)
+	}
+	key := f.tagged.nextStructParent
+	f.tagged.nextStructParent++
+	f.tagged.parentTreeObjects = append(f.tagged.parentTreeObjects, taggedParentTreeObject{Key: key, Elem: elem})
+	return elem, key
+}
+
+func (f *Document) putTaggedPDF() {
+	if !f.tagged.enabled {
+		return
+	}
+	startObj := f.n + 1
+	for i, elem := range f.tagged.elems {
+		elem.ObjNum = startObj + i
+	}
+	f.tagged.documentElemObj = startObj + len(f.tagged.elems)
+	f.tagged.parentTreeObj = f.tagged.documentElemObj + 1
+	f.tagged.namespaceObj = f.tagged.parentTreeObj + 1
+	f.tagged.structTreeRootObj = f.tagged.namespaceObj + 1
+
+	for _, elem := range f.tagged.elems {
+		f.putTaggedElement(elem)
+	}
+	f.putTaggedDocumentElement()
+	f.putTaggedParentTree()
+	f.putTaggedNamespace()
+	f.putTaggedStructTreeRoot()
+}
+
+func (f *Document) putTaggedElement(elem *taggedElement) {
+	f.newobj()
+	f.out("<<")
+	f.out("/Type /StructElem")
+	f.outf("/S /%s", elem.Role)
+	if elem.Parent != nil {
+		f.outf("/P %d 0 R", elem.Parent.ObjNum)
+	} else {
+		f.outf("/P %d 0 R", f.tagged.documentElemObj)
+	}
+	if f.tagged.namespaceObj > 0 {
+		f.outf("/NS %d 0 R", f.tagged.namespaceObj)
+	}
+	if elem.Page > 0 && elem.Page < len(f.tagged.pageObjNums) && f.tagged.pageObjNums[elem.Page] > 0 {
+		f.outf("/Pg %d 0 R", f.tagged.pageObjNums[elem.Page])
+	}
+	if elem.Alt != "" {
+		f.outf("/Alt %s", f.textstring(utf8toutf16(elem.Alt)))
+	}
+	if attr := f.taggedTableAttributeString(elem); attr != "" {
+		f.outf("/A %s", attr)
+	} else if elem.Role == "L" {
+		f.out("/A << /O /List /ListNumbering /Disc >>")
+	}
+	kids := f.taggedElementKids(elem)
+	switch len(kids) {
+	case 0:
+		f.out("/K []")
+	case 1:
+		f.outf("/K %s", kids[0])
+	default:
+		var out fmtBuffer
+		out.printf("/K [")
+		for _, kid := range kids {
+			out.printf("%s ", kid)
+		}
+		out.printf("]")
+		f.out(out.String())
+	}
+	f.out(">>")
+	f.out("endobj")
+}
+
+func (f *Document) taggedTableAttributeString(elem *taggedElement) string {
+	if elem == nil || (elem.Table.Scope == "" && elem.Table.RowSpan <= 1 && elem.Table.ColSpan <= 1) {
+		return ""
+	}
+	var out fmtBuffer
+	out.printf("<< /O /Table")
+	if elem.Table.Scope != "" {
+		out.printf(" /Scope /%s", elem.Table.Scope)
+	}
+	if elem.Table.RowSpan > 1 {
+		out.printf(" /RowSpan %d", elem.Table.RowSpan)
+	}
+	if elem.Table.ColSpan > 1 {
+		out.printf(" /ColSpan %d", elem.Table.ColSpan)
+	}
+	out.printf(" >>")
+	return out.String()
+}
+
+func normalizeTaggedTableAttributes(role string, attrs taggedTableAttributes) taggedTableAttributes {
+	role = normalizeTaggedRole(role)
+	if role != "TH" && role != "TD" {
+		return taggedTableAttributes{}
+	}
+	if attrs.RowSpan < 1 {
+		attrs.RowSpan = 1
+	}
+	if attrs.ColSpan < 1 {
+		attrs.ColSpan = 1
+	}
+	scope := normalizeTaggedRole(attrs.Scope)
+	if role == "TH" {
+		switch scope {
+		case "Row", "Column", "Both":
+			attrs.Scope = scope
+		default:
+			attrs.Scope = "Column"
+		}
+	} else {
+		attrs.Scope = ""
+	}
+	return attrs
+}
+
+func (f *Document) taggedElementKids(elem *taggedElement) []string {
+	kids := make([]string, 0, 1+len(elem.Marked)+len(elem.Children)+1)
+	if elem.MCID >= 0 {
+		kids = append(kids, f.taggedMCR(elem.Page, elem.MCID))
+	}
+	for _, marked := range elem.Marked {
+		kids = append(kids, f.taggedMCR(marked.Page, marked.MCID))
+	}
+	for _, child := range elem.Children {
+		kids = append(kids, sprintf("%d 0 R", child.ObjNum))
+	}
+	if elem.ObjRef > 0 {
+		kids = append(kids, sprintf("<< /Type /OBJR /Obj %d 0 R >>", elem.ObjRef))
+	}
+	return kids
+}
+
+func (f *Document) taggedMCR(page, mcid int) string {
+	return sprintf("<< /Type /MCR /Pg %d 0 R /MCID %d >>", f.tagged.pageObjNums[page], mcid)
+}
+
+func (f *Document) putTaggedDocumentElement() {
+	f.newobj()
+	f.out("<<")
+	f.out("/Type /StructElem")
+	f.out("/S /Document")
+	f.outf("/P %d 0 R", f.tagged.structTreeRootObj)
+	if f.tagged.namespaceObj > 0 {
+		f.outf("/NS %d 0 R", f.tagged.namespaceObj)
+	}
+	if len(f.tagged.elems) > 0 {
+		var kids fmtBuffer
+		kids.printf("/K [")
+		for _, elem := range f.tagged.elems {
+			if elem.Parent == nil {
+				kids.printf("%d 0 R ", elem.ObjNum)
+			}
+		}
+		kids.printf("]")
+		f.out(kids.String())
+	} else {
+		f.out("/K []")
+	}
+	f.out(">>")
+	f.out("endobj")
+}
+
+func (f *Document) putTaggedParentTree() {
+	f.newobj()
+	f.out("<<")
+	var nums fmtBuffer
+	nums.printf("/Nums [")
+	for page := 1; page < len(f.tagged.pageElems); page++ {
+		key := f.taggedPageStructParents(page)
+		if key < 0 {
+			continue
+		}
+		nums.printf("%d [", key)
+		for _, elem := range f.tagged.pageElems[page] {
+			nums.printf("%d 0 R ", elem.ObjNum)
+		}
+		nums.printf("] ")
+	}
+	for _, obj := range f.tagged.parentTreeObjects {
+		if obj.Elem == nil {
+			continue
+		}
+		nums.printf("%d %d 0 R ", obj.Key, obj.Elem.ObjNum)
+	}
+	nums.printf("]")
+	f.out(nums.String())
+	f.out(">>")
+	f.out("endobj")
+}
+
+func (f *Document) putTaggedStructTreeRoot() {
+	f.newobj()
+	f.out("<<")
+	f.out("/Type /StructTreeRoot")
+	f.outf("/K %d 0 R", f.tagged.documentElemObj)
+	f.outf("/ParentTree %d 0 R", f.tagged.parentTreeObj)
+	if f.tagged.namespaceObj > 0 {
+		f.outf("/Namespaces [%d 0 R]", f.tagged.namespaceObj)
+	}
+	f.out(">>")
+	f.out("endobj")
+}
+
+func (f *Document) putTaggedNamespace() {
+	f.newobj()
+	f.out("<<")
+	f.out("/Type /Namespace")
+	f.out("/NS (http://iso.org/pdf2/ssn)")
+	f.out(">>")
+	f.out("endobj")
+}
+
+func normalizeTaggedRole(role string) string {
+	role = strings.TrimSpace(strings.TrimPrefix(role, "/"))
+	if role == "" {
+		return ""
+	}
+	for _, r := range role {
+		if r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			continue
+		}
+		return ""
+	}
+	return role
+}
+
+func ensureIntSliceLen(in []int, size int) []int {
+	for len(in) < size {
+		in = append(in, -1)
+	}
+	return in
+}
+
+func ensureTaggedPageElemsLen(in [][]*taggedElement, size int) [][]*taggedElement {
+	for len(in) < size {
+		in = append(in, nil)
+	}
+	return in
+}

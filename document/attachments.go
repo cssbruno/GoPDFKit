@@ -7,6 +7,8 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"mime"
+	"path/filepath"
 	"strings"
 )
 
@@ -24,6 +26,15 @@ type Attachment struct {
 	// and might be modified by the PDF reader.
 	Description string
 
+	// MIMEType is written to the embedded file stream /Subtype. When empty,
+	// it is inferred from Filename and falls back to application/octet-stream.
+	MIMEType string
+
+	// AFRelationship describes why the file is associated with the document.
+	// Common PDF/A-4f values are Source, Data, Alternative, Supplement, and
+	// Unspecified. When empty, Data is used.
+	AFRelationship string
+
 	objectNumber int // Filled when the content is embedded.
 }
 
@@ -35,7 +46,7 @@ func checksum(data []byte) string {
 
 // writeCompressedFileObject writes a deflate-compressed /EmbeddedFile object
 // with length, compressed length, and MD5 checksum metadata.
-func (f *Document) writeCompressedFileObject(content []byte) {
+func (f *Document) writeCompressedFileObject(content []byte, mimeType string) {
 	lenUncompressed := len(content)
 	sum := checksum(content)
 	compressed := f.compressBytes(content)
@@ -44,8 +55,8 @@ func (f *Document) writeCompressedFileObject(content []byte) {
 	}
 	lenCompressed := len(compressed)
 	f.newobj()
-	f.outf("<< /Type /EmbeddedFile /Length %d /Filter /FlateDecode /Params << /CheckSum <%s> /Size %d >> >>\n",
-		lenCompressed, sum, lenUncompressed)
+	f.outf("<< /Type /EmbeddedFile /Subtype /%s /Length %d /Filter /FlateDecode /Params << /CheckSum <%s> /Size %d >> >>\n",
+		escapePDFName(mimeType), lenCompressed, sum, lenUncompressed)
 	f.putstream(compressed)
 	f.out("endobj")
 }
@@ -57,16 +68,57 @@ func (f *Document) embed(a *Attachment) {
 	}
 	oldState := f.state
 	f.state = 1 // Write file content to the main buffer.
-	f.writeCompressedFileObject(a.Content)
+	f.writeCompressedFileObject(a.Content, attachmentMIMEType(*a))
 	streamID := f.n
 	f.newobj()
-	f.outf("<< /Type /Filespec /F () /UF %s /EF << /F %d 0 R >> /Desc %s\n>>",
+	f.outf("<< /Type /Filespec /F () /UF %s /AFRelationship /%s /EF << /F %d 0 R >> /Desc %s\n>>",
 		f.textstring(utf8toutf16(a.Filename)),
+		attachmentAFRelationship(*a),
 		streamID,
 		f.textstring(utf8toutf16(a.Description)))
 	f.out("endobj")
 	a.objectNumber = f.n
 	f.state = oldState
+}
+
+func attachmentMIMEType(a Attachment) string {
+	if strings.TrimSpace(a.MIMEType) != "" {
+		return strings.TrimSpace(a.MIMEType)
+	}
+	if ext := filepath.Ext(a.Filename); ext != "" {
+		if typ := mime.TypeByExtension(ext); typ != "" {
+			if base, _, ok := strings.Cut(typ, ";"); ok {
+				return strings.TrimSpace(base)
+			}
+			return strings.TrimSpace(typ)
+		}
+	}
+	return "application/octet-stream"
+}
+
+func attachmentAFRelationship(a Attachment) string {
+	switch strings.TrimSpace(a.AFRelationship) {
+	case "Source", "Data", "Alternative", "Supplement", "Unspecified":
+		return strings.TrimSpace(a.AFRelationship)
+	default:
+		return "Data"
+	}
+}
+
+func escapePDFName(name string) string {
+	const hexDigits = "0123456789ABCDEF"
+	var out strings.Builder
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if c <= ' ' || c >= 0x7f || strings.ContainsRune("()<>[]{}/%#", rune(c)) {
+			out.WriteByte('#')
+			out.WriteByte(hexDigits[c>>4])
+			out.WriteByte(hexDigits[c&0x0f])
+			continue
+		}
+		out.WriteByte(c)
+	}
+	return out.String()
 }
 
 // SetAttachments writes attachments as embedded files attached to the document.

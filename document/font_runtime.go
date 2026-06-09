@@ -652,6 +652,7 @@ func (f *Document) putfonts() {
 				f.generateCIDFontMap(&font, font.utf8File.LastRune)
 				f.out("/CIDToGIDMap " + strconv.Itoa(f.n+4) + " 0 R>>")
 				f.out("endobj")
+				toUnicode := utf8ToUnicodeCMap()
 				f.newobj()
 				f.out("<</Length " + strconv.Itoa(len(toUnicode)) + ">>")
 				f.putstream([]byte(toUnicode))

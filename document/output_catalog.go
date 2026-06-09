@@ -4,7 +4,10 @@
 package document
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -64,7 +67,9 @@ func (f *Document) RegisterAlias(alias, replacement string) {
 }
 
 func (f *Document) putresourcedict() {
-	f.out("/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]")
+	if !f.omitDeprecatedPDF2Entries() {
+		f.out("/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]")
+	}
 	f.out("/Font <<")
 	{
 		var keyList []string
@@ -199,6 +204,25 @@ func (f *Document) putinfo() {
 func (f *Document) putcatalog() {
 	f.out("/Type /Catalog")
 	f.out("/Pages 1 0 R")
+	if f.nXmp > 0 {
+		f.outf("/Metadata %d 0 R", f.nXmp)
+	}
+	if f.compliance.PDFUA2 {
+		f.out("/MarkInfo << /Marked true >>")
+		if strings.TrimSpace(f.compliance.Lang) != "" {
+			f.outf("/Lang %s", f.textstring(f.compliance.Lang))
+		}
+		f.out("/ViewerPreferences << /DisplayDocTitle true >>")
+	}
+	if f.tagged.structTreeRootObj > 0 {
+		f.outf("/StructTreeRoot %d 0 R", f.tagged.structTreeRootObj)
+	}
+	if f.nOutputIntentICC > 0 {
+		f.outf("/OutputIntents [ << /Type /OutputIntent /S /GTS_PDFA1 /OutputConditionIdentifier %s /Info %s /DestOutputProfile %d 0 R >> ]",
+			f.textstring(f.outputIntent.identifier),
+			f.textstring(firstNonEmpty(f.outputIntent.info, f.outputIntent.identifier)),
+			f.nOutputIntentICC)
+	}
 	switch f.zoomMode {
 	case "fullpage":
 		f.out("/OpenAction [3 0 R /Fit]")
@@ -240,16 +264,37 @@ func (f *Document) putheader() {
 		f.pdfVersion = "1.4"
 	}
 	f.outf("%%PDF-%s", f.pdfVersion)
+	if f.compliance.PDFA != PDFAModeNone {
+		f.out("%\xE2\xE3\xCF\xD3")
+	}
 }
 
 func (f *Document) puttrailer() {
 	f.outf("/Size %d", f.n+1)
 	f.outf("/Root %d 0 R", f.n)
-	f.outf("/Info %d 0 R", f.n-1)
+	if !f.omitInfoDictionary() {
+		f.outf("/Info %d 0 R", f.n-1)
+	}
 	if f.protect.encrypted {
 		f.outf("/Encrypt %d 0 R", f.protect.objNum)
 		f.out("/ID [()()]")
+	} else if f.compliance.PDFA != PDFAModeNone || f.compliance.Arlington {
+		id := f.fileIdentifier()
+		f.outf("/ID [<%s><%s>]", id, id)
 	}
+}
+
+func (f *Document) omitInfoDictionary() bool {
+	return f.compliance.PDFA != PDFAModeNone || f.compliance.Arlington
+}
+
+func (f *Document) omitDeprecatedPDF2Entries() bool {
+	return f.compliance.Arlington
+}
+
+func (f *Document) fileIdentifier() string {
+	sum := sha256.Sum256(f.buffer.Bytes())
+	return strings.ToUpper(hex.EncodeToString(sum[:16]))
 }
 
 func (f *Document) putxmp() {
@@ -257,8 +302,20 @@ func (f *Document) putxmp() {
 		return
 	}
 	f.newobj()
+	f.nXmp = f.n
 	f.outf("<< /Type /Metadata /Subtype /XML /Length %d >>", len(f.xmp))
 	f.putstream(f.xmp)
+	f.out("endobj")
+}
+
+func (f *Document) putOutputIntent() {
+	if len(f.outputIntent.iccProfile) == 0 {
+		return
+	}
+	f.newobj()
+	f.nOutputIntentICC = f.n
+	f.outf("<< /N 3 /Alternate /DeviceRGB /Length %d >>", len(f.outputIntent.iccProfile))
+	f.putstream(f.outputIntent.iccProfile)
 	f.out("endobj")
 }
 
@@ -319,6 +376,11 @@ func (f *Document) enddoc() {
 	if f.err != nil {
 		return
 	}
+	f.validateComplianceMetadata()
+	if f.err != nil {
+		return
+	}
+	f.ensureComplianceMetadata()
 	f.layerEndDoc()
 	f.putheader()
 	f.putAttachments()
@@ -329,12 +391,16 @@ func (f *Document) enddoc() {
 		return
 	}
 	f.putbookmarks()
+	f.putOutputIntent()
 	f.putxmp()
-	f.newobj()
-	f.out("<<")
-	f.putinfo()
-	f.out(">>")
-	f.out("endobj")
+	f.putTaggedPDF()
+	if !f.omitInfoDictionary() {
+		f.newobj()
+		f.out("<<")
+		f.putinfo()
+		f.out(">>")
+		f.out("endobj")
+	}
 	f.newobj()
 	f.out("<<")
 	f.putcatalog()

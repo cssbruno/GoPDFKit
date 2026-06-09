@@ -12,9 +12,12 @@ import (
 )
 
 func sliceCompressLevel(data []byte, level int) ([]byte, error) {
-	var buf bytes.Buffer
+	buf := compressBufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer releaseCompressBuffer(buf)
+
 	pool := zlibWriterPool(level)
-	cmp, err := pooledZlibWriter(pool, &buf, level)
+	cmp, err := pooledZlibWriter(pool, buf, level)
 	if err != nil {
 		return nil, err
 	}
@@ -28,10 +31,24 @@ func sliceCompressLevel(data []byte, level int) ([]byte, error) {
 		return nil, err
 	}
 	releaseZlibWriter(pool, cmp)
-	return buf.Bytes(), nil
+	return append([]byte(nil), buf.Bytes()...), nil
 }
 
 var zlibWriterPools [zlib.BestCompression - zlib.HuffmanOnly + 1]sync.Pool
+
+var compressBufferPool = sync.Pool{
+	New: func() any {
+		return new(bytes.Buffer)
+	},
+}
+
+func releaseCompressBuffer(buf *bytes.Buffer) {
+	const maxRetainedBufferCapacity = 4 << 20
+	if buf.Cap() > maxRetainedBufferCapacity {
+		return
+	}
+	compressBufferPool.Put(buf)
+}
 
 func zlibWriterPool(level int) *sync.Pool {
 	if !validCompressionLevel(level) {

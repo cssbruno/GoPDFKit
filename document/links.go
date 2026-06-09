@@ -45,7 +45,17 @@ func (f *Document) newLink(x, y, w, h float64, link int, linkStr string) {
 		f.SetErrorf("invalid link rectangle")
 		return
 	}
-	f.pageLinks[f.page] = append(f.pageLinks[f.page], pageLink{x * f.k, f.hPt - y*f.k, w * f.k, h * f.k, link, linkStr})
+	elem, structParent := f.taggedLinkAnnotation()
+	f.pageLinks[f.page] = append(f.pageLinks[f.page], pageLink{
+		x:            x * f.k,
+		y:            f.hPt - y*f.k,
+		wd:           w * f.k,
+		ht:           h * f.k,
+		link:         link,
+		linkStr:      linkStr,
+		structParent: structParent,
+		structElem:   elem,
+	})
 }
 
 func (f *Document) validLinkID(link int) bool {

@@ -232,7 +232,7 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 		}
 	}
 	if len(s) > 0 {
-		f.outbytes(s)
+		f.outbytes(f.wrapTaggedContent(s, f.consumeNextTextTag(link > 0 || linkStr != "")))
 	}
 	f.lasth = h
 	if ln > 0 {

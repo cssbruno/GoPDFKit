@@ -179,6 +179,7 @@ func (r *documentRenderer) renderParagraph(block ParagraphBlock) {
 	r.renderBox(block.Box, func() {
 		style := mergedTextStyle(NewMeasureContext(r.pdf, r.contentWidth()).DefaultStyle, block.Style)
 		r.applyTextStyle(style)
+		r.pdf.SetNextTextRole(taggedRoleP)
 		r.pdf.MultiCell(0, resolvedLineHeight(style), textSegmentsPlainText(block.Segments), "", textAlign(style.Align), false)
 	})
 }
@@ -195,18 +196,34 @@ func (r *documentRenderer) renderHeading(block HeadingBlock) {
 			style.LineHeight = style.FontSize * 1.25
 		}
 		r.applyTextStyle(style)
+		r.pdf.SetNextTextRole(documentHeadingRole(block.Level))
 		r.pdf.MultiCell(0, resolvedLineHeight(style), textSegmentsPlainText(block.Segments), "", textAlign(style.Align), false)
 		r.pdf.Ln(resolvedLineHeight(style) * 0.25)
 	})
 }
 
+func documentHeadingRole(level int) string {
+	switch {
+	case level <= 1:
+		return "H1"
+	case level >= 6:
+		return "H6"
+	default:
+		return sprintf("H%d", level)
+	}
+}
+
 func (r *documentRenderer) renderList(block ListBlock) {
 	r.renderBox(block.Box, func() {
+		r.pdf.BeginStructure("L")
+		defer r.pdf.EndStructure()
 		markerWidth := r.listMarkerWidth(block)
 		for i, item := range block.Items {
+			r.pdf.BeginStructure("LI")
 			marker := listMarker(block, i)
 			x, y := r.pdf.GetXY()
 			r.applyTextStyle(mergedTextStyle(NewMeasureContext(r.pdf, r.contentWidth()).DefaultStyle, block.Style))
+			r.pdf.SetNextTextRole("Lbl")
 			r.pdf.CellFormat(markerWidth, 5, marker, "", 0, "R", false, 0, "")
 			itemX := x + markerWidth + 2
 			r.pdf.SetXY(itemX, y)
@@ -214,9 +231,12 @@ func (r *documentRenderer) renderList(block ListBlock) {
 			oldLeft, oldRight := r.pdf.lMargin, r.pdf.rMargin
 			r.pdf.lMargin = itemX
 			r.pdf.rMargin = r.pdf.w - r.pdf.GetX() - itemWidth
+			r.pdf.BeginStructure("LBody")
 			r.renderBlocks(item.Blocks)
+			r.pdf.EndStructure()
 			r.pdf.lMargin, r.pdf.rMargin = oldLeft, oldRight
 			r.pdf.SetX(r.pdf.lMargin)
+			r.pdf.EndStructure()
 		}
 	})
 }
@@ -234,6 +254,8 @@ func (r *documentRenderer) listMarkerWidth(block ListBlock) float64 {
 
 func (r *documentRenderer) renderTable(block TableBlock) {
 	r.renderBox(block.Box, func() {
+		r.pdf.BeginStructure("Table")
+		defer r.pdf.EndStructure()
 		if block.Caption != "" {
 			r.renderParagraph(ParagraphBlock{Segments: []TextSegment{{Text: block.Caption}}, Style: TextStyle{Bold: true, Align: "C"}})
 		}
@@ -245,16 +267,18 @@ func (r *documentRenderer) renderTable(block TableBlock) {
 			return
 		}
 		widths := tableRenderWidths(block, rows, r.contentWidth(), colCount)
-		for _, row := range rows {
-			r.renderTableRow(row, widths)
+		for rowIndex, row := range rows {
+			r.renderTableRow(row, widths, rowIndex < len(block.Header))
 		}
 	})
 }
 
-func (r *documentRenderer) renderTableRow(row TableRow, widths []float64) {
+func (r *documentRenderer) renderTableRow(row TableRow, widths []float64, header bool) {
 	if len(widths) == 0 {
 		return
 	}
+	r.pdf.BeginStructure("TR")
+	defer r.pdf.EndStructure()
 	x, y := r.pdf.GetXY()
 	rowHeight := MeasureBlock(NewMeasureContext(r.pdf, r.contentWidth()), TableBlock{Body: []TableRow{row}}).Height
 	if rowHeight <= 0 {
@@ -275,15 +299,27 @@ func (r *documentRenderer) renderTableRow(row TableRow, widths []float64) {
 			span = 1
 		}
 		wd := sumFloat64(widths[col:minInt(col+span, len(widths))])
-		r.renderTableCell(cell, x, y, wd, rowHeight)
+		r.renderTableCell(cell, x, y, wd, rowHeight, header, taggedTableAttributes{
+			Scope:   tableCellHeaderScope(header),
+			RowSpan: cell.RowSpan,
+			ColSpan: span,
+		})
 		x += wd
 		col += span
 	}
 	r.pdf.SetXY(r.pdf.lMargin, y+rowHeight)
 }
 
-func (r *documentRenderer) renderTableCell(cell TableCell, x, y, wd, ht float64) {
+func (r *documentRenderer) renderTableCell(cell TableCell, x, y, wd, ht float64, header bool, tableAttrs taggedTableAttributes) {
+	if header {
+		r.pdf.beginTableCellStructure("TH", tableAttrs)
+	} else {
+		r.pdf.beginTableCellStructure("TD", tableAttrs)
+	}
+	defer r.pdf.EndStructure()
+	r.pdf.BeginArtifact()
 	r.pdf.Rect(x, y, wd, ht, "D")
+	r.pdf.EndArtifact()
 	cellX := x + 1
 	r.pdf.SetXY(cellX, y+1)
 	oldLeft, oldRight := r.pdf.lMargin, r.pdf.rMargin
@@ -291,11 +327,23 @@ func (r *documentRenderer) renderTableCell(cell TableCell, x, y, wd, ht float64)
 	r.pdf.rMargin = r.pdf.w - x - wd + 1
 	if len(cell.Blocks) == 0 {
 		r.applyTextStyle(cell.Style)
+		if header {
+			r.pdf.SetNextTextRole("TH")
+		} else {
+			r.pdf.SetNextTextRole("TD")
+		}
 		r.pdf.MultiCell(wd-2, maxPositive(4, ht-2), "", "", textAlign(cell.Align), false)
 	} else {
 		r.renderBlocks(cell.Blocks)
 	}
 	r.pdf.lMargin, r.pdf.rMargin = oldLeft, oldRight
+}
+
+func tableCellHeaderScope(header bool) string {
+	if header {
+		return "Column"
+	}
+	return ""
 }
 
 func (r *documentRenderer) renderImage(block ImageBlock) {
@@ -319,11 +367,14 @@ func (r *documentRenderer) renderImage(block ImageBlock) {
 		case len(block.Data) > 0 && block.Format != "":
 			name := fmt.Sprintf("document-image-%p", &block)
 			r.pdf.RegisterImageOptionsReader(name, ImageOptions{ImageType: block.Format, ReadDpi: block.DPI > 0}, bytes.NewReader(block.Data))
-			r.pdf.ImageOptions(name, x, r.pdf.GetY(), wd, ht, false, ImageOptions{ImageType: block.Format}, 0, "")
+			r.pdf.ImageOptions(name, x, r.pdf.GetY(), wd, ht, false, ImageOptions{ImageType: block.Format, AltText: block.Alt, Artifact: block.Alt == ""}, 0, "")
 		case block.Source != "":
-			r.pdf.ImageOptions(block.Source, x, r.pdf.GetY(), wd, ht, false, ImageOptions{ImageType: block.Format}, 0, "")
+			r.pdf.ImageOptions(block.Source, x, r.pdf.GetY(), wd, ht, false, ImageOptions{ImageType: block.Format, AltText: block.Alt, Artifact: block.Alt == ""}, 0, "")
 		case block.Alt != "":
+			r.pdf.BeginArtifact()
 			r.pdf.Rect(x, r.pdf.GetY(), wd, ht, "D")
+			r.pdf.EndArtifact()
+			r.pdf.SetNextTextRole(taggedRoleFigure)
 			r.pdf.MultiCell(wd, 5, block.Alt, "", "C", false)
 		}
 		r.pdf.SetY(r.pdf.GetY() + ht)
@@ -344,9 +395,12 @@ func (r *documentRenderer) renderSignatureRow(block SignatureRowBlock) {
 		y := r.pdf.GetY() + 12
 		for i, col := range columns {
 			x := r.pdf.lMargin + float64(i)*(wd+gap)
+			r.pdf.BeginArtifact()
 			r.pdf.Line(x, y, x+wd, y)
+			r.pdf.EndArtifact()
 			r.pdf.SetXY(x, y+2)
 			r.applyTextStyle(TextStyle{FontFamily: "Helvetica", FontSize: 9})
+			r.pdf.SetNextTextRole(taggedRoleP)
 			r.pdf.MultiCell(wd, 4, signatureColumnText(col), "", "C", false)
 		}
 		r.pdf.SetY(maxPositive(r.pdf.GetY(), y+12))
@@ -396,6 +450,7 @@ func (r *documentRenderer) renderMetadataGrid(block MetadataGridBlock) {
 			if field.Value != "" {
 				text += ": " + field.Value
 			}
+			r.pdf.SetNextTextRole("Lbl")
 			r.pdf.CellFormat(wd, 6, text, "", 0, "L", false, 0, "")
 		}
 		r.pdf.Ln(6)
@@ -414,9 +469,11 @@ func (r *documentRenderer) renderQRVerification(block QRVerificationBlock) {
 			size = 25
 		}
 		x, y := r.pdf.GetXY()
+		r.pdf.BeginArtifact()
 		r.pdf.Rect(x, y, size, size, "D")
 		r.pdf.Line(x, y, x+size, y+size)
 		r.pdf.Line(x+size, y, x, y+size)
+		r.pdf.EndArtifact()
 		textX := x + size + 4
 		r.pdf.SetXY(textX, y)
 		segments := block.Text
@@ -430,6 +487,7 @@ func (r *documentRenderer) renderQRVerification(block QRVerificationBlock) {
 			segments = []TextSegment{{Text: text}}
 		}
 		r.applyTextStyle(mergedTextStyle(NewMeasureContext(r.pdf, r.contentWidth()).DefaultStyle, block.Style))
+		r.pdf.SetNextTextRole(taggedRoleP)
 		r.pdf.MultiCell(r.contentWidth()-size-4, 5, textSegmentsPlainText(segments), "", "L", false)
 		if r.pdf.GetY() < y+size {
 			r.pdf.SetY(y + size)

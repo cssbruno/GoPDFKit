@@ -84,9 +84,15 @@ func (f *Document) putpages() {
 		hPt = f.defPageSize.Wd * f.k
 	}
 	pagesObjectNumbers := make([]int, nb+1)
+	nextObj := f.n + 1
+	for n := 1; n <= nb; n++ {
+		pagesObjectNumbers[n] = nextObj
+		nextObj += 2 + len(f.pageLinks[n])
+	}
+	f.tagged.pageObjNums = ensureIntSliceLen(f.tagged.pageObjNums, nb+1)
 	for n := 1; n <= nb; n++ {
 		f.newobj()
-		pagesObjectNumbers[n] = f.n
+		f.tagged.pageObjNums[n] = f.n
 		f.out("<</Type /Page")
 		f.out("/Parent 1 0 R")
 		pageSize, ok = f.pageSizes[n]
@@ -100,29 +106,27 @@ func (f *Document) putpages() {
 			f.outf("/%s [%.2f %.2f %.2f %.2f]", t, pb.X, pb.Y, pb.Wd, pb.Ht)
 		}
 		f.out("/Resources 2 0 R")
+		if structParents := f.taggedPageStructParents(n); structParents >= 0 {
+			f.outf("/StructParents %d", structParents)
+		}
 		if len(f.pageLinks[n])+len(f.pageAttachments[n]) > 0 {
 			var annots fmtBuffer
 			annots.printf("/Annots [")
-			for _, pl := range f.pageLinks[n] {
-				annots.printf("<</Type /Annot /Subtype /Link /Rect [%.2f %.2f %.2f %.2f] /Border [0 0 0] ", pl.x, pl.y, pl.x+pl.wd, pl.y-pl.ht)
-				if pl.link == 0 {
-					annots.printf("/A <</S /URI /URI %s>>>>", f.textstring(pl.linkStr))
-				} else {
-					l := f.links[pl.link]
-					var sz Size
-					var h float64
-					sz, ok = f.pageSizes[l.page]
-					if ok {
-						h = sz.Ht
-					} else {
-						h = hPt
-					}
-					annots.printf("/Dest [%d 0 R /XYZ 0 %.2f null]>>", 1+2*l.page, h-l.y*f.k)
+			linkObjNum := f.n + 2
+			for i := range f.pageLinks[n] {
+				f.pageLinks[n][i].objNum = linkObjNum
+				if f.pageLinks[n][i].structElem != nil {
+					f.pageLinks[n][i].structElem.ObjRef = linkObjNum
 				}
+				annots.printf("%d 0 R ", linkObjNum)
+				linkObjNum++
 			}
 			f.putAttachmentAnnotationLinks(&annots, n)
 			annots.printf("]")
 			f.out(annots.String())
+			if f.compliance.PDFUA2 {
+				f.out("/Tabs /S")
+			}
 		}
 		if f.pdfVersion > "1.3" {
 			f.out("/Group <</Type /Group /S /Transparency /CS /DeviceRGB>>")
@@ -142,6 +146,9 @@ func (f *Document) putpages() {
 			f.putstream(f.pages[n].Bytes())
 		}
 		f.out("endobj")
+		for _, pl := range f.pageLinks[n] {
+			f.putLinkAnnotation(pl, pagesObjectNumbers, hPt)
+		}
 	}
 	f.offsets[1] = f.buffer.Len()
 	f.out("1 0 obj")
@@ -155,6 +162,30 @@ func (f *Document) putpages() {
 	f.out(kids.String())
 	f.outf("/Count %d", nb)
 	f.outf("/MediaBox [0 0 %.2f %.2f]", wPt, hPt)
+	f.out(">>")
+	f.out("endobj")
+}
+
+func (f *Document) putLinkAnnotation(pl pageLink, pagesObjectNumbers []int, defaultPageHeight float64) {
+	f.newobj()
+	f.outf("<< /Type /Annot /Subtype /Link /Rect [%.2f %.2f %.2f %.2f] /Border [0 0 0]", pl.x, pl.y, pl.x+pl.wd, pl.y-pl.ht)
+	if pl.structParent >= 0 {
+		f.outf("/StructParent %d", pl.structParent)
+	}
+	if pl.link == 0 {
+		f.outf("/A << /S /URI /URI %s >>", f.textstring(pl.linkStr))
+	} else {
+		l := f.links[pl.link]
+		h := defaultPageHeight
+		if sz, ok := f.pageSizes[l.page]; ok {
+			h = sz.Ht
+		}
+		pageObj := 0
+		if l.page > 0 && l.page < len(pagesObjectNumbers) {
+			pageObj = pagesObjectNumbers[l.page]
+		}
+		f.outf("/Dest [%d 0 R /XYZ 0 %.2f null]", pageObj, h-l.y*f.k)
+	}
 	f.out(">>")
 	f.out("endobj")
 }

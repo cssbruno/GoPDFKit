@@ -22,6 +22,42 @@ jobs:
       - name: Check
         run: make check
 
+      - name: Compliance fixture smoke test
+        run: make compliance-validate
+
+      - name: Install compliance dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y colord-data
+
+      - name: Start Arlington checker
+        run: |
+          docker run -d --rm --name gopdfkit-arlington -p 8080:8080 verapdf/arlington:latest
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/api/profiles/ids >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs gopdfkit-arlington
+          exit 1
+
+      - name: External compliance validation
+        env:
+          REQUIRE_COMPLIANCE_TOOLS: "1"
+          SRGB_ICC: /usr/share/color/icc/colord/sRGB.icc
+          VERAPDF: tools/verapdf-docker.sh 0
+          PDFUA_CHECKER: tools/verapdf-docker.sh ua2
+          ARLINGTON_CHECKER: tools/arlington-validate.sh
+          ARLINGTON_URL: http://localhost:8080
+          ARLINGTON_PROFILE: arlington2.0
+          ARLINGTON_REPORT_DIR: artifacts/compliance
+        run: make compliance-validate
+
+      - name: Stop Arlington checker
+        if: always()
+        run: docker rm -f gopdfkit-arlington || true
+
       - name: Race test
         run: go test -race ./...
 

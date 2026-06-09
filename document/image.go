@@ -79,7 +79,11 @@ func (f *Document) ImageOptions(imageNameStr string, x, y, w, h float64, flow bo
 	if f.err != nil {
 		return
 	}
-	f.imageOut(info, x, y, w, h, options.AllowNegativePosition, flow, link, linkStr)
+	f.imageOut(info, x, y, w, h, options.AllowNegativePosition, flow, link, linkStr, taggedContentOptions{
+		Role:     taggedRoleFigure,
+		AltText:  options.AltText,
+		Artifact: options.Artifact,
+	})
 }
 
 // ImageOptions configures image parsing and placement.
@@ -99,6 +103,8 @@ type ImageOptions struct {
 	ImageType             string // Explicit image type: jpg, png, gif, or webp.
 	ReadDpi               bool   // Whether to read DPI metadata from the image.
 	AllowNegativePosition bool   // Whether negative coordinates are preserved.
+	AltText               string // Alternate text for meaningful PDF/UA image content.
+	Artifact              bool   // Whether the image is decorative and should be tagged as an artifact.
 }
 
 // RegisterImageOptionsReader registers an image by reading it from r, adding it
@@ -195,7 +201,8 @@ func (f *Document) UseImportedTemplate(tplName string, scaleX float64, scaleY fl
 		f.SetErrorf("invalid imported template name: %s", tplName)
 		return
 	}
-	f.outf("q 0 J 1 w 0 j 0 G 0 g q %.4F 0 0 %.4F %.4F %.4F cm %s Do Q Q\n", scaleX*f.k, scaleY*f.k, tX*f.k, (tY+f.h)*f.k, tplName)
+	content := []byte(sprintf("q 0 J 1 w 0 j 0 G 0 g q %.4F 0 0 %.4F %.4F %.4F cm %s Do Q Q", scaleX*f.k, scaleY*f.k, tX*f.k, (tY+f.h)*f.k, tplName))
+	f.outbytes(f.wrapTaggedContent(content, taggedContentOptions{Artifact: true}))
 }
 
 // ImportTemplates imports external template names for inclusion in the ProcSet

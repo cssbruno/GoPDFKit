@@ -4,6 +4,43 @@
 [![MIT licensed][badge-mit]][license]
 [![GoDoc][badge-doc]][godoc]
 
+## Benchmark Snapshot
+
+Local benchmark run on `12th Gen Intel(R) Core(TM) i7-12700` with 20 logical
+CPUs. Results are medians from:
+
+```shell
+go test ./document -run '^$' -bench 'BenchmarkGeneration(BaselineNoCompliance.*|Images.*|PDFA4FCompliance.*|PDFUA2ArlingtonCompiledHTML.*|SignedPDFA4FPDFUA2ArlingtonXMP.*)$' -benchmem -count=3
+```
+
+| Workload | Mode | ns/PDF | PDF/sec | Memory/PDF | Allocs/PDF |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Baseline no-compliance, uncached image | Single worker | 932,906 | 1,072 | 1,117,652 B | 1,703 |
+| Baseline no-compliance, uncached image | 100% CPU | 89,024 | 11,233 | 874,016 B | 1,690 |
+| Baseline no-compliance, cached image | Single worker | 517,280 | 1,933 | 825,700 B | 1,564 |
+| Baseline no-compliance, cached image | 100% CPU | 79,543 | 12,572 | 649,346 B | 1,555 |
+| Baseline no-compliance, signed uncached image | Single worker | 1,934,896 | 517 | 1,953,249 B | 2,033 |
+| Baseline no-compliance, signed uncached image | 100% CPU | 251,348 | 3,979 | 1,706,731 B | 2,014 |
+| Baseline no-compliance, signed cached image | Single worker | 1,419,739 | 704 | 1,555,624 B | 1,889 |
+| Baseline no-compliance, signed cached image | 100% CPU | 203,488 | 4,914 | 1,466,333 B | 1,879 |
+| PDF/A-4f metadata, ICC, UTF-8 fonts, attachment | Single worker | 5,094,580 | 196 | 10,526,864 B | 27,629 |
+| PDF/A-4f metadata, ICC, UTF-8 fonts, attachment | 100% CPU | 916,350 | 1,091 | 11,220,702 B | 27,644 |
+| PDF/UA-2 + Arlington tagged compiled HTML | Single worker | 5,842,078 | 171 | 11,087,177 B | 34,761 |
+| PDF/UA-2 + Arlington tagged compiled HTML | 100% CPU | 764,041 | 1,309 | 12,095,492 B | 34,785 |
+| Signed PDF/A-4f + PDF/UA-2 + Arlington + XMP XML metadata | Single worker | 6,824,408 | 147 | 11,877,863 B | 35,144 |
+| Signed PDF/A-4f + PDF/UA-2 + Arlington + XMP XML metadata | 100% CPU | 833,561 | 1,200 | 12,621,359 B | 35,159 |
+| Four uncached images | Single worker | 1,311,764 | 762 | 1,971,071 B | 1,470 |
+| Four uncached images | 100% CPU | 182,279 | 5,486 | 1,838,310 B | 1,460 |
+| Four cached images | Single worker | 63,990 | 15,627 | 70,630 B | 275 |
+| Four cached images | 100% CPU | 48,924 | 20,440 | 72,979 B | 283 |
+
+The 100% CPU rows use `runtime.GOMAXPROCS(0)` explicit benchmark workers, so
+they measure concurrent PDF generation throughput across all logical CPUs
+available to the Go process. Signed rows
+include PDF output plus detached CMS signing; the benchmark certificate and key
+are prepared outside the timed loop. Compliance rows measure generation only;
+external veraPDF and Arlington validation are separate CI steps.
+
 <img src="https://raw.githubusercontent.com/cssbruno/gopdfkit/master/assets/static/image/gopher_pdf.png" alt="GoPDFKit gopher" width="160">
 
 GoPDFKit is an MIT-licensed Go library for generating PDFs directly from Go
@@ -99,6 +136,37 @@ reported as unsupported.
 
 Password protection applies to newly generated output. The permission flags are
 advisory because PDF readers decide how strictly to enforce them.
+
+## Compliance Metadata
+
+`document.SetComplianceMetadata` can generate PDF/A-4, PDF/UA-2, Arlington, and
+XMP metadata foundations. PDF/UA-2 mode enables tagged PDF output with
+`/StructTreeRoot`, `/ParentTree`, page and annotation `/StructParent` entries,
+MCIDs, text/link/image marked content, link annotation `/OBJR` references,
+image alternate text, artifact spans for drawing/raw decorative content, and
+semantic structure containers for HTML and shared document renderer lists and
+tables. Templates and imported pages are treated as artifacts unless their
+content is rendered through semantic APIs before placement. PDF/A mode also
+enforces the high-risk generation blockers currently known to the library: no
+encryption, no JavaScript, an ICC output intent, embedded UTF-8 fonts with
+Unicode maps, and PDF/A-4f or PDF/A-4e when attachments are present.
+
+This is not a full validator replacement. Use `make compliance-fixtures` and
+`make compliance-validate` with external validators for standards checks. See
+[`compliance-validation.md`][compliance-validation].
+
+Strict validation can be run with Dockerized veraPDF plus the Arlington REST
+service:
+
+```shell
+REQUIRE_COMPLIANCE_TOOLS=1 \
+SRGB_ICC=/usr/share/color/icc/colord/sRGB.icc \
+VERAPDF='tools/verapdf-docker.sh 0' \
+PDFUA_CHECKER='tools/verapdf-docker.sh ua2' \
+ARLINGTON_CHECKER='tools/arlington-validate.sh' \
+ARLINGTON_URL='http://localhost:8080' \
+make compliance-validate
+```
 
 ## Examples
 
@@ -332,6 +400,7 @@ Dave Barnes, Brigham Thompson, Joe Westcott, and Benoit KUGLER.
 [badge-doc]: https://img.shields.io/badge/godoc-GoPDFKit-blue.svg
 [badge-mit]: https://img.shields.io/badge/license-MIT-blue.svg
 [ci]: https://github.com/cssbruno/gopdfkit/actions/workflows/ci.yml
+[compliance-validation]: compliance-validation.md
 [examples]: ../examples
 [fpdf-site]: http://www.fpdf.org/
 [generation-examples]: generation-examples.md

@@ -65,7 +65,7 @@ func (f *Document) drawImageXObject(imageID string, x, y, w, h float64) {
 	f.outf("q %.5f 0 0 %.5f %.5f %.5f cm /I%s Do Q", w*f.k, h*f.k, x*f.k, (f.h-(y+h))*f.k, imageID)
 }
 
-func (f *Document) imageOut(info *ImageInfo, x, y, w, h float64, allowNegativeX, flow bool, link int, linkStr string) {
+func (f *Document) imageOut(info *ImageInfo, x, y, w, h float64, allowNegativeX, flow bool, link int, linkStr string, tag taggedContentOptions) {
 	if info == nil {
 		f.err = errors.New("missing image info")
 		return
@@ -74,7 +74,11 @@ func (f *Document) imageOut(info *ImageInfo, x, y, w, h float64, allowNegativeX,
 	if !ok {
 		return
 	}
-	f.drawImageXObject(info.i, placement.x, placement.y, placement.w, placement.h)
+	if !f.validateTaggedImageOptions(tag) {
+		return
+	}
+	content := []byte(sprintf("q %.5f 0 0 %.5f %.5f %.5f cm /I%s Do Q", placement.w*f.k, placement.h*f.k, placement.x*f.k, (f.h-(placement.y+placement.h))*f.k, info.i))
+	f.outbytes(f.wrapTaggedContent(content, tag))
 	if link > 0 || len(linkStr) > 0 {
 		f.newLink(placement.x, placement.y, placement.w, placement.h, link, linkStr)
 	}

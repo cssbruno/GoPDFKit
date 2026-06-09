@@ -65,8 +65,8 @@ func (f *Document) UseTemplateScaled(t Template, corner Point, size Size) {
 	tx := corner.X * f.k
 	ty := (f.curPageSize.Ht - corner.Y - size.Ht) * f.k
 
-	f.outf("q %.4f 0 0 %.4f %.4f %.4f cm", scaleX, scaleY, tx, ty)
-	f.outf("/TPL%s Do Q", t.ID())
+	content := []byte(sprintf("q %.4f 0 0 %.4f %.4f %.4f cm\n/TPL%s Do Q", scaleX, scaleY, tx, ty, t.ID()))
+	f.outbytes(f.wrapTaggedContent(content, taggedContentOptions{Artifact: true}))
 }
 
 func (f *Document) registerTemplate(t Template) {
@@ -177,7 +177,10 @@ func (f *Document) putTemplates() {
 
 		// Template's resource dictionary
 		f.out("/Resources ")
-		f.out("<</ProcSet [/PDF /Text /ImageB /ImageC /ImageI]")
+		f.out("<<")
+		if !f.omitDeprecatedPDF2Entries() {
+			f.out("/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]")
+		}
 
 		f.templateFontCatalog()
 		f.templateXObjectCatalog(t)

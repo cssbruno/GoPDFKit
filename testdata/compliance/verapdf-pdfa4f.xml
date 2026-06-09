@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<report>
+  <buildInformation>
+    <releaseDetails id="core" version="1.30.2" buildDate="2026-06-03T10:43:00Z"></releaseDetails>
+    <releaseDetails id="validation-model" version="1.30.2" buildDate="2026-06-03T10:46:00Z"></releaseDetails>
+    <releaseDetails id="apps" version="1.30.2" buildDate="2026-06-03T10:55:00Z"></releaseDetails>
+  </buildInformation>
+  <jobs>
+    <job>
+      <item size="59766">
+        <name>/work/artifacts/compliance/pdfa4f-attachment-metadata.pdf</name>
+      </item>
+      <validationReport jobEndStatus="normal" profileName="PDF/A-4f validation profile" statement="PDF file is compliant with Validation Profile requirements." isCompliant="true">
+        <details passedRules="109" failedRules="0" passedChecks="280" failedChecks="0"></details>
+      </validationReport>
+      <duration start="1781038547393" finish="1781038547665">00:00:00.272</duration>
+    </job>
+  </jobs>
+  <batchSummary totalJobs="1" failedToParse="0" encrypted="0" outOfMemory="0" veraExceptions="0">
+    <validationReports compliant="1" nonCompliant="0" failedJobs="0">1</validationReports>
+    <featureReports failedJobs="0">0</featureReports>
+    <repairReports failedJobs="0">0</repairReports>
+    <duration start="1781038547354" finish="1781038547677">00:00:00.323</duration>
+  </batchSummary>
+</report>

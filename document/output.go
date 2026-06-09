@@ -6,6 +6,7 @@ package document
 import (
 	"io"
 	"os"
+	"strings"
 )
 
 // OutputAndClose sends the PDF document to the writer specified by w. This
@@ -94,7 +95,17 @@ func (f *Document) outbytes(b []byte) {
 // understanding of the PDF specification is needed to use this method
 // correctly.
 func (f *Document) RawWriteStr(str string) {
+	if f.tagged.enabled {
+		f.SetErrorf("tagged PDF raw writes must use RawWriteArtifactStr or semantic drawing APIs")
+		return
+	}
 	f.out(str)
+}
+
+// RawWriteArtifactStr writes raw PDF content marked as an artifact when tagged
+// PDF output is enabled.
+func (f *Document) RawWriteArtifactStr(str string) {
+	f.outbytes(f.wrapTaggedContent([]byte(str), taggedContentOptions{Artifact: true}))
 }
 
 // RawWriteBuf writes the contents of the specified buffer directly to the PDF
@@ -102,7 +113,19 @@ func (f *Document) RawWriteStr(str string) {
 // normal PDF construction. An understanding of the PDF specification is needed
 // to use this method correctly.
 func (f *Document) RawWriteBuf(r io.Reader) {
+	if f.tagged.enabled {
+		f.SetErrorf("tagged PDF raw writes must use RawWriteArtifactBuf or semantic drawing APIs")
+		return
+	}
 	f.outbuf(r)
+}
+
+// RawWriteArtifactBuf writes raw PDF content marked as an artifact when tagged
+// PDF output is enabled.
+func (f *Document) RawWriteArtifactBuf(r io.Reader) {
+	var buf strings.Builder
+	_, _ = io.Copy(&buf, r)
+	f.RawWriteArtifactStr(buf.String())
 }
 
 // outf adds a formatted line to the document.

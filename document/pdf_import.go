@@ -147,7 +147,8 @@ func (f *Document) UseImportedPage(pageID int, x, y, w, h float64) {
 		f.SetErrorf("invalid imported page placement: %.4f %.4f %.4f %.4f", x, y, w, h)
 		return
 	}
-	f.outf("q %.5f 0 0 %.5f %.5f %.5f cm /IPG%d Do Q", w*f.k, h*f.k, x*f.k, (f.h-(y+h))*f.k, pageID)
+	content := []byte(sprintf("q %.5f 0 0 %.5f %.5f %.5f cm /IPG%d Do Q", w*f.k, h*f.k, x*f.k, (f.h-(y+h))*f.k, pageID))
+	f.outbytes(f.wrapTaggedContent(content, taggedContentOptions{Artifact: true}))
 }
 
 func pdfImportSourceBytes(source any) ([]byte, error) {

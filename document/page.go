@@ -447,6 +447,7 @@ func (f *Document) beginpage(orientationStr string, size Size, rotation int) {
 	f.pageLinks = append(f.pageLinks, make([]pageLink, 0))
 	f.pageAttachments = append(f.pageAttachments, []annotationAttach{})
 	f.state = 2
+	f.taggedBeginPage(f.page)
 	f.x = f.lMargin
 	f.y = f.tMargin
 	f.fontFamily = ""

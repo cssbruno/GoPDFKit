@@ -84,6 +84,11 @@ type Document struct {
 	zoomMode         string                     // zoom display mode
 	layoutMode       string                     // layout display mode
 	xmp              []byte                     // XMP metadata
+	nXmp             int                        // XMP metadata object number
+	compliance       ComplianceMetadata         // standards metadata and catalog markers
+	outputIntent     outputIntent               // document output color intent
+	nOutputIntentICC int                        // ICC output profile object number
+	tagged           taggedPDFState             // tagged PDF structure tree state
 	producer         string                     // producer
 	title            string                     // title
 	subject          string                     // subject

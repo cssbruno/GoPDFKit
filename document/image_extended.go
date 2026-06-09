@@ -38,6 +38,8 @@ type ExtendedImageOptions struct {
 	Crop             *ImageCrop   // Optional crop rectangle.
 	MaskImage        string       // Optional soft-mask image name or path.
 	MaskImageOptions ImageOptions // Options for the soft-mask image.
+	AltText          string       // Alternate text for meaningful PDF/UA image content.
+	Artifact         bool         // Whether the image is decorative and should be tagged as an artifact.
 }
 
 // ImageOptionsExtended places an image with optional rotation, flipping,
@@ -97,7 +99,14 @@ func (f *Document) ImageOptionsExtended(name string, opts ExtendedImageOptions) 
 		f.SetErrorf("invalid extended image placement")
 		return
 	}
+	tag := taggedContentOptions{Role: taggedRoleFigure, AltText: firstNonEmpty(opts.AltText, opts.Options.AltText), Artifact: opts.Artifact || opts.Options.Artifact}
+	if !f.validateTaggedImageOptions(tag) {
+		return
+	}
 	transform := opts.Rotation != 0 || opts.HorizontalFlip || opts.VerticalFlip
+	if f.tagged.enabled {
+		f.outbytes(f.beginTaggedContent(tag))
+	}
 	if transform {
 		f.TransformBegin()
 		centerX := draw.x + draw.w/2
@@ -133,6 +142,9 @@ func (f *Document) ImageOptionsExtended(name string, opts ExtendedImageOptions) 
 	}
 	if transform {
 		f.TransformEnd()
+	}
+	if f.tagged.enabled {
+		f.out("EMC")
 	}
 	if opts.Link > 0 || opts.LinkString != "" {
 		f.newLink(draw.x, draw.y, draw.w, draw.h, opts.Link, opts.LinkString)

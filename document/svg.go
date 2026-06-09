@@ -87,6 +87,7 @@ type SVGText struct {
 	X     float64  // Text X coordinate.
 	Y     float64  // Text Y coordinate.
 	Text  string   // Text content.
+	Role  string   // Optional tagged PDF role for this text node.
 	Style SVGStyle // Text style.
 }
 

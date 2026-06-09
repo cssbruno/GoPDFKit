@@ -60,6 +60,7 @@ type HTML struct {
 	renderCacheActive     bool
 	dataImageCache        map[string]htmlImageSource
 	styleDeclarationCache map[string]map[string]string
+	compiledStyleCache    map[string]map[string]string
 	inlineSVGCache        map[string]SVG
 }
 
@@ -105,15 +106,36 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 		html.pdf.SetErrorf("HTML input exceeds maximum size")
 		return
 	}
+	compiled, err := compileHTML(htmlStr, false)
+	if err != nil {
+		html.pdf.SetError(err)
+		return
+	}
+	html.WriteCompiled(lineHt, compiled)
+}
+
+// WriteCompiled renders a precompiled HTML fragment. Use CompileHTML when the
+// same HTML is rendered repeatedly across documents.
+func (html *HTML) WriteCompiled(lineHt float64, compiled *CompiledHTML) {
+	if err := compiled.validate(); err != nil {
+		html.pdf.SetError(err)
+		return
+	}
+	if compiled.maxDepth > html.maxElementDepth() {
+		html.pdf.SetErrorf("HTML element depth exceeds maximum size")
+		return
+	}
 	previousStartPageCount := html.renderStartPageCount
 	previousRenderCacheActive := html.renderCacheActive
 	previousDataImageCache := html.dataImageCache
 	previousStyleDeclarationCache := html.styleDeclarationCache
+	previousCompiledStyleCache := html.compiledStyleCache
 	previousInlineSVGCache := html.inlineSVGCache
 	html.renderStartPageCount = html.pdf.PageCount()
 	html.renderCacheActive = true
 	html.dataImageCache = make(map[string]htmlImageSource)
 	html.styleDeclarationCache = nil
+	html.compiledStyleCache = compiled.styleDeclarations
 	html.inlineSVGCache = nil
 	defer func() {
 		pageCount := html.generatedPageCount()
@@ -125,6 +147,7 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 		html.renderCacheActive = previousRenderCacheActive
 		html.dataImageCache = previousDataImageCache
 		html.styleDeclarationCache = previousStyleDeclarationCache
+		html.compiledStyleCache = previousCompiledStyleCache
 		html.inlineSVGCache = previousInlineSVGCache
 	}()
 	textR, textG, textB := html.pdf.GetTextColor()
@@ -171,6 +194,9 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 		st := current()
 		textLineHt := htmlEffectiveLineHeight(st, lineHt)
 		writeCurrent := func(linkStr string) {
+			if st.role != "" && linkStr == "" {
+				html.pdf.SetNextTextRole(st.role)
+			}
 			if st.script != 0 {
 				html.pdf.SubWrite(textLineHt, text, st.fontSize*0.75, float64(st.script)*st.fontSize*0.35, 0, linkStr)
 				return
@@ -217,6 +243,11 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 		if src == "" {
 			writeText(attrs["alt"])
 			return
+		}
+		tag := taggedContentOptions{
+			Role:     taggedRoleFigure,
+			AltText:  attrs["alt"],
+			Artifact: strings.TrimSpace(attrs["alt"]) == "",
 		}
 		blockBreak()
 		margin := htmlBoxEdgesFromDeclarations(html.styleDeclarations(attrs), "margin", html.pdf, html.pdf.w-html.pdf.lMargin-html.pdf.rMargin)
@@ -283,7 +314,7 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 				y = html.pdf.GetY()
 			}
 			html.pdf.ClipRect(x, y, flowWd, flowHt, false)
-			html.pdf.imageOut(info, x+drawX, y+drawY, drawWd, drawHt, options.AllowNegativePosition, false, 0, st.href)
+			html.pdf.imageOut(info, x+drawX, y+drawY, drawWd, drawHt, options.AllowNegativePosition, false, 0, st.href, tag)
 			html.pdf.ClipEnd()
 			if st.href != "" {
 				html.pdf.newLink(x, y, flowWd, flowHt, 0, st.href)
@@ -302,7 +333,7 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 				html.pdf.x = x2
 				y = html.pdf.GetY()
 			}
-			html.pdf.imageOut(info, x+drawX, y+drawY, drawWd, drawHt, options.AllowNegativePosition, false, 0, st.href)
+			html.pdf.imageOut(info, x+drawX, y+drawY, drawWd, drawHt, options.AllowNegativePosition, false, 0, st.href, tag)
 			if st.href != "" {
 				html.pdf.newLink(x, y, flowWd, flowHt, 0, st.href)
 			}
@@ -310,18 +341,14 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 			html.pdf.SetX(html.pdf.lMargin)
 			return
 		}
-		html.pdf.imageOut(info, x+drawX, 0, drawWd, drawHt, options.AllowNegativePosition, true, 0, st.href)
+		html.pdf.imageOut(info, x+drawX, 0, drawWd, drawHt, options.AllowNegativePosition, true, 0, st.href, tag)
 		if margin.bottom > 0 {
 			html.pdf.Ln(margin.bottom)
 		}
 	}
-	tokens := htmlTokenize(htmlStr, make(map[string]map[string]string))
-	if message := htmlElementDepthMessage(tokens, html.maxElementDepth()); message != "" {
-		html.pdf.SetError(errors.New(message))
-		return
-	}
+	tokens := compiled.tokens
 	html.logUnsupportedHTML(tokens)
-	cssRules := htmlCollectCSSRules(tokens)
+	cssRules := compiled.cssRules
 	for i := 0; i < len(tokens); i++ {
 		el := tokens[i]
 		switch el.Cat {
@@ -369,16 +396,16 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 				writeImage(el.Attr, st)
 				pushStyle = false
 			case "table":
-				i = html.writeTable(tokens, i, lineHt, st, defaultColor, cssRules, elementStack)
+				i = html.writeCompiledTable(compiled, i, lineHt, st, defaultColor, cssRules, elementStack)
 				pushStyle = false
 			case "svg":
-				i = html.writeInlineSVG(tokens, i, lineHt, st)
+				i = html.writeCompiledInlineSVG(compiled, tokens, i, lineHt, st)
 				pushStyle = false
 			case "hr":
 				html.writeHorizontalRule(el, cssRules, lineHt, elementStack)
 				pushStyle = false
 			case "style", "script", "head":
-				i = htmlSkipElement(tokens, i, el.Str)
+				i = compiled.skipElement(i, el.Str)
 				pushStyle = false
 			case "p", "div", "section", "article", "header", "footer", "figure":
 				if el.Str == "figure" {
@@ -392,13 +419,17 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 					}
 				}
 				if html.blockHasBoxStyle(el, cssRules, elementStack...) {
-					i = html.writeBlockBox(tokens, i, lineHt, st, defaultColor, cssRules, elementStack)
+					i = html.writeCompiledBlockBox(compiled, tokens, i, lineHt, st, defaultColor, cssRules, elementStack)
 					pushStyle = false
 				} else {
 					blockBreak()
 				}
+				if el.Str == "p" {
+					st.role = taggedRoleP
+				}
 			case "figcaption":
 				blockBreak()
+				st.role = "Caption"
 				st.italic = true
 				if st.align == "" || st.align == "L" {
 					st.align = "C"
@@ -410,9 +441,11 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 				blockBreak()
 			case "dt":
 				blockBreak()
+				st.role = "Lbl"
 				st.bold = true
 			case "dd":
 				blockBreak()
+				st.role = "LBody"
 				html.pdf.SetX(html.pdf.lMargin + lineHt*1.5)
 			case "center":
 				blockBreak()
@@ -424,26 +457,33 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 				blockBreak()
 				st.align = "L"
 			case "h1", "h2", "h3", "h4", "h5", "h6":
-				html.keepHeadingWithNext(tokens, i, lineHt, st, defaultColor, cssRules, elementStack)
+				html.keepCompiledHeadingWithNext(compiled, tokens, i, lineHt, st, defaultColor, cssRules, elementStack)
 				blockBreak()
 				st.bold = true
 				st.fontSize = htmlHeadingFontSize(base.fontSize, el.Str)
+				st.role = strings.ToUpper(el.Str)
 			case "ul":
 				blockBreak()
+				html.pdf.BeginStructure("L")
 				st.list = "ul"
 				openedList = &el
 			case "ol":
 				blockBreak()
+				html.pdf.BeginStructure("L")
 				st.list = "ol"
 				openedList = &el
 			case "li":
 				blockBreak()
+				html.pdf.BeginStructure("LI")
 				if len(listStack) > 0 {
 					list := &listStack[len(listStack)-1]
 					list.counter++
 					html.pdf.SetX(html.pdf.lMargin + float64(len(listStack)-1)*list.indent)
+					html.pdf.SetNextTextRole("Lbl")
 					writeText(list.marker())
 				}
+				html.pdf.BeginStructure("LBody")
+				st.role = "LBody"
 			}
 			applyHTMLCSSRules(&st, el, cssRules, base.fontSize, base.lineHeight, html.pdf, elementStack...)
 			html.applyAttrs(&st, el.Attr, base.fontSize, base.lineHeight, html.pdf)
@@ -460,12 +500,17 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 				popElement(el.Str)
 			}
 			switch el.Str {
-			case "p", "div", "section", "article", "header", "footer", "figure", "figcaption", "pre", "h1", "h2", "h3", "h4", "h5", "h6", "li", "dt", "dd":
+			case "p", "div", "section", "article", "header", "footer", "figure", "figcaption", "pre", "h1", "h2", "h3", "h4", "h5", "h6", "dt", "dd":
+				lineBreak()
+			case "li":
+				html.pdf.EndStructure()
+				html.pdf.EndStructure()
 				lineBreak()
 			case "ul", "ol":
 				if len(listStack) > 0 {
 					listStack = listStack[:len(listStack)-1]
 				}
+				html.pdf.EndStructure()
 				lineBreak()
 			case "dl":
 				lineBreak()

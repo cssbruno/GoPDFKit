@@ -475,6 +475,71 @@ func TestHTMLWriteInlineSVG(t *testing.T) {
 	}
 }
 
+func TestHTMLWriteCompiledRendersRepeatedFragment(t *testing.T) {
+	compiled, err := document.CompileHTML(`<style>
+		.note { font-weight: bold; }
+		td { padding: 2px; border: 1px solid #333; }
+	</style>` +
+		`<h2>Compiled Fragment</h2>` +
+		`<p class="note">Paragraph text</p>` +
+		`<svg width="32" height="16" viewBox="0 0 32 16">` +
+		`<rect x="1" y="1" width="30" height="14" fill="#eeeeee" stroke="#333"/>` +
+		`<text x="16" y="11" text-anchor="middle" font-size="6">svg</text>` +
+		`</svg>` +
+		`<table><tr><td>Cell text</td></tr></table>`)
+	if err != nil {
+		t.Fatalf("CompileHTML() error = %v", err)
+	}
+
+	for i := 0; i < 2; i++ {
+		pdf := document.New("P", "mm", "A4", "")
+		pdf.SetCompression(false)
+		pdf.AddPage()
+		pdf.SetFont("Helvetica", "", 12)
+		_, lineHeight := pdf.GetFontSize()
+		html := pdf.HTMLNew()
+		html.WriteCompiled(lineHeight, compiled)
+
+		var output bytes.Buffer
+		if err := pdf.Output(&output); err != nil {
+			t.Fatalf("Output() render %d error = %v", i, err)
+		}
+		pdfText := output.String()
+		for _, want := range []string{"Compiled Fragment", "Paragraph text", "svg", "Cell text"} {
+			if !strings.Contains(pdfText, want) {
+				t.Fatalf("render %d generated PDF does not contain %q", i, want)
+			}
+		}
+	}
+}
+
+func TestCompileHTMLSkipsHiddenInlineSVG(t *testing.T) {
+	compiled, err := document.CompileHTML(`<head><svg><path d="bad path"/></svg></head><p>Visible</p>`)
+	if err != nil {
+		t.Fatalf("CompileHTML() error = %v", err)
+	}
+
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	_, lineHeight := pdf.GetFontSize()
+	html := pdf.HTMLNew()
+	html.WriteCompiled(lineHeight, compiled)
+
+	var output bytes.Buffer
+	if err := pdf.Output(&output); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	pdfText := output.String()
+	if !strings.Contains(pdfText, "Visible") {
+		t.Fatal("generated PDF does not contain visible text")
+	}
+	if strings.Contains(pdfText, "bad path") {
+		t.Fatal("generated PDF leaked hidden SVG text")
+	}
+}
+
 func TestHTMLWriteStyleRules(t *testing.T) {
 	pdf := document.New("P", "mm", "A4", "")
 	pdf.SetCompression(false)

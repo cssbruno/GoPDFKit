@@ -59,6 +59,9 @@ type pageLink struct {
 	x, y, wd, ht float64
 	link         int    // Auto-generated internal link ID or...
 	linkStr      string // ...application-provided external link string
+	objNum       int
+	structParent int
+	structElem   *taggedElement
 }
 
 type internalLink struct {

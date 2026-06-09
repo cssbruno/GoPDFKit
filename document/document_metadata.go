@@ -60,5 +60,6 @@ func (f *Document) SetCreator(creatorStr string, isUTF8 bool) {
 
 // SetXmpMetadata defines XMP metadata that will be embedded with the document.
 func (f *Document) SetXmpMetadata(xmpStream []byte) {
-	f.xmp = xmpStream
+	f.xmp = append([]byte(nil), xmpStream...)
+	f.nXmp = 0
 }

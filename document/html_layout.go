@@ -23,6 +23,7 @@ type htmlTextStyle struct {
 	fontSize           float64
 	lineHeight         float64
 	color              CSSColorType
+	role               string
 	list               string
 	listStyleType      string
 	script             int
@@ -94,7 +95,17 @@ func (html *HTML) blockHasBoxStyle(el HTMLSegmentType, cssRules []htmlCSSRule, a
 }
 
 func (html *HTML) writeBlockBox(tokens []HTMLSegmentType, start int, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) int {
-	blockTokens, end := htmlCollectElementTokens(tokens, start, tokens[start].Str)
+	return html.writeCompiledBlockBox(nil, tokens, start, lineHt, inherited, fallback, cssRules, ancestors)
+}
+
+func (html *HTML) writeCompiledBlockBox(compiled *CompiledHTML, tokens []HTMLSegmentType, start int, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) int {
+	var blockTokens []HTMLSegmentType
+	var end int
+	if compiled != nil {
+		blockTokens, end = compiled.collectElementTokens(start, tokens[start].Str)
+	} else {
+		blockTokens, end = htmlCollectElementTokens(tokens, start, tokens[start].Str)
+	}
 	if len(blockTokens) == 0 {
 		return end
 	}
@@ -109,11 +120,16 @@ func (html *HTML) writeBlockBox(tokens []HTMLSegmentType, start int, lineHt floa
 			return end
 		}
 	}
-	text := htmlPlainText(blockTokens[1 : len(blockTokens)-1])
 	style := inherited
 	applyHTMLCSSRules(&style, tokens[start], cssRules, inherited.fontSize, inherited.lineHeight, pdf, ancestors...)
 	html.applyAttrs(&style, tokens[start].Attr, inherited.fontSize, inherited.lineHeight, pdf)
 	html.applyTextStyle(style, fallback)
+	text := htmlPlainTextWithMode(blockTokens[1:len(blockTokens)-1], style.preserveWhitespace)
+	if compiled != nil {
+		if cachedText, ok := compiled.text(start, style.preserveWhitespace); ok {
+			text = cachedText
+		}
+	}
 	boxWd := htmlMaxFloat(availableWd-box.margin.left-box.margin.right, 0)
 	contentWd := htmlMaxFloat(boxWd-box.padding.left-box.padding.right, 0)
 	styleLineHt := htmlEffectiveLineHeight(style, lineHt)
@@ -366,11 +382,21 @@ func minInt(a, b int) int {
 }
 
 func (html *HTML) keepHeadingWithNext(tokens []HTMLSegmentType, start int, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) {
+	html.keepCompiledHeadingWithNext(nil, tokens, start, lineHt, inherited, fallback, cssRules, ancestors)
+}
+
+func (html *HTML) keepCompiledHeadingWithNext(compiled *CompiledHTML, tokens []HTMLSegmentType, start int, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) {
 	if html == nil || html.pdf == nil {
 		return
 	}
 	defer html.applyTextStyle(inherited, fallback)
-	headingTokens, end := htmlCollectElementTokens(tokens, start, tokens[start].Str)
+	var headingTokens []HTMLSegmentType
+	var end int
+	if compiled != nil {
+		headingTokens, end = compiled.collectElementTokens(start, tokens[start].Str)
+	} else {
+		headingTokens, end = htmlCollectElementTokens(tokens, start, tokens[start].Str)
+	}
 	if len(headingTokens) == 0 {
 		return
 	}
@@ -379,8 +405,8 @@ func (html *HTML) keepHeadingWithNext(tokens []HTMLSegmentType, start int, lineH
 	style.fontSize = htmlHeadingFontSize(inherited.fontSize, tokens[start].Str)
 	applyHTMLCSSRules(&style, tokens[start], cssRules, inherited.fontSize, inherited.lineHeight, html.pdf, ancestors...)
 	html.applyAttrs(&style, tokens[start].Attr, inherited.fontSize, inherited.lineHeight, html.pdf)
-	headingHt := html.textBlockHeight(headingTokens[1:len(headingTokens)-1], style, lineHt, fallback)
-	nextHt := html.nextBlockHeight(tokens, end+1, lineHt, inherited, fallback, cssRules, ancestors)
+	headingHt := html.compiledTextBlockHeight(compiled, start, headingTokens[1:len(headingTokens)-1], style, lineHt, fallback)
+	nextHt := html.nextCompiledBlockHeight(compiled, tokens, end+1, lineHt, inherited, fallback, cssRules, ancestors)
 	if headingHt <= 0 || nextHt <= 0 {
 		return
 	}
@@ -396,6 +422,10 @@ func (html *HTML) keepHeadingWithNext(tokens []HTMLSegmentType, start int, lineH
 }
 
 func (html *HTML) nextBlockHeight(tokens []HTMLSegmentType, start int, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) float64 {
+	return html.nextCompiledBlockHeight(nil, tokens, start, lineHt, inherited, fallback, cssRules, ancestors)
+}
+
+func (html *HTML) nextCompiledBlockHeight(compiled *CompiledHTML, tokens []HTMLSegmentType, start int, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) float64 {
 	for i := start; i < len(tokens); i++ {
 		token := tokens[i]
 		if token.Cat == 'T' && strings.TrimSpace(token.Str) == "" {
@@ -406,7 +436,12 @@ func (html *HTML) nextBlockHeight(tokens []HTMLSegmentType, start int, lineHt fl
 		}
 		switch token.Str {
 		case "p", "div", "section", "article", "header", "footer":
-			blockTokens, _ := htmlCollectElementTokens(tokens, i, token.Str)
+			var blockTokens []HTMLSegmentType
+			if compiled != nil {
+				blockTokens, _ = compiled.collectElementTokens(i, token.Str)
+			} else {
+				blockTokens, _ = htmlCollectElementTokens(tokens, i, token.Str)
+			}
 			if len(blockTokens) < 2 {
 				return 0
 			}
@@ -415,11 +450,16 @@ func (html *HTML) nextBlockHeight(tokens []HTMLSegmentType, start int, lineHt fl
 			html.applyAttrs(&style, token.Attr, inherited.fontSize, inherited.lineHeight, html.pdf)
 			if html.blockHasBoxStyle(token, cssRules, ancestors...) {
 				box := html.blockBox(token, cssRules, html.pdf, html.pdf.w-html.pdf.rMargin-html.pdf.lMargin, ancestors...)
-				return html.textBlockHeight(blockTokens[1:len(blockTokens)-1], style, lineHt, fallback) + box.padding.top + box.padding.bottom + box.margin.top + box.margin.bottom
+				return html.compiledTextBlockHeight(compiled, i, blockTokens[1:len(blockTokens)-1], style, lineHt, fallback) + box.padding.top + box.padding.bottom + box.margin.top + box.margin.bottom
 			}
-			return html.textBlockHeight(blockTokens[1:len(blockTokens)-1], style, lineHt, fallback)
+			return html.compiledTextBlockHeight(compiled, i, blockTokens[1:len(blockTokens)-1], style, lineHt, fallback)
 		case "h1", "h2", "h3", "h4", "h5", "h6":
-			blockTokens, _ := htmlCollectElementTokens(tokens, i, token.Str)
+			var blockTokens []HTMLSegmentType
+			if compiled != nil {
+				blockTokens, _ = compiled.collectElementTokens(i, token.Str)
+			} else {
+				blockTokens, _ = htmlCollectElementTokens(tokens, i, token.Str)
+			}
 			if len(blockTokens) < 2 {
 				return 0
 			}
@@ -428,9 +468,9 @@ func (html *HTML) nextBlockHeight(tokens []HTMLSegmentType, start int, lineHt fl
 			style.fontSize = htmlHeadingFontSize(inherited.fontSize, token.Str)
 			applyHTMLCSSRules(&style, token, cssRules, inherited.fontSize, inherited.lineHeight, html.pdf, ancestors...)
 			html.applyAttrs(&style, token.Attr, inherited.fontSize, inherited.lineHeight, html.pdf)
-			return html.textBlockHeight(blockTokens[1:len(blockTokens)-1], style, lineHt, fallback)
+			return html.compiledTextBlockHeight(compiled, i, blockTokens[1:len(blockTokens)-1], style, lineHt, fallback)
 		case "table":
-			return html.tableHeight(tokens, i, lineHt, inherited, fallback, cssRules, ancestors)
+			return html.compiledTableHeight(compiled, tokens, i, lineHt, inherited, fallback, cssRules, ancestors)
 		case "figure":
 			return html.figureHeight(tokens, i, lineHt, inherited, fallback)
 		case "img":
@@ -441,11 +481,23 @@ func (html *HTML) nextBlockHeight(tokens []HTMLSegmentType, start int, lineHt fl
 }
 
 func (html *HTML) textBlockHeight(tokens []HTMLSegmentType, style htmlTextStyle, lineHt float64, fallback CSSColorType) float64 {
+	return html.compiledTextBlockHeight(nil, -1, tokens, style, lineHt, fallback)
+}
+
+func (html *HTML) compiledTextBlockHeight(compiled *CompiledHTML, start int, tokens []HTMLSegmentType, style htmlTextStyle, lineHt float64, fallback CSSColorType) float64 {
 	if html == nil || html.pdf == nil {
 		return 0
 	}
 	html.applyTextStyle(style, fallback)
-	text := htmlPlainTextWithMode(tokens, style.preserveWhitespace)
+	text := ""
+	if compiled != nil {
+		if cachedText, ok := compiled.text(start, style.preserveWhitespace); ok {
+			text = cachedText
+		}
+	}
+	if text == "" {
+		text = htmlPlainTextWithMode(tokens, style.preserveWhitespace)
+	}
 	if text == "" {
 		return htmlEffectiveLineHeight(style, lineHt)
 	}
@@ -455,7 +507,20 @@ func (html *HTML) textBlockHeight(tokens []HTMLSegmentType, style htmlTextStyle,
 }
 
 func (html *HTML) tableHeight(tokens []HTMLSegmentType, start int, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) float64 {
-	table, _ := parseHTMLTable(tokens, start)
+	return html.compiledTableHeight(nil, tokens, start, lineHt, inherited, fallback, cssRules, ancestors)
+}
+
+func (html *HTML) compiledTableHeight(compiled *CompiledHTML, tokens []HTMLSegmentType, start int, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) float64 {
+	var table htmlTableType
+	if compiled != nil {
+		var ok bool
+		table, _, ok = compiled.table(start)
+		if !ok {
+			table, _ = parseHTMLTable(tokens, start)
+		}
+	} else {
+		table, _ = parseHTMLTable(tokens, start)
+	}
 	if len(table.rows) == 0 {
 		return 0
 	}

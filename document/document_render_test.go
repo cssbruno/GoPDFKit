@@ -64,6 +64,53 @@ func TestWriteDocumentRendersSharedBlocks(t *testing.T) {
 	}
 }
 
+func TestWriteDocumentEmitsTaggedRoles(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.SetComplianceMetadata(ComplianceMetadata{PDFUA2: true, Title: "Tagged document"})
+	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc.Body = []Block{
+		HeadingBlock{Level: 2, Segments: []TextSegment{{Text: "Tagged heading"}}},
+		ParagraphBlock{Segments: []TextSegment{{Text: "Tagged paragraph"}}},
+		ListBlock{Items: []ListItem{{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Tagged item"}}}}}}},
+		TableBlock{
+			Header: []TableRow{{Cells: []TableCell{{ColSpan: 2, Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Head"}}}}}}}},
+			Body:   []TableRow{{Cells: []TableCell{{RowSpan: 2, Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Body"}}}}}, {Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "More"}}}}}}}},
+		},
+	}
+
+	pdf.WriteDocument(doc)
+	var output bytes.Buffer
+	if err := pdf.Output(&output); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	text := output.String()
+	for _, want := range []string{
+		"/StructTreeRoot ",
+		"/H2 <</MCID 0>> BDC",
+		"/P <</MCID 1>> BDC",
+		"/Lbl <</MCID 2>> BDC",
+		"/P <</MCID 3>> BDC",
+		"/S /H2",
+		"/S /P",
+		"/S /L",
+		"/S /LI",
+		"/S /Lbl",
+		"/S /LBody",
+		"/S /Table",
+		"/S /TR",
+		"/S /TH",
+		"/S /TD",
+		"/A << /O /Table /Scope /Column /ColSpan 2 >>",
+		"/A << /O /Table /RowSpan 2 >>",
+		"/Artifact BMC",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("tagged document output missing %q", want)
+		}
+	}
+}
+
 func TestWriteDocumentPageBreakBlockAddsPage(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	doc := NewLayoutDocument(DocumentKindGeneric)

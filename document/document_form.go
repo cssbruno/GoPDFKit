@@ -41,16 +41,14 @@ type FormAnswer struct {
 // FormDocumentHTML returns the canonical supported-HTML representation of a
 // form document.
 func FormDocumentHTML(form FormDocument) string {
-	var out strings.Builder
+	out := newFormHTMLWriter(estimateFormHTMLSize(form))
 	if strings.TrimSpace(form.Title) != "" {
-		out.WriteString("<h1>")
-		out.WriteString(escapeFormHTML(form.Title))
-		out.WriteString("</h1>")
+		out.elementText("h1", form.Title)
 	}
 	for _, section := range form.Sections {
-		writeFormSectionHTML(&out, section)
+		writeFormSectionHTML(out, section)
 	}
-	return out.String()
+	return out.string()
 }
 
 // ValidateFormDocumentHTML validates the canonical form HTML against the
@@ -95,61 +93,111 @@ func FormDocumentModel(form FormDocument) *LayoutDocument {
 	return doc
 }
 
-func writeFormSectionHTML(out *strings.Builder, section FormSection) {
-	style := formSectionStyle(section)
-	out.WriteString(`<section class="form-section"`)
-	if style != "" {
-		out.WriteString(` style="`)
-		out.WriteString(style)
-		out.WriteByte('"')
-	}
-	out.WriteByte('>')
-	if strings.TrimSpace(section.Title) != "" {
-		out.WriteString("<h2>")
-		out.WriteString(escapeFormHTML(section.Title))
-		out.WriteString("</h2>")
-	}
-	out.WriteString(`<dl class="form-qa">`)
-	for _, question := range section.Questions {
-		out.WriteString("<dt>")
-		out.WriteString(escapeFormHTML(question.Label))
-		if question.Required {
-			out.WriteString(" *")
-		}
-		out.WriteString("</dt><dd>")
-		writeFormAnswerHTML(out, question.Answer)
-		out.WriteString("</dd>")
-	}
-	out.WriteString("</dl></section>")
+type formHTMLWriter struct {
+	out strings.Builder
 }
 
-func writeFormAnswerHTML(out *strings.Builder, answer FormAnswer) {
+func newFormHTMLWriter(capacity int) *formHTMLWriter {
+	w := &formHTMLWriter{}
+	if capacity > 0 {
+		w.out.Grow(capacity)
+	}
+	return w
+}
+
+func (w *formHTMLWriter) string() string {
+	return w.out.String()
+}
+
+func (w *formHTMLWriter) raw(value string) {
+	w.out.WriteString(value)
+}
+
+func (w *formHTMLWriter) byte(value byte) {
+	w.out.WriteByte(value)
+}
+
+func (w *formHTMLWriter) text(value string) {
+	w.out.WriteString(escapeFormHTML(value))
+}
+
+func (w *formHTMLWriter) elementText(tag, value string) {
+	w.byte('<')
+	w.raw(tag)
+	w.byte('>')
+	w.text(value)
+	w.raw("</")
+	w.raw(tag)
+	w.byte('>')
+}
+
+func writeFormSectionHTML(out *formHTMLWriter, section FormSection) {
+	style := formSectionStyle(section)
+	out.raw(`<section class="form-section"`)
+	if style != "" {
+		out.raw(` style="`)
+		out.raw(style)
+		out.byte('"')
+	}
+	out.byte('>')
+	if strings.TrimSpace(section.Title) != "" {
+		out.elementText("h2", section.Title)
+	}
+	out.raw(`<dl class="form-qa">`)
+	for _, question := range section.Questions {
+		out.raw("<dt>")
+		out.text(question.Label)
+		if question.Required {
+			out.raw(" *")
+		}
+		out.raw("</dt><dd>")
+		writeFormAnswerHTML(out, question.Answer)
+		out.raw("</dd>")
+	}
+	out.raw("</dl></section>")
+}
+
+func writeFormAnswerHTML(out *formHTMLWriter, answer FormAnswer) {
 	switch {
 	case len(answer.Table) > 0:
-		out.WriteString(`<table class="form-answer-table"><tbody>`)
+		out.raw(`<table class="form-answer-table"><tbody>`)
 		for _, row := range answer.Table {
-			out.WriteString("<tr>")
+			out.raw("<tr>")
 			for _, cell := range row {
-				out.WriteString("<td>")
-				out.WriteString(escapeFormHTML(cell))
-				out.WriteString("</td>")
+				out.elementText("td", cell)
 			}
-			out.WriteString("</tr>")
+			out.raw("</tr>")
 		}
-		out.WriteString("</tbody></table>")
+		out.raw("</tbody></table>")
 	case len(answer.Items) > 0:
-		out.WriteString(`<ul class="form-answer-list">`)
+		out.raw(`<ul class="form-answer-list">`)
 		for _, item := range answer.Items {
-			out.WriteString("<li>")
-			out.WriteString(escapeFormHTML(item))
-			out.WriteString("</li>")
+			out.elementText("li", item)
 		}
-		out.WriteString("</ul>")
+		out.raw("</ul>")
 	default:
-		out.WriteString("<p>")
-		out.WriteString(escapeFormHTML(answer.Text))
-		out.WriteString("</p>")
+		out.elementText("p", answer.Text)
 	}
+}
+
+func estimateFormHTMLSize(form FormDocument) int {
+	size := len(form.Title) + 16
+	for _, section := range form.Sections {
+		size += len(section.Title) + 80
+		for _, question := range section.Questions {
+			size += len(question.Label) + len(question.Answer.Text) + 32
+			for _, item := range question.Answer.Items {
+				size += len(item) + 16
+			}
+			for _, row := range question.Answer.Table {
+				size += 16
+				for _, cell := range row {
+					size += len(cell) + 16
+				}
+			}
+		}
+	}
+	return size
 }
 
 func formQuestionBlocks(question FormQuestion) []Block {
