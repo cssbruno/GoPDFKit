@@ -7,10 +7,10 @@
 ## Benchmark Snapshot
 
 Local benchmark run on `12th Gen Intel(R) Core(TM) i7-12700` with 20 logical
-CPUs. Results are medians from:
+CPUs. Results below are from:
 
 ```shell
-go test ./document -run '^$' -bench 'BenchmarkGeneration(BaselineNoCompliance.*|Images.*|PDFA4FCompliance.*|PDFUA2ArlingtonCompiledHTML.*|SignedPDFA4FPDFUA2ArlingtonXMP.*|HTML(SelectorHeavyCompiled|TableHeavyCompiled|DataImageHeavyCompiled|MalformedCompiled).*)$' -benchmem -count=3
+make bench-generation-core
 ```
 
 For a generation-only suite without HTML examples:
@@ -19,45 +19,34 @@ For a generation-only suite without HTML examples:
 make bench-generation-core-ci
 ```
 
-| Workload | Mode | ns/PDF | PDF/sec | Memory/PDF | Allocs/PDF |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Baseline no-compliance, no image | Single worker | 349,084 | 2,864 | 448,603 B | 1,410 |
-| Baseline no-compliance, no image | 40 workers | 43,333 | 23,077 | 447,385 B | 1,408 |
-| Baseline no-compliance, uncached image | Single worker | 932,906 | 1,072 | 1,117,652 B | 1,703 |
-| Baseline no-compliance, uncached image | 100% CPU | 89,024 | 11,233 | 874,016 B | 1,690 |
-| Baseline no-compliance, cached image | Single worker | 517,280 | 1,933 | 825,700 B | 1,564 |
-| Baseline no-compliance, cached image | 100% CPU | 79,543 | 12,572 | 649,346 B | 1,555 |
-| Baseline no-compliance, signed uncached image | Single worker | 1,934,896 | 517 | 1,953,249 B | 2,033 |
-| Baseline no-compliance, signed uncached image | 100% CPU | 251,348 | 3,979 | 1,706,731 B | 2,014 |
-| Baseline no-compliance, signed cached image | Single worker | 1,419,739 | 704 | 1,555,624 B | 1,889 |
-| Baseline no-compliance, signed cached image | 100% CPU | 203,488 | 4,914 | 1,466,333 B | 1,879 |
-| PDF/A-4f metadata, ICC, UTF-8 fonts, attachment | Single worker | 5,094,580 | 196 | 10,526,864 B | 27,629 |
-| PDF/A-4f metadata, ICC, UTF-8 fonts, attachment | 100% CPU | 916,350 | 1,091 | 11,220,702 B | 27,644 |
-| PDF/UA-2 + Arlington tagged compiled HTML | Single worker | 5,842,078 | 171 | 11,087,177 B | 34,761 |
-| PDF/UA-2 + Arlington tagged compiled HTML | 100% CPU | 764,041 | 1,309 | 12,095,492 B | 34,785 |
-| Signed PDF/A-4f + PDF/UA-2 + Arlington + XMP XML metadata | Single worker | 6,824,408 | 147 | 11,877,863 B | 35,144 |
-| Signed PDF/A-4f + PDF/UA-2 + Arlington + XMP XML metadata | 100% CPU | 833,561 | 1,200 | 12,621,359 B | 35,159 |
-| Selector-heavy compiled HTML | Single worker | 635,650 | 1,573 | 207,433 B | 1,615 |
-| Selector-heavy compiled HTML | 40 workers | 127,062 | 7,870 | 211,776 B | 1,628 |
-| Table-heavy compiled HTML | Single worker | 968,191 | 1,033 | 826,387 B | 1,899 |
-| Table-heavy compiled HTML | 40 workers | 174,264 | 5,738 | 826,360 B | 1,903 |
-| Data-image-heavy compiled HTML | Single worker | 257,365 | 3,886 | 263,682 B | 1,059 |
-| Data-image-heavy compiled HTML | 40 workers | 36,791 | 27,181 | 168,223 B | 1,056 |
-| Malformed compiled HTML recovery | Single worker | 340,485 | 2,937 | 296,380 B | 1,196 |
-| Malformed compiled HTML recovery | 40 workers | 101,023 | 9,899 | 299,271 B | 1,206 |
-| Four uncached images | Single worker | 1,311,764 | 762 | 1,971,071 B | 1,470 |
-| Four uncached images | 100% CPU | 182,279 | 5,486 | 1,838,310 B | 1,460 |
-| Four cached images | Single worker | 63,990 | 15,627 | 70,630 B | 275 |
-| Four cached images | 100% CPU | 48,924 | 20,440 | 72,979 B | 283 |
+| Workload | Mode | ns/PDF | PDF/sec | Memory/PDF | Allocs/PDF | Output size | Total allocated |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Text table | 40 workers | 69,243 | 14,442 | 321,953 B | 1,326 | 43,591 B | 5,288 MB |
+| Long text | 40 workers | 26,673 | 37,492 | 87,435 B | 257 | 8,281 B | 3,468 MB |
+| Baseline no-compliance, uncached image | 40 workers | 71,916 | 13,905 | 641,572 B | 1,628 | 59,506 B | 9,984 MB |
+| Baseline no-compliance, no image | 40 workers | 60,138 | 16,628 | 446,967 B | 1,407 | 50,268 B | 9,328 MB |
+| Baseline no-compliance, cached image | 40 workers | 61,553 | 16,246 | 458,651 B | 1,495 | 59,338 B | 8,531 MB |
+| Baseline no-compliance, signed uncached image | 40 workers | 227,397 | 4,398 | 1,146,568 B | 1,943 | 93,298 B | 7,640 MB |
+| Baseline no-compliance, signed cached image | 40 workers | 177,336 | 5,639 | 961,381 B | 1,809 | 93,074 B | 7,243 MB |
+| UTF-8 text | 40 workers | 639,110 | 1,565 | 7,009,282 B | 15,386 | 44,370 B | 11,792 MB |
+| UTF-8 text, cached font | 40 workers | 208,604 | 4,794 | 1,075,476 B | 4,176 | 44,370 B | 7,047 MB |
+| Text compression, best speed | 40 workers | 62,747 | 15,937 | 220,349 B | 1,329 | 8,187 B | 4,035 MB |
+| Text compression, best compression | 40 workers | 126,533 | 7,903 | 219,738 B | 1,329 | 7,726 B | 2,096 MB |
+| Four uncached images | 40 workers | 150,022 | 6,666 | 1,367,486 B | 1,416 | 15,073 B | 11,109 MB |
+| Four cached images | 40 workers | 6,057 | 165,085 | 62,593 B | 245 | 15,017 B | 11,279 MB |
+| SVG | 40 workers | 7,526 | 132,876 | 42,292 B | 134 | 7,797 B | 7,913 MB |
+| Templates | 40 workers | 51,599 | 19,380 | 249,557 B | 541 | 9,909 B | 5,553 MB |
+| Imported PDF pages | 40 workers | 5,958 | 167,843 | 40,406 B | 329 | 1,938 B | 9,277 MB |
+| Protection | 40 workers | 8,567 | 116,722 | 57,407 B | 356 | 5,047 B | 8,883 MB |
+| Attachments | 40 workers | 21,658 | 46,173 | 48,429 B | 229 | 8,383 B | 2,516 MB |
 
-The 100% CPU rows use `runtime.GOMAXPROCS(0)` explicit benchmark workers, so
-they measure concurrent PDF generation throughput across all logical CPUs
-available to the Go process. Signed rows
-include PDF output plus detached CMS signing; the benchmark certificate and key
-are prepared outside the timed loop. Compliance rows measure generation only;
-external veraPDF and Arlington validation are separate CI steps. The raw Go
-benchmark output also includes a `total_MB` metric for total bytes allocated
-during the timed loop.
+The 40-worker rows use a fixed explicit worker count, so they measure concurrent
+PDF generation throughput with the same workload pressure across machines.
+Signed rows include PDF output plus detached CMS signing; the benchmark
+certificate and key are prepared outside the timed loop. Compliance rows measure
+generation only; external veraPDF and Arlington validation are separate CI
+steps. The raw Go benchmark output also includes `pdf/s`, `pdf_bytes`, and
+`total_MB` metrics from the timed loop.
 
 Additional compiled HTML/parser medians from:
 
@@ -87,7 +76,7 @@ The `benchmarks/gopdfsuit` module compares GoPDFKit against the in-process
 `github.com/chinmay-sawant/gopdfsuit/v5/pkg/gopdflib` API with one shared
 harness. Both libraries run on the same machine, use the same prepared workload
 data, write to the same in-memory PDF target, and use the same explicit worker
-counts.
+count: 40 workers.
 
 ```shell
 make bench-gopdfsuit-ci
@@ -95,45 +84,31 @@ make bench-gopdfsuit-ci
 
 The comparable workloads are `text_short`, `text_240_lines`, `table_180_rows`,
 `table_900_rows`, `invoice_40_rows`, `png_table_180_rows`, and `png_rows_60`,
-each run in `single` and `workers_40` modes. The harness validates that every
+each run in `workers_40` mode. The harness validates that every
 output starts with a PDF header, contains an EOF marker, and is importable by
 GoPDFKit's lightweight inspector. HTML and compliance rows are opt-in or
 excluded because the two libraries do not expose equivalent behavior for those
 cases. Raw benchmark rows include `pdf/s`, `pdf_bytes`, `workers`, and
 `total_MB`.
 
-Local median results from `make bench-gopdfsuit-ci`:
+Local results from `make bench-gopdfsuit`:
 
-| Workload | Library | Mode | ns/PDF | PDF/sec | Memory/PDF | Allocs/PDF | Output size |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| text_short | GoPDFKit | single | 145,648 | 6,866 | 93,342 B | 244 | 1,505 B |
-| text_short | gopdflib | single | 66,812 | 14,967 | 164,192 B | 127 | 4,303 B |
-| text_short | GoPDFKit | workers_40 | 27,722 | 36,072 | 56,503 B | 243 | 1,505 B |
-| text_short | gopdflib | workers_40 | 8,790 | 113,761 | 111,574 B | 126 | 4,303 B |
-| text_240_lines | GoPDFKit | single | 483,609 | 2,068 | 549,983 B | 635 | 4,706 B |
-| text_240_lines | gopdflib | single | 676,105 | 1,479 | 2,404,057 B | 840 | 13,074 B |
-| text_240_lines | GoPDFKit | workers_40 | 104,211 | 9,596 | 402,145 B | 628 | 4,706 B |
-| text_240_lines | gopdflib | workers_40 | 97,332 | 10,274 | 1,060,076 B | 812 | 13,074 B |
-| table_180_rows | GoPDFKit | single | 1,231,625 | 812 | 638,074 B | 941 | 8,043 B |
-| table_180_rows | gopdflib | single | 639,289 | 1,564 | 1,702,625 B | 961 | 22,885 B |
-| table_180_rows | GoPDFKit | workers_40 | 93,979 | 10,641 | 515,462 B | 935 | 8,043 B |
-| table_180_rows | gopdflib | workers_40 | 127,675 | 7,832 | 709,387 B | 941 | 22,885 B |
-| table_900_rows | GoPDFKit | single | 2,469,137 | 405 | 2,570,611 B | 3,773 | 34,997 B |
-| table_900_rows | gopdflib | single | 2,025,632 | 494 | 3,225,596 B | 4,253 | 97,915 B |
-| table_900_rows | GoPDFKit | workers_40 | 437,130 | 2,288 | 2,230,411 B | 3,754 | 34,997 B |
-| table_900_rows | gopdflib | workers_40 | 532,450 | 1,878 | 3,140,435 B | 4,248 | 97,915 B |
-| invoice_40_rows | GoPDFKit | single | 203,854 | 4,905 | 195,076 B | 405 | 3,232 B |
-| invoice_40_rows | gopdflib | single | 255,818 | 3,909 | 487,131 B | 309 | 8,633 B |
-| invoice_40_rows | GoPDFKit | workers_40 | 38,844 | 25,744 | 143,570 B | 403 | 3,232 B |
-| invoice_40_rows | gopdflib | workers_40 | 40,462 | 24,714 | 218,851 B | 303 | 8,633 B |
-| png_table_180_rows | GoPDFKit | single | 985,687 | 1,015 | 963,882 B | 1,120 | 15,784 B |
-| png_table_180_rows | gopdflib | single | 900,476 | 1,111 | 1,774,978 B | 986 | 28,500 B |
-| png_table_180_rows | GoPDFKit | workers_40 | 130,782 | 7,646 | 794,895 B | 1,110 | 15,784 B |
-| png_table_180_rows | gopdflib | workers_40 | 158,873 | 6,294 | 715,035 B | 963 | 28,500 B |
-| png_rows_60 | GoPDFKit | single | 1,396,648 | 716 | 1,047,804 B | 2,347 | 32,082 B |
-| png_rows_60 | gopdflib | single | 1,785,107 | 560 | 4,293,184 B | 1,075 | 322,532 B |
-| png_rows_60 | GoPDFKit | workers_40 | 185,016 | 5,405 | 833,812 B | 2,336 | 32,082 B |
-| png_rows_60 | gopdflib | workers_40 | 193,189 | 5,176 | 1,999,991 B | 1,028 | 322,532 B |
+| Workload | Library | Mode | ns/PDF | PDF/sec | Memory/PDF | Allocs/PDF | Output size | Total allocated |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| text_short | GoPDFKit | workers_40 | 4,355 | 229,606 | 33,430 B | 185 | 1,505 B | 8,574 MB |
+| text_short | gopdflib | workers_40 | 7,427 | 134,641 | 104,269 B | 126 | 4,303 B | 16,905 MB |
+| text_240_lines | GoPDFKit | workers_40 | 36,304 | 27,546 | 303,507 B | 568 | 4,706 B | 9,381 MB |
+| text_240_lines | gopdflib | workers_40 | 90,125 | 11,096 | 1,028,017 B | 811 | 13,074 B | 12,824 MB |
+| table_180_rows | GoPDFKit | workers_40 | 46,308 | 21,595 | 372,881 B | 874 | 8,043 B | 9,402 MB |
+| table_180_rows | gopdflib | workers_40 | 100,742 | 9,926 | 699,241 B | 940 | 22,885 B | 6,668 MB |
+| table_900_rows | GoPDFKit | workers_40 | 213,970 | 4,674 | 1,781,727 B | 3,685 | 34,997 B | 9,546 MB |
+| table_900_rows | gopdflib | workers_40 | 488,571 | 2,047 | 3,140,994 B | 4,247 | 97,915 B | 7,848 MB |
+| invoice_40_rows | GoPDFKit | workers_40 | 16,499 | 60,611 | 102,583 B | 348 | 3,232 B | 8,667 MB |
+| invoice_40_rows | gopdflib | workers_40 | 29,455 | 33,950 | 208,499 B | 303 | 8,633 B | 8,684 MB |
+| png_table_180_rows | GoPDFKit | workers_40 | 116,066 | 8,616 | 584,406 B | 1,048 | 15,784 B | 5,573 MB |
+| png_table_180_rows | gopdflib | workers_40 | 105,201 | 9,506 | 719,850 B | 963 | 28,500 B | 7,737 MB |
+| png_rows_60 | GoPDFKit | workers_40 | 176,534 | 5,665 | 660,280 B | 2,274 | 32,082 B | 4,758 MB |
+| png_rows_60 | gopdflib | workers_40 | 174,381 | 5,735 | 1,868,885 B | 1,025 | 322,532 B | 10,594 MB |
 
 
 
@@ -501,8 +476,8 @@ attachments.
 `make bench-gopdfsuit` runs the apples-to-apples comparison harness in
 `benchmarks/gopdfsuit`. That harness drives GoPDFKit and the in-process
 `github.com/chinmay-sawant/gopdfsuit/v5/pkg/gopdflib` API with the same workload
-data, in-memory PDF output target, and explicit single-worker and 40-worker
-modes. It intentionally does not include GoPdfSuit HTTP service or client
+data, in-memory PDF output target, and explicit 40-worker concurrency. It
+intentionally does not include GoPdfSuit HTTP service or client
 transport overhead. Chrome-backed HTML conversion is opt-in because GoPDFKit's
 HTML renderer is an in-process subset while gopdflib uses Chrome/Chromium.
 

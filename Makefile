@@ -14,7 +14,7 @@ GOVULNCHECK := $(TOOLS_BIN)/govulncheck
 GOSEC_EXCLUDES ?= G115,G304,G401,G405,G501,G503,G505,G703
 COMPLIANCE_OUT ?= artifacts/compliance
 GOPDFSUIT_BENCH_DIR ?= benchmarks/gopdfsuit
-GENERATION_CORE_BENCH ?= BenchmarkGeneration(BaselineNoCompliance.*|Text(Concurrent40)?|LongText(Concurrent40)?|UTF8Text.*|TextCompressionLevel.*|Images.*|SVG(Concurrent40)?|Templates(Concurrent40)?|ImportedPDFPages(Concurrent40)?|Protection(Concurrent40)?|Attachments(Concurrent40)?)$
+GENERATION_CORE_BENCH ?= BenchmarkGeneration(BaselineNoCompliance.*Concurrent40|TextConcurrent40|LongTextConcurrent40|UTF8Text.*Concurrent40|TextCompressionLevelConcurrent40|Images.*Concurrent40|SVGConcurrent40|TemplatesConcurrent40|ImportedPDFPagesConcurrent40|ProtectionConcurrent40|AttachmentsConcurrent40)$
 
 .PHONY: all documentation cov test vet fmt-check check tools tools-clean lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-gopdfsuit bench-gopdfsuit-ci compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate clean
 

@@ -18,6 +18,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -50,6 +51,8 @@ func benchmarkGeneratedPDFOutput(b *testing.B, build func(*document.Document), o
 	var before runtime.MemStats
 	runtime.ReadMemStats(&before)
 	b.ResetTimer()
+	start := time.Now()
+	var totalBytes int64
 
 	for i := 0; i < b.N; i++ {
 		pdf := document.New("P", "mm", "A4", "")
@@ -63,8 +66,11 @@ func benchmarkGeneratedPDFOutput(b *testing.B, build func(*document.Document), o
 		if output.Len() == 0 {
 			b.Fatal("generated empty PDF")
 		}
+		totalBytes += int64(output.Len())
 	}
+	elapsed := time.Since(start)
 	b.StopTimer()
+	reportBenchmarkThroughput(b, totalBytes, elapsed)
 	reportBenchmarkTotalAllocMB(b, before.TotalAlloc)
 }
 
@@ -101,6 +107,7 @@ func benchmarkGeneratedPDFOutputConcurrent(b *testing.B, workers int, build func
 	b.ReportMetric(float64(workers), "workers")
 
 	jobs := make(chan struct{}, workers)
+	var totalBytes atomic.Int64
 	var wg sync.WaitGroup
 	var errMu sync.Mutex
 	var firstErr error
@@ -131,7 +138,9 @@ func benchmarkGeneratedPDFOutputConcurrent(b *testing.B, workers int, build func
 				}
 				if output.Len() == 0 {
 					setErr(fmt.Errorf("generated empty PDF"))
+					continue
 				}
+				totalBytes.Add(int64(output.Len()))
 			}
 		}()
 	}
@@ -139,17 +148,29 @@ func benchmarkGeneratedPDFOutputConcurrent(b *testing.B, workers int, build func
 	var before runtime.MemStats
 	runtime.ReadMemStats(&before)
 	b.ResetTimer()
+	start := time.Now()
 	for i := 0; i < b.N; i++ {
 		jobs <- struct{}{}
 	}
 	close(jobs)
 	wg.Wait()
+	elapsed := time.Since(start)
 	b.StopTimer()
+	reportBenchmarkThroughput(b, totalBytes.Load(), elapsed)
 	reportBenchmarkTotalAllocMB(b, before.TotalAlloc)
 
 	if firstErr != nil {
 		b.Fatal(firstErr)
 	}
+}
+
+func reportBenchmarkThroughput(b *testing.B, totalBytes int64, elapsed time.Duration) {
+	b.Helper()
+	if b.N == 0 || elapsed <= 0 {
+		return
+	}
+	b.ReportMetric(float64(totalBytes)/float64(b.N), "pdf_bytes")
+	b.ReportMetric(float64(b.N)/elapsed.Seconds(), "pdf/s")
 }
 
 func reportBenchmarkTotalAllocMB(b *testing.B, beforeTotalAlloc uint64) {
