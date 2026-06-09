@@ -1,5 +1,49 @@
 # Changelog
 
+## v0.5.0 - 2026-06-09
+
+Minor release focused on PDF compliance metadata, tagged PDF output, external
+validator fixtures, and generation benchmark coverage.
+
+### Added
+
+- PDF/A-4, PDF/A-4f, PDF/UA-2, Arlington, and XMP metadata support through
+  `document.SetComplianceMetadata`.
+- Tagged PDF generation foundations for text, links, images, lists, HTML
+  structure, tables, artifacts, parent-tree entries, and structure namespaces.
+- PDF/A-4 output requirements for embedded UTF-8 fonts, ToUnicode maps,
+  output intents, trailer identifiers, and attachment metadata.
+- Compliance fixture generation and local structural checks under
+  `cmd/compliance-fixtures` and `cmd/compliance-check`.
+- Docker-backed veraPDF and Arlington validation wrappers plus CI wiring for
+  strict `REQUIRE_COMPLIANCE_TOOLS=1` validation.
+- Passing external validator baselines for PDF/A-4, PDF/A-4f, PDF/UA-2, and
+  Arlington PDF 2.0 under `testdata/compliance`.
+- Compiled HTML rendering support with `document.CompileHTML` and
+  `HTML.WriteCompiled`.
+- Reusable image caching support with `document.ImageCache`.
+- Expanded generation benchmarks for image caching, PDF/A-4f, PDF/UA-2,
+  Arlington, XMP metadata, signing, and concurrent throughput.
+
+### Changed
+
+- HTML, SVG, imported page, drawing, link, image, and document-renderer output
+  paths now propagate semantic tagging or artifact markers when tagged PDF mode
+  is enabled.
+- PDF 2.0 Arlington mode omits deprecated Info and ProcSet entries and writes a
+  trailer ID.
+- Documentation now includes compliance validation workflow, benchmark results,
+  CPU model, and strict validator setup.
+
+### Fixed
+
+- Corrected generated UTF-8 ToUnicode CMap ranges so veraPDF accepts the
+  embedded font maps.
+- Added embedded-file MIME type and AFRelationship output for PDF/A-4f
+  attachments.
+- Adjusted compliance fixtures to pass real veraPDF PDF/A-4, PDF/A-4f,
+  PDF/UA-2, and Arlington PDF 2.0 validation.
+
 ## v0.4.0 - 2026-06-04
 
 Minor release focused on reusable PAdES/CMS revocation-info helpers.
