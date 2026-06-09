@@ -5,7 +5,11 @@ package document_test
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"strconv"
 	"strings"
 	"sync"
@@ -567,6 +571,70 @@ func TestHTMLWriteCompiledConcurrentReuse(t *testing.T) {
 	}
 }
 
+func TestCompileHTMLHandlesDeeplyNestedFragment(t *testing.T) {
+	var fragment strings.Builder
+	for i := 0; i < 96; i++ {
+		fragment.WriteString(`<section class="level">`)
+	}
+	fragment.WriteString(`<p>Deep text</p>`)
+	for i := 0; i < 96; i++ {
+		fragment.WriteString(`</section>`)
+	}
+
+	compiled, err := document.CompileHTML(fragment.String())
+	if err != nil {
+		t.Fatalf("CompileHTML() error = %v", err)
+	}
+	if stats := compiled.Stats(); stats.MaxDepth < 96 || stats.Recovery != 0 {
+		t.Fatalf("Stats() = %#v, want deep tree without recovery", stats)
+	}
+
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	_, lineHeight := pdf.GetFontSize()
+	html := pdf.HTMLNew()
+	html.WriteCompiled(lineHeight, compiled)
+
+	var output bytes.Buffer
+	if err := pdf.Output(&output); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if !strings.Contains(output.String(), "Deep text") {
+		t.Fatal("generated PDF does not contain deeply nested text")
+	}
+}
+
+func TestCompileHTMLIgnoresDoctypeCommentsAndHeadContent(t *testing.T) {
+	compiled, err := document.CompileHTML(`<!doctype html><!-- hidden comment --><html><head><title>Hidden title</title><style>.x{color:red}</style><script>hiddenScript()</script></head><body><p>Visible body</p></body></html>`)
+	if err != nil {
+		t.Fatalf("CompileHTML() error = %v", err)
+	}
+
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	_, lineHeight := pdf.GetFontSize()
+	html := pdf.HTMLNew()
+	html.WriteCompiled(lineHeight, compiled)
+
+	var output bytes.Buffer
+	if err := pdf.Output(&output); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	pdfText := output.String()
+	if !strings.Contains(pdfText, "Visible body") {
+		t.Fatal("generated PDF does not contain visible body text")
+	}
+	for _, blocked := range []string{"doctype", "hidden comment", "Hidden title", "hiddenScript", "color:red"} {
+		if strings.Contains(pdfText, blocked) {
+			t.Fatalf("generated PDF leaked ignored HTML content %q", blocked)
+		}
+	}
+}
+
 func TestCompileHTMLSkipsHiddenInlineSVG(t *testing.T) {
 	compiled, err := document.CompileHTML(`<head><svg><path d="bad path"/></svg></head><p>Visible</p>`)
 	if err != nil {
@@ -639,6 +707,99 @@ func TestCompileHTMLHandlesMalformedAttributes(t *testing.T) {
 	}
 }
 
+func FuzzCompileHTMLRecovery(f *testing.F) {
+	for _, seed := range []string{
+		`<p>plain</p>`,
+		`<div><p><strong>misnested</p></div>`,
+		`<!doctype html><!-- comment --><head><title>x</title></head><body><p>visible</p></body>`,
+		`<table><tr><td rowspan="2">x<td>y</table>`,
+		`<img src="data:image/png;base64,%">`,
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, fragment string) {
+		compiled, err := document.CompileHTML(fragment)
+		if err != nil {
+			return
+		}
+		stats := compiled.Stats()
+		if stats.Tokens < 0 || stats.Nodes < 0 || stats.Recovery < 0 {
+			t.Fatalf("negative compiled stats: %#v", stats)
+		}
+		if len(compiled.RecoveryIssues()) != stats.Recovery {
+			t.Fatalf("RecoveryIssues len = %d, Stats().Recovery = %d", len(compiled.RecoveryIssues()), stats.Recovery)
+		}
+	})
+}
+
+func TestCompileHTMLDataURIImages(t *testing.T) {
+	var jpegData bytes.Buffer
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	img.Set(0, 0, color.RGBA{R: 0xaa, G: 0xbb, B: 0xcc, A: 0xff})
+	if err := jpeg.Encode(&jpegData, img, nil); err != nil {
+		t.Fatalf("jpeg.Encode() error = %v", err)
+	}
+	pngDataURI := `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ` +
+		`AAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`
+	jpegDataURI := `data:image/jpeg;base64,` + base64.StdEncoding.EncodeToString(jpegData.Bytes())
+
+	for _, tt := range []struct {
+		name string
+		src  string
+	}{
+		{name: "png", src: pngDataURI},
+		{name: "jpeg", src: jpegDataURI},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			compiled, err := document.CompileHTML(`<p>Before</p><img src="` + tt.src + `" width="8" height="8"/><p>After</p>`)
+			if err != nil {
+				t.Fatalf("CompileHTML() error = %v", err)
+			}
+			if stats := compiled.Stats(); stats.Images != 1 {
+				t.Fatalf("Stats().Images = %d, want 1", stats.Images)
+			}
+			pdf := document.New("P", "mm", "A4", "")
+			pdf.SetCompression(false)
+			pdf.AddPage()
+			pdf.SetFont("Helvetica", "", 12)
+			_, lineHeight := pdf.GetFontSize()
+			html := pdf.HTMLNew()
+			html.WriteCompiled(lineHeight, compiled)
+
+			var output bytes.Buffer
+			if err := pdf.Output(&output); err != nil {
+				t.Fatalf("Output() error = %v", err)
+			}
+			pdfText := output.String()
+			if !strings.Contains(pdfText, "/Subtype /Image") || !strings.Contains(pdfText, "Before") || !strings.Contains(pdfText, "After") {
+				t.Fatalf("generated PDF missing image or surrounding text for %s", tt.name)
+			}
+		})
+	}
+}
+
+func TestCompileHTMLRejectsInvalidDataURIImages(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		src  string
+		want string
+	}{
+		{name: "not-base64", src: "data:image/png,not-base64", want: "must be base64"},
+		{name: "unsupported-mime", src: "data:image/svg+xml;base64,PHN2Zy8+", want: "unsupported HTML image type"},
+		{name: "invalid-base64", src: "data:image/png;base64,%", want: "invalid HTML image data URI"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := document.CompileHTML(`<img src="` + tt.src + `"/>`)
+			if err == nil {
+				t.Fatal("CompileHTML() error = nil, want data URI error")
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("CompileHTML() error = %q, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestWriteCompiledEnforcesCustomDataImageLimit(t *testing.T) {
 	compiled, err := document.CompileHTML(`<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ` +
 		`AAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="/>`)
@@ -660,6 +821,32 @@ func TestWriteCompiledEnforcesCustomDataImageLimit(t *testing.T) {
 	}
 	if !strings.Contains(pdf.Error().Error(), "exceeds maximum size") {
 		t.Fatalf("WriteCompiled error = %v, want maximum size", pdf.Error())
+	}
+}
+
+func TestWriteCompiledDataImageReuseDoesNotMutateCachedBytes(t *testing.T) {
+	compiled, err := document.CompileHTML(`<p>Before</p><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ` +
+		`AAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" width="8" height="8"/><p>After</p>`)
+	if err != nil {
+		t.Fatalf("CompileHTML() error = %v", err)
+	}
+
+	for i := 0; i < 3; i++ {
+		pdf := document.New("P", "mm", "A4", "")
+		pdf.SetCompression(false)
+		pdf.AddPage()
+		pdf.SetFont("Helvetica", "", 12)
+		_, lineHeight := pdf.GetFontSize()
+		html := pdf.HTMLNew()
+		html.WriteCompiled(lineHeight, compiled)
+		var output bytes.Buffer
+		if err := pdf.Output(&output); err != nil {
+			t.Fatalf("render %d Output() error = %v", i, err)
+		}
+		pdfText := output.String()
+		if !strings.Contains(pdfText, "/Subtype /Image") || !strings.Contains(pdfText, "Before") || !strings.Contains(pdfText, "After") {
+			t.Fatalf("render %d generated PDF missing cached data image or surrounding text", i)
+		}
 	}
 }
 
@@ -1104,6 +1291,62 @@ func TestSVGWriteStyledContent(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), "Hello SVG") {
 		t.Fatal("generated PDF does not contain SVG text")
+	}
+}
+
+func TestSVGWriteDoesNotMutateParsedSVG(t *testing.T) {
+	svg, err := document.SVGParse([]byte(`<svg width="100" height="40">
+		<g fill="#123456" font-size="10"><text x="10" y="20">Stable SVG</text></g>
+	</svg>`))
+	if err != nil {
+		t.Fatalf("SVGParse() error = %v", err)
+	}
+	before := fmt.Sprintf("%#v", svg)
+
+	for i := 0; i < 2; i++ {
+		pdf := document.New("P", "mm", "A4", "")
+		pdf.SetCompression(false)
+		pdf.AddPage()
+		pdf.SetFont("Helvetica", "", 12)
+		pdf.SVGWrite(&svg, 0.5)
+		var output bytes.Buffer
+		if err := pdf.Output(&output); err != nil {
+			t.Fatalf("render %d Output() error = %v", i, err)
+		}
+		if !strings.Contains(output.String(), "Stable SVG") {
+			t.Fatalf("render %d generated PDF does not contain SVG text", i)
+		}
+	}
+
+	if after := fmt.Sprintf("%#v", svg); after != before {
+		t.Fatal("SVGWrite mutated the parsed SVG value")
+	}
+}
+
+func TestHTMLWriteCompiledInlineSVGTaggedRole(t *testing.T) {
+	compiled, err := document.CompileHTML(`<a href="https://example.test/svg"><svg width="80" height="20" viewBox="0 0 80 20"><text x="2" y="14">Tagged SVG</text></svg></a>`)
+	if err != nil {
+		t.Fatalf("CompileHTML() error = %v", err)
+	}
+
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFUA2: true, Title: "Tagged SVG"})
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	_, lineHeight := pdf.GetFontSize()
+	html := pdf.HTMLNew()
+	html.WriteCompiled(lineHeight, compiled)
+
+	var output bytes.Buffer
+	if err := pdf.Output(&output); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	pdfText := output.String()
+	for _, want := range []string{"Tagged SVG", "/S /Link", "/Type /Annot /Subtype /Link", "/Type /OBJR /Obj"} {
+		if !strings.Contains(pdfText, want) {
+			t.Fatalf("generated tagged SVG PDF does not contain %q", want)
+		}
 	}
 }
 

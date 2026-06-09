@@ -568,6 +568,22 @@ func BenchmarkGenerationHTMLDataImageHeavyCompiledConcurrent40(b *testing.B) {
 	benchmarkGeneratedPDFConcurrent(b, 40, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkDataImageHeavyHTML()))
 }
 
+func BenchmarkGenerationHTMLDataImageHeavy(b *testing.B) {
+	benchmarkGeneratedPDF(b, benchmarkGenerationHTMLBuilder(benchmarkDataImageHeavyHTML()))
+}
+
+func BenchmarkGenerationHTMLLargeTableCompiled(b *testing.B) {
+	benchmarkGeneratedPDF(b, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkLargeTableHTML(600, 5)))
+}
+
+func BenchmarkGenerationHTMLWideTableCompiled(b *testing.B) {
+	benchmarkGeneratedPDF(b, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkWideTableHTML(32, 24)))
+}
+
+func BenchmarkGenerationHTMLSVGHeavyCompiled(b *testing.B) {
+	benchmarkGeneratedPDF(b, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkSVGHeavyHTML()))
+}
+
 func BenchmarkGenerationHTMLMalformedCompiled(b *testing.B) {
 	benchmarkGeneratedPDF(b, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkMalformedHTML()))
 }
@@ -725,6 +741,16 @@ func benchmarkGenerationCompiledHTMLBuilder(b *testing.B, htmlStr string) func(*
 	}
 }
 
+func benchmarkGenerationHTMLBuilder(htmlStr string) func(*document.Document) {
+	return func(pdf *document.Document) {
+		pdf.AddPage()
+		pdf.SetFont("Helvetica", "", 9)
+		_, lineHeight := pdf.GetFontSize()
+		html := pdf.HTMLNew()
+		html.Write(lineHeight, htmlStr)
+	}
+}
+
 func benchmarkGenerationPDFA4FPDFUA2ArlingtonXMPBuilder(b *testing.B) func(*document.Document) {
 	cache := benchmarkComplianceFontCache(b)
 	compiled, err := document.CompileHTML(benchmarkTaggedHTML())
@@ -834,6 +860,61 @@ func benchmarkDataImageHeavyHTML() string {
 	var out strings.Builder
 	for i := 0; i < 64; i++ {
 		fmt.Fprintf(&out, `<p>Compiled data image %02d</p><img src="%s" width="16" height="16" alt="pixel"/>`, i, pngDataURI)
+	}
+	return out.String()
+}
+
+func benchmarkLargeTableHTML(rows, cols int) string {
+	var out strings.Builder
+	out.WriteString(`<style>td,th{padding:2px;border:1px solid #555}.num{text-align:right}</style>`)
+	out.WriteString(`<table border="1" width="100%"><caption>Large table benchmark</caption><thead><tr>`)
+	for col := 0; col < cols; col++ {
+		fmt.Fprintf(&out, `<th>Column %02d</th>`, col)
+	}
+	out.WriteString(`</tr></thead><tbody>`)
+	for row := 0; row < rows; row++ {
+		out.WriteString(`<tr>`)
+		for col := 0; col < cols; col++ {
+			if col == cols-1 {
+				fmt.Fprintf(&out, `<td class="num">%0.2f</td>`, float64(row+1)*float64(col+1))
+			} else {
+				fmt.Fprintf(&out, `<td>Row %03d column %02d</td>`, row, col)
+			}
+		}
+		out.WriteString(`</tr>`)
+	}
+	out.WriteString(`</tbody></table>`)
+	return out.String()
+}
+
+func benchmarkWideTableHTML(rows, cols int) string {
+	var out strings.Builder
+	out.WriteString(`<style>td,th{padding:1px;border:1px solid #777;font-size:8px}</style>`)
+	out.WriteString(`<table border="1" width="100%"><thead><tr>`)
+	for col := 0; col < cols; col++ {
+		fmt.Fprintf(&out, `<th>C%02d</th>`, col)
+	}
+	out.WriteString(`</tr></thead><tbody>`)
+	for row := 0; row < rows; row++ {
+		out.WriteString(`<tr>`)
+		for col := 0; col < cols; col++ {
+			fmt.Fprintf(&out, `<td>%02d-%02d</td>`, row, col)
+		}
+		out.WriteString(`</tr>`)
+	}
+	out.WriteString(`</tbody></table>`)
+	return out.String()
+}
+
+func benchmarkSVGHeavyHTML() string {
+	const svg = `<svg width="96" height="24" viewBox="0 0 96 24">` +
+		`<rect x="1" y="1" width="94" height="22" fill="#f6f8fa" stroke="#40516b"/>` +
+		`<path d="M6 18 L18 8 L30 16 L42 7 L54 15 L66 9 L90 18" fill="none" stroke="#18715f" stroke-width="2"/>` +
+		`<text x="48" y="16" text-anchor="middle" font-size="8">svg</text>` +
+		`</svg>`
+	var out strings.Builder
+	for i := 0; i < 96; i++ {
+		fmt.Fprintf(&out, `<p>SVG row %02d</p>%s`, i, svg)
 	}
 	return out.String()
 }

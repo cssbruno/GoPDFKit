@@ -49,6 +49,28 @@ include PDF output plus detached CMS signing; the benchmark certificate and key
 are prepared outside the timed loop. Compliance rows measure generation only;
 external veraPDF and Arlington validation are separate CI steps.
 
+Additional compiled HTML/parser medians from:
+
+```shell
+go test ./document -run '^$' -bench 'BenchmarkHTMLTokenize|BenchmarkCompileHTMLLargeFragment|BenchmarkGenerationHTML(SelectorHeavyCompiled|DataImageHeavy|DataImageHeavyCompiled|LargeTableCompiled|WideTableCompiled|SVGHeavyCompiled)$' -benchmem -count=5
+```
+
+| Workload | ns/op | Ops/sec | Memory/op | Allocs/op |
+| --- | ---: | ---: | ---: | ---: |
+| Tokenizer, small attributes | 313 | 3,190,810 | 432 B | 3 |
+| Tokenizer, large fragment | 459,518 | 2,176 | 1,130,706 B | 3,125 |
+| CompileHTML, large fragment | 1,995,077 | 501 | 3,105,631 B | 11,384 |
+| Selector-heavy compiled HTML render | 626,999 | 1,595 | 193,069 B | 1,629 |
+| Data-image-heavy compiled HTML render | 209,107 | 4,782 | 137,117 B | 1,027 |
+| Data-image-heavy non-compiled HTML render | 310,302 | 3,223 | 233,747 B | 1,439 |
+| Large table compiled HTML render | 5,127,521 | 195 | 5,227,244 B | 11,515 |
+| Wide table compiled HTML render | 1,461,651 | 684 | 1,584,045 B | 3,538 |
+| SVG-heavy compiled HTML render | 452,602 | 2,209 | 391,676 B | 1,762 |
+
+The latest local profiles used for the tokenizer and compiled HTML work are
+`/tmp/gopdfkit-tokenizer.cpu`, `/tmp/gopdfkit-selector-heavy.cpu`, and
+`/tmp/gopdfkit-data-image-heavy.mem`.
+
 ## Apples-to-Apples gopdflib Harness
 
 The `benchmarks/gopdfsuit` module compares GoPDFKit against the in-process

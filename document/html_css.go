@@ -14,7 +14,10 @@ type htmlCSSRule struct {
 	declarations map[string]string
 }
 
-type htmlCSSSelector struct{ parts []htmlCSSSelectorPart }
+type htmlCSSSelector struct {
+	parts       []htmlCSSSelectorPart
+	specificity int
+}
 
 type htmlCSSSelectorPart struct {
 	tag    string
@@ -145,22 +148,37 @@ func htmlElementDeclarationsWithStyle(el HTMLSegmentType, cssRules []htmlCSSRule
 	if len(cssRules) == 0 {
 		return style
 	}
-	var decl map[string]string
-	for _, rule := range cssRules {
+	type appliedDeclaration struct {
+		value       string
+		specificity int
+		order       int
+	}
+	applied := make(map[string]appliedDeclaration)
+	for order, rule := range cssRules {
+		specificity := -1
 		for _, selector := range rule.selectors {
 			if htmlCSSSelectorMatches(selector, el, ancestors) {
-				if decl == nil {
-					decl = make(map[string]string, len(rule.declarations)+len(style))
+				if selector.specificity > specificity {
+					specificity = selector.specificity
 				}
-				for name, value := range rule.declarations {
-					decl[name] = value
-				}
-				break
+			}
+		}
+		if specificity < 0 {
+			continue
+		}
+		for name, value := range rule.declarations {
+			current, ok := applied[name]
+			if !ok || specificity > current.specificity || specificity == current.specificity && order >= current.order {
+				applied[name] = appliedDeclaration{value: value, specificity: specificity, order: order}
 			}
 		}
 	}
-	if decl == nil {
+	if len(applied) == 0 {
 		return style
+	}
+	decl := make(map[string]string, len(applied)+len(style))
+	for name, applied := range applied {
+		decl[name] = applied.value
 	}
 	for name, value := range style {
 		decl[name] = value
@@ -807,6 +825,7 @@ func parseHTMLCSSSelector(value string) (htmlCSSSelector, bool) {
 	if expectSimple {
 		return htmlCSSSelector{}, false
 	}
+	selector.specificity = htmlCSSSelectorSpecificity(selector)
 	return selector, true
 }
 
@@ -876,13 +895,9 @@ func applyHTMLCSSRules(st *htmlTextStyle, el HTMLSegmentType, rules []htmlCSSRul
 	if ancestors == nil {
 		ancestors = []HTMLSegmentType{}
 	}
-	for _, rule := range rules {
-		for _, selector := range rule.selectors {
-			if htmlCSSSelectorMatches(selector, el, ancestors) {
-				applyHTMLStyleDeclarations(st, rule.declarations, baseFontSize, baseLineHeight, pdf)
-				break
-			}
-		}
+	decl := htmlElementDeclarationsWithStyle(el, rules, nil, ancestors...)
+	if len(decl) > 0 {
+		applyHTMLStyleDeclarations(st, decl, baseFontSize, baseLineHeight, pdf)
 	}
 }
 
@@ -920,6 +935,22 @@ func htmlCSSSelectorMatches(selector htmlCSSSelector, el HTMLSegmentType, ancest
 		}
 	}
 	return true
+}
+
+func htmlCSSSelectorSpecificity(selector htmlCSSSelector) int {
+	specificity := 0
+	for _, part := range selector.parts {
+		if part.id != "" {
+			specificity += 100
+		}
+		if part.class != "" {
+			specificity += 10
+		}
+		if part.tag != "" {
+			specificity++
+		}
+	}
+	return specificity
 }
 
 func htmlCSSSelectorPartMatches(part htmlCSSSelectorPart, el HTMLSegmentType) bool {

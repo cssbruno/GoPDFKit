@@ -75,6 +75,65 @@ func TestParseStyleDeclarations(t *testing.T) {
 	}
 }
 
+func TestHTMLCSSSpecificityAndInlinePrecedence(t *testing.T) {
+	tokens := HTMLTokenize(`<style>
+		p { color: #111111; text-align: left; line-height: 1.1; }
+		.note { color: #222222; }
+		div p.note { color: #333333; text-align: center; }
+		#target { color: #444444; }
+		p.note { line-height: 1.4; }
+	</style>`)
+	rules := htmlCollectCSSRules(tokens)
+	el := HTMLSegmentType{Cat: 'O', Str: "p", Attr: map[string]string{
+		"id":    "target",
+		"class": "note",
+		"style": "color: #555555",
+	}}
+	ancestor := HTMLSegmentType{Cat: 'O', Str: "div", Attr: map[string]string{}}
+	decl := htmlElementDeclarationsWithStyle(el, rules, parseStyleDeclarations(el.Attr["style"]), ancestor)
+
+	if got := decl["color"]; got != "#555555" {
+		t.Fatalf("inline color = %q, want #555555 over id/class/tag rules", got)
+	}
+	if got := decl["text-align"]; got != "center" {
+		t.Fatalf("descendant text-align = %q, want center", got)
+	}
+	if got := decl["line-height"]; got != "1.4" {
+		t.Fatalf("class+tag line-height = %q, want 1.4", got)
+	}
+}
+
+func TestHTMLTextStyleInheritanceAndOverrides(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	inherited := htmlTextStyle{
+		fontFamily: "Helvetica",
+		fontSize:   12,
+		lineHeight: 6,
+		align:      "R",
+		color:      CSSColorType{R: 1, G: 2, B: 3, Set: true},
+	}
+	child := inherited
+	applyHTMLStyleDeclarations(&child, map[string]string{
+		"font-family": "monospace",
+		"color":       "#112233",
+		"line-height": "2",
+		"text-align":  "center",
+	}, inherited.fontSize, inherited.lineHeight, pdf)
+
+	if child.fontFamily != "Courier" {
+		t.Fatalf("font family = %q, want Courier", child.fontFamily)
+	}
+	if child.color.R != 0x11 || child.color.G != 0x22 || child.color.B != 0x33 || !child.color.Set {
+		t.Fatalf("color = %#v, want #112233", child.color)
+	}
+	if !almostEqual(child.lineHeight, 12) {
+		t.Fatalf("line height = %.2f, want 12", child.lineHeight)
+	}
+	if child.align != "C" {
+		t.Fatalf("align = %q, want C", child.align)
+	}
+}
+
 func TestHTMLSplitLinesWrapsLongWords(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	pdf.AddPage()
