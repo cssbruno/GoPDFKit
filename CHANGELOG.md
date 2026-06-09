@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.5.2 - 2026-06-09
+
+Patch release for apples-to-apples benchmark reporting and fixed 40-worker
+throughput comparisons.
+
+### Added
+
+- Fixed-40-worker benchmark reporting for the core generation suite and
+  gopdflib comparison harness.
+- Raw benchmark `pdf/s`, `pdf_bytes`, and `total_MB` metrics for PDF
+  throughput, output size, and total timed-loop allocation reporting.
+- No-image baseline rows and expanded non-HTML generation workload coverage in
+  benchmark documentation.
+
+### Changed
+
+- `make bench-generation-core` now runs only 40-worker generation benchmarks.
+- The gopdflib comparison harness now reports only `workers_40` rows so the
+  default output is apples-to-apples on concurrency.
+- Benchmark snapshots now include 40-worker PDF/sec and total allocated MB
+  columns.
+
 ## v0.5.1 - 2026-06-09
 
 Patch release for the post-v0.5 compiled HTML performance work and benchmark
