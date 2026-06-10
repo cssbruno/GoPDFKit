@@ -31,6 +31,22 @@ const benchmarkWorkerCount40 = 40
 
 type benchmarkPDFOutput func(*document.Document, *bytes.Buffer) error
 
+type benchmarkTableRow struct {
+	label string
+	value string
+}
+
+func benchmarkTableRows(count int, valueScale float64) []benchmarkTableRow {
+	rows := make([]benchmarkTableRow, count)
+	for row := range rows {
+		rows[row] = benchmarkTableRow{
+			label: fmt.Sprintf("Row %03d", row),
+			value: fmt.Sprintf("%0.2f", float64(row)*valueScale),
+		}
+	}
+	return rows
+}
+
 func benchmarkGeneratedPDF(b *testing.B, build func(*document.Document)) {
 	b.Helper()
 	benchmarkGeneratedPDFOutput(b, build, func(pdf *document.Document, output *bytes.Buffer) error {
@@ -682,6 +698,17 @@ func benchmarkGenerationBaselineNoComplianceBuilder(b *testing.B, imageCache *do
 	if err != nil {
 		b.Fatalf("ReadFile(grid.go) error = %v", err)
 	}
+	pageTitles := make([]string, 3)
+	for page := range pageTitles {
+		pageTitles[page] = fmt.Sprintf("Operational report page %d", page+1)
+	}
+	rows := make([]benchmarkTableRow, 3*48)
+	for row := range rows {
+		rows[row] = benchmarkTableRow{
+			label: fmt.Sprintf("Item %03d", row),
+			value: fmt.Sprintf("%0.2f", float64(row%48+1)*2.35),
+		}
+	}
 
 	return func(pdf *document.Document) {
 		pdf.SetTitle("Baseline no-compliance benchmark", false)
@@ -707,12 +734,13 @@ func benchmarkGenerationBaselineNoComplianceBuilder(b *testing.B, imageCache *do
 			pdf.UseTemplate(template)
 			pdf.SetXY(12, 24)
 			pdf.SetFont("Helvetica", "B", 13)
-			pdf.CellFormat(0, 8, fmt.Sprintf("Operational report page %d", page+1), "", 1, "L", false, 0, "")
+			pdf.CellFormat(0, 8, pageTitles[page], "", 1, "L", false, 0, "")
 			pdf.SetFont("Helvetica", "", 9)
 			for row := 0; row < 48; row++ {
-				pdf.CellFormat(26, 5, fmt.Sprintf("Item %03d", page*48+row), "1", 0, "L", false, 0, "")
+				tableRow := rows[page*48+row]
+				pdf.CellFormat(26, 5, tableRow.label, "1", 0, "L", false, 0, "")
 				pdf.CellFormat(88, 5, "Baseline PDF output without standards validation layers", "1", 0, "L", false, 0, "")
-				pdf.CellFormat(24, 5, fmt.Sprintf("%0.2f", float64(row+1)*2.35), "1", 0, "R", false, 0, "")
+				pdf.CellFormat(24, 5, tableRow.value, "1", 0, "R", false, 0, "")
 				pdf.CellFormat(28, 5, "ready", "1", 1, "C", false, 0, "")
 			}
 			if !includeImages {
@@ -1090,6 +1118,7 @@ func BenchmarkGenerationUTF8TextCachedFontConcurrent40(b *testing.B) {
 }
 
 func BenchmarkGenerationTextCompressionLevel(b *testing.B) {
+	rows := benchmarkTableRows(180, 1.25)
 	for _, tc := range []struct {
 		name  string
 		level int
@@ -1107,10 +1136,10 @@ func BenchmarkGenerationTextCompressionLevel(b *testing.B) {
 				pdf.SetCompressionLevel(tc.level)
 				pdf.AddPage()
 				pdf.SetFont("Arial", "", 10)
-				for row := 0; row < 180; row++ {
-					pdf.CellFormat(40, 6, fmt.Sprintf("Row %03d", row), "1", 0, "L", false, 0, "")
+				for _, row := range rows {
+					pdf.CellFormat(40, 6, row.label, "1", 0, "L", false, 0, "")
 					pdf.CellFormat(80, 6, "Operational PDF generation benchmark", "1", 0, "L", false, 0, "")
-					pdf.CellFormat(40, 6, fmt.Sprintf("%0.2f", float64(row)*1.25), "1", 1, "R", false, 0, "")
+					pdf.CellFormat(40, 6, row.value, "1", 1, "R", false, 0, "")
 				}
 				var output bytes.Buffer
 				if err := pdf.Output(&output); err != nil {
@@ -1127,6 +1156,7 @@ func BenchmarkGenerationTextCompressionLevel(b *testing.B) {
 }
 
 func BenchmarkGenerationTextCompressionLevelConcurrent40(b *testing.B) {
+	rows := benchmarkTableRows(180, 1.25)
 	for _, tc := range []struct {
 		name  string
 		level int
@@ -1139,10 +1169,10 @@ func BenchmarkGenerationTextCompressionLevelConcurrent40(b *testing.B) {
 				pdf.SetCompressionLevel(tc.level)
 				pdf.AddPage()
 				pdf.SetFont("Arial", "", 10)
-				for row := 0; row < 180; row++ {
-					pdf.CellFormat(40, 6, fmt.Sprintf("Row %03d", row), "1", 0, "L", false, 0, "")
+				for _, row := range rows {
+					pdf.CellFormat(40, 6, row.label, "1", 0, "L", false, 0, "")
 					pdf.CellFormat(80, 6, "Operational PDF generation benchmark", "1", 0, "L", false, 0, "")
-					pdf.CellFormat(40, 6, fmt.Sprintf("%0.2f", float64(row)*1.25), "1", 1, "R", false, 0, "")
+					pdf.CellFormat(40, 6, row.value, "1", 1, "R", false, 0, "")
 				}
 			})
 		})
@@ -1150,69 +1180,87 @@ func BenchmarkGenerationTextCompressionLevelConcurrent40(b *testing.B) {
 }
 
 func BenchmarkGenerationImages(b *testing.B) {
+	images := benchmarkImageFiles()
 	benchmarkGeneratedPDF(b, func(pdf *document.Document) {
 		pdf.AddPage()
 		pdf.SetFont("Arial", "", 10)
-		for i, image := range []string{"logo.png", "logo.jpg", "logo.gif", "logo-rgb.png"} {
+		for i, image := range images {
 			x := 10 + float64(i%2)*90
 			y := 15 + float64(i/2)*70
-			pdf.ImageOptions(example.ImageFile(image), x, y, 60, 0, false, document.ImageOptions{}, 0, "")
-			pdf.Text(x, y+50, image)
+			pdf.ImageOptions(image.path, x, y, 60, 0, false, document.ImageOptions{}, 0, "")
+			pdf.Text(x, y+50, image.name)
 		}
 	})
 }
 
 func BenchmarkGenerationImagesConcurrent40(b *testing.B) {
+	images := benchmarkImageFiles()
 	benchmarkGeneratedPDFConcurrent40(b, func(pdf *document.Document) {
 		pdf.AddPage()
 		pdf.SetFont("Arial", "", 10)
-		for i, image := range []string{"logo.png", "logo.jpg", "logo.gif", "logo-rgb.png"} {
+		for i, image := range images {
 			x := 10 + float64(i%2)*90
 			y := 15 + float64(i/2)*70
-			pdf.ImageOptions(example.ImageFile(image), x, y, 60, 0, false, document.ImageOptions{}, 0, "")
-			pdf.Text(x, y+50, image)
+			pdf.ImageOptions(image.path, x, y, 60, 0, false, document.ImageOptions{}, 0, "")
+			pdf.Text(x, y+50, image.name)
 		}
 	})
 }
 
 func BenchmarkGenerationImagesCached(b *testing.B) {
 	cache := document.NewImageCache()
-	for _, image := range []string{"logo.png", "logo.jpg", "logo.gif", "logo-rgb.png"} {
-		if _, err := cache.RegisterImageOptions(image, example.ImageFile(image), document.ImageOptions{}); err != nil {
-			b.Fatalf("RegisterImageOptions(%s) error = %v", image, err)
+	images := benchmarkImageFiles()
+	for _, image := range images {
+		if _, err := cache.RegisterImageOptions(image.name, image.path, document.ImageOptions{}); err != nil {
+			b.Fatalf("RegisterImageOptions(%s) error = %v", image.name, err)
 		}
 	}
 
 	benchmarkGeneratedPDF(b, func(pdf *document.Document) {
 		pdf.AddPage()
 		pdf.SetFont("Arial", "", 10)
-		for i, image := range []string{"logo.png", "logo.jpg", "logo.gif", "logo-rgb.png"} {
+		for i, image := range images {
 			x := 10 + float64(i%2)*90
 			y := 15 + float64(i/2)*70
-			pdf.ImageFromCache(image, cache, x, y, 60, 0, false, document.ImageOptions{}, 0, "")
-			pdf.Text(x, y+50, image)
+			pdf.ImageFromCache(image.name, cache, x, y, 60, 0, false, document.ImageOptions{}, 0, "")
+			pdf.Text(x, y+50, image.name)
 		}
 	})
 }
 
 func BenchmarkGenerationImagesCachedConcurrent40(b *testing.B) {
 	cache := document.NewImageCache()
-	for _, image := range []string{"logo.png", "logo.jpg", "logo.gif", "logo-rgb.png"} {
-		if _, err := cache.RegisterImageOptions(image, example.ImageFile(image), document.ImageOptions{}); err != nil {
-			b.Fatalf("RegisterImageOptions(%s) error = %v", image, err)
+	images := benchmarkImageFiles()
+	for _, image := range images {
+		if _, err := cache.RegisterImageOptions(image.name, image.path, document.ImageOptions{}); err != nil {
+			b.Fatalf("RegisterImageOptions(%s) error = %v", image.name, err)
 		}
 	}
 
 	benchmarkGeneratedPDFConcurrent40(b, func(pdf *document.Document) {
 		pdf.AddPage()
 		pdf.SetFont("Arial", "", 10)
-		for i, image := range []string{"logo.png", "logo.jpg", "logo.gif", "logo-rgb.png"} {
+		for i, image := range images {
 			x := 10 + float64(i%2)*90
 			y := 15 + float64(i/2)*70
-			pdf.ImageFromCache(image, cache, x, y, 60, 0, false, document.ImageOptions{}, 0, "")
-			pdf.Text(x, y+50, image)
+			pdf.ImageFromCache(image.name, cache, x, y, 60, 0, false, document.ImageOptions{}, 0, "")
+			pdf.Text(x, y+50, image.name)
 		}
 	})
+}
+
+type benchmarkImageFile struct {
+	name string
+	path string
+}
+
+func benchmarkImageFiles() []benchmarkImageFile {
+	names := []string{"logo.png", "logo.jpg", "logo.gif", "logo-rgb.png"}
+	images := make([]benchmarkImageFile, len(names))
+	for i, name := range names {
+		images[i] = benchmarkImageFile{name: name, path: example.ImageFile(name)}
+	}
+	return images
 }
 
 func BenchmarkGenerationSVG(b *testing.B) {
