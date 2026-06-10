@@ -55,18 +55,8 @@ func (f *Document) writeCompressedFileObject(content []byte, mimeType string) {
 	}
 	lenCompressed := len(compressed)
 	f.newobj()
-	mimeName := escapePDFName(mimeType)
-	buf := make([]byte, 0, len(mimeName)+len(sum)+112)
-	buf = append(buf, "<< /Type /EmbeddedFile /Subtype /"...)
-	buf = append(buf, mimeName...)
-	buf = append(buf, " /Length "...)
-	buf = appendPDFInt(buf, lenCompressed)
-	buf = append(buf, " /Filter /FlateDecode /Params << /CheckSum <"...)
-	buf = append(buf, sum...)
-	buf = append(buf, "> /Size "...)
-	buf = appendPDFInt(buf, lenUncompressed)
-	buf = append(buf, " >> >>\n"...)
-	f.outbytes(buf)
+	f.outf("<< /Type /EmbeddedFile /Subtype /%s /Length %d /Filter /FlateDecode /Params << /CheckSum <%s> /Size %d >> >>\n",
+		escapePDFName(mimeType), lenCompressed, sum, lenUncompressed)
 	f.putstream(compressed)
 	f.out("endobj")
 }
@@ -81,20 +71,11 @@ func (f *Document) embed(a *Attachment) {
 	f.writeCompressedFileObject(a.Content, attachmentMIMEType(*a))
 	streamID := f.n
 	f.newobj()
-	filename := f.textstring(utf8toutf16(a.Filename))
-	relationship := attachmentAFRelationship(*a)
-	description := f.textstring(utf8toutf16(a.Description))
-	buf := make([]byte, 0, len(filename)+len(relationship)+len(description)+96)
-	buf = append(buf, "<< /Type /Filespec /F () /UF "...)
-	buf = append(buf, filename...)
-	buf = append(buf, " /AFRelationship /"...)
-	buf = append(buf, relationship...)
-	buf = append(buf, " /EF << /F "...)
-	buf = appendPDFIndirectRef(buf, streamID)
-	buf = append(buf, " >> /Desc "...)
-	buf = append(buf, description...)
-	buf = append(buf, "\n>>"...)
-	f.outbytes(buf)
+	f.outf("<< /Type /Filespec /F () /UF %s /AFRelationship /%s /EF << /F %d 0 R >> /Desc %s\n>>",
+		f.textstring(utf8toutf16(a.Filename)),
+		attachmentAFRelationship(*a),
+		streamID,
+		f.textstring(utf8toutf16(a.Description)))
 	f.out("endobj")
 	a.objectNumber = f.n
 	f.state = oldState

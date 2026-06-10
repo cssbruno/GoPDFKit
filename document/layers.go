@@ -42,7 +42,7 @@ func (f *Document) AddLayer(name string, visible bool) (layerID int) {
 func (f *Document) BeginLayer(id int) {
 	f.EndLayer()
 	if id >= 0 && id < len(f.layer.list) {
-		f.outPDFKeyInt("/OC /OC", id, " BDC")
+		f.outf("/OC /OC%d BDC", id)
 		f.layer.currentLayer = id
 	}
 }
@@ -83,7 +83,7 @@ func (f *Document) layerPutResourceDict() {
 	if len(f.layer.list) > 0 {
 		f.out("/Properties <<")
 		for j, layer := range f.layer.list {
-			f.outPDFIntResourceRef("/OC", j, layer.objNum)
+			f.outf("/OC%d %d 0 R", j, layer.objNum)
 		}
 		f.out(">>")
 	}

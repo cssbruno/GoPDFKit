@@ -87,10 +87,7 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 		f.x = x
 		if ws > 0 {
 			f.ws = ws
-			var scratch [32]byte
-			buf := appendPDFNumber(scratch[:0], ws*k, 3)
-			buf = append(buf, " Tw"...)
-			f.outbytes(buf)
+			f.outf("%.3f Tw", ws*k)
 		}
 	}
 	if w == 0 {

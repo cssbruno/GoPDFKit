@@ -137,10 +137,7 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 					} else {
 						f.ws = 0
 					}
-					var scratch [32]byte
-					buf := appendPDFNumber(scratch[:0], f.ws*f.k, 3)
-					buf = append(buf, " Tw"...)
-					f.outbytes(buf)
+					f.outf("%.3f Tw", f.ws*f.k)
 				}
 				if f.isCurrentUTF8 {
 					f.CellFormat(w, h, string(srune[j:sep]), b, 2, alignStr, fill, 0, "")

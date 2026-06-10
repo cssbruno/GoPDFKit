@@ -475,8 +475,7 @@ func (f *Document) svgWriteGradientFill(originX, originY, scale float64, path SV
 	} else {
 		f.out("W n")
 	}
-	var scratch [96]byte
-	f.outbytes(appendPDFScaleTranslateCM(scratch[:0], wd*f.k, ht*f.k, x*f.k, (f.h-(y+ht))*f.k))
+	f.outf("%.5f 0 0 %.5f %.5f %.5f cm", wd*f.k, ht*f.k, x*f.k, (f.h-(y+ht))*f.k)
 	gradient := path.Style.FillGradient
 	if gradient.Kind == "radial" {
 		cx := svgGradientUnit(gradient.CX, minX, maxX, gradient.Units)

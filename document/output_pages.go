@@ -97,26 +97,17 @@ func (f *Document) putpages() {
 		f.out("/Parent 1 0 R")
 		pageSize, ok = f.pageSizes[n]
 		if ok {
-			f.outPDFMediaBox(pageSize.Wd, pageSize.Ht)
+			f.outf("/MediaBox [0 0 %.2f %.2f]", pageSize.Wd, pageSize.Ht)
 		}
 		if rotation := f.pageRotations[n]; rotation != 0 {
-			f.outPDFKeyInt("/Rotate ", rotation, "")
+			f.outf("/Rotate %d", rotation)
 		}
 		for t, pb := range f.pageBoxes[n] {
-			var scratch [96]byte
-			buf := append(scratch[:0], '/')
-			buf = append(buf, t...)
-			buf = append(buf, " ["...)
-			buf = appendPDFNumberSpace(buf, pb.X, 2)
-			buf = appendPDFNumberSpace(buf, pb.Y, 2)
-			buf = appendPDFNumberSpace(buf, pb.Wd, 2)
-			buf = appendPDFNumber(buf, pb.Ht, 2)
-			buf = append(buf, ']')
-			f.outbytes(buf)
+			f.outf("/%s [%.2f %.2f %.2f %.2f]", t, pb.X, pb.Y, pb.Wd, pb.Ht)
 		}
 		f.out("/Resources 2 0 R")
 		if structParents := f.taggedPageStructParents(n); structParents >= 0 {
-			f.outPDFKeyInt("/StructParents ", structParents, "")
+			f.outf("/StructParents %d", structParents)
 		}
 		if len(f.pageLinks[n])+len(f.pageAttachments[n]) > 0 {
 			var annots fmtBuffer
@@ -140,7 +131,7 @@ func (f *Document) putpages() {
 		if f.pdfVersion > "1.3" {
 			f.out("/Group <</Type /Group /S /Transparency /CS /DeviceRGB>>")
 		}
-		f.outPDFKeyInt("/Contents ", f.n+1, " 0 R>>")
+		f.outf("/Contents %d 0 R>>", f.n+1)
 		f.out("endobj")
 		f.newobj()
 		if f.compress {
@@ -148,10 +139,10 @@ func (f *Document) putpages() {
 			if f.err != nil {
 				return
 			}
-			f.outPDFKeyInt("<</Filter /FlateDecode /Length ", len(data), ">>")
+			f.outf("<</Filter /FlateDecode /Length %d>>", len(data))
 			f.putstream(data)
 		} else {
-			f.outPDFKeyInt("<</Length ", f.pages[n].Len(), ">>")
+			f.outf("<</Length %d>>", f.pages[n].Len())
 			f.putstream(f.pages[n].Bytes())
 		}
 		f.out("endobj")
@@ -169,24 +160,17 @@ func (f *Document) putpages() {
 	}
 	kids.printf("]")
 	f.out(kids.String())
-	f.outPDFKeyInt("/Count ", nb, "")
-	f.outPDFMediaBox(wPt, hPt)
+	f.outf("/Count %d", nb)
+	f.outf("/MediaBox [0 0 %.2f %.2f]", wPt, hPt)
 	f.out(">>")
 	f.out("endobj")
 }
 
 func (f *Document) putLinkAnnotation(pl pageLink, pagesObjectNumbers []int, defaultPageHeight float64) {
 	f.newobj()
-	var scratch [160]byte
-	buf := append(scratch[:0], "<< /Type /Annot /Subtype /Link /Rect ["...)
-	buf = appendPDFNumberSpace(buf, pl.x, 2)
-	buf = appendPDFNumberSpace(buf, pl.y, 2)
-	buf = appendPDFNumberSpace(buf, pl.x+pl.wd, 2)
-	buf = appendPDFNumber(buf, pl.y-pl.ht, 2)
-	buf = append(buf, "] /Border [0 0 0] /F 4"...)
-	f.outbytes(buf)
+	f.outf("<< /Type /Annot /Subtype /Link /Rect [%.2f %.2f %.2f %.2f] /Border [0 0 0] /F 4", pl.x, pl.y, pl.x+pl.wd, pl.y-pl.ht)
 	if pl.structParent >= 0 {
-		f.outPDFKeyInt("/StructParent ", pl.structParent, "")
+		f.outf("/StructParent %d", pl.structParent)
 	}
 	if pl.link == 0 {
 		f.outf("/A << /S /URI /URI %s >>", f.textstring(pl.linkStr))
@@ -200,12 +184,7 @@ func (f *Document) putLinkAnnotation(pl pageLink, pagesObjectNumbers []int, defa
 		if l.page > 0 && l.page < len(pagesObjectNumbers) {
 			pageObj = pagesObjectNumbers[l.page]
 		}
-		buf = append(scratch[:0], "/Dest ["...)
-		buf = appendPDFIndirectRef(buf, pageObj)
-		buf = append(buf, " /XYZ 0 "...)
-		buf = appendPDFNumber(buf, h-l.y*f.k, 2)
-		buf = append(buf, " null]"...)
-		f.outbytes(buf)
+		f.outf("/Dest [%d 0 R /XYZ 0 %.2f null]", pageObj, h-l.y*f.k)
 	}
 	f.out(">>")
 	f.out("endobj")

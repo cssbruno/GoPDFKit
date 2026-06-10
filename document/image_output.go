@@ -62,9 +62,7 @@ func (f *Document) resolveImagePlacement(info *ImageInfo, x, y, w, h float64, al
 }
 
 func (f *Document) drawImageXObject(imageID string, x, y, w, h float64) {
-	buf := make([]byte, 0, len(imageID)+72)
-	buf = appendPDFImageCM(buf, w*f.k, h*f.k, x*f.k, (f.h-(y+h))*f.k, imageID)
-	f.outbytes(buf)
+	f.outf("q %.5f 0 0 %.5f %.5f %.5f cm /I%s Do Q", w*f.k, h*f.k, x*f.k, (f.h-(y+h))*f.k, imageID)
 }
 
 func (f *Document) imageOut(info *ImageInfo, x, y, w, h float64, allowNegativeX, flow bool, link int, linkStr string, tag taggedContentOptions) {
@@ -166,18 +164,8 @@ func (f *Document) putImportedPages() {
 		}
 		f.newobj()
 		page.objectID = f.n
-		var header []byte
-		header = append(header, "<</Type /XObject\n/Subtype /Form\n/FormType 1\n/BBox [0 0 "...)
-		header = appendPDFNumberSpace(header, page.widthPt, 2)
-		header = appendPDFNumber(header, page.heightPt, 2)
-		header = append(header, "]\n/Matrix [1 0 0 1 0 0]\n/Resources "...)
-		header = append(header, resources...)
-		header = append(header, '\n')
-		header = append(header, filter...)
-		header = append(header, "/Length "...)
-		header = appendPDFInt(header, len(content))
-		header = append(header, ">>"...)
-		f.outbytes(header)
+		f.outf("<</Type /XObject\n/Subtype /Form\n/FormType 1\n/BBox [0 0 %.2f %.2f]\n/Matrix [1 0 0 1 0 0]\n/Resources %s\n%s/Length %d>>",
+			page.widthPt, page.heightPt, string(resources), filter, len(content))
 		f.putstream(content)
 		f.out("endobj")
 	}
@@ -220,23 +208,17 @@ func (f *Document) putimage(info *ImageInfo) {
 	info.n = f.n
 	f.out("<</Type /XObject")
 	f.out("/Subtype /Image")
-	f.outPDFKeyInt("/Width ", int(info.w), "")
-	f.outPDFKeyInt("/Height ", int(info.h), "")
+	f.outf("/Width %d", int(info.w))
+	f.outf("/Height %d", int(info.h))
 	if info.cs == "Indexed" {
-		var scratch [64]byte
-		buf := append(scratch[:0], "/ColorSpace [/Indexed /DeviceRGB "...)
-		buf = appendPDFInt(buf, len(info.pal)/3-1)
-		buf = append(buf, ' ')
-		buf = appendPDFIndirectRef(buf, f.n+1)
-		buf = append(buf, ']')
-		f.outbytes(buf)
+		f.outf("/ColorSpace [/Indexed /DeviceRGB %d %d 0 R]", len(info.pal)/3-1, f.n+1)
 	} else {
 		f.outf("/ColorSpace /%s", info.cs)
 		if info.cs == "DeviceCMYK" {
 			f.out("/Decode [1 0 1 0 1 0 1 0]")
 		}
 	}
-	f.outPDFKeyInt("/BitsPerComponent ", info.bpc, "")
+	f.outf("/BitsPerComponent %d", info.bpc)
 	if len(info.f) > 0 {
 		f.outf("/Filter /%s", info.f)
 	}
@@ -244,21 +226,16 @@ func (f *Document) putimage(info *ImageInfo) {
 		f.outf("/DecodeParms <<%s>>", info.dp)
 	}
 	if len(info.trns) > 0 {
-		buf := make([]byte, 0, len(info.trns)*8+8)
-		buf = append(buf, "/Mask ["...)
+		var trns fmtBuffer
 		for _, v := range info.trns {
-			buf = appendPDFInt(buf, v)
-			buf = append(buf, ' ')
-			buf = appendPDFInt(buf, v)
-			buf = append(buf, ' ')
+			trns.printf("%d %d ", v, v)
 		}
-		buf = append(buf, ']')
-		f.outbytes(buf)
+		f.outf("/Mask [%s]", trns.String())
 	}
 	if info.smask != nil {
-		f.outPDFKeyIndirectRef("/SMask ", f.n+1)
+		f.outf("/SMask %d 0 R", f.n+1)
 	}
-	f.outPDFKeyInt("/Length ", len(info.data), ">>")
+	f.outf("/Length %d>>", len(info.data))
 	f.putstream(info.data)
 	f.out("endobj")
 	if len(info.smask) > 0 {
@@ -272,10 +249,10 @@ func (f *Document) putimage(info *ImageInfo) {
 			if f.err != nil {
 				return
 			}
-			f.outPDFKeyInt("<</Filter /FlateDecode /Length ", len(pal), ">>")
+			f.outf("<</Filter /FlateDecode /Length %d>>", len(pal))
 			f.putstream(pal)
 		} else {
-			f.outPDFKeyInt("<</Length ", len(info.pal), ">>")
+			f.outf("<</Length %d>>", len(info.pal))
 			f.putstream(info.pal)
 		}
 		f.out("endobj")
@@ -300,7 +277,7 @@ func (f *Document) putxobjectdict() {
 			if image == nil {
 				continue
 			}
-			f.outPDFStringResourceRef("/I", image.i, image.n)
+			f.outf("/I%s %d 0 R", image.i, image.n)
 		}
 	}
 	{
@@ -315,7 +292,7 @@ func (f *Document) putxobjectdict() {
 			}
 			id := tpl.ID()
 			if objID, ok := f.templateObjects[id]; ok {
-				f.outPDFStringResourceRef("/TPL", id, objID)
+				f.outf("/TPL%s %d 0 R", id, objID)
 			}
 		}
 	}
@@ -325,7 +302,7 @@ func (f *Document) putxobjectdict() {
 				f.SetErrorf("invalid imported template name: %s", tplName)
 				return
 			}
-			f.outPDFStringResourceRef("", tplName, f.importedTplIDs[objID])
+			f.outf("%s %d 0 R", tplName, f.importedTplIDs[objID])
 		}
 	}
 	{
@@ -337,7 +314,7 @@ func (f *Document) putxobjectdict() {
 		for _, id := range ids {
 			page := f.importedPages[id]
 			if page != nil && page.objectID > 0 {
-				f.outPDFIntResourceRef("/IPG", id, page.objectID)
+				f.outf("/IPG%d %d 0 R", id, page.objectID)
 			}
 		}
 	}

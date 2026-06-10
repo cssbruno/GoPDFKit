@@ -156,14 +156,8 @@ func (f *Document) putSpotColors() {
 		f.outf("[/Separation /%s", strings.ReplaceAll(name, " ", "#20"))
 		f.out("/DeviceCMYK <<")
 		f.out("/Range [0 1 0 1 0 1 0 1] /C0 [0 0 0 0] ")
-		var scratch [80]byte
-		buf := append(scratch[:0], "/C1 ["...)
-		buf = appendPDFNumberSpace(buf, float64(spotColor.cmyk.c)/100, 3)
-		buf = appendPDFNumberSpace(buf, float64(spotColor.cmyk.m)/100, 3)
-		buf = appendPDFNumberSpace(buf, float64(spotColor.cmyk.y)/100, 3)
-		buf = appendPDFNumber(buf, float64(spotColor.cmyk.k)/100, 3)
-		buf = append(buf, "] "...)
-		f.outbytes(buf)
+		f.outf("/C1 [%.3f %.3f %.3f %.3f] ", float64(spotColor.cmyk.c)/100, float64(spotColor.cmyk.m)/100,
+			float64(spotColor.cmyk.y)/100, float64(spotColor.cmyk.k)/100)
 		f.out("/FunctionType 2 /Domain [0 1] /N 1>>]")
 		f.out("endobj")
 		spotColor.objID = f.n
@@ -174,7 +168,7 @@ func (f *Document) putSpotColors() {
 func (f *Document) putSpotColorResourceDict() {
 	f.out("/ColorSpace <<")
 	for _, spotColor := range f.spotColorMap {
-		f.outPDFIntResourceRef("/CS", spotColor.id, spotColor.objID)
+		f.outf("/CS%d %d 0 R", spotColor.id, spotColor.objID)
 	}
 	f.out(">>")
 }
