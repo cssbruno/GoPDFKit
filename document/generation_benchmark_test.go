@@ -1180,28 +1180,30 @@ func BenchmarkGenerationTextCompressionLevelConcurrent40(b *testing.B) {
 }
 
 func BenchmarkGenerationImages(b *testing.B) {
-	images := benchmarkImageFiles()
+	images := benchmarkImageFiles(b)
 	benchmarkGeneratedPDF(b, func(pdf *document.Document) {
 		pdf.AddPage()
 		pdf.SetFont("Arial", "", 10)
 		for i, image := range images {
 			x := 10 + float64(i%2)*90
 			y := 15 + float64(i/2)*70
-			pdf.ImageOptions(image.path, x, y, 60, 0, false, document.ImageOptions{}, 0, "")
+			pdf.RegisterImageOptionsReader(image.name, document.ImageOptions{ImageType: image.imageType}, bytes.NewReader(image.data))
+			pdf.ImageOptions(image.name, x, y, 60, 0, false, document.ImageOptions{}, 0, "")
 			pdf.Text(x, y+50, image.name)
 		}
 	})
 }
 
 func BenchmarkGenerationImagesConcurrent40(b *testing.B) {
-	images := benchmarkImageFiles()
+	images := benchmarkImageFiles(b)
 	benchmarkGeneratedPDFConcurrent40(b, func(pdf *document.Document) {
 		pdf.AddPage()
 		pdf.SetFont("Arial", "", 10)
 		for i, image := range images {
 			x := 10 + float64(i%2)*90
 			y := 15 + float64(i/2)*70
-			pdf.ImageOptions(image.path, x, y, 60, 0, false, document.ImageOptions{}, 0, "")
+			pdf.RegisterImageOptionsReader(image.name, document.ImageOptions{ImageType: image.imageType}, bytes.NewReader(image.data))
+			pdf.ImageOptions(image.name, x, y, 60, 0, false, document.ImageOptions{}, 0, "")
 			pdf.Text(x, y+50, image.name)
 		}
 	})
@@ -1209,9 +1211,9 @@ func BenchmarkGenerationImagesConcurrent40(b *testing.B) {
 
 func BenchmarkGenerationImagesCached(b *testing.B) {
 	cache := document.NewImageCache()
-	images := benchmarkImageFiles()
+	images := benchmarkImageFiles(b)
 	for _, image := range images {
-		if _, err := cache.RegisterImageOptions(image.name, image.path, document.ImageOptions{}); err != nil {
+		if _, err := cache.RegisterImageOptionsReader(image.name, document.ImageOptions{ImageType: image.imageType}, bytes.NewReader(image.data)); err != nil {
 			b.Fatalf("RegisterImageOptions(%s) error = %v", image.name, err)
 		}
 	}
@@ -1230,9 +1232,9 @@ func BenchmarkGenerationImagesCached(b *testing.B) {
 
 func BenchmarkGenerationImagesCachedConcurrent40(b *testing.B) {
 	cache := document.NewImageCache()
-	images := benchmarkImageFiles()
+	images := benchmarkImageFiles(b)
 	for _, image := range images {
-		if _, err := cache.RegisterImageOptions(image.name, image.path, document.ImageOptions{}); err != nil {
+		if _, err := cache.RegisterImageOptionsReader(image.name, document.ImageOptions{ImageType: image.imageType}, bytes.NewReader(image.data)); err != nil {
 			b.Fatalf("RegisterImageOptions(%s) error = %v", image.name, err)
 		}
 	}
@@ -1250,15 +1252,22 @@ func BenchmarkGenerationImagesCachedConcurrent40(b *testing.B) {
 }
 
 type benchmarkImageFile struct {
-	name string
-	path string
+	name      string
+	imageType string
+	data      []byte
 }
 
-func benchmarkImageFiles() []benchmarkImageFile {
+func benchmarkImageFiles(b *testing.B) []benchmarkImageFile {
+	b.Helper()
 	names := []string{"logo.png", "logo.jpg", "logo.gif", "logo-rgb.png"}
 	images := make([]benchmarkImageFile, len(names))
 	for i, name := range names {
-		images[i] = benchmarkImageFile{name: name, path: example.ImageFile(name)}
+		data, err := os.ReadFile(example.ImageFile(name))
+		if err != nil {
+			b.Fatalf("ReadFile(%s) error = %v", name, err)
+		}
+		imageType := name[strings.LastIndex(name, ".")+1:]
+		images[i] = benchmarkImageFile{name: name, imageType: imageType, data: data}
 	}
 	return images
 }
