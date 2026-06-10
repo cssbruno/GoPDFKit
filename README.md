@@ -70,46 +70,6 @@ The latest local profiles used for the tokenizer and compiled HTML work are
 `/tmp/gopdfkit-tokenizer.cpu`, `/tmp/gopdfkit-selector-heavy.cpu`, and
 `/tmp/gopdfkit-data-image-heavy.mem`.
 
-## Apples-to-Apples gopdflib Harness
-
-The `benchmarks/gopdfsuit` module compares GoPDFKit against the in-process
-`github.com/chinmay-sawant/gopdfsuit/v5/pkg/gopdflib` API with one shared
-harness. Both libraries run on the same machine, use the same prepared workload
-data, write to the same in-memory PDF target, and use the same explicit worker
-count: 40 workers.
-
-```shell
-make bench-gopdfsuit-ci
-```
-
-The comparable workloads are `text_short`, `text_240_lines`, `table_180_rows`,
-`table_900_rows`, `invoice_40_rows`, `png_table_180_rows`, and `png_rows_60`,
-each run in `workers_40` mode. The harness validates that every
-output starts with a PDF header, contains an EOF marker, and is importable by
-GoPDFKit's lightweight inspector. HTML and compliance rows are opt-in or
-excluded because the two libraries do not expose equivalent behavior for those
-cases. Raw benchmark rows include `pdf/s`, `pdf_bytes`, `workers`, and
-`total_MB`.
-
-Local results from `make bench-gopdfsuit`:
-
-| Workload | Library | Mode | ns/PDF | PDF/sec | Memory/PDF | Allocs/PDF | Output size | Total allocated |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| text_short | GoPDFKit | workers_40 | 4,355 | 229,606 | 33,430 B | 185 | 1,505 B | 8,574 MB |
-| text_short | gopdflib | workers_40 | 7,427 | 134,641 | 104,269 B | 126 | 4,303 B | 16,905 MB |
-| text_240_lines | GoPDFKit | workers_40 | 36,304 | 27,546 | 303,507 B | 568 | 4,706 B | 9,381 MB |
-| text_240_lines | gopdflib | workers_40 | 90,125 | 11,096 | 1,028,017 B | 811 | 13,074 B | 12,824 MB |
-| table_180_rows | GoPDFKit | workers_40 | 46,308 | 21,595 | 372,881 B | 874 | 8,043 B | 9,402 MB |
-| table_180_rows | gopdflib | workers_40 | 100,742 | 9,926 | 699,241 B | 940 | 22,885 B | 6,668 MB |
-| table_900_rows | GoPDFKit | workers_40 | 213,970 | 4,674 | 1,781,727 B | 3,685 | 34,997 B | 9,546 MB |
-| table_900_rows | gopdflib | workers_40 | 488,571 | 2,047 | 3,140,994 B | 4,247 | 97,915 B | 7,848 MB |
-| invoice_40_rows | GoPDFKit | workers_40 | 16,499 | 60,611 | 102,583 B | 348 | 3,232 B | 8,667 MB |
-| invoice_40_rows | gopdflib | workers_40 | 29,455 | 33,950 | 208,499 B | 303 | 8,633 B | 8,684 MB |
-| png_table_180_rows | GoPDFKit | workers_40 | 116,066 | 8,616 | 584,406 B | 1,048 | 15,784 B | 5,573 MB |
-| png_table_180_rows | gopdflib | workers_40 | 105,201 | 9,506 | 719,850 B | 963 | 28,500 B | 7,737 MB |
-| png_rows_60 | GoPDFKit | workers_40 | 176,534 | 5,665 | 660,280 B | 2,274 | 32,082 B | 4,758 MB |
-| png_rows_60 | gopdflib | workers_40 | 174,381 | 5,735 | 1,868,885 B | 1,025 | 322,532 B | 10,594 MB |
-
 
 
 GoPDFKit is an MIT-licensed Go library for generating PDFs directly from Go
@@ -465,21 +425,11 @@ make bench
 make bench-ci
 make bench-generation-core
 make bench-generation-core-ci
-make bench-gopdfsuit
-make bench-gopdfsuit-ci
 ```
 
 `make bench-generation-core` runs non-HTML generation benchmarks only: baseline,
 text, UTF-8 text, images, SVG, templates, imported pages, protection, and
 attachments.
-
-`make bench-gopdfsuit` runs the apples-to-apples comparison harness in
-`benchmarks/gopdfsuit`. That harness drives GoPDFKit and the in-process
-`github.com/chinmay-sawant/gopdfsuit/v5/pkg/gopdflib` API with the same workload
-data, in-memory PDF output target, and explicit 40-worker concurrency. It
-intentionally does not include GoPdfSuit HTTP service or client
-transport overhead. Chrome-backed HTML conversion is opt-in because GoPDFKit's
-HTML renderer is an in-process subset while gopdflib uses Chrome/Chromium.
 
 Some test examples generate or refresh PDFs under `assets/generated/pdf`. The
 `document` test package also clears generated PDFs before its example tests run.

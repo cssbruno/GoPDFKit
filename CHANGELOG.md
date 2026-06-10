@@ -1,14 +1,31 @@
 # Changelog
 
+## v0.5.3 - 2026-06-10
+
+Patch release for native generation throughput and benchmark cleanup.
+
+### Changed
+
+- Replaced high-frequency PDF formatting calls in object output, xref writing,
+  image placement, clipping, gradients, transforms, templates, tagged PDF
+  references, and attachment output with scratch-buffer append helpers.
+- Kept core generation benchmark reporting focused on fixed 40-worker native
+  GoPDFKit workloads.
+
+### Removed
+
+- Removed the external PDF-library comparison benchmark module and its Makefile
+  targets.
+- Removed external comparison benchmark tables and documentation.
+
 ## v0.5.2 - 2026-06-09
 
-Patch release for apples-to-apples benchmark reporting and fixed 40-worker
-throughput comparisons.
+Patch release for benchmark reporting and fixed 40-worker throughput
+comparisons.
 
 ### Added
 
-- Fixed-40-worker benchmark reporting for the core generation suite and
-  gopdflib comparison harness.
+- Fixed-40-worker benchmark reporting for the core generation suite.
 - Raw benchmark `pdf/s`, `pdf_bytes`, and `total_MB` metrics for PDF
   throughput, output size, and total timed-loop allocation reporting.
 - No-image baseline rows and expanded non-HTML generation workload coverage in
@@ -17,8 +34,6 @@ throughput comparisons.
 ### Changed
 
 - `make bench-generation-core` now runs only 40-worker generation benchmarks.
-- The gopdflib comparison harness now reports only `workers_40` rows so the
-  default output is apples-to-apples on concurrency.
 - Benchmark snapshots now include 40-worker PDF/sec and total allocated MB
   columns.
 
@@ -34,10 +49,6 @@ repeatability.
   images, malformed-fragment diagnostics, and public compiled-plan stats.
 - Selector-heavy, table-heavy, data-image-heavy, and malformed HTML generation
   benchmarks with single-worker and 40-worker rows.
-- Separate `benchmarks/gopdfsuit` module for apples-to-apples benchmark runs
-  against `github.com/chinmay-sawant/gopdfsuit/v5` pinned to commit
-  `e61b05028120937d62408ca700d10a41f48e3899`.
-
 ### Changed
 
 - `v0.5.0` remains on the original compliance release commit; the compiled HTML
