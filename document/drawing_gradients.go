@@ -57,12 +57,15 @@ func (f *Document) SetAlpha(alpha float64, blendModeStr string) {
 		f.blendList = append(f.blendList, blendModeType{alphaStr, alphaStr, bl.modeStr, 0})
 		f.blendMap[keyStr] = pos
 	}
-	f.outf("/GS%d gs", pos)
+	f.outPDFKeyInt("/GS", pos, " gs")
 }
 
 func (f *Document) gradientClipStart(x, y, w, h float64) {
-	f.outf("q %.2f %.2f %.2f %.2f re W n", x*f.k, (f.h-y)*f.k, w*f.k, -h*f.k)
-	f.outf("%.5f 0 0 %.5f %.5f %.5f cm", w*f.k, h*f.k, x*f.k, (f.h-(y+h))*f.k)
+	var scratch [96]byte
+	buf := append(scratch[:0], "q "...)
+	buf = appendPDFRectPaint(buf, x*f.k, (f.h-y)*f.k, w*f.k, -h*f.k, "W n", false)
+	f.outbytes(buf)
+	f.outbytes(appendPDFScaleTranslateCM(scratch[:0], w*f.k, h*f.k, x*f.k, (f.h-(y+h))*f.k))
 }
 
 func (f *Document) gradientClipEnd() {
@@ -100,7 +103,7 @@ func (f *Document) gradientWithStops(tp int, stops []gradientStopType, x1, y1, x
 		}
 	}
 	f.gradientList = append(f.gradientList, gradientType{tp: tp, clr1Str: stops[0].clrStr, clr2Str: stops[len(stops)-1].clrStr, stops: stops, x1: x1, y1: y1, x2: x2, y2: y2, r: r})
-	f.outf("/Sh%d sh", pos)
+	f.outPDFKeyInt("/Sh", pos, " sh")
 }
 
 // LinearGradient draws a rectangular area with a blend from one color to
@@ -169,12 +172,32 @@ func (f *Document) putGradients() {
 			f1 = f.putGradientFunction(gr)
 		}
 		f.newobj()
-		f.outf("<</ShadingType %d /ColorSpace /DeviceRGB", gr.tp)
+		f.outPDFKeyInt("<</ShadingType ", gr.tp, " /ColorSpace /DeviceRGB")
 		switch gr.tp {
 		case 2:
-			f.outf("/Coords [%.5f %.5f %.5f %.5f] /Function %d 0 R /Extend [true true]>>", gr.x1, gr.y1, gr.x2, gr.y2, f1)
+			var scratch [128]byte
+			buf := append(scratch[:0], "/Coords ["...)
+			buf = appendPDFNumberSpace(buf, gr.x1, 5)
+			buf = appendPDFNumberSpace(buf, gr.y1, 5)
+			buf = appendPDFNumberSpace(buf, gr.x2, 5)
+			buf = appendPDFNumber(buf, gr.y2, 5)
+			buf = append(buf, "] /Function "...)
+			buf = appendPDFIndirectRef(buf, f1)
+			buf = append(buf, " /Extend [true true]>>"...)
+			f.outbytes(buf)
 		case 3:
-			f.outf("/Coords [%.5f %.5f 0 %.5f %.5f %.5f] /Function %d 0 R /Extend [true true]>>", gr.x1, gr.y1, gr.x2, gr.y2, gr.r, f1)
+			var scratch [144]byte
+			buf := append(scratch[:0], "/Coords ["...)
+			buf = appendPDFNumberSpace(buf, gr.x1, 5)
+			buf = appendPDFNumberSpace(buf, gr.y1, 5)
+			buf = append(buf, "0 "...)
+			buf = appendPDFNumberSpace(buf, gr.x2, 5)
+			buf = appendPDFNumberSpace(buf, gr.y2, 5)
+			buf = appendPDFNumber(buf, gr.r, 5)
+			buf = append(buf, "] /Function "...)
+			buf = appendPDFIndirectRef(buf, f1)
+			buf = append(buf, " /Extend [true true]>>"...)
+			f.outbytes(buf)
 		}
 		f.out("endobj")
 		f.gradientList[j].objNum = f.n

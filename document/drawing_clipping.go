@@ -19,7 +19,11 @@ import (
 // This ClipText() example demonstrates this method.
 func (f *Document) ClipRect(x, y, w, h float64, outline bool) {
 	f.clipNest++
-	f.outf("q %.2f %.2f %.2f %.2f re W %s", x*f.k, (f.h-y)*f.k, w*f.k, -h*f.k, strIf(outline, "S", "n"))
+	var scratch [96]byte
+	buf := append(scratch[:0], "q "...)
+	buf = appendPDFRectPaint(buf, x*f.k, (f.h-y)*f.k, w*f.k, -h*f.k, "W", true)
+	buf = append(buf, strIf(outline, "S", "n")...)
+	f.outbytes(buf)
 }
 
 // ClipText begins a clipping operation in which rendering is confined to the
@@ -32,12 +36,25 @@ func (f *Document) ClipRect(x, y, w, h float64, outline bool) {
 // ClipEnd() to restore unclipped operations.
 func (f *Document) ClipText(x, y float64, txtStr string, outline bool) {
 	f.clipNest++
-	f.outf("q BT %.5f %.5f Td %d Tr (%s) Tj ET", x*f.k, (f.h-y)*f.k, intIf(outline, 5, 7), f.escape(txtStr))
+	escaped := f.escape(txtStr)
+	buf := make([]byte, 0, len(escaped)+64)
+	buf = append(buf, "q BT "...)
+	buf = appendPDFNumberSpace(buf, x*f.k, 5)
+	buf = appendPDFNumberSpace(buf, (f.h-y)*f.k, 5)
+	buf = append(buf, "Td "...)
+	buf = appendPDFInt(buf, intIf(outline, 5, 7))
+	buf = append(buf, " Tr ("...)
+	buf = append(buf, escaped...)
+	buf = append(buf, ") Tj ET"...)
+	f.outbytes(buf)
 }
 
 func (f *Document) clipArc(x1, y1, x2, y2, x3, y3 float64) {
 	h := f.h
-	f.outf("%.5f %.5f %.5f %.5f %.5f %.5f c ", x1*f.k, (h-y1)*f.k, x2*f.k, (h-y2)*f.k, x3*f.k, (h-y3)*f.k)
+	var scratch [96]byte
+	buf := appendPDFCubicCurve(scratch[:0], x1*f.k, (h-y1)*f.k, x2*f.k, (h-y2)*f.k, x3*f.k, (h-y3)*f.k)
+	buf = append(buf, ' ')
+	f.outbytes(buf)
 }
 
 // ClipRoundedRect begins a rectangular clipping operation. The rectangle has
@@ -62,7 +79,7 @@ func (f *Document) ClipRoundedRect(x, y, w, h, r float64, outline bool) {
 func (f *Document) ClipRoundedRectExt(x, y, w, h, rTL, rTR, rBR, rBL float64, outline bool) {
 	f.clipNest++
 	f.roundedRectPath(x, y, w, h, rTL, rTR, rBR, rBL)
-	f.outf(" W %s", strIf(outline, "S", "n"))
+	f.out(" W " + strIf(outline, "S", "n"))
 }
 
 // roundedRectPath adds a rounded rectangle path. RoundedRect() and
@@ -71,28 +88,31 @@ func (f *Document) roundedRectPath(x, y, w, h, rTL, rTR, rBR, rBL float64) {
 	k := f.k
 	hp := f.h
 	myArc := (4.0 / 3.0) * (math.Sqrt2 - 1.0)
-	f.outf("q %.5f %.5f m", (x+rTL)*k, (hp-y)*k)
+	var scratch [96]byte
+	buf := append(scratch[:0], "q "...)
+	buf = appendPDFMoveTo(buf, (x+rTL)*k, (hp-y)*k, 5)
+	f.outbytes(buf)
 	xc := x + w - rTR
 	yc := y + rTR
-	f.outf("%.5f %.5f l", xc*k, (hp-y)*k)
+	f.outbytes(appendPDFLineTo(scratch[:0], xc*k, (hp-y)*k, 5))
 	if rTR != 0 {
 		f.clipArc(xc+rTR*myArc, yc-rTR, xc+rTR, yc-rTR*myArc, xc+rTR, yc)
 	}
 	xc = x + w - rBR
 	yc = y + h - rBR
-	f.outf("%.5f %.5f l", (x+w)*k, (hp-yc)*k)
+	f.outbytes(appendPDFLineTo(scratch[:0], (x+w)*k, (hp-yc)*k, 5))
 	if rBR != 0 {
 		f.clipArc(xc+rBR, yc+rBR*myArc, xc+rBR*myArc, yc+rBR, xc, yc+rBR)
 	}
 	xc = x + rBL
 	yc = y + h - rBL
-	f.outf("%.5f %.5f l", xc*k, (hp-(y+h))*k)
+	f.outbytes(appendPDFLineTo(scratch[:0], xc*k, (hp-(y+h))*k, 5))
 	if rBL != 0 {
 		f.clipArc(xc-rBL*myArc, yc+rBL, xc-rBL, yc+rBL*myArc, xc-rBL, yc)
 	}
 	xc = x + rTL
 	yc = y + rTL
-	f.outf("%.5f %.5f l", x*k, (hp-yc)*k)
+	f.outbytes(appendPDFLineTo(scratch[:0], x*k, (hp-yc)*k, 5))
 	if rTL != 0 {
 		f.clipArc(xc-rTL, yc-rTL*myArc, xc-rTL*myArc, yc-rTL, xc, yc-rTL)
 	}
@@ -113,10 +133,18 @@ func (f *Document) ClipEllipse(x, y, rx, ry float64, outline bool) {
 	ly := (4.0 / 3.0) * ry * (math.Sqrt2 - 1)
 	k := f.k
 	h := f.h
-	f.outf("q %.5f %.5f m %.5f %.5f %.5f %.5f %.5f %.5f c", (x+rx)*k, (h-y)*k, (x+rx)*k, (h-(y-ly))*k, (x+lx)*k, (h-(y-ry))*k, x*k, (h-(y-ry))*k)
-	f.outf("%.5f %.5f %.5f %.5f %.5f %.5f c", (x-lx)*k, (h-(y-ry))*k, (x-rx)*k, (h-(y-ly))*k, (x-rx)*k, (h-y)*k)
-	f.outf("%.5f %.5f %.5f %.5f %.5f %.5f c", (x-rx)*k, (h-(y+ly))*k, (x-lx)*k, (h-(y+ry))*k, x*k, (h-(y+ry))*k)
-	f.outf("%.5f %.5f %.5f %.5f %.5f %.5f c W %s", (x+lx)*k, (h-(y+ry))*k, (x+rx)*k, (h-(y+ly))*k, (x+rx)*k, (h-y)*k, strIf(outline, "S", "n"))
+	var scratch [160]byte
+	buf := append(scratch[:0], "q "...)
+	buf = appendPDFMoveTo(buf, (x+rx)*k, (h-y)*k, 5)
+	buf = append(buf, ' ')
+	buf = appendPDFCubicCurve(buf, (x+rx)*k, (h-(y-ly))*k, (x+lx)*k, (h-(y-ry))*k, x*k, (h-(y-ry))*k)
+	f.outbytes(buf)
+	f.outbytes(appendPDFCubicCurve(scratch[:0], (x-lx)*k, (h-(y-ry))*k, (x-rx)*k, (h-(y-ly))*k, (x-rx)*k, (h-y)*k))
+	f.outbytes(appendPDFCubicCurve(scratch[:0], (x-rx)*k, (h-(y+ly))*k, (x-lx)*k, (h-(y+ry))*k, x*k, (h-(y+ry))*k))
+	buf = appendPDFCubicCurve(scratch[:0], (x+lx)*k, (h-(y+ry))*k, (x+rx)*k, (h-(y+ly))*k, (x+rx)*k, (h-y)*k)
+	buf = append(buf, " W "...)
+	buf = append(buf, strIf(outline, "S", "n")...)
+	f.outbytes(buf)
 }
 
 // ClipCircle begins a circular clipping operation. The circle is centered at

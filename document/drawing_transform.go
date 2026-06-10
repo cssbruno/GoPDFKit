@@ -196,8 +196,8 @@ func (f *Document) TransformSkew(angleX, angleY, x, y float64) {
 // methods such as TransformRotate() and TransformMirrorVertical() instead.
 func (f *Document) Transform(tm TransformMatrix) {
 	if f.transformNest > 0 {
-		f.outf("%.5f %.5f %.5f %.5f %.5f %.5f cm",
-			tm.A, tm.B, tm.C, tm.D, tm.E, tm.F)
+		var scratch [128]byte
+		f.outbytes(appendPDFMatrix(scratch[:0], tm.A, tm.B, tm.C, tm.D, tm.E, tm.F))
 	} else if f.err == nil {
 		f.err = errors.New("transformation context is not active")
 	}

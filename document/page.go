@@ -248,10 +248,10 @@ func (f *Document) addPageFormatRotation(orientationStr string, size Size, rotat
 		f.endpage()
 	}
 	f.beginpage(orientationStr, size, rotation)
-	f.outf("%d J", f.capStyle)
-	f.outf("%d j", f.joinStyle)
+	f.outPDFIntOperator(f.capStyle, 'J')
+	f.outPDFIntOperator(f.joinStyle, 'j')
 	f.lineWidth = lw
-	f.outf("%.2f w", lw*f.k)
+	f.outPDFLineWidth(lw * f.k)
 	if len(f.dashArray) > 0 {
 		f.outputDashPattern()
 	}
@@ -281,7 +281,7 @@ func (f *Document) addPageFormatRotation(orientationStr string, size Size, rotat
 	}
 	if f.lineWidth != lw {
 		f.lineWidth = lw
-		f.outf("%.2f w", lw*f.k)
+		f.outPDFLineWidth(lw * f.k)
 	}
 	if familyStr != "" {
 		f.SetFont(familyStr, style, fontsize)

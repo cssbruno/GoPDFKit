@@ -9,7 +9,10 @@ func (f *Document) newobj() {
 		f.offsets = append(f.offsets, 0)
 	}
 	f.offsets[f.n] = f.buffer.Len()
-	f.outf("%d 0 obj", f.n)
+	var scratch [24]byte
+	buf := appendPDFInt(scratch[:0], f.n)
+	buf = append(buf, " 0 obj"...)
+	f.outbytes(buf)
 }
 
 func (f *Document) putstream(b []byte) {

@@ -85,7 +85,9 @@ func (f *Document) putresourcedict() {
 		}
 		for _, key = range keyList {
 			font = f.fonts[key]
-			f.outf("/F%s %d 0 R", font.i, font.N)
+			var scratch [64]byte
+			buf := appendPDFFontResourceRef(scratch[:0], font.i, font.N)
+			f.outbytes(buf)
 		}
 	}
 	f.out(">>")
@@ -96,7 +98,7 @@ func (f *Document) putresourcedict() {
 	if count > 1 {
 		f.out("/ExtGState <<")
 		for j := 1; j < count; j++ {
-			f.outf("/GS%d %d 0 R", j, f.blendList[j].objNum)
+			f.outPDFIntResourceRef("/GS", j, f.blendList[j].objNum)
 		}
 		f.out(">>")
 	}
@@ -104,7 +106,7 @@ func (f *Document) putresourcedict() {
 	if count > 1 {
 		f.out("/Shading <<")
 		for j := 1; j < count; j++ {
-			f.outf("/Sh%d %d 0 R", j, f.gradientList[j].objNum)
+			f.outPDFIntResourceRef("/Sh", j, f.gradientList[j].objNum)
 		}
 		f.out(">>")
 	}
@@ -119,7 +121,7 @@ func (f *Document) putjavascript() {
 	f.newobj()
 	f.nJs = f.n
 	f.out("<<")
-	f.outf("/Names [(EmbeddedJS) %d 0 R]", f.n+1)
+	f.outPDFKeyIndirectRefSuffix("/Names [(EmbeddedJS) ", f.n+1, "]")
 	f.out(">>")
 	f.out("endobj")
 	f.newobj()
@@ -162,7 +164,7 @@ func (f *Document) putresources() {
 		f.out("/R 2")
 		f.outf("/O (%s)", f.escape(string(f.protect.oValue)))
 		f.outf("/U (%s)", f.escape(string(f.protect.uValue)))
-		f.outf("/P %d", f.protect.pValue)
+		f.outPDFKeyInt("/P ", f.protect.pValue, "")
 		f.out(">>")
 		f.out("endobj")
 	}
@@ -205,7 +207,7 @@ func (f *Document) putcatalog() {
 	f.out("/Type /Catalog")
 	f.out("/Pages 1 0 R")
 	if f.nXmp > 0 {
-		f.outf("/Metadata %d 0 R", f.nXmp)
+		f.outPDFKeyIndirectRef("/Metadata ", f.nXmp)
 	}
 	if f.compliance.PDFUA2 {
 		f.out("/MarkInfo << /Marked true >>")
@@ -215,13 +217,20 @@ func (f *Document) putcatalog() {
 		f.out("/ViewerPreferences << /DisplayDocTitle true >>")
 	}
 	if f.tagged.structTreeRootObj > 0 {
-		f.outf("/StructTreeRoot %d 0 R", f.tagged.structTreeRootObj)
+		f.outPDFKeyIndirectRef("/StructTreeRoot ", f.tagged.structTreeRootObj)
 	}
 	if f.nOutputIntentICC > 0 {
-		f.outf("/OutputIntents [ << /Type /OutputIntent /S /GTS_PDFA1 /OutputConditionIdentifier %s /Info %s /DestOutputProfile %d 0 R >> ]",
-			f.textstring(f.outputIntent.identifier),
-			f.textstring(firstNonEmpty(f.outputIntent.info, f.outputIntent.identifier)),
-			f.nOutputIntentICC)
+		identifier := f.textstring(f.outputIntent.identifier)
+		info := f.textstring(firstNonEmpty(f.outputIntent.info, f.outputIntent.identifier))
+		buf := make([]byte, 0, len(identifier)+len(info)+112)
+		buf = append(buf, "/OutputIntents [ << /Type /OutputIntent /S /GTS_PDFA1 /OutputConditionIdentifier "...)
+		buf = append(buf, identifier...)
+		buf = append(buf, " /Info "...)
+		buf = append(buf, info...)
+		buf = append(buf, " /DestOutputProfile "...)
+		buf = appendPDFIndirectRef(buf, f.nOutputIntentICC)
+		buf = append(buf, " >> ]"...)
+		f.outbytes(buf)
 	}
 	switch f.zoomMode {
 	case "fullpage":
@@ -247,13 +256,13 @@ func (f *Document) putcatalog() {
 		f.out("/PageLayout /" + f.layoutMode)
 	}
 	if len(f.outlines) > 0 {
-		f.outf("/Outlines %d 0 R", f.outlineRoot)
+		f.outPDFKeyIndirectRef("/Outlines ", f.outlineRoot)
 		f.out("/PageMode /UseOutlines")
 	}
 	f.layerPutCatalog()
 	f.out("/Names <<")
 	if f.javascript != nil {
-		f.outf("/JavaScript %d 0 R", f.nJs)
+		f.outPDFKeyIndirectRef("/JavaScript ", f.nJs)
 	}
 	f.outf("/EmbeddedFiles %s", f.getEmbeddedFiles())
 	f.out(">>")
@@ -270,13 +279,13 @@ func (f *Document) putheader() {
 }
 
 func (f *Document) puttrailer() {
-	f.outf("/Size %d", f.n+1)
-	f.outf("/Root %d 0 R", f.n)
+	f.outPDFKeyInt("/Size ", f.n+1, "")
+	f.outPDFKeyIndirectRef("/Root ", f.n)
 	if !f.omitInfoDictionary() {
-		f.outf("/Info %d 0 R", f.n-1)
+		f.outPDFKeyIndirectRef("/Info ", f.n-1)
 	}
 	if f.protect.encrypted {
-		f.outf("/Encrypt %d 0 R", f.protect.objNum)
+		f.outPDFKeyIndirectRef("/Encrypt ", f.protect.objNum)
 		f.out("/ID [()()]")
 	} else if f.compliance.PDFA != PDFAModeNone || f.compliance.Arlington {
 		id := f.fileIdentifier()
@@ -303,7 +312,7 @@ func (f *Document) putxmp() {
 	}
 	f.newobj()
 	f.nXmp = f.n
-	f.outf("<< /Type /Metadata /Subtype /XML /Length %d >>", len(f.xmp))
+	f.outPDFKeyInt("<< /Type /Metadata /Subtype /XML /Length ", len(f.xmp), " >>")
 	f.putstream(f.xmp)
 	f.out("endobj")
 }
@@ -314,7 +323,7 @@ func (f *Document) putOutputIntent() {
 	}
 	f.newobj()
 	f.nOutputIntentICC = f.n
-	f.outf("<< /N 3 /Alternate /DeviceRGB /Length %d >>", len(f.outputIntent.iccProfile))
+	f.outPDFKeyInt("<< /N 3 /Alternate /DeviceRGB /Length ", len(f.outputIntent.iccProfile), " >>")
 	f.putstream(f.outputIntent.iccProfile)
 	f.out("endobj")
 }
@@ -347,27 +356,33 @@ func (f *Document) putbookmarks() {
 		for _, o := range f.outlines {
 			f.newobj()
 			f.outf("<</Title %s", f.textstring(o.text))
-			f.outf("/Parent %d 0 R", n+o.parent)
+			f.outPDFKeyIndirectRef("/Parent ", n+o.parent)
 			if o.prev != -1 {
-				f.outf("/Prev %d 0 R", n+o.prev)
+				f.outPDFKeyIndirectRef("/Prev ", n+o.prev)
 			}
 			if o.next != -1 {
-				f.outf("/Next %d 0 R", n+o.next)
+				f.outPDFKeyIndirectRef("/Next ", n+o.next)
 			}
 			if o.first != -1 {
-				f.outf("/First %d 0 R", n+o.first)
+				f.outPDFKeyIndirectRef("/First ", n+o.first)
 			}
 			if o.last != -1 {
-				f.outf("/Last %d 0 R", n+o.last)
+				f.outPDFKeyIndirectRef("/Last ", n+o.last)
 			}
-			f.outf("/Dest [%d 0 R /XYZ 0 %.2f null]", 1+2*o.p, (f.h-o.y)*f.k)
+			var scratch [80]byte
+			buf := append(scratch[:0], "/Dest ["...)
+			buf = appendPDFIndirectRef(buf, 1+2*o.p)
+			buf = append(buf, " /XYZ 0 "...)
+			buf = appendPDFNumber(buf, (f.h-o.y)*f.k, 2)
+			buf = append(buf, " null]"...)
+			f.outbytes(buf)
 			f.out("/Count 0>>")
 			f.out("endobj")
 		}
 		f.newobj()
 		f.outlineRoot = f.n
-		f.outf("<</Type /Outlines /First %d 0 R", n)
-		f.outf("/Last %d 0 R>>", n+lru[0])
+		f.outPDFKeyIndirectRef("<</Type /Outlines /First ", n)
+		f.outPDFKeyInt("/Last ", n+lru[0], " 0 R>>")
 		f.out("endobj")
 	}
 }
@@ -408,17 +423,18 @@ func (f *Document) enddoc() {
 	f.out("endobj")
 	o := f.buffer.Len()
 	f.out("xref")
-	f.outf("0 %d", f.n+1)
+	f.outPDFKeyInt("0 ", f.n+1, "")
 	f.out("0000000000 65535 f ")
+	var scratch [24]byte
 	for j := 1; j <= f.n; j++ {
-		f.outf("%010d 00000 n ", f.offsets[j])
+		f.outbytes(appendPDFXrefEntry(scratch[:0], f.offsets[j]))
 	}
 	f.out("trailer")
 	f.out("<<")
 	f.puttrailer()
 	f.out(">>")
 	f.out("startxref")
-	f.outf("%d", o)
+	f.outPDFKeyInt("", o, "")
 	f.out("%%EOF")
 	f.state = 3
 }

@@ -149,7 +149,9 @@ func (f *Document) templateFontCatalog() {
 	}
 	for _, key = range keyList {
 		font = f.fonts[key]
-		f.outf("/F%s %d 0 R", font.i, font.N)
+		var scratch [64]byte
+		buf := appendPDFFontResourceRef(scratch[:0], font.i, font.N)
+		f.outbytes(buf)
 	}
 	f.out(">>")
 }
@@ -170,9 +172,14 @@ func (f *Document) putTemplates() {
 		f.outf("<<%s/Type /XObject", filter)
 		f.out("/Subtype /Form")
 		f.out("/Formtype 1")
-		f.outf("/BBox [%.2f %.2f %.2f %.2f]", corner.X*f.k, corner.Y*f.k, (corner.X+size.Wd)*f.k, (corner.Y+size.Ht)*f.k)
+		var scratch [96]byte
+		f.outbytes(appendPDFRectArray(scratch[:0], "/BBox [", corner.X*f.k, corner.Y*f.k, (corner.X+size.Wd)*f.k, (corner.Y+size.Ht)*f.k, 2))
 		if corner.X != 0 || corner.Y != 0 {
-			f.outf("/Matrix [1 0 0 1 %.5f %.5f]", -corner.X*f.k*2, corner.Y*f.k*2)
+			buf := append(scratch[:0], "/Matrix [1 0 0 1 "...)
+			buf = appendPDFNumberSpace(buf, -corner.X*f.k*2, 5)
+			buf = appendPDFNumber(buf, corner.Y*f.k*2, 5)
+			buf = append(buf, ']')
+			f.outbytes(buf)
 		}
 
 		// Template's resource dictionary
@@ -194,7 +201,7 @@ func (f *Document) putTemplates() {
 				return
 			}
 		}
-		f.outf("/Length %d >>", len(buffer))
+		f.outPDFKeyInt("/Length ", len(buffer), " >>")
 		f.putstream(buffer)
 		f.out("endobj")
 	}
@@ -225,7 +232,7 @@ func (f *Document) templateImageCatalog(images map[string]*ImageInfo) {
 	for _, key := range keyList {
 		image := images[key]
 		if image != nil {
-			f.outf("/I%s %d 0 R", image.i, image.n)
+			f.outPDFStringResourceRef("/I", image.i, image.n)
 		}
 	}
 }
@@ -236,7 +243,7 @@ func (f *Document) templateDependencyCatalog(templates []Template) {
 			continue
 		}
 		if objID, ok := f.templateObjects[t.ID()]; ok {
-			f.outf("/TPL%s %d 0 R", t.ID(), objID)
+			f.outPDFStringResourceRef("/TPL", t.ID(), objID)
 		}
 	}
 }

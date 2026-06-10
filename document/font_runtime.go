@@ -527,16 +527,16 @@ func (f *Document) putfonts() {
 					buf = append(buf, font[6+info.length1+6:info.length2]...)
 					font = buf
 				}
-				f.outf("<</Length %d", len(font))
+				f.outPDFKeyInt("<</Length ", len(font), "")
 				if compressed {
 					f.out("/Filter /FlateDecode")
 				}
 				if info.fontType == "OpenTypeCFF" {
 					f.out("/Subtype /Type1C")
 				} else {
-					f.outf("/Length1 %d", info.length1)
+					f.outPDFKeyInt("/Length1 ", int(info.length1), "")
 					if info.length2 > 0 {
-						f.outf("/Length2 %d /Length3 0", info.length2)
+						f.outPDFKeyInt("/Length2 ", int(info.length2), " /Length3 0")
 					}
 				}
 				f.out(">>")
@@ -584,10 +584,10 @@ func (f *Document) putfonts() {
 				}
 				f.outf("/Subtype /%s", fontSubtype)
 				f.out("/FirstChar 32 /LastChar 255")
-				f.outf("/Widths %d 0 R", f.n+1)
-				f.outf("/FontDescriptor %d 0 R", f.n+2)
+				f.outPDFKeyIndirectRef("/Widths ", f.n+1)
+				f.outPDFKeyIndirectRef("/FontDescriptor ", f.n+2)
 				if font.DiffN > 0 {
-					f.outf("/Encoding %d 0 R", nf+font.DiffN)
+					f.outPDFKeyIndirectRef("/Encoding ", nf+font.DiffN)
 				} else {
 					f.out("/Encoding /WinAnsiEncoding")
 				}

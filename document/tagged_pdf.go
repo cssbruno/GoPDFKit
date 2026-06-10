@@ -346,15 +346,15 @@ func (f *Document) putTaggedElement(elem *taggedElement) {
 	f.out("/Type /StructElem")
 	f.outf("/S /%s", elem.Role)
 	if elem.Parent != nil {
-		f.outf("/P %d 0 R", elem.Parent.ObjNum)
+		f.outPDFKeyIndirectRef("/P ", elem.Parent.ObjNum)
 	} else {
-		f.outf("/P %d 0 R", f.tagged.documentElemObj)
+		f.outPDFKeyIndirectRef("/P ", f.tagged.documentElemObj)
 	}
 	if f.tagged.namespaceObj > 0 {
-		f.outf("/NS %d 0 R", f.tagged.namespaceObj)
+		f.outPDFKeyIndirectRef("/NS ", f.tagged.namespaceObj)
 	}
 	if elem.Page > 0 && elem.Page < len(f.tagged.pageObjNums) && f.tagged.pageObjNums[elem.Page] > 0 {
-		f.outf("/Pg %d 0 R", f.tagged.pageObjNums[elem.Page])
+		f.outPDFKeyIndirectRef("/Pg ", f.tagged.pageObjNums[elem.Page])
 	}
 	if elem.Alt != "" {
 		f.outf("/Alt %s", f.textstring(utf8toutf16(elem.Alt)))
@@ -453,9 +453,9 @@ func (f *Document) putTaggedDocumentElement() {
 	f.out("<<")
 	f.out("/Type /StructElem")
 	f.out("/S /Document")
-	f.outf("/P %d 0 R", f.tagged.structTreeRootObj)
+	f.outPDFKeyIndirectRef("/P ", f.tagged.structTreeRootObj)
 	if f.tagged.namespaceObj > 0 {
-		f.outf("/NS %d 0 R", f.tagged.namespaceObj)
+		f.outPDFKeyIndirectRef("/NS ", f.tagged.namespaceObj)
 	}
 	if len(f.tagged.elems) > 0 {
 		var kids fmtBuffer
@@ -506,10 +506,10 @@ func (f *Document) putTaggedStructTreeRoot() {
 	f.newobj()
 	f.out("<<")
 	f.out("/Type /StructTreeRoot")
-	f.outf("/K %d 0 R", f.tagged.documentElemObj)
-	f.outf("/ParentTree %d 0 R", f.tagged.parentTreeObj)
+	f.outPDFKeyIndirectRef("/K ", f.tagged.documentElemObj)
+	f.outPDFKeyIndirectRef("/ParentTree ", f.tagged.parentTreeObj)
 	if f.tagged.namespaceObj > 0 {
-		f.outf("/Namespaces [%d 0 R]", f.tagged.namespaceObj)
+		f.outPDFKeyIndirectRefSuffix("/Namespaces [", f.tagged.namespaceObj, "]")
 	}
 	f.out(">>")
 	f.out("endobj")
