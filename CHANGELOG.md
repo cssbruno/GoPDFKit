@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.5.4 - 2026-06-13
+
+Patch release for generation benchmark throughput cleanup after the v0.5.3
+rollback.
+
+### Changed
+
+- Reverted the experimental PDF hot-path formatting helper extraction while
+  keeping the benchmark suite focused on native GoPDFKit generation throughput.
+- Expanded fixed 40-worker generation benchmark coverage for text, UTF-8 text,
+  compression levels, images, SVG, templates, imported pages, protection, and
+  attachments.
+- Improved image benchmark throughput measurements with cached and uncached
+  image rows.
+
 ## v0.5.3 - 2026-06-10
 
 Patch release for native generation throughput and benchmark cleanup.
