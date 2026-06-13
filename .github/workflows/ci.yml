@@ -127,15 +127,10 @@ jobs:
           cache: true
 
       - name: Run generation benchmarks
-        run: make bench-ci
-
-      - name: Run gopdfsuit comparison benchmarks
-        run: make bench-gopdfsuit-ci
+        run: make bench-generation-core-ci
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
         with:
           name: generation-benchmarks
-          path: |
-            artifacts/benchmarks.txt
-            artifacts/gopdfsuit-benchmarks.txt
+          path: artifacts/generation-core-benchmarks.txt

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.5 - 2026-06-13
+
+Patch release for CI benchmark workflow cleanup.
+
+### Fixed
+
+- Updated the CI benchmark job to run the current
+  `make bench-generation-core-ci` target after the external gopdfsuit comparison
+  benchmark target was removed.
+
 ## v0.5.4 - 2026-06-13
 
 Patch release for generation benchmark throughput cleanup after the v0.5.3
