@@ -473,7 +473,8 @@ func (html *HTML) tableHeight(tokens []HTMLSegmentType, start int, lineHt float6
 	tableEl := HTMLSegmentType{Cat: 'O', Str: "table", Attr: table.attrs}
 	tableAncestors := appendHTMLAncestors(ancestors, tableEl)
 	colWidths := html.tableColumnWidths(layoutRows, colCount, tableWd, html.pdf)
-	rowHeights := html.tableRowHeights(layoutRows, colWidths, padding, lineHt, inherited, fallback, cssRules, tableAncestors)
+	colOffsets := htmlTableSpanPrefix(colWidths)
+	rowHeights := html.tableRowHeights(layoutRows, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors)
 	return html.tableCaptionHeight(table, tableWd, lineHt, inherited, fallback, cssRules, tableAncestors) + sumFloat64(rowHeights) + lineHt
 }
 

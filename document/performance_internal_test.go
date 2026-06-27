@@ -104,6 +104,64 @@ func BenchmarkPerfRegisterImageOptionsReaderPNGAlpha(b *testing.B) {
 	}
 }
 
+func TestHTMLTablePrefixSpanWidthMatchesScan(t *testing.T) {
+	widths := []float64{1.25, 2.5, 3.75, 4, 5.5}
+	offsets := htmlTableSpanPrefix(widths)
+	for start := 0; start <= len(widths)+1; start++ {
+		for span := 0; span <= len(widths)+2; span++ {
+			want := htmlTableSpanWidth(widths, start, span)
+			got := htmlTablePrefixSpanWidth(offsets, start, span)
+			if got != want {
+				t.Fatalf("span width start=%d span=%d got %v, want %v", start, span, got, want)
+			}
+		}
+	}
+}
+
+func BenchmarkHTMLTableSpanWidthWideRows(b *testing.B) {
+	const (
+		cols = 1024
+		rows = 100
+	)
+	widths := make([]float64, cols)
+	for i := range widths {
+		widths[i] = 1 + float64(i%7)*0.25
+	}
+	offsets := htmlTableSpanPrefix(widths)
+
+	b.Run("Scan", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			total := 0.0
+			for row := 0; row < rows; row++ {
+				for col := 0; col < cols; col++ {
+					total += htmlTableSpanWidth(widths, 0, col)
+					total += htmlTableSpanWidth(widths, col, 1)
+				}
+			}
+			if total == 0 {
+				b.Fatal("empty total")
+			}
+		}
+	})
+
+	b.Run("Prefix", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			total := 0.0
+			for row := 0; row < rows; row++ {
+				for col := 0; col < cols; col++ {
+					total += htmlTablePrefixSpanWidth(offsets, 0, col)
+					total += htmlTablePrefixSpanWidth(offsets, col, 1)
+				}
+			}
+			if total == 0 {
+				b.Fatal("empty total")
+			}
+		}
+	})
+}
+
 func benchmarkAlphaPNG(tb testing.TB, width, height int) []byte {
 	tb.Helper()
 

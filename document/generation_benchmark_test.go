@@ -104,6 +104,33 @@ func BenchmarkGenerationHTMLTable(b *testing.B) {
 	})
 }
 
+func BenchmarkGenerationHTMLWideTableCompiled(b *testing.B) {
+	const (
+		cols = 512
+		rows = 24
+	)
+	var htmlBuilder strings.Builder
+	htmlBuilder.Grow(rows * cols * 12)
+	htmlBuilder.WriteString(`<table border="1" cellpadding="1" width="100%">`)
+	for row := 0; row < rows; row++ {
+		htmlBuilder.WriteString(`<tr>`)
+		for col := 0; col < cols; col++ {
+			fmt.Fprintf(&htmlBuilder, `<td>%d</td>`, (row+col)%10)
+		}
+		htmlBuilder.WriteString(`</tr>`)
+	}
+	htmlBuilder.WriteString(`</table>`)
+	htmlStr := htmlBuilder.String()
+
+	benchmarkGeneratedPDF(b, func(pdf *document.Document) {
+		pdf.AddPage()
+		pdf.SetFont("Helvetica", "", 6)
+		_, lineHeight := pdf.GetFontSize()
+		html := pdf.HTMLNew()
+		html.Write(lineHeight, htmlStr)
+	})
+}
+
 func BenchmarkGenerationHTMLDataPNG(b *testing.B) {
 	const pngDataURI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ" +
 		"AAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
