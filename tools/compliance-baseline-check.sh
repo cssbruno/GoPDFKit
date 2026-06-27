@@ -16,7 +16,12 @@ normalize_xml() {
 
 normalize_json() {
 	awk '/"batchSummary"/ { exit } { print }' | sed -E \
+		-e '/^[[:space:]]*"extensions"[[:space:]]*:[[:space:]]*"",?[[:space:]]*$/d' \
+		-e 's#"version"[[:space:]]*:[[:space:]]*"[^"]*"#"version" : "VERSION"#g' \
+		-e 's#"buildDate"[[:space:]]*:[[:space:]]*[0-9]+#"buildDate" : BUILDDATE#g' \
 		-e 's#"size"[[:space:]]*:[[:space:]]*[0-9]+#"size" : SIZE#g' \
+		-e 's#"passedRules"[[:space:]]*:[[:space:]]*[0-9]+#"passedRules" : PASSED_RULES#g' \
+		-e 's#"passedChecks"[[:space:]]*:[[:space:]]*[0-9]+#"passedChecks" : PASSED_CHECKS#g' \
 		-e 's#"start"[[:space:]]*:[[:space:]]*[0-9]+#"start" : TIME#g' \
 		-e 's#"finish"[[:space:]]*:[[:space:]]*[0-9]+#"finish" : TIME#g' \
 		-e 's#"difference"[[:space:]]*:[[:space:]]*[0-9]+#"difference" : DURATION#g' \
