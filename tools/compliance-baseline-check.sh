@@ -15,7 +15,7 @@ normalize_xml() {
 }
 
 normalize_json() {
-	awk '/"batchSummary"/ { exit } { print }' | sed -E \
+	awk '/"processingTime"/ { exit } /"batchSummary"/ { exit } { print }' | sed -E \
 		-e '/^[[:space:]]*"extensions"[[:space:]]*:[[:space:]]*"",?[[:space:]]*$/d' \
 		-e 's#"version"[[:space:]]*:[[:space:]]*"[^"]*"#"version" : "VERSION"#g' \
 		-e 's#"buildDate"[[:space:]]*:[[:space:]]*[0-9]+#"buildDate" : BUILDDATE#g' \

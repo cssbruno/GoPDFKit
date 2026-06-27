@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6.3 - 2026-06-27
+
+Patch release for Arlington baseline timing normalization.
+
+### Fixed
+
+- Ignored volatile Arlington `processingTime` ordering in compliance baseline
+  comparisons.
+
 ## v0.6.2 - 2026-06-27
 
 Patch release for compliance baseline CI stability after v0.6.1.
