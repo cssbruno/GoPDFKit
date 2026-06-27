@@ -38,7 +38,7 @@ func (f *Document) WriteDocument(doc *LayoutDocument) {
 		f.AddPage()
 	}
 	chrome := doc.PageChrome()
-	if alias := chrome.pageTotalAlias(); alias != "" {
+	if alias := chrome.PageTotalAlias(); alias != "" {
 		f.AliasNbPages(alias)
 	}
 	renderer := documentRenderer{pdf: f, chrome: chrome}

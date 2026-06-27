@@ -5,5 +5,7 @@
 //
 // Most applications can start with the root gopdfkit package. Import document
 // directly when you need explicit constructor options, document model types,
-// measurement helpers, or lower-level PDF drawing APIs.
+// measurement helpers, or lower-level PDF drawing APIs. Renderer-independent
+// document model types live in the layout package and are re-exported here for
+// compatibility.
 package document

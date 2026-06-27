@@ -15,6 +15,10 @@ The root `gopdfkit` package is intentionally small. It exposes the default
 constructor and public aliases. Import `github.com/cssbruno/gopdfkit/document`
 when you need the full API.
 
+Structured document model types also live in
+`github.com/cssbruno/gopdfkit/layout`; the `document` package re-exports them
+for compatibility and renders them with `WriteDocument`.
+
 ## Install
 
 ```shell
@@ -39,8 +43,8 @@ func main() {
 }
 ```
 
-Use `document.NewWithOptions` when generation defaults should be configured at
-construction time:
+Use `document.NewWithOptions` when page construction settings should be
+configured with a struct:
 
 ```go
 pdf := document.NewWithOptions(document.Options{
@@ -55,6 +59,16 @@ pdf := document.NewWithOptions(document.Options{
 streams. It is not a full PDF optimizer for images, object streams, fonts, or
 arbitrary existing PDFs.
 
+Use `document.NewWithDefaults` when compression, catalog ordering, or fixed
+metadata dates should be explicit for one document instead of inherited from
+package-wide defaults:
+
+```go
+defaults := document.DefaultSettings()
+defaults.Compression = false
+pdf := document.NewWithDefaults(document.Options{SizeStr: "Letter"}, defaults)
+```
+
 ## Current Capabilities
 
 GoPDFKit currently supports:
@@ -65,7 +79,7 @@ GoPDFKit currently supports:
 * Text, cells, multicells, aligned writing, styled paragraphs, links, bookmarks,
   and aliases
 * Tables, reports, invoices, static filled form documents, and shared document
-  model rendering
+  model rendering through the `layout` model
 * Drawing primitives: lines, rectangles, rounded rectangles, arcs, Bezier
   curves, polygons, paths, clipping, transforms, transparency, gradients, spot
   colors, and layers

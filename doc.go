@@ -16,19 +16,27 @@ for the full API.
 	pdf.Cell(40, 10, "Hello, world")
 	err := pdf.OutputFileAndClose("hello.pdf")
 
-Use document.NewWithOptions when generation defaults should be configured at
-construction time:
+Use NewDocument when generation defaults should be configured at construction
+time and constructor errors should be returned directly:
 
-	pdf := document.NewWithOptions(document.Options{
-	    OrientationStr: "P",
-	    UnitStr:        "mm",
-	    SizeStr:        "A4",
-	    Optimize:       true,
-	})
+	pdf, err := gopdfkit.NewDocument(
+	    gopdfkit.WithOrientation(gopdfkit.OrientationPortrait),
+	    gopdfkit.WithUnit(gopdfkit.UnitMillimeter),
+	    gopdfkit.WithPageSize(gopdfkit.PageSizeA4),
+	    gopdfkit.WithBestCompression(),
+	)
 
-Optimize selects best zlib compression for generated page and template streams.
-It is not a full PDF optimizer for images, fonts, object streams, or arbitrary
-existing PDFs.
+WithBestCompression selects best zlib compression for generated page and
+template streams. It is not a full PDF optimizer for images, fonts, object
+streams, or arbitrary existing PDFs.
+
+Use document.NewWithDefaults when compression, catalog ordering, or fixed
+metadata dates should be explicit for one document instead of inherited from
+package-wide defaults:
+
+	defaults := document.DefaultSettings()
+	defaults.Compression = false
+	pdf := document.NewWithDefaults(document.Options{SizeStr: "Letter"}, defaults)
 
 # Current Capabilities
 
@@ -63,6 +71,7 @@ The main packages are:
 
   - gopdfkit: root facade with the default constructor and public aliases.
   - document: main PDF generation API.
+  - layout: renderer-independent structured document model types.
   - font: font parsing and JSON font definition generation.
   - importpdf: small wrappers around imported-page APIs.
   - inspect: lightweight PDF structure, stream, page, and text inspection.

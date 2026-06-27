@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
-package document
+package layout
 
 import (
 	"fmt"
@@ -444,6 +444,11 @@ func (pc PageChrome) PageNumberText(page int) string {
 		}
 	}
 	return fmt.Sprintf(format, page)
+}
+
+// PageTotalAlias returns the alias replaced with the total page count.
+func (pc PageChrome) PageTotalAlias() string {
+	return pc.pageTotalAlias()
 }
 
 func (pc PageChrome) pageTotalAlias() string {
