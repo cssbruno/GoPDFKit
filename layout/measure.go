@@ -3,7 +3,10 @@
 
 package layout
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 const (
 	paragraphSpacing = 2.0
@@ -154,13 +157,14 @@ func measureParagraphBlock(ctx MeasureContext, block ParagraphBlock) BlockMeasur
 func measureHeadingBlock(ctx MeasureContext, block HeadingBlock) BlockMeasurement {
 	block.Box = HeadingBox(block.Box)
 	style := MergedTextStyle(ctx.DefaultStyle, block.Style)
-	if style.FontSize <= 0 {
+	if block.Style.FontSize <= 0 {
 		style.FontSize = HeadingFontSize(ctx.DefaultStyle.FontSize, block.Level)
 	}
-	if style.LineHeight <= 0 {
-		style.LineHeight = style.FontSize * 1.25
+	if block.Style.LineHeight <= 0 {
+		style.LineHeight = scaledLineHeight(ctx.DefaultStyle, style.FontSize)
 	}
 	height := measureTextSegments(ctx, block.Segments, style, InnerWidth(ctx.Width, block.Box))
+	height += ResolvedLineHeight(style) * 0.25
 	height += VerticalSpacing(block.Box.Margin) + VerticalSpacing(block.Box.Padding) + BorderVertical(block.Box.Border)
 	minHeight := ResolvedLineHeight(style) + block.Box.Padding.Top + block.Box.Padding.Bottom + BorderVertical(block.Box.Border)
 	return BlockMeasurement{
@@ -386,25 +390,31 @@ func measureBlockSequence(ctx MeasureContext, blocks []Block) BlockMeasurement {
 }
 
 func measureTableRow(ctx MeasureContext, row TableRow, table TableBlock) BlockMeasurement {
-	columnCount := measureMaxInt(len(row.Cells), len(table.Columns))
+	columnCount := measureMaxInt(measureTableRowColumnCount(row), len(table.Columns))
 	if columnCount <= 0 {
 		columnCount = 1
 	}
-	cellWidth := InnerWidth(ctx.Width, table.Box) / float64(columnCount)
+	widths := measureTableColumnWidths(InnerWidth(ctx.Width, table.Box), columnCount, table.Columns)
 	maxHeight := 0.0
+	col := 0
 	for _, cell := range row.Cells {
+		if col >= len(widths) {
+			break
+		}
 		span := cell.ColSpan
 		if span <= 0 {
 			span = 1
 		}
+		cellWidth := sumMeasureFloat64(widths[col:measureMinInt(col+span, len(widths))])
 		childCtx := ctx
-		childCtx.Width = cellWidth*float64(span) - horizontalSpacing(cell.Box.Padding) - borderHorizontal(cell.Box.Border)
+		childCtx.Width = cellWidth - horizontalSpacing(cell.Box.Padding) - borderHorizontal(cell.Box.Border)
 		cellMeasure := measureBlockSequence(childCtx, cell.Blocks)
 		if cellMeasure.Height <= 0 {
 			cellMeasure.Height = ResolvedLineHeight(MergedTextStyle(ctx.DefaultStyle, cell.Style))
 		}
 		cellMeasure.Height += VerticalSpacing(cell.Box.Padding) + BorderVertical(cell.Box.Border)
 		maxHeight = measureMaxFloat(maxHeight, cellMeasure.Height)
+		col += span
 	}
 	if maxHeight <= 0 {
 		maxHeight = ResolvedLineHeight(ctx.DefaultStyle)
@@ -419,14 +429,29 @@ func measureTableRow(ctx MeasureContext, row TableRow, table TableBlock) BlockMe
 	}
 }
 
+func measureTableRowColumnCount(row TableRow) int {
+	count := 0
+	for _, cell := range row.Cells {
+		span := cell.ColSpan
+		if span <= 0 {
+			span = 1
+		}
+		count += span
+	}
+	return count
+}
+
 func measureTextSegments(ctx MeasureContext, segments []TextSegment, style TextStyle, width float64) float64 {
 	lineHeight := ResolvedLineHeight(style)
 	text := TextSegmentsPlainText(segments)
 	if text == "" {
 		return lineHeight
 	}
-	if width <= 0 || ctx.TextMeasurer == nil {
+	if width <= 0 {
 		return lineHeight * float64(strings.Count(text, "\n")+1)
+	}
+	if ctx.TextMeasurer == nil {
+		return lineHeight * float64(estimatedTextLineCount(text, style, width))
 	}
 	lineCount := ctx.TextMeasurer.TextLineCount(text, style, width)
 	if lineCount <= 0 {
@@ -450,6 +475,9 @@ func MergedTextStyle(base, override TextStyle) TextStyle {
 		base.FontFamily = override.FontFamily
 	}
 	if override.FontSize > 0 {
+		if override.LineHeight <= 0 {
+			base.LineHeight = scaledLineHeight(base, override.FontSize)
+		}
 		base.FontSize = override.FontSize
 	}
 	if override.LineHeight > 0 {
@@ -477,6 +505,16 @@ func ResolvedLineHeight(style TextStyle) float64 {
 		return style.FontSize * 1.2
 	}
 	return 5
+}
+
+func scaledLineHeight(base TextStyle, fontSize float64) float64 {
+	if fontSize <= 0 {
+		return ResolvedLineHeight(base)
+	}
+	if base.LineHeight > 0 && base.FontSize > 0 {
+		return base.LineHeight * fontSize / base.FontSize
+	}
+	return fontSize * 1.2
 }
 
 // HeadingFontSize returns the default heading size for level.
@@ -564,4 +602,122 @@ func measureMaxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func measureMinInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func measureTableColumnWidths(total float64, count int, columns []TableColumn) []float64 {
+	if count <= 0 {
+		return nil
+	}
+	widths := make([]float64, count)
+	fixed := 0.0
+	for i := 0; i < count && i < len(columns); i++ {
+		if columns[i].Width > 0 {
+			widths[i] = columns[i].Width
+			fixed += widths[i]
+		}
+	}
+	remainingCount := 0
+	for _, width := range widths {
+		if width <= 0 {
+			remainingCount++
+		}
+	}
+	fill := 0.0
+	if remainingCount > 0 {
+		fill = (total - fixed) / float64(remainingCount)
+	}
+	if fill <= 0 {
+		fill = total / float64(count)
+	}
+	for i := range widths {
+		if widths[i] <= 0 {
+			widths[i] = fill
+		}
+	}
+	return widths
+}
+
+func sumMeasureFloat64(values []float64) float64 {
+	total := 0.0
+	for _, value := range values {
+		total += value
+	}
+	return total
+}
+
+func estimatedTextLineCount(text string, style TextStyle, width float64) int {
+	if width <= 0 {
+		return strings.Count(text, "\n") + 1
+	}
+	lines := 1
+	lineWidth := 0.0
+	for _, char := range strings.TrimRight(text, "\n") {
+		if char == '\n' {
+			lines++
+			lineWidth = 0
+			continue
+		}
+		charWidth := estimatedRuneWidth(char, style)
+		if lineWidth > 0 && lineWidth+charWidth > width {
+			lines++
+			lineWidth = 0
+		}
+		lineWidth += charWidth
+	}
+	return lines
+}
+
+func estimatedRuneWidth(char rune, style TextStyle) float64 {
+	if unicode.IsControl(char) {
+		return 0
+	}
+	fontSize := style.FontSize
+	if fontSize <= 0 {
+		fontSize = 12
+	}
+	em := fontSize * 0.3527777778
+	factor := 0.5
+	family := strings.ToLower(style.FontFamily)
+	switch {
+	case strings.Contains(family, "courier") || strings.Contains(family, "mono"):
+		factor = 0.6
+	case strings.Contains(family, "times") || strings.Contains(family, "serif"):
+		factor = 0.47
+	}
+	switch {
+	case unicode.Is(unicode.Mn, char) || unicode.Is(unicode.Me, char):
+		factor = 0
+	case char == '\t':
+		factor = 1.2
+	case unicode.IsSpace(char):
+		factor = 0.28
+	case isWideRune(char):
+		factor = 0.95
+	case strings.ContainsRune(".,;:!|'`iIl1[](){}", char):
+		factor *= 0.55
+	case strings.ContainsRune("mwMW@#%&", char):
+		factor *= 1.35
+	}
+	if style.Bold && factor > 0 {
+		factor *= 1.04
+	}
+	return em * factor
+}
+
+func isWideRune(char rune) bool {
+	return (char >= 0x1100 && char <= 0x11FF) ||
+		(char >= 0x2E80 && char <= 0xA4CF) ||
+		(char >= 0xAC00 && char <= 0xD7AF) ||
+		(char >= 0xF900 && char <= 0xFAFF) ||
+		(char >= 0xFE10 && char <= 0xFE6F) ||
+		(char >= 0xFF00 && char <= 0xFF60) ||
+		(char >= 0xFFE0 && char <= 0xFFE6) ||
+		(char >= 0x1F300 && char <= 0x1FAFF)
 }

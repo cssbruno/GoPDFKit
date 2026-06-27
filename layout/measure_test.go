@@ -18,6 +18,58 @@ func TestMeasureBlockUsesTextMeasurer(t *testing.T) {
 	}
 }
 
+func TestMeasureBlockFallbackWrapsByFontAndCharacters(t *testing.T) {
+	ctx := NewMeasureContext(8, TextStyle{FontFamily: "Courier", FontSize: 10, LineHeight: 4})
+
+	narrow := MeasureBlock(ctx, ParagraphBlock{Segments: []TextSegment{{Text: "iiiiii"}}})
+	wide := MeasureBlock(ctx, ParagraphBlock{Segments: []TextSegment{{Text: "MMMMMM"}}})
+
+	if wide.Height <= narrow.Height {
+		t.Fatalf("wide text height = %.2f, narrow = %.2f; want wide > narrow", wide.Height, narrow.Height)
+	}
+}
+
+func TestMergedTextStyleScalesLineHeightWithFontSize(t *testing.T) {
+	style := MergedTextStyle(
+		TextStyle{FontFamily: "Helvetica", FontSize: 10, LineHeight: 4},
+		TextStyle{FontSize: 20},
+	)
+
+	if style.LineHeight != 8 {
+		t.Fatalf("LineHeight = %.2f, want 8", style.LineHeight)
+	}
+}
+
+func TestMeasureHeadingUsesLevelFontSize(t *testing.T) {
+	ctx := NewMeasureContext(80, TextStyle{FontFamily: "Helvetica", FontSize: 10, LineHeight: 4})
+
+	h1 := MeasureBlock(ctx, HeadingBlock{Level: 1, Segments: []TextSegment{{Text: "Title"}}})
+	h4 := MeasureBlock(ctx, HeadingBlock{Level: 4, Segments: []TextSegment{{Text: "Title"}}})
+
+	if h1.Height <= h4.Height {
+		t.Fatalf("h1 height = %.2f, h4 = %.2f; want h1 > h4", h1.Height, h4.Height)
+	}
+}
+
+func TestMeasureTableRowUsesColumnWidths(t *testing.T) {
+	ctx := NewMeasureContext(100, TextStyle{FontFamily: "Courier", FontSize: 10, LineHeight: 4})
+	table := TableBlock{
+		Columns: []TableColumn{{Width: 10}, {Width: 90}},
+		Body: []TableRow{{Cells: []TableCell{
+			{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "MMMMMMMMMMMM"}}}}},
+			{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "ok"}}}}},
+		}}},
+	}
+
+	measure := MeasureBlock(ctx, table)
+	if len(measure.ChildMeasures) != 1 {
+		t.Fatalf("row measures = %d, want 1", len(measure.ChildMeasures))
+	}
+	if measure.ChildMeasures[0].Height <= ResolvedLineHeight(ctx.DefaultStyle)+paragraphSpacing {
+		t.Fatalf("row height = %.2f, want wrapped narrow-column height", measure.ChildMeasures[0].Height)
+	}
+}
+
 func TestMeasurePageBreakBlock(t *testing.T) {
 	measure := MeasureBlock(NewMeasureContext(80, TextStyle{}), PageBreakBlock{Before: true, After: true})
 	if !measure.BreakBefore {

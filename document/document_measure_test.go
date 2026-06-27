@@ -24,6 +24,52 @@ func TestMeasureParagraphBlockUsesTextWrapping(t *testing.T) {
 	}
 }
 
+func TestMeasureParagraphScalesLineHeightWithFontSize(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetFont("Helvetica", "", 12)
+	ctx := NewMeasureContext(pdf, 120)
+
+	regular := MeasureBlock(ctx, ParagraphBlock{Segments: []TextSegment{{Text: "same text"}}})
+	large := MeasureBlock(ctx, ParagraphBlock{
+		Segments: []TextSegment{{Text: "same text"}},
+		Style:    TextStyle{FontSize: 24},
+	})
+
+	if large.MinHeight <= regular.MinHeight*1.5 {
+		t.Fatalf("large min height = %.2f, regular = %.2f; want scaled line height", large.MinHeight, regular.MinHeight)
+	}
+}
+
+func TestMeasureHeadingUsesDocumentHeadingSize(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetFont("Helvetica", "", 12)
+	ctx := NewMeasureContext(pdf, 120)
+
+	h1 := MeasureBlock(ctx, HeadingBlock{Level: 1, Segments: []TextSegment{{Text: "Title"}}})
+	h4 := MeasureBlock(ctx, HeadingBlock{Level: 4, Segments: []TextSegment{{Text: "Title"}}})
+
+	if h1.MinHeight <= h4.MinHeight {
+		t.Fatalf("h1 min height = %.2f, h4 = %.2f; want h1 > h4", h1.MinHeight, h4.MinHeight)
+	}
+}
+
+func TestDocumentRendererMeasuresTableRowsWithRenderedWidths(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetFont("Courier", "", 12)
+	pdf.AddPage()
+	renderer := documentRenderer{pdf: pdf}
+	row := TableRow{Cells: []TableCell{
+		{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "MMMMMMMMMMMMMMMMMMMM"}}}}},
+	}}
+
+	narrow := renderer.measureRenderedTableRow(row, []float64{18})
+	wide := renderer.measureRenderedTableRow(row, []float64{120})
+
+	if narrow <= wide {
+		t.Fatalf("narrow row height = %.2f, wide = %.2f; want narrow > wide", narrow, wide)
+	}
+}
+
 func TestMeasureTextRestoresPDFFontState(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	pdf.SetFont("Courier", "I", 10)
