@@ -53,10 +53,23 @@ compare_normalized() {
 	diff -u "$tmp_dir/expected-$name" "$tmp_dir/actual-$name"
 }
 
+require_readable_file() {
+	if [ ! -f "$1" ]; then
+		echo "missing compliance artifact: $1" >&2
+		echo "generate artifacts first, for example: make compliance-validate SRGB_ICC=/path/to/sRGB.icc" >&2
+		return 1
+	fi
+	if [ ! -r "$1" ]; then
+		echo "compliance artifact is not readable: $1" >&2
+		return 1
+	fi
+}
+
 verapdf_report() {
 	profile="$1"
 	pdf="$2"
 	report="$3"
+	require_readable_file "$pdf"
 	docker run --rm \
 		-v "$PWD:/work" \
 		-v /tmp:/tmp \
