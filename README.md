@@ -6,8 +6,7 @@
 <img src="https://raw.githubusercontent.com/cssbruno/gopdfkit/master/assets/static/image/gopher_pdf.png" alt="GoPDFKit gopher" width="160">
 ## Benchmark Snapshot
 
-Local benchmark run on `12th Gen Intel(R) Core(TM) i7-12700` with 20 logical
-CPUs. Results below are from:
+Local benchmark run on `Apple M2` with 8 logical CPUs. Results below are from:
 
 ```shell
 make bench-generation-core
@@ -21,24 +20,24 @@ make bench-generation-core-ci
 
 | Workload | Mode | ns/PDF | PDF/sec | Memory/PDF | Allocs/PDF | Output size | Total allocated |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Text table | 40 workers | 69,243 | 14,442 | 321,953 B | 1,326 | 43,591 B | 5,288 MB |
-| Long text | 40 workers | 26,673 | 37,492 | 87,435 B | 257 | 8,281 B | 3,468 MB |
-| Baseline no-compliance, uncached image | 40 workers | 71,916 | 13,905 | 641,572 B | 1,628 | 59,506 B | 9,984 MB |
-| Baseline no-compliance, no image | 40 workers | 60,138 | 16,628 | 446,967 B | 1,407 | 50,268 B | 9,328 MB |
-| Baseline no-compliance, cached image | 40 workers | 61,553 | 16,246 | 458,651 B | 1,495 | 59,338 B | 8,531 MB |
-| Baseline no-compliance, signed uncached image | 40 workers | 227,397 | 4,398 | 1,146,568 B | 1,943 | 93,298 B | 7,640 MB |
-| Baseline no-compliance, signed cached image | 40 workers | 177,336 | 5,639 | 961,381 B | 1,809 | 93,074 B | 7,243 MB |
-| UTF-8 text | 40 workers | 639,110 | 1,565 | 7,009,282 B | 15,386 | 44,370 B | 11,792 MB |
-| UTF-8 text, cached font | 40 workers | 208,604 | 4,794 | 1,075,476 B | 4,176 | 44,370 B | 7,047 MB |
-| Text compression, best speed | 40 workers | 62,747 | 15,937 | 220,349 B | 1,329 | 8,187 B | 4,035 MB |
-| Text compression, best compression | 40 workers | 126,533 | 7,903 | 219,738 B | 1,329 | 7,726 B | 2,096 MB |
-| Four uncached images | 40 workers | 150,022 | 6,666 | 1,367,486 B | 1,416 | 15,073 B | 11,109 MB |
-| Four cached images | 40 workers | 6,057 | 165,085 | 62,593 B | 245 | 15,017 B | 11,279 MB |
-| SVG | 40 workers | 7,526 | 132,876 | 42,292 B | 134 | 7,797 B | 7,913 MB |
-| Templates | 40 workers | 51,599 | 19,380 | 249,557 B | 541 | 9,909 B | 5,553 MB |
-| Imported PDF pages | 40 workers | 5,958 | 167,843 | 40,406 B | 329 | 1,938 B | 9,277 MB |
-| Protection | 40 workers | 8,567 | 116,722 | 57,407 B | 356 | 5,047 B | 8,883 MB |
-| Attachments | 40 workers | 21,658 | 46,173 | 48,429 B | 229 | 8,383 B | 2,516 MB |
+| Text table | 40 workers | 85,868 | 11,646 | 369,284 B | 1,479 | 43,543 B | 5,033 MB |
+| Long text | 40 workers | 35,729 | 27,989 | 75,519 B | 235 | 8,233 B | 2,284 MB |
+| Baseline no-compliance, uncached image | 40 workers | 151,452 | 6,603 | 632,074 B | 1,391 | 59,498 B | 4,619 MB |
+| Baseline no-compliance, no image | 40 workers | 87,335 | 11,450 | 436,097 B | 1,207 | 50,260 B | 7,090 MB |
+| Baseline no-compliance, cached image | 40 workers | 69,819 | 14,323 | 455,848 B | 1,268 | 59,330 B | 7,497 MB |
+| Baseline no-compliance, signed uncached image | 40 workers | 422,288 | 2,368 | 1,023,959 B | 1,581 | 93,290 B | 3,161 MB |
+| Baseline no-compliance, signed cached image | 40 workers | 339,404 | 2,946 | 848,000 B | 1,457 | 93,066 B | 2,911 MB |
+| UTF-8 text | 40 workers | 699,661 | 1,429 | 5,646,683 B | 12,464 | 44,322 B | 8,385 MB |
+| UTF-8 text, cached font | 40 workers | 200,822 | 4,980 | 636,136 B | 2,052 | 44,322 B | 3,568 MB |
+| Text compression, best speed | 40 workers | 79,007 | 12,657 | 360,635 B | 959 | 8,139 B | 4,990 MB |
+| Text compression, best compression | 40 workers | 153,613 | 6,510 | 369,508 B | 959 | 7,678 B | 2,608 MB |
+| Four uncached images | 40 workers | 202,576 | 4,936 | 1,346,954 B | 1,293 | 15,025 B | 8,028 MB |
+| Four cached images | 40 workers | 5,399 | 185,214 | 63,357 B | 175 | 14,969 B | 13,958 MB |
+| SVG | 40 workers | 8,579 | 116,558 | 45,922 B | 118 | 7,613 B | 6,282 MB |
+| Templates | 40 workers | 66,614 | 15,012 | 229,002 B | 402 | 9,862 B | 3,840 MB |
+| Imported PDF pages | 40 workers | 5,423 | 184,402 | 40,338 B | 267 | 1,890 B | 8,296 MB |
+| Protection | 40 workers | 8,198 | 121,980 | 54,476 B | 328 | 4,999 B | 7,727 MB |
+| Attachments | 40 workers | 67,375 | 14,842 | 118,438 B | 173 | 13,684 B | 2,088 MB |
 
 The 40-worker rows use a fixed explicit worker count, so they measure concurrent
 PDF generation throughput with the same workload pressure across machines.

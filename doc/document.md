@@ -6,11 +6,10 @@
 
 ## Benchmark Snapshot
 
-Local benchmark run on `12th Gen Intel(R) Core(TM) i7-12700` with 20 logical
-CPUs. Results are medians from:
+Local benchmark run on `Apple M2` with 8 logical CPUs. Results below are from:
 
 ```shell
-go test ./document -run '^$' -bench 'BenchmarkGeneration(BaselineNoCompliance.*|Images.*|PDFA4FCompliance.*|PDFUA2ArlingtonCompiledHTML.*|SignedPDFA4FPDFUA2ArlingtonXMP.*|HTML(SelectorHeavyCompiled|TableHeavyCompiled|DataImageHeavyCompiled|MalformedCompiled).*)$' -benchmem -count=3
+make bench-generation-core
 ```
 
 For a generation-only suite without HTML examples:
@@ -19,43 +18,34 @@ For a generation-only suite without HTML examples:
 make bench-generation-core-ci
 ```
 
-| Workload | Mode | ns/PDF | PDF/sec | Memory/PDF | Allocs/PDF |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Baseline no-compliance, no image | Single worker | 349,084 | 2,864 | 448,603 B | 1,410 |
-| Baseline no-compliance, no image | 40 workers | 43,333 | 23,077 | 447,385 B | 1,408 |
-| Baseline no-compliance, uncached image | Single worker | 932,906 | 1,072 | 1,117,652 B | 1,703 |
-| Baseline no-compliance, uncached image | 100% CPU | 89,024 | 11,233 | 874,016 B | 1,690 |
-| Baseline no-compliance, cached image | Single worker | 517,280 | 1,933 | 825,700 B | 1,564 |
-| Baseline no-compliance, cached image | 100% CPU | 79,543 | 12,572 | 649,346 B | 1,555 |
-| Baseline no-compliance, signed uncached image | Single worker | 1,934,896 | 517 | 1,953,249 B | 2,033 |
-| Baseline no-compliance, signed uncached image | 100% CPU | 251,348 | 3,979 | 1,706,731 B | 2,014 |
-| Baseline no-compliance, signed cached image | Single worker | 1,419,739 | 704 | 1,555,624 B | 1,889 |
-| Baseline no-compliance, signed cached image | 100% CPU | 203,488 | 4,914 | 1,466,333 B | 1,879 |
-| PDF/A-4f metadata, ICC, UTF-8 fonts, attachment | Single worker | 5,094,580 | 196 | 10,526,864 B | 27,629 |
-| PDF/A-4f metadata, ICC, UTF-8 fonts, attachment | 100% CPU | 916,350 | 1,091 | 11,220,702 B | 27,644 |
-| PDF/UA-2 + Arlington tagged compiled HTML | Single worker | 5,842,078 | 171 | 11,087,177 B | 34,761 |
-| PDF/UA-2 + Arlington tagged compiled HTML | 100% CPU | 764,041 | 1,309 | 12,095,492 B | 34,785 |
-| Signed PDF/A-4f + PDF/UA-2 + Arlington + XMP XML metadata | Single worker | 6,824,408 | 147 | 11,877,863 B | 35,144 |
-| Signed PDF/A-4f + PDF/UA-2 + Arlington + XMP XML metadata | 100% CPU | 833,561 | 1,200 | 12,621,359 B | 35,159 |
-| Selector-heavy compiled HTML | Single worker | 635,650 | 1,573 | 207,433 B | 1,615 |
-| Selector-heavy compiled HTML | 40 workers | 127,062 | 7,870 | 211,776 B | 1,628 |
-| Table-heavy compiled HTML | Single worker | 968,191 | 1,033 | 826,387 B | 1,899 |
-| Table-heavy compiled HTML | 40 workers | 174,264 | 5,738 | 826,360 B | 1,903 |
-| Data-image-heavy compiled HTML | Single worker | 257,365 | 3,886 | 263,682 B | 1,059 |
-| Data-image-heavy compiled HTML | 40 workers | 36,791 | 27,181 | 168,223 B | 1,056 |
-| Malformed compiled HTML recovery | Single worker | 340,485 | 2,937 | 296,380 B | 1,196 |
-| Malformed compiled HTML recovery | 40 workers | 101,023 | 9,899 | 299,271 B | 1,206 |
-| Four uncached images | Single worker | 1,311,764 | 762 | 1,971,071 B | 1,470 |
-| Four uncached images | 100% CPU | 182,279 | 5,486 | 1,838,310 B | 1,460 |
-| Four cached images | Single worker | 63,990 | 15,627 | 70,630 B | 275 |
-| Four cached images | 100% CPU | 48,924 | 20,440 | 72,979 B | 283 |
+| Workload | Mode | ns/PDF | PDF/sec | Memory/PDF | Allocs/PDF | Output size | Total allocated |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Text table | 40 workers | 85,868 | 11,646 | 369,284 B | 1,479 | 43,543 B | 5,033 MB |
+| Long text | 40 workers | 35,729 | 27,989 | 75,519 B | 235 | 8,233 B | 2,284 MB |
+| Baseline no-compliance, uncached image | 40 workers | 151,452 | 6,603 | 632,074 B | 1,391 | 59,498 B | 4,619 MB |
+| Baseline no-compliance, no image | 40 workers | 87,335 | 11,450 | 436,097 B | 1,207 | 50,260 B | 7,090 MB |
+| Baseline no-compliance, cached image | 40 workers | 69,819 | 14,323 | 455,848 B | 1,268 | 59,330 B | 7,497 MB |
+| Baseline no-compliance, signed uncached image | 40 workers | 422,288 | 2,368 | 1,023,959 B | 1,581 | 93,290 B | 3,161 MB |
+| Baseline no-compliance, signed cached image | 40 workers | 339,404 | 2,946 | 848,000 B | 1,457 | 93,066 B | 2,911 MB |
+| UTF-8 text | 40 workers | 699,661 | 1,429 | 5,646,683 B | 12,464 | 44,322 B | 8,385 MB |
+| UTF-8 text, cached font | 40 workers | 200,822 | 4,980 | 636,136 B | 2,052 | 44,322 B | 3,568 MB |
+| Text compression, best speed | 40 workers | 79,007 | 12,657 | 360,635 B | 959 | 8,139 B | 4,990 MB |
+| Text compression, best compression | 40 workers | 153,613 | 6,510 | 369,508 B | 959 | 7,678 B | 2,608 MB |
+| Four uncached images | 40 workers | 202,576 | 4,936 | 1,346,954 B | 1,293 | 15,025 B | 8,028 MB |
+| Four cached images | 40 workers | 5,399 | 185,214 | 63,357 B | 175 | 14,969 B | 13,958 MB |
+| SVG | 40 workers | 8,579 | 116,558 | 45,922 B | 118 | 7,613 B | 6,282 MB |
+| Templates | 40 workers | 66,614 | 15,012 | 229,002 B | 402 | 9,862 B | 3,840 MB |
+| Imported PDF pages | 40 workers | 5,423 | 184,402 | 40,338 B | 267 | 1,890 B | 8,296 MB |
+| Protection | 40 workers | 8,198 | 121,980 | 54,476 B | 328 | 4,999 B | 7,727 MB |
+| Attachments | 40 workers | 67,375 | 14,842 | 118,438 B | 173 | 13,684 B | 2,088 MB |
 
-The 100% CPU rows use `runtime.GOMAXPROCS(0)` explicit benchmark workers, so
-they measure concurrent PDF generation throughput across all logical CPUs
-available to the Go process. Signed rows
-include PDF output plus detached CMS signing; the benchmark certificate and key
-are prepared outside the timed loop. Compliance rows measure generation only;
-external veraPDF and Arlington validation are separate CI steps.
+The 40-worker rows use a fixed explicit worker count, so they measure concurrent
+PDF generation throughput with the same workload pressure across machines.
+Signed rows include PDF output plus detached CMS signing; the benchmark
+certificate and key are prepared outside the timed loop. Compliance rows measure
+generation only; external veraPDF and Arlington validation are separate CI
+steps. The raw Go benchmark output also includes `pdf/s`, `pdf_bytes`, and
+`total_MB` metrics from the timed loop.
 
 Additional compiled HTML/parser medians from:
 
