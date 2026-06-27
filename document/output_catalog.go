@@ -10,8 +10,10 @@ import (
 
 // SetDefaultCatalogSort sets the default value of the catalog sort flag that
 // will be used when initializing a new Document instance. See SetCatalogSort() for
-// more details.
+// more details. Prefer NewWithDefaults for per-document configuration.
 func SetDefaultCatalogSort(flag bool) {
+	_gl.Lock()
+	defer _gl.Unlock()
 	_gl.catalogSort = flag
 }
 
@@ -24,15 +26,20 @@ func (f *Document) SetCatalogSort(flag bool) {
 
 // SetDefaultCreationDate sets the default value of the document creation date
 // that will be used when initializing a new Document instance. See
-// SetCreationDate() for more details.
+// SetCreationDate() for more details. Prefer NewWithDefaults for per-document
+// configuration.
 func SetDefaultCreationDate(tm time.Time) {
+	_gl.Lock()
+	defer _gl.Unlock()
 	_gl.creationDate = tm
 }
 
 // SetDefaultModificationDate sets the default document modification date used
 // when initializing a new Document instance. See SetCreationDate() for more
-// details.
+// details. Prefer NewWithDefaults for per-document configuration.
 func SetDefaultModificationDate(tm time.Time) {
+	_gl.Lock()
+	defer _gl.Unlock()
 	_gl.modDate = tm
 }
 

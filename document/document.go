@@ -8,10 +8,12 @@ import (
 	"compress/zlib"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
 var _gl struct {
+	sync.RWMutex
 	catalogSort  bool
 	noCompress   bool // Initial zero value indicates compression
 	creationDate time.Time
@@ -27,6 +29,7 @@ func (b *fmtBuffer) printf(fmtStr string, args ...any) {
 }
 
 func documentNew(orientationStr, unitStr, sizeStr, fontDirStr string, size Size) (f *Document) {
+	defaults := DefaultSettings()
 	f = new(Document)
 	if orientationStr == "" {
 		orientationStr = "p"
@@ -160,9 +163,8 @@ func documentNew(orientationStr, unitStr, sizeStr, fontDirStr string, size Size)
 	f.acceptPageBreak = func() bool {
 		return f.autoPageBreak
 	}
-	// Enable compression
+	// Default compression level
 	f.compressLevel = zlib.BestSpeed
-	f.SetCompression(!_gl.noCompress)
 	f.spotColorMap = make(map[string]spotColorType)
 	f.blendList = make([]blendModeType, 0, 8)
 	f.blendList = append(f.blendList, blendModeType{}) // blendList[0] is unused (1-based)
@@ -175,19 +177,65 @@ func documentNew(orientationStr, unitStr, sizeStr, fontDirStr string, size Size)
 	f.pdfVersion = "1.3"
 	f.SetProducer("Document "+cnDocumentVersion, true)
 	f.layerInit()
-	f.catalogSort = _gl.catalogSort
-	f.creationDate = _gl.creationDate
-	f.modDate = _gl.modDate
+	f.applyDefaults(defaults)
 	f.userUnderlineThickness = 1
 	return
 }
 
+func newWithOptions(options Options) (f *Document) {
+	cfg := options.normalized()
+	f = documentNew(cfg.orientationStr, cfg.unitStr, cfg.sizeStr, cfg.fontDirStr, cfg.size)
+	if f.err == nil && cfg.optimize {
+		f.SetCompressionLevel(zlib.BestCompression)
+	}
+	return f
+}
+
 // NewWithOptions returns a new Document instance using explicit construction
-// options. It is an alternative to New when the default page size must be set by
-// width and height instead of a named page size.
+// options. It preserves the legacy error-latching behavior: constructor errors
+// are stored on the returned document and can be read with Error(). New code that
+// prefers normal Go error handling should use NewDocumentWithOptions.
 func NewWithOptions(options Options) (f *Document) {
-	f = documentNew(options.OrientationStr, options.UnitStr, options.SizeStr, options.FontDirStr, options.Size)
-	if f.err == nil && options.Optimize {
+	return newWithOptions(options)
+}
+
+// NewDocumentWithOptions returns a new Document instance and reports constructor
+// failures directly instead of returning a Document with a latched error.
+func NewDocumentWithOptions(options Options) (*Document, error) {
+	f := newWithOptions(options)
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f, nil
+}
+
+// NewDocument returns a new Document instance using functional options and
+// normal Go error handling.
+func NewDocument(options ...Option) (*Document, error) {
+	return NewDocumentWithOptions(buildOptions(options...))
+}
+
+// MustNew returns a new Document instance using functional options and panics if
+// construction fails.
+func MustNew(options ...Option) *Document {
+	f, err := NewDocument(options...)
+	if err != nil {
+		panic(err)
+	}
+	return f
+}
+
+// NewWithDefaults returns a new Document instance using explicit per-document
+// defaults instead of package-wide default state. These defaults affect only the
+// returned document.
+func NewWithDefaults(options Options, defaults Defaults) (f *Document) {
+	cfg := options.normalized()
+	f = documentNew(cfg.orientationStr, cfg.unitStr, cfg.sizeStr, cfg.fontDirStr, cfg.size)
+	if f.err != nil {
+		return f
+	}
+	f.applyDefaults(defaults)
+	if cfg.optimize && defaults.Compression {
 		f.SetCompressionLevel(zlib.BestCompression)
 	}
 	return f
