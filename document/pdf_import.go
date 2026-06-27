@@ -4,24 +4,21 @@
 package document
 
 import (
-	"bytes"
-	"errors"
-	"fmt"
 	"io"
-	"os"
-	"sort"
+
+	"github.com/cssbruno/gopdfkit/importpdf"
 )
 
-const maxPDFImportSourceBytes = 128 * 1024 * 1024
+const (
+	maxPDFImportSourceBytes        = importpdf.MaxSourceBytes
+	maxPDFImportDecodedStreamBytes = importpdf.MaxDecodedStreamBytes
+	maxPDFImportArrayItems         = importpdf.MaxArrayItems
+)
 
 type importedPDFPage struct {
-	id        int
-	widthPt   float64
-	heightPt  float64
-	resources []byte
-	content   []byte
-	objects   map[pdfObjRef][]byte
-	objectID  int
+	id       int
+	page     *importpdf.PageRef
+	objectID int
 }
 
 // ImportPage imports one page from a PDF file and returns its imported page ID.
@@ -31,41 +28,36 @@ type importedPDFPage struct {
 // streams are unfiltered or FlateDecode-compressed. PDFs using xref streams or
 // object streams are reported as unsupported.
 func (f *Document) ImportPage(sourceFile string, pageNo int, box string) int {
-	data, err := readPDFImportFile(sourceFile)
+	source, err := importpdf.OpenFile(sourceFile)
 	if err != nil {
 		f.SetError(err)
 		return 0
 	}
-	return f.importPageFromBytes(data, pageNo, box)
+	return f.importPageFromSource(source, pageNo, box)
 }
 
 // ImportPageStream imports one page from a PDF stream and returns its imported
 // page ID. The stream is read into memory, so callers may pass any io.Reader.
 func (f *Document) ImportPageStream(source io.Reader, pageNo int, box string) int {
-	data, err := readPDFImportReader(source)
+	sourcePDF, err := importpdf.OpenReader(source)
 	if err != nil {
 		f.SetError(err)
 		return 0
 	}
-	return f.importPageFromBytes(data, pageNo, box)
+	return f.importPageFromSource(sourcePDF, pageNo, box)
 }
 
 // ImportPagesFromSource imports every page from source and returns the imported
 // page IDs. source may be a file path string, []byte, or io.Reader.
 func (f *Document) ImportPagesFromSource(source any, box string) []int {
-	data, err := pdfImportSourceBytes(source)
+	sourcePDF, err := importpdf.Open(source)
 	if err != nil {
 		f.SetError(err)
 		return nil
 	}
-	doc, err := parsePDFImportDocument(data)
-	if err != nil {
-		f.SetError(err)
-		return nil
-	}
-	ids := make([]int, 0, len(doc.pages))
-	for pageNo := 1; pageNo <= len(doc.pages); pageNo++ {
-		page, err := doc.importPage(pageNo, box)
+	ids := make([]int, 0, sourcePDF.PageCount())
+	for pageNo := 1; pageNo <= sourcePDF.PageCount(); pageNo++ {
+		page, err := sourcePDF.Page(pageNo, box)
 		if err != nil {
 			f.SetError(err)
 			return ids
@@ -79,15 +71,11 @@ func (f *Document) ImportPagesFromSource(source any, box string) []int {
 // reported in PDF points. source may be a file path string, []byte, or
 // io.Reader.
 func GetPageSizes(source any) (map[int]map[string]Size, error) {
-	data, err := pdfImportSourceBytes(source)
+	sizes, err := importpdf.GetPageSizes(source)
 	if err != nil {
 		return nil, err
 	}
-	doc, err := parsePDFImportDocument(data)
-	if err != nil {
-		return nil, err
-	}
-	return doc.pageSizes(), nil
+	return documentPageSizes(sizes), nil
 }
 
 // GetPageSizes returns the available page box sizes for a PDF source and stores
@@ -101,13 +89,8 @@ func (f *Document) GetPageSizes(source any) map[int]map[string]Size {
 	return sizes
 }
 
-func (f *Document) importPageFromBytes(data []byte, pageNo int, box string) int {
-	doc, err := parsePDFImportDocument(data)
-	if err != nil {
-		f.SetError(err)
-		return 0
-	}
-	page, err := doc.importPage(pageNo, box)
+func (f *Document) importPageFromSource(source *importpdf.Source, pageNo int, box string) int {
+	page, err := source.Page(pageNo, box)
 	if err != nil {
 		f.SetError(err)
 		return 0
@@ -115,11 +98,13 @@ func (f *Document) importPageFromBytes(data []byte, pageNo int, box string) int 
 	return f.addImportedPDFPage(page)
 }
 
-func (f *Document) addImportedPDFPage(page *importedPDFPage) int {
+func (f *Document) addImportedPDFPage(page *importpdf.PageRef) int {
 	f.importedPageSeq++
-	page.id = f.importedPageSeq
-	f.importedPages[page.id] = page
-	return page.id
+	f.importedPages[f.importedPageSeq] = &importedPDFPage{
+		id:   f.importedPageSeq,
+		page: page,
+	}
+	return f.importedPageSeq
 }
 
 // UseImportedPage draws a page imported by ImportPage, ImportPageStream, or
@@ -128,12 +113,12 @@ func (f *Document) addImportedPDFPage(page *importedPDFPage) int {
 // passing zero for both draws the page at its native size.
 func (f *Document) UseImportedPage(pageID int, x, y, w, h float64) {
 	page, ok := f.importedPages[pageID]
-	if !ok || page == nil {
+	if !ok || page == nil || page.page == nil {
 		f.SetErrorf("unknown imported page ID: %d", pageID)
 		return
 	}
-	nativeW := page.widthPt / f.k
-	nativeH := page.heightPt / f.k
+	nativeW := page.page.WidthPoints() / f.k
+	nativeH := page.page.HeightPoints() / f.k
 	switch {
 	case w == 0 && h == 0:
 		w = nativeW
@@ -150,88 +135,14 @@ func (f *Document) UseImportedPage(pageID int, x, y, w, h float64) {
 	f.outf("q %.5f 0 0 %.5f %.5f %.5f cm /IPG%d Do Q", w*f.k, h*f.k, x*f.k, (f.h-(y+h))*f.k, pageID)
 }
 
-func pdfImportSourceBytes(source any) ([]byte, error) {
-	switch src := source.(type) {
-	case string:
-		return readPDFImportFile(src)
-	case []byte:
-		if len(src) > maxPDFImportSourceBytes {
-			return nil, errors.New("PDF import source exceeds maximum size")
+func documentPageSizes(sizes map[int]map[string]importpdf.Size) map[int]map[string]Size {
+	out := make(map[int]map[string]Size, len(sizes))
+	for pageNo, pageSizes := range sizes {
+		converted := make(map[string]Size, len(pageSizes))
+		for name, size := range pageSizes {
+			converted[name] = Size{Wd: size.Wd, Ht: size.Ht}
 		}
-		return append([]byte(nil), src...), nil
-	case io.Reader:
-		return readPDFImportReader(src)
-	default:
-		return nil, fmt.Errorf("unsupported PDF import source type %T", source)
+		out[pageNo] = converted
 	}
-}
-
-func readPDFImportFile(path string) ([]byte, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = file.Close() }()
-	if info, err := file.Stat(); err == nil && info.Mode().IsRegular() && info.Size() > maxPDFImportSourceBytes {
-		return nil, errors.New("PDF import source exceeds maximum size")
-	}
-	return readPDFImportReader(file)
-}
-
-func readPDFImportReader(r io.Reader) ([]byte, error) {
-	data, err := io.ReadAll(io.LimitReader(r, maxPDFImportSourceBytes+1))
-	if err == nil && len(data) > maxPDFImportSourceBytes {
-		err = errors.New("PDF import source exceeds maximum size")
-	}
-	return data, err
-}
-
-func sortedPDFObjRefs(objects map[pdfObjRef][]byte) []pdfObjRef {
-	refs := make([]pdfObjRef, 0, len(objects))
-	for ref := range objects {
-		refs = append(refs, ref)
-	}
-	sort.Slice(refs, func(i, j int) bool {
-		if refs[i].num == refs[j].num {
-			return refs[i].gen < refs[j].gen
-		}
-		return refs[i].num < refs[j].num
-	})
-	return refs
-}
-
-func rewritePDFIndirectRefs(data []byte, refMap map[pdfObjRef]int) []byte {
-	if data == nil {
-		return []byte{}
-	}
-	streamPos := bytes.Index(data, []byte("stream"))
-	if streamPos < 0 {
-		return rewritePDFIndirectRefsInSection(data, refMap)
-	}
-	out := rewritePDFIndirectRefsInSection(data[:streamPos], refMap)
-	out = append(out, data[streamPos:]...)
 	return out
-}
-
-func rewritePDFIndirectRefsInSection(data []byte, refMap map[pdfObjRef]int) []byte {
-	if data == nil {
-		return []byte{}
-	}
-	refs := findPDFIndirectRefs(data)
-	if len(refs) == 0 {
-		return append([]byte(nil), data...)
-	}
-	var out bytes.Buffer
-	last := 0
-	for _, found := range refs {
-		newObj, ok := refMap[found.ref]
-		if !ok {
-			continue
-		}
-		out.Write(data[last:found.start])
-		fmt.Fprintf(&out, "%d 0 R", newObj)
-		last = found.end
-	}
-	out.Write(data[last:])
-	return out.Bytes()
 }

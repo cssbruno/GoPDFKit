@@ -197,28 +197,6 @@ func TestSecurityFontDefinitionReaderSizeLimit(t *testing.T) {
 	}
 }
 
-func TestSecurityPDFImportDecodedStreamLimit(t *testing.T) {
-	compressed := securityZlibBytes(bytes.Repeat([]byte{'A'}, maxPDFImportDecodedStreamBytes+1))
-	_, err := decodePDFStream(pdfDict{"Filter": pdfValue{kind: pdfValueName, name: "FlateDecode"}}, compressed)
-	if err == nil || !strings.Contains(err.Error(), "uncompressed data exceeds expected size") {
-		t.Fatalf("decodePDFStream() error = %v, want decoded stream size limit", err)
-	}
-}
-
-func TestSecurityPDFValueArrayLimit(t *testing.T) {
-	var input strings.Builder
-	input.WriteByte('[')
-	for range maxPDFImportArrayItems + 1 {
-		input.WriteString("0 ")
-	}
-	input.WriteByte(']')
-
-	_, err := newPDFValueParser([]byte(input.String())).parseValue()
-	if err == nil || !strings.Contains(err.Error(), "PDF array exceeds maximum size") {
-		t.Fatalf("parseValue() error = %v, want array size limit", err)
-	}
-}
-
 func TestSecurityFontCacheFileSizeLimit(t *testing.T) {
 	fontPath := filepath.Join(t.TempDir(), "oversized.ttf")
 	file, err := os.Create(fontPath)
