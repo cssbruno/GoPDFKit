@@ -458,7 +458,13 @@ func svgElementPath(node svgNode, style SVGStyle, transform svgMatrix) (SVGPath,
 		if len(segs) == 0 {
 			return SVGPath{}, false, nil
 		}
-		return SVGPath{Segments: svgTransformSegments(segs, transform), Style: svgRenderedStyle(style, transform)}, true, nil
+		transformed := svgTransformSegments(segs, transform)
+		path := SVGPath{Segments: transformed, Style: svgRenderedStyle(style, transform)}
+		if minX, minY, maxX, maxY, ok := svgPathBounds(transformed); ok {
+			path.Bounds = [4]float64{minX, minY, maxX, maxY}
+			path.HasBounds = true
+		}
+		return path, true, nil
 	}
 	switch node.XMLName.Local {
 	case "path":

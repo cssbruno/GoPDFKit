@@ -4,6 +4,7 @@
 package document
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -18,7 +19,13 @@ type SVGImage struct {
 	Ht        float64  // Image height.
 	ImageType string   // Embedded image type, such as png or jpg.
 	Data      []byte   // Encoded image bytes.
+	Name      string   // Deterministic document image name.
 	Style     SVGStyle // Image style.
+}
+
+func svgImageName(imageType string, data []byte) string {
+	sum := sha256.Sum256(data)
+	return fmt.Sprintf("svg-image-%s-%x", imageType, sum)
 }
 
 func svgImageTypeFromMime(mimeType string) string {
@@ -124,5 +131,5 @@ func svgImage(node svgNode, style SVGStyle, transform svgMatrix) (SVGImage, bool
 	}
 	x, y, wd, ht = svgImageBounds(x, y, wd, ht, transform)
 	style = svgRenderedStyle(style, transform)
-	return SVGImage{X: x, Y: y, Wd: wd, Ht: ht, ImageType: imageType, Data: data, Style: style}, true, nil
+	return SVGImage{X: x, Y: y, Wd: wd, Ht: ht, ImageType: imageType, Data: data, Name: svgImageName(imageType, data), Style: style}, true, nil
 }

@@ -1496,8 +1496,11 @@ func TestSVGWritePatternFill(t *testing.T) {
 	if !strings.Contains(pdfText, "W n") {
 		t.Fatal("generated PDF does not clip SVG pattern fill")
 	}
-	if strings.Count(pdfText, "1.000 0.000 0.000 rg") < 2 {
-		t.Fatal("generated PDF does not tile the red pattern content")
+	if strings.Count(pdfText, "1.000 0.000 0.000 rg") != 1 {
+		t.Fatal("generated PDF should render pattern tile content once")
+	}
+	if strings.Count(pdfText, " Do Q") < 2 {
+		t.Fatal("generated PDF does not stamp the cached pattern tile")
 	}
 }
 

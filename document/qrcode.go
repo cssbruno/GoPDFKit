@@ -10,7 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"image/draw"
+	"image/color"
 	"image/png"
 	"strings"
 
@@ -52,12 +52,15 @@ func QRCodePNG(payload string, sizePx int) ([]byte, error) {
 		return nil, fmt.Errorf("qr scale: %w", err)
 	}
 
-	bounds := scaled.Bounds()
-	pngImage := image.NewNRGBA(bounds)
-	draw.Draw(pngImage, bounds, scaled, bounds.Min, draw.Src)
+	gray := image.NewGray(scaled.Bounds())
+	for y := 0; y < gray.Rect.Dy(); y++ {
+		for x := 0; x < gray.Rect.Dx(); x++ {
+			gray.Pix[y*gray.Stride+x] = color.GrayModel.Convert(scaled.At(x+gray.Rect.Min.X, y+gray.Rect.Min.Y)).(color.Gray).Y
+		}
+	}
 
 	var buf bytes.Buffer
-	if err := png.Encode(&buf, pngImage); err != nil {
+	if err := png.Encode(&buf, gray); err != nil {
 		return nil, fmt.Errorf("qr png encode: %w", err)
 	}
 
@@ -76,12 +79,16 @@ func (f *Document) RegisterQRCodePNG(payload string, sizePx int) (string, error)
 		return "", errors.New("qr payload is empty")
 	}
 
+	name := QRCodeImageName(payload)
+	if info := f.images[name]; info != nil {
+		return name, nil
+	}
+
 	data, err := QRCodePNG(payload, sizePx)
 	if err != nil {
 		return "", err
 	}
 
-	name := QRCodeImageName(payload)
 	f.RegisterImageOptionsReader(name, ImageOptions{ImageType: "png", ReadDpi: true}, bytes.NewReader(data))
 
 	return name, f.Error()

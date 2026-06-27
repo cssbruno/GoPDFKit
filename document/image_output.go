@@ -92,7 +92,7 @@ func (f *Document) imageOut(info *ImageInfo, x, y, w, h float64, allowNegativeX,
 		return
 	}
 	content := f.appendImageXObject(make([]byte, 0, len(info.i)+96), info.i, placement.x, placement.y, placement.w, placement.h)
-	f.outbytes(f.wrapTaggedContent(content, tag))
+	f.outTaggedContent(content, tag)
 	if link > 0 || len(linkStr) > 0 {
 		f.newLink(placement.x, placement.y, placement.w, placement.h, link, linkStr)
 	}
@@ -202,7 +202,12 @@ func (f *Document) putimages() {
 		keyList = append(keyList, key)
 	}
 	sort.SliceStable(keyList, func(i, j int) bool {
-		return f.images[keyList[i]].w < f.images[keyList[j]].w
+		left := f.images[keyList[i]]
+		right := f.images[keyList[j]]
+		if left.w != right.w {
+			return left.w < right.w
+		}
+		return left.i < right.i
 	})
 	for _, key := range keyList {
 		image := f.images[key]

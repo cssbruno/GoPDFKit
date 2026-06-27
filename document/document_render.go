@@ -329,9 +329,9 @@ func (r *documentRenderer) renderBlockMeasured(block Block, measure BlockMeasure
 	case QRVerificationBlock:
 		r.renderQRVerification(b)
 	case NoteBoxBlock:
-		r.renderBox(b.Box, func() {
+		r.renderBox(b.EffectiveBox(), func() {
 			if b.Title != "" {
-				r.renderHeading(HeadingBlock{Level: 4, Segments: []TextSegment{{Text: b.Title}}, Style: b.Style})
+				r.renderHeading(HeadingBlock{Level: 4, Segments: []TextSegment{{Text: b.Title}}, Style: b.EffectiveStyle()})
 			}
 			r.renderBlocks(b.Body)
 		})
@@ -339,13 +339,13 @@ func (r *documentRenderer) renderBlockMeasured(block Block, measure BlockMeasure
 		if b.Title != "" {
 			r.renderHeading(HeadingBlock{Level: 2, Segments: []TextSegment{{Text: b.Title}}})
 		}
-		r.renderBox(b.Box, func() { r.renderBlocks(b.Blocks) })
+		r.renderBox(b.EffectiveBox(), func() { r.renderBlocks(b.Blocks) })
 	case ClauseBlock:
 		title := strings.TrimSpace(strings.TrimSpace(b.Number + " " + b.Title))
 		if title != "" {
 			r.renderHeading(HeadingBlock{Level: 3, Segments: []TextSegment{{Text: title}}})
 		}
-		r.renderBox(b.Box, func() { r.renderBlocks(b.Blocks) })
+		r.renderBox(b.EffectiveBox(), func() { r.renderBlocks(b.Blocks) })
 	}
 	if !r.renderingShell && measure.BreakAfter {
 		r.addPageWithTemplate()
@@ -362,9 +362,9 @@ func (r *documentRenderer) addPageWithTemplate() {
 }
 
 func (r *documentRenderer) renderParagraph(block ParagraphBlock) {
-	block.Box = documentParagraphBox(block.Box)
-	r.renderBox(block.Box, func() {
-		style := r.mergedStyle(block.Style)
+	box := documentParagraphBox(block.EffectiveBox())
+	r.renderBox(box, func() {
+		style := r.mergedStyle(block.EffectiveStyle())
 		r.applyTextStyle(style)
 		r.pdf.SetNextTextRole(taggedRoleP)
 		r.pdf.MultiCell(r.contentWidth(), resolvedLineHeight(style), r.textSegmentsPlainText(block.Segments), "", textAlign(style.Align), false)
@@ -372,14 +372,15 @@ func (r *documentRenderer) renderParagraph(block ParagraphBlock) {
 }
 
 func (r *documentRenderer) renderHeading(block HeadingBlock) {
-	block.Box = documentHeadingBox(block.Box)
-	r.renderBox(block.Box, func() {
+	box := documentHeadingBox(block.EffectiveBox())
+	blockStyle := block.EffectiveStyle()
+	r.renderBox(box, func() {
 		defaultStyle := r.measureContext().DefaultStyle
-		style := mergedTextStyle(defaultStyle, block.Style)
+		style := mergedTextStyle(defaultStyle, blockStyle)
 		style.Bold = true
-		if block.Style.FontSize <= 0 {
+		if blockStyle.FontSize <= 0 {
 			style.FontSize = documentHeadingFontSize(defaultStyle.FontSize, block.Level)
-			style.LineHeight = firstPositive(block.Style.LineHeight, defaultStyle.LineHeight*style.FontSize/defaultStyle.FontSize)
+			style.LineHeight = firstPositive(blockStyle.LineHeight, defaultStyle.LineHeight*style.FontSize/defaultStyle.FontSize)
 		}
 		r.applyTextStyle(style)
 		r.pdf.SetNextTextRole(documentHeadingRole(block.Level))
@@ -406,7 +407,8 @@ func documentHeadingRole(level int) string {
 }
 
 func (r *documentRenderer) renderList(block ListBlock) {
-	r.renderBox(block.Box, func() {
+	blockStyle := block.EffectiveStyle()
+	r.renderBox(block.EffectiveBox(), func() {
 		r.pdf.BeginStructure(taggedRoleL)
 		defer r.pdf.EndStructure()
 		markerWidth := r.listMarkerWidth(block)
@@ -414,7 +416,7 @@ func (r *documentRenderer) renderList(block ListBlock) {
 			r.pdf.BeginStructure(taggedRoleLI)
 			marker := listMarker(block, i)
 			x, y := r.pdf.GetXY()
-			r.applyTextStyle(r.mergedStyle(block.Style))
+			r.applyTextStyle(r.mergedStyle(blockStyle))
 			r.pdf.SetNextTextRole(taggedRoleLbl)
 			r.pdf.CellFormat(markerWidth, 5, marker, "", 0, "R", false, 0, "")
 			itemX := x + markerWidth + 2
@@ -434,7 +436,7 @@ func (r *documentRenderer) renderList(block ListBlock) {
 }
 
 func (r *documentRenderer) listMarkerWidth(block ListBlock) float64 {
-	r.applyTextStyle(r.mergedStyle(block.Style))
+	r.applyTextStyle(r.mergedStyle(block.EffectiveStyle()))
 	wd := 5.0
 	if len(block.Items) == 0 {
 		return wd
@@ -450,7 +452,7 @@ func (r *documentRenderer) listMarkerWidth(block ListBlock) float64 {
 }
 
 func (r *documentRenderer) renderTable(block TableBlock) {
-	r.renderBox(block.Box, func() {
+	r.renderBox(block.EffectiveBox(), func() {
 		r.pdf.BeginStructure(taggedRoleTable)
 		defer r.pdf.EndStructure()
 		if block.Caption != "" {
@@ -585,7 +587,7 @@ func (r *documentRenderer) measureRenderedTableCellDetailed(cell TableCell, widt
 	}
 	ctx := r.measureContextForWidth(contentWidth)
 	if len(cell.Blocks) == 0 {
-		style := mergedTextStyle(ctx.DefaultStyle, cell.Style)
+		style := mergedTextStyle(ctx.DefaultStyle, cell.EffectiveStyle())
 		measurement.height = maxPositive(4, resolvedLineHeight(style))
 		return measurement
 	}
@@ -597,7 +599,7 @@ func (r *documentRenderer) measureRenderedTableCellDetailed(cell TableCell, widt
 		total += blockMeasure.Height
 	}
 	if total <= 0 {
-		total = resolvedLineHeight(mergedTextStyle(ctx.DefaultStyle, cell.Style))
+		total = resolvedLineHeight(mergedTextStyle(ctx.DefaultStyle, cell.EffectiveStyle()))
 	}
 	measurement.height = total + 2
 	return measurement
@@ -630,7 +632,7 @@ func tableCellHeaderScope(header bool) string {
 }
 
 func (r *documentRenderer) renderImage(block ImageBlock) {
-	r.renderBox(block.Box, func() {
+	r.renderBox(block.EffectiveBox(), func() {
 		wd := firstPositive(block.Width, block.MaxWidth, r.contentWidth())
 		ht := firstPositive(block.Height, block.MaxHeight, wd*0.75)
 		if block.MaxWidth > 0 && wd > block.MaxWidth {
@@ -670,10 +672,11 @@ func (r *documentRenderer) renderImage(block ImageBlock) {
 
 func (r *documentRenderer) registerImageBlock(block ImageBlock) (string, ImageOptions, *ImageInfo) {
 	options := ImageOptions{ImageType: block.Format, ReadDpi: block.DPI > 0}
+	data := block.ImageData()
 	switch {
-	case len(block.Data) > 0 && block.Format != "":
+	case len(data) > 0 && block.Format != "":
 		name := r.documentImageName(block)
-		info := r.pdf.RegisterImageOptionsReader(name, options, bytes.NewReader(block.Data))
+		info := r.pdf.RegisterImageOptionsReader(name, options, bytes.NewReader(data))
 		if block.DPI > 0 && info != nil {
 			info.SetDpi(block.DPI)
 		}
@@ -690,10 +693,11 @@ func (r *documentRenderer) registerImageBlock(block ImageBlock) (string, ImageOp
 }
 
 func (r *documentRenderer) documentImageName(block ImageBlock) string {
+	data := block.ImageData()
 	key := documentImageCacheKey{
 		format: strings.ToLower(block.Format),
-		ptr:    uintptr(unsafe.Pointer(&block.Data[0])),
-		len:    len(block.Data),
+		ptr:    uintptr(unsafe.Pointer(&data[0])),
+		len:    len(data),
 	}
 	if name, ok := r.imageNameCache[key]; ok {
 		return name
@@ -707,10 +711,11 @@ func (r *documentRenderer) documentImageName(block ImageBlock) string {
 }
 
 func documentImageName(block ImageBlock) string {
+	data := block.ImageData()
 	hash := sha256.New()
 	hash.Write([]byte(strings.ToLower(block.Format)))
 	hash.Write([]byte{0})
-	hash.Write(block.Data)
+	hash.Write(data)
 	return "document-image-" + hex.EncodeToString(hash.Sum(nil))
 }
 
@@ -753,7 +758,7 @@ func (r *documentRenderer) renderFittedImage(name string, options ImageOptions, 
 }
 
 func (r *documentRenderer) renderSignatureRow(block SignatureRowBlock) {
-	r.renderBox(block.Box, func() {
+	r.renderBox(block.EffectiveBox(), func() {
 		columns := block.Columns
 		if len(columns) == 0 {
 			columns = []SignatureColumn{{}}
@@ -803,13 +808,13 @@ func signatureColumnText(col SignatureColumn) string {
 }
 
 func (r *documentRenderer) renderMetadataGrid(block MetadataGridBlock) {
-	r.renderBox(block.Box, func() {
+	r.renderBox(block.EffectiveBox(), func() {
 		columns := block.Columns
 		if columns <= 0 {
 			columns = 2
 		}
 		wd := r.contentWidth() / float64(columns)
-		r.applyTextStyle(r.mergedStyle(block.Style))
+		r.applyTextStyle(r.mergedStyle(block.EffectiveStyle()))
 		for i, field := range block.Fields {
 			if i > 0 && i%columns == 0 {
 				r.pdf.Ln(6)
@@ -834,7 +839,7 @@ func metadataFieldText(field MetadataField) string {
 }
 
 func (r *documentRenderer) renderQRVerification(block QRVerificationBlock) {
-	r.renderBox(block.Box, func() {
+	r.renderBox(block.EffectiveBox(), func() {
 		qr := block.QR
 		if strings.TrimSpace(qr.Value) == "" && strings.TrimSpace(qr.URL) == "" {
 			r.pdf.SetErrorf("QR verification block requires a value or URL")
@@ -862,7 +867,7 @@ func (r *documentRenderer) renderQRVerification(block QRVerificationBlock) {
 			}
 			segments = []TextSegment{{Text: text}}
 		}
-		r.applyTextStyle(r.mergedStyle(block.Style))
+		r.applyTextStyle(r.mergedStyle(block.EffectiveStyle()))
 		r.pdf.SetNextTextRole(taggedRoleP)
 		r.pdf.MultiCell(r.contentWidth()-size-4, 5, r.textSegmentsPlainText(segments), "", "L", false)
 		if r.pdf.GetY() < y+size {

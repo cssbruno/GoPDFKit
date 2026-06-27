@@ -87,7 +87,7 @@ func (f *Document) UseTemplateScaled(t Template, corner Point, size Size) {
 	ty := (f.curPageSize.Ht - corner.Y - size.Ht) * f.k
 
 	content := []byte(sprintf("q %.4f 0 0 %.4f %.4f %.4f cm\n/TPL%s Do Q", scaleX, scaleY, tx, ty, t.ID()))
-	f.outbytes(f.wrapTaggedContent(content, taggedContentOptions{Artifact: true}))
+	f.outTaggedContent(content, taggedContentOptions{Artifact: true})
 }
 
 func validateTemplateGeometry(corner Point, size Size) error {

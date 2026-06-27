@@ -6,10 +6,12 @@ package document
 import (
 	"bytes"
 	"crypto/sha1"
-	"encoding/gob"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"maps"
+	"math"
+	"sort"
 )
 
 // createTemplate creates a template, copying graphics settings from a Document
@@ -33,7 +35,7 @@ func createTemplate(corner Point, size Size, orientationStr, unitStr, fontDirStr
 	bytes := make([][]byte, len(tpl.pages))
 	// Skip the first page because it is always empty.
 	for x := 1; x < len(bytes); x++ {
-		bytes[x] = tpl.pages[x].Bytes()
+		bytes[x] = append([]byte(nil), tpl.pages[x].Bytes()...)
 	}
 
 	templates := make([]Template, 0, len(tpl.templates))
@@ -42,7 +44,14 @@ func createTemplate(corner Point, size Size, orientationStr, unitStr, fontDirStr
 	}
 	images := tpl.images
 
-	template := DocumentTpl{corner, size, bytes, images, templates, tpl.page}
+	template := DocumentTpl{
+		corner:    corner,
+		size:      size,
+		bytes:     bytes,
+		images:    images,
+		templates: templates,
+		page:      tpl.page,
+	}
 	return &template
 }
 
@@ -54,6 +63,7 @@ type DocumentTpl struct {
 	images    map[string]*ImageInfo
 	templates []Template
 	page      int
+	id        string
 }
 
 const (
@@ -67,7 +77,10 @@ const (
 
 // ID returns the global template identifier.
 func (t *DocumentTpl) ID() string {
-	return fmt.Sprintf("%x", sha1.Sum(t.Bytes()))
+	if t.id == "" {
+		t.id = fmt.Sprintf("%x", sha1.Sum(t.Bytes()))
+	}
+	return t.id
 }
 
 // Size returns the bounding dimensions of this template.
@@ -101,6 +114,7 @@ func (t *DocumentTpl) FromPage(page int) (Template, error) {
 
 	t2 := *t
 	t2.page = page
+	t2.id = ""
 	return &t2, nil
 }
 
@@ -135,11 +149,12 @@ func (t *DocumentTpl) NumPages() int {
 
 // Serialize turns a template into a byte slice for later deserialization.
 func (t *DocumentTpl) Serialize() ([]byte, error) {
-	b := new(bytes.Buffer)
-	enc := gob.NewEncoder(b)
-	err := enc.Encode(t)
-
-	return b.Bytes(), err
+	var w templateBinaryWriter
+	w.writeRaw([]byte(templateBinaryMagic))
+	if err := w.writeTemplate(t, 0); err != nil {
+		return nil, err
+	}
+	return w.bytes(), nil
 }
 
 // DeserializeTemplate creates a template from a previously serialized template.
@@ -147,13 +162,18 @@ func DeserializeTemplate(b []byte) (Template, error) {
 	if len(b) > maxTemplateSerializedBytes {
 		return nil, errors.New("serialized template exceeds maximum size")
 	}
-	tpl := new(DocumentTpl)
-	dec := gob.NewDecoder(bytes.NewBuffer(b))
-	err := dec.Decode(tpl)
-	if err == nil {
-		err = tpl.validate()
+	r := templateBinaryReader{data: b}
+	if !bytes.Equal(r.readRawBytes(len(templateBinaryMagic)), []byte(templateBinaryMagic)) {
+		return nil, errors.New("invalid serialized template header")
 	}
-	return tpl, err
+	tpl, err := r.readTemplate(0)
+	if err != nil {
+		return nil, err
+	}
+	if err := tpl.validate(); err != nil {
+		return nil, err
+	}
+	return tpl, nil
 }
 
 // childrenImages returns the next layer of child images without recursing into
@@ -166,12 +186,27 @@ func (t *DocumentTpl) childrenImages() map[string]*ImageInfo {
 		if invalidTemplate(child) {
 			continue
 		}
+		childID := child.ID()
 		for key, image := range child.Images() {
-			images[sprintf("t%s-%s", child.ID(), key)] = image
+			images[sprintf("t%s-%s", childID, key)] = image
 		}
 	}
 
 	return images
+}
+
+func (t *DocumentTpl) childImageKeys() map[string]bool {
+	keys := make(map[string]bool)
+	for _, child := range t.templates {
+		if invalidTemplate(child) {
+			continue
+		}
+		childID := child.ID()
+		for key := range child.Images() {
+			keys[sprintf("t%s-%s", childID, key)] = true
+		}
+	}
+	return keys
 }
 
 // childrenTemplates returns the next layer of child templates without
@@ -198,7 +233,11 @@ func (t *DocumentTpl) topLevelTemplates() []Template {
 
 	templates := make([]Template, 0, len(t.templates))
 	for _, child := range t.templates {
-		if invalidTemplate(child) || nestedIDs[child.ID()] {
+		if invalidTemplate(child) {
+			continue
+		}
+		childID := child.ID()
+		if nestedIDs[childID] {
 			continue
 		}
 		templates = append(templates, child)
@@ -208,85 +247,332 @@ func (t *DocumentTpl) topLevelTemplates() []Template {
 }
 
 func (t *DocumentTpl) ownImages() map[string]*ImageInfo {
-	childImages := t.childrenImages()
+	childImageKeys := t.childImageKeys()
 	images := make(map[string]*ImageInfo)
 	for key, image := range t.images {
-		if _, inherited := childImages[key]; !inherited {
+		if !childImageKeys[key] {
 			images[key] = image
 		}
 	}
 	return images
 }
 
+const templateBinaryMagic = "GPKTPL1\x00"
+
 // GobEncode encodes the receiving template into a byte buffer. Use GobDecode
 // to decode the byte buffer back to a template.
 func (t *DocumentTpl) GobEncode() ([]byte, error) {
-	w := new(bytes.Buffer)
-	encoder := gob.NewEncoder(w)
-
-	fields := []any{
-		t.topLevelTemplates(),
-		t.ownImages(),
-		t.corner,
-		t.size,
-		t.bytes,
-		t.page,
-	}
-	for _, field := range fields {
-		if err := encoder.Encode(field); err != nil {
-			return nil, err
-		}
-	}
-
-	return w.Bytes(), nil
+	return t.Serialize()
 }
 
 // GobDecode decodes the specified byte buffer into the receiving template.
 func (t *DocumentTpl) GobDecode(buf []byte) error {
-	r := bytes.NewBuffer(buf)
-	decoder := gob.NewDecoder(r)
-
-	templates, err := decodeTemplateList(decoder)
+	if len(buf) > maxTemplateSerializedBytes {
+		return errors.New("serialized template exceeds maximum size")
+	}
+	r := templateBinaryReader{data: buf}
+	if !bytes.Equal(r.readRawBytes(len(templateBinaryMagic)), []byte(templateBinaryMagic)) {
+		return errors.New("invalid serialized template header")
+	}
+	tpl, err := r.readTemplate(0)
 	if err != nil {
 		return err
 	}
-	t.templates = templates
+	*t = *tpl
+	return nil
+}
 
+type templateBinaryWriter struct {
+	buf bytes.Buffer
+	err error
+}
+
+func (w *templateBinaryWriter) bytes() []byte {
+	if w.err != nil {
+		return nil
+	}
+	return w.buf.Bytes()
+}
+
+func (w *templateBinaryWriter) writeTemplate(t *DocumentTpl, depth int) error {
+	if w.err != nil {
+		return w.err
+	}
+	if t == nil {
+		return errors.New("invalid nil template")
+	}
+	if depth > maxTemplateDepth {
+		return errors.New("template nesting depth exceeded")
+	}
+	children := t.topLevelTemplates()
+	w.writeUint(uint64(len(children)))
+	for _, child := range children {
+		childTpl, ok := child.(*DocumentTpl)
+		if !ok || childTpl == nil {
+			return errors.New("unsupported template implementation")
+		}
+		if err := w.writeTemplate(childTpl, depth+1); err != nil {
+			return err
+		}
+	}
+	w.writeImages(t.ownImages())
+	w.writeFloat(t.corner.X)
+	w.writeFloat(t.corner.Y)
+	w.writeFloat(t.size.Wd)
+	w.writeFloat(t.size.Ht)
+	w.writeBytesList(t.bytes)
+	w.writeInt(t.page)
+	return w.err
+}
+
+func (w *templateBinaryWriter) writeImages(images map[string]*ImageInfo) {
+	keys := make([]string, 0, len(images))
+	for key := range images {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	w.writeUint(uint64(len(keys)))
+	for _, key := range keys {
+		w.writeString(key)
+		w.writeImage(images[key])
+	}
+}
+
+func (w *templateBinaryWriter) writeImage(info *ImageInfo) {
+	if info == nil {
+		w.writeBool(false)
+		return
+	}
+	w.writeBool(true)
+	w.writeBytes(info.data)
+	w.writeBytes(info.smask)
+	w.writeInt(info.n)
+	w.writeFloat(info.w)
+	w.writeFloat(info.h)
+	w.writeString(info.cs)
+	w.writeBytes(info.pal)
+	w.writeInt(info.bpc)
+	w.writeString(info.f)
+	w.writeString(info.dp)
+	w.writeUint(uint64(len(info.trns)))
+	for _, value := range info.trns {
+		w.writeInt(value)
+	}
+	w.writeFloat(info.scale)
+	w.writeFloat(info.dpi)
+}
+
+func (w *templateBinaryWriter) writeBytesList(values [][]byte) {
+	w.writeUint(uint64(len(values)))
+	for _, value := range values {
+		w.writeBytes(value)
+	}
+}
+
+func (w *templateBinaryWriter) writeString(value string) {
+	w.writeBytes([]byte(value))
+}
+
+func (w *templateBinaryWriter) writeRaw(value []byte) {
+	if w.err == nil {
+		_, w.err = w.buf.Write(value)
+	}
+}
+
+func (w *templateBinaryWriter) writeBytes(value []byte) {
+	w.writeUint(uint64(len(value)))
+	if w.err == nil {
+		_, w.err = w.buf.Write(value)
+	}
+}
+
+func (w *templateBinaryWriter) writeBool(value bool) {
+	if value {
+		w.writeByte(1)
+	} else {
+		w.writeByte(0)
+	}
+}
+
+func (w *templateBinaryWriter) writeInt(value int) {
+	w.writeUint(uint64(int64(value)))
+}
+
+func (w *templateBinaryWriter) writeFloat(value float64) {
+	w.writeUint(math.Float64bits(value))
+}
+
+func (w *templateBinaryWriter) writeUint(value uint64) {
+	var scratch [binary.MaxVarintLen64]byte
+	n := binary.PutUvarint(scratch[:], value)
+	if w.err == nil {
+		_, w.err = w.buf.Write(scratch[:n])
+	}
+}
+
+func (w *templateBinaryWriter) writeByte(value byte) {
+	if w.err == nil {
+		w.err = w.buf.WriteByte(value)
+	}
+}
+
+type templateBinaryReader struct {
+	data []byte
+	pos  int
+	err  error
+}
+
+func (r *templateBinaryReader) readTemplate(depth int) (*DocumentTpl, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	if depth > maxTemplateDepth {
+		return nil, errors.New("template nesting depth exceeded")
+	}
+	childCount := r.readCount(maxTemplateChildren, "template children")
+	children := make([]Template, 0, childCount)
+	for i := 0; i < childCount; i++ {
+		child, err := r.readTemplate(depth + 1)
+		if err != nil {
+			return nil, err
+		}
+		children = append(children, child)
+	}
+	t := &DocumentTpl{templates: children}
 	childImages := t.childrenImages()
 	t.templates = append(t.childrenTemplates(), t.templates...)
-
-	if err := decoder.Decode(&t.images); err != nil {
-		return err
-	}
+	t.images = r.readImages()
 	if t.images == nil {
 		t.images = make(map[string]*ImageInfo)
 	}
 	maps.Copy(t.images, childImages)
-
-	fields := []any{&t.corner, &t.size, &t.bytes, &t.page}
-	for _, field := range fields {
-		if err := decoder.Decode(field); err != nil {
-			return err
-		}
+	t.corner = Point{X: r.readFloat(), Y: r.readFloat()}
+	t.size = Size{Wd: r.readFloat(), Ht: r.readFloat()}
+	t.bytes = r.readBytesList()
+	t.page = r.readInt()
+	if r.err != nil {
+		return nil, r.err
 	}
-
-	return nil
+	return t, nil
 }
 
-func decodeTemplateList(decoder *gob.Decoder) ([]Template, error) {
-	children := make([]*DocumentTpl, 0)
-	if err := decoder.Decode(&children); err != nil {
-		return nil, err
+func (r *templateBinaryReader) readImages() map[string]*ImageInfo {
+	count := r.readCount(maxTemplateImages, "template images")
+	images := make(map[string]*ImageInfo, count)
+	for i := 0; i < count; i++ {
+		key := r.readString()
+		images[key] = r.readImage()
 	}
+	return images
+}
 
-	templates := make([]Template, 0, len(children))
-	for _, child := range children {
-		if child == nil {
-			return nil, errors.New("invalid nil child template")
-		}
-		templates = append(templates, child)
+func (r *templateBinaryReader) readImage() *ImageInfo {
+	if !r.readBool() {
+		return nil
 	}
-	return templates, nil
+	info := &ImageInfo{}
+	info.data = r.readLimitedBytes(maxImageSourceBytes)
+	info.smask = r.readLimitedBytes(maxImageSourceBytes)
+	info.n = r.readInt()
+	info.w = r.readFloat()
+	info.h = r.readFloat()
+	info.cs = r.readString()
+	info.pal = r.readLimitedBytes(maxImageSourceBytes)
+	info.bpc = r.readInt()
+	info.f = r.readString()
+	info.dp = r.readString()
+	trnsCount := r.readCount(4096, "image transparency entries")
+	info.trns = make([]int, trnsCount)
+	for i := range info.trns {
+		info.trns[i] = r.readInt()
+	}
+	info.scale = r.readFloat()
+	info.dpi = r.readFloat()
+	if r.err == nil {
+		info.i, _ = generateImageID(info)
+	}
+	return info
+}
+
+func (r *templateBinaryReader) readBytesList() [][]byte {
+	count := r.readCount(maxTemplatePages, "template pages")
+	values := make([][]byte, count)
+	for i := range values {
+		values[i] = r.readLimitedBytes(maxTemplatePageBytes)
+	}
+	return values
+}
+
+func (r *templateBinaryReader) readString() string {
+	return string(r.readLimitedBytes(maxTemplateSerializedBytes))
+}
+
+func (r *templateBinaryReader) readLimitedBytes(maxLen int) []byte {
+	n := r.readCount(maxLen, "byte slice")
+	return r.readRawBytes(n)
+}
+
+func (r *templateBinaryReader) readRawBytes(n int) []byte {
+	if r.err != nil {
+		return nil
+	}
+	if n < 0 || n > len(r.data)-r.pos {
+		r.err = errors.New("truncated serialized template")
+		return nil
+	}
+	out := r.data[r.pos : r.pos+n]
+	r.pos += n
+	return out
+}
+
+func (r *templateBinaryReader) readBool() bool {
+	return r.readByte() != 0
+}
+
+func (r *templateBinaryReader) readByte() byte {
+	if r.err != nil {
+		return 0
+	}
+	if r.pos >= len(r.data) {
+		r.err = errors.New("truncated serialized template")
+		return 0
+	}
+	value := r.data[r.pos]
+	r.pos++
+	return value
+}
+
+func (r *templateBinaryReader) readInt() int {
+	return int(int64(r.readUint()))
+}
+
+func (r *templateBinaryReader) readFloat() float64 {
+	return math.Float64frombits(r.readUint())
+}
+
+func (r *templateBinaryReader) readCount(max int, name string) int {
+	value := r.readUint()
+	if r.err != nil {
+		return 0
+	}
+	if value > uint64(max) {
+		r.err = fmt.Errorf("%s exceeds maximum size", name)
+		return 0
+	}
+	return int(value)
+}
+
+func (r *templateBinaryReader) readUint() uint64 {
+	if r.err != nil {
+		return 0
+	}
+	value, n := binary.Uvarint(r.data[r.pos:])
+	if n <= 0 {
+		r.err = errors.New("invalid serialized template integer")
+		return 0
+	}
+	r.pos += n
+	return value
 }
 
 func (t *DocumentTpl) validate() error {

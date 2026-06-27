@@ -78,17 +78,28 @@ type SVGPattern struct {
 
 // SVGPath describes one styled SVG path.
 type SVGPath struct {
-	Segments []SVGSegment // Path segments.
-	Style    SVGStyle     // Path style.
+	Segments  []SVGSegment // Path segments.
+	Style     SVGStyle     // Path style.
+	Bounds    [4]float64   // Cached minX, minY, maxX, maxY path bounds.
+	HasBounds bool         // Whether Bounds contains valid path bounds.
 }
 
 // SVGText describes one SVG text element.
 type SVGText struct {
-	X     float64  // Text X coordinate.
-	Y     float64  // Text Y coordinate.
-	Text  string   // Text content.
-	Role  string   // Optional tagged PDF role for this text node.
-	Style SVGStyle // Text style.
+	X          float64           // Text X coordinate.
+	Y          float64           // Text Y coordinate.
+	Text       string            // Text content.
+	Role       string            // Optional tagged PDF role for this text node.
+	Style      SVGStyle          // Text style.
+	widthCache svgTextWidthCache // Cached rendered text width.
+}
+
+type svgTextWidthCache struct {
+	font     string
+	fontSize float64
+	text     string
+	width    float64
+	ok       bool
 }
 
 // SVGElement describes one drawable SVG element in document order.

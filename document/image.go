@@ -249,7 +249,7 @@ func (f *Document) UseImportedTemplate(tplName string, scaleX float64, scaleY fl
 		return
 	}
 	content := []byte(sprintf("q 0 J 1 w 0 j 0 G 0 g q %.4F 0 0 %.4F %.4F %.4F cm %s Do Q Q", scaleX*f.k, scaleY*f.k, tX*f.k, (tY+f.h)*f.k, tplName))
-	f.outbytes(f.wrapTaggedContent(content, taggedContentOptions{Artifact: true}))
+	f.outTaggedContent(content, taggedContentOptions{Artifact: true})
 }
 
 // ImportTemplates imports external template names for inclusion in the ProcSet

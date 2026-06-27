@@ -268,13 +268,18 @@ func buildIncrement(ctx pdfContext, options preparedOptions, byteRangePlaceholde
 	acroObject := ctx.Size
 	fieldObject := ctx.Size + 1
 	signatureObject := ctx.Size + 2
+	rootEntries := []pdfDictEntry{{
+		key:   "/AcroForm",
+		value: fmt.Sprintf("%d 0 R", acroObject),
+	}}
 	if options.SubFilter == SubFilterETSI_CAdESDetached {
-		rootDict, err = addPAdESExtension(rootDict)
-		if err != nil {
-			return signingIncrement{}, err
-		}
+		rootEntries = append([]pdfDictEntry{{
+			key:          "/Extensions",
+			value:        "<< /ESIC << /BaseVersion /1.7 /ExtensionLevel 1 >> >>",
+			skipExisting: true,
+		}}, rootEntries...)
 	}
-	rootDict, err = addDictEntry(rootDict, "/AcroForm", fmt.Sprintf("%d 0 R", acroObject))
+	rootDict, err = addDictEntries(rootDict, rootEntries...)
 	if err != nil {
 		return signingIncrement{}, err
 	}
@@ -335,10 +340,11 @@ func buildIncrement(ctx pdfContext, options preparedOptions, byteRangePlaceholde
 }
 
 func addPAdESExtension(rootDict []byte) ([]byte, error) {
-	if findPDFName(rootDict, "/Extensions") >= 0 {
-		return rootDict, nil
-	}
-	return addDictEntry(rootDict, "/Extensions", "<< /ESIC << /BaseVersion /1.7 /ExtensionLevel 1 >> >>")
+	return addDictEntries(rootDict, pdfDictEntry{
+		key:          "/Extensions",
+		value:        "<< /ESIC << /BaseVersion /1.7 /ExtensionLevel 1 >> >>",
+		skipExisting: true,
+	})
 }
 
 func signatureDictionaryBytes(options preparedOptions, byteRangePlaceholder string, contentsPlaceholder []byte) signatureDictionaryData {

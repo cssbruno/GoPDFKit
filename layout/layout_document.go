@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // DocumentKind identifies the high-level purpose of a generated document.
@@ -186,16 +188,19 @@ type BorderSide struct {
 
 // TextSegment is a styled text run.
 type TextSegment struct {
-	Text  string    // Segment text.
-	Style TextStyle // Style applied to this segment.
-	Link  string    // Optional link target.
+	Text     string     // Segment text.
+	Style    TextStyle  // Style applied to this segment.
+	StyleRef *TextStyle // Optional shared segment style.
+	Link     string     // Optional link target.
 }
 
 // ParagraphBlock represents a paragraph of styled text.
 type ParagraphBlock struct {
 	Segments []TextSegment // Paragraph text segments.
 	Style    TextStyle     // Paragraph text style.
+	StyleRef *TextStyle    // Optional shared paragraph text style.
 	Box      BoxStyle      // Paragraph box style.
+	BoxRef   *BoxStyle     // Optional shared paragraph box style.
 }
 
 // DocumentBlockKind returns BlockKindParagraph.
@@ -206,7 +211,9 @@ type HeadingBlock struct {
 	Level    int           // Heading level, where 1 is the highest.
 	Segments []TextSegment // Heading text segments.
 	Style    TextStyle     // Heading text style.
+	StyleRef *TextStyle    // Optional shared heading text style.
 	Box      BoxStyle      // Heading box style.
+	BoxRef   *BoxStyle     // Optional shared heading box style.
 }
 
 // DocumentBlockKind returns BlockKindHeading.
@@ -218,7 +225,9 @@ type ListBlock struct {
 	MarkerStyle string     // Marker style, such as decimal or bullet.
 	Items       []ListItem // List items.
 	Style       TextStyle  // List text style.
+	StyleRef    *TextStyle // Optional shared list text style.
 	Box         BoxStyle   // List box style.
+	BoxRef      *BoxStyle  // Optional shared list box style.
 }
 
 // DocumentBlockKind returns BlockKindList.
@@ -238,6 +247,7 @@ type TableBlock struct {
 	Footer  []TableRow    // Footer rows.
 	Style   TableStyle    // Table layout options.
 	Box     BoxStyle      // Table box style.
+	BoxRef  *BoxStyle     // Optional shared table box style.
 }
 
 // DocumentBlockKind returns BlockKindTable.
@@ -265,13 +275,15 @@ type TableRow struct {
 
 // TableCell stores table cell content and layout attributes.
 type TableCell struct {
-	Blocks        []Block   // Cell content blocks.
-	ColSpan       int       // Number of columns spanned by the cell.
-	RowSpan       int       // Number of rows spanned by the cell.
-	Align         string    // Horizontal cell alignment.
-	VerticalAlign string    // Vertical cell alignment.
-	Style         TextStyle // Cell text style.
-	Box           BoxStyle  // Cell box style.
+	Blocks        []Block    // Cell content blocks.
+	ColSpan       int        // Number of columns spanned by the cell.
+	RowSpan       int        // Number of rows spanned by the cell.
+	Align         string     // Horizontal cell alignment.
+	VerticalAlign string     // Vertical cell alignment.
+	Style         TextStyle  // Cell text style.
+	StyleRef      *TextStyle // Optional shared cell text style.
+	Box           BoxStyle   // Cell box style.
+	BoxRef        *BoxStyle  // Optional shared cell box style.
 }
 
 // ImageFitMode identifies how an image is fitted into its target box.
@@ -290,6 +302,7 @@ const (
 type ImageBlock struct {
 	Source    string        // Image file path or registered image name.
 	Data      []byte        // Inline image bytes.
+	DataRef   *[]byte       // Optional shared inline image bytes.
 	Format    string        // Image format, such as png or jpg.
 	Alt       string        // Alternative text used by fallback rendering.
 	Caption   []TextSegment // Optional caption text.
@@ -301,10 +314,75 @@ type ImageBlock struct {
 	Align     string        // Horizontal alignment.
 	DPI       float64       // Optional image DPI override.
 	Box       BoxStyle      // Image box style.
+	BoxRef    *BoxStyle     // Optional shared image box style.
 }
 
 // DocumentBlockKind returns BlockKindImage.
 func (ImageBlock) DocumentBlockKind() BlockKind { return BlockKindImage }
+
+func effectiveTextStyle(style TextStyle, ref *TextStyle) TextStyle {
+	if ref != nil {
+		return *ref
+	}
+	return style
+}
+
+func effectiveBoxStyle(box BoxStyle, ref *BoxStyle) BoxStyle {
+	if ref != nil {
+		return *ref
+	}
+	return box
+}
+
+// EffectiveStyle returns the shared style reference when one is configured.
+func (s TextSegment) EffectiveStyle() TextStyle { return effectiveTextStyle(s.Style, s.StyleRef) }
+
+// EffectiveStyle returns the shared paragraph style when one is configured.
+func (b ParagraphBlock) EffectiveStyle() TextStyle { return effectiveTextStyle(b.Style, b.StyleRef) }
+
+// EffectiveBox returns the shared paragraph box when one is configured.
+func (b ParagraphBlock) EffectiveBox() BoxStyle { return effectiveBoxStyle(b.Box, b.BoxRef) }
+
+// EffectiveStyle returns the shared heading style when one is configured.
+func (b HeadingBlock) EffectiveStyle() TextStyle { return effectiveTextStyle(b.Style, b.StyleRef) }
+
+// EffectiveBox returns the shared heading box when one is configured.
+func (b HeadingBlock) EffectiveBox() BoxStyle { return effectiveBoxStyle(b.Box, b.BoxRef) }
+
+// EffectiveStyle returns the shared list style when one is configured.
+func (b ListBlock) EffectiveStyle() TextStyle { return effectiveTextStyle(b.Style, b.StyleRef) }
+
+// EffectiveBox returns the shared list box when one is configured.
+func (b ListBlock) EffectiveBox() BoxStyle { return effectiveBoxStyle(b.Box, b.BoxRef) }
+
+// EffectiveBox returns the shared table box when one is configured.
+func (b TableBlock) EffectiveBox() BoxStyle { return effectiveBoxStyle(b.Box, b.BoxRef) }
+
+// EffectiveStyle returns the shared cell style when one is configured.
+func (c TableCell) EffectiveStyle() TextStyle { return effectiveTextStyle(c.Style, c.StyleRef) }
+
+// EffectiveBox returns the shared cell box when one is configured.
+func (c TableCell) EffectiveBox() BoxStyle { return effectiveBoxStyle(c.Box, c.BoxRef) }
+
+// ImageData returns shared inline image bytes when configured.
+func (b ImageBlock) ImageData() []byte {
+	if b.DataRef != nil {
+		return *b.DataRef
+	}
+	return b.Data
+}
+
+// EffectiveBox returns the shared image box when one is configured.
+func (b ImageBlock) EffectiveBox() BoxStyle { return effectiveBoxStyle(b.Box, b.BoxRef) }
+
+// EffectiveBox returns the shared signature-row box when one is configured.
+func (b SignatureRowBlock) EffectiveBox() BoxStyle { return effectiveBoxStyle(b.Box, b.BoxRef) }
+
+// EffectiveStyle returns the shared metadata-grid style when one is configured.
+func (b MetadataGridBlock) EffectiveStyle() TextStyle { return effectiveTextStyle(b.Style, b.StyleRef) }
+
+// EffectiveBox returns the shared metadata-grid box when one is configured.
+func (b MetadataGridBlock) EffectiveBox() BoxStyle { return effectiveBoxStyle(b.Box, b.BoxRef) }
 
 // SignatureBlock groups one or more signature rows.
 type SignatureBlock struct {
@@ -315,11 +393,26 @@ type SignatureBlock struct {
 
 // PAdESFieldName returns the signature field name to use with PAdES signing.
 func (s SignatureBlock) PAdESFieldName() string {
-	name := strings.TrimSpace(s.PlaceholderReference)
+	name := s.PlaceholderReference
+	if needsTrimSpace(name) {
+		name = strings.TrimSpace(name)
+	}
 	if name == "" {
 		return "Signature1"
 	}
 	return name
+}
+
+func needsTrimSpace(s string) bool {
+	if s == "" {
+		return false
+	}
+	first, _ := utf8.DecodeRuneInString(s)
+	if unicode.IsSpace(first) {
+		return true
+	}
+	last, _ := utf8.DecodeLastRuneInString(s)
+	return unicode.IsSpace(last)
 }
 
 // SignatureRowBlock represents one row of signature columns.
@@ -327,6 +420,7 @@ type SignatureRowBlock struct {
 	Columns      []SignatureColumn // Signature columns.
 	KeepTogether bool              // Whether the row should stay on one page.
 	Box          BoxStyle          // Row box style.
+	BoxRef       *BoxStyle         // Optional shared row box style.
 }
 
 // DocumentBlockKind returns BlockKindSignatureRow.
@@ -343,10 +437,12 @@ type SignatureColumn struct {
 
 // MetadataGridBlock represents label/value metadata in a grid.
 type MetadataGridBlock struct {
-	Fields  []MetadataField // Metadata fields to render.
-	Columns int             // Number of grid columns.
-	Style   TextStyle       // Grid text style.
-	Box     BoxStyle        // Grid box style.
+	Fields   []MetadataField // Metadata fields to render.
+	Columns  int             // Number of grid columns.
+	Style    TextStyle       // Grid text style.
+	StyleRef *TextStyle      // Optional shared grid text style.
+	Box      BoxStyle        // Grid box style.
+	BoxRef   *BoxStyle       // Optional shared grid box style.
 }
 
 // DocumentBlockKind returns BlockKindMetadataGrid.
@@ -450,50 +546,76 @@ func (pt PageTemplate) pageTotalAlias() string {
 
 // QRVerificationBlock combines a QR code with verification text.
 type QRVerificationBlock struct {
-	QR    QRBlock       // QR code configuration.
-	Text  []TextSegment // Verification text.
-	Style TextStyle     // Verification text style.
-	Box   BoxStyle      // Verification box style.
+	QR       QRBlock       // QR code configuration.
+	Text     []TextSegment // Verification text.
+	Style    TextStyle     // Verification text style.
+	StyleRef *TextStyle    // Optional shared verification text style.
+	Box      BoxStyle      // Verification box style.
+	BoxRef   *BoxStyle     // Optional shared verification box style.
 }
 
 // DocumentBlockKind returns BlockKindQRVerification.
 func (QRVerificationBlock) DocumentBlockKind() BlockKind { return BlockKindQRVerification }
 
+// EffectiveStyle returns the shared QR-verification style when one is configured.
+func (b QRVerificationBlock) EffectiveStyle() TextStyle {
+	return effectiveTextStyle(b.Style, b.StyleRef)
+}
+
+// EffectiveBox returns the shared QR-verification box when one is configured.
+func (b QRVerificationBlock) EffectiveBox() BoxStyle { return effectiveBoxStyle(b.Box, b.BoxRef) }
+
 // NoteBoxBlock represents a callout, warning, or highlighted note.
 type NoteBoxBlock struct {
-	Title string    // Note title.
-	Body  []Block   // Note body blocks.
-	Style TextStyle // Note text style.
-	Box   BoxStyle  // Note box style.
+	Title    string     // Note title.
+	Body     []Block    // Note body blocks.
+	Style    TextStyle  // Note text style.
+	StyleRef *TextStyle // Optional shared note text style.
+	Box      BoxStyle   // Note box style.
+	BoxRef   *BoxStyle  // Optional shared note box style.
 }
 
 // DocumentBlockKind returns BlockKindNoteBox.
 func (NoteBoxBlock) DocumentBlockKind() BlockKind { return BlockKindNoteBox }
 
+// EffectiveStyle returns the shared note-box style when one is configured.
+func (b NoteBoxBlock) EffectiveStyle() TextStyle { return effectiveTextStyle(b.Style, b.StyleRef) }
+
+// EffectiveBox returns the shared note-box style when one is configured.
+func (b NoteBoxBlock) EffectiveBox() BoxStyle { return effectiveBoxStyle(b.Box, b.BoxRef) }
+
 // SectionBlock groups related blocks under an optional title.
 type SectionBlock struct {
-	Title             string   // Optional section title.
-	Blocks            []Block  // Section body blocks.
-	KeepTitleWithBody bool     // Prefer to keep title and first body block together.
-	Box               BoxStyle // Section box style.
+	Title             string    // Optional section title.
+	Blocks            []Block   // Section body blocks.
+	KeepTitleWithBody bool      // Prefer to keep title and first body block together.
+	Box               BoxStyle  // Section box style.
+	BoxRef            *BoxStyle // Optional shared section box style.
 }
 
 // DocumentBlockKind returns BlockKindSection.
 func (SectionBlock) DocumentBlockKind() BlockKind { return BlockKindSection }
 
+// EffectiveBox returns the shared section box when one is configured.
+func (b SectionBlock) EffectiveBox() BoxStyle { return effectiveBoxStyle(b.Box, b.BoxRef) }
+
 // ClauseBlock represents a numbered or named clause in long-form documents.
 type ClauseBlock struct {
-	Number       string   // Clause number or label.
-	Title        string   // Clause title.
-	Blocks       []Block  // Clause body blocks.
-	BreakBefore  bool     // Insert a page break before the clause.
-	BreakAfter   bool     // Insert a page break after the clause.
-	KeepTogether bool     // Prefer to keep the clause on one page.
-	Box          BoxStyle // Clause box style.
+	Number       string    // Clause number or label.
+	Title        string    // Clause title.
+	Blocks       []Block   // Clause body blocks.
+	BreakBefore  bool      // Insert a page break before the clause.
+	BreakAfter   bool      // Insert a page break after the clause.
+	KeepTogether bool      // Prefer to keep the clause on one page.
+	Box          BoxStyle  // Clause box style.
+	BoxRef       *BoxStyle // Optional shared clause box style.
 }
 
 // DocumentBlockKind returns BlockKindClause.
 func (ClauseBlock) DocumentBlockKind() BlockKind { return BlockKindClause }
+
+// EffectiveBox returns the shared clause box when one is configured.
+func (b ClauseBlock) EffectiveBox() BoxStyle { return effectiveBoxStyle(b.Box, b.BoxRef) }
 
 // PageBreakBlock represents an explicit page break.
 type PageBreakBlock struct {
@@ -506,18 +628,26 @@ func (PageBreakBlock) DocumentBlockKind() BlockKind { return BlockKindPageBreak 
 
 // HeaderBlock stores reusable header content.
 type HeaderBlock struct {
-	Blocks []Block  // Header content blocks.
-	Height float64  // Reserved header height.
-	Box    BoxStyle // Header box style.
+	Blocks []Block   // Header content blocks.
+	Height float64   // Reserved header height.
+	Box    BoxStyle  // Header box style.
+	BoxRef *BoxStyle // Optional shared header box style.
 }
+
+// EffectiveBox returns the shared header box when one is configured.
+func (b HeaderBlock) EffectiveBox() BoxStyle { return effectiveBoxStyle(b.Box, b.BoxRef) }
 
 // FooterBlock stores reusable footer content.
 type FooterBlock struct {
-	Blocks          []Block  // Footer content blocks.
-	Height          float64  // Reserved footer height.
-	ReservePageArea bool     // Whether body layout reserves footer height.
-	Box             BoxStyle // Footer box style.
+	Blocks          []Block   // Footer content blocks.
+	Height          float64   // Reserved footer height.
+	ReservePageArea bool      // Whether body layout reserves footer height.
+	Box             BoxStyle  // Footer box style.
+	BoxRef          *BoxStyle // Optional shared footer box style.
 }
+
+// EffectiveBox returns the shared footer box when one is configured.
+func (b FooterBlock) EffectiveBox() BoxStyle { return effectiveBoxStyle(b.Box, b.BoxRef) }
 
 // AttachmentBlock describes a PDF attachment that can be added during output.
 type AttachmentBlock struct {

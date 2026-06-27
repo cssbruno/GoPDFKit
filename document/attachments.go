@@ -4,12 +4,17 @@
 package document
 
 import (
+	"bytes"
+	"compress/zlib"
 	"crypto/md5"
 	"encoding/hex"
-	"fmt"
+	"io"
 	"mime"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 )
 
 // Attachment defines content to include in the PDF in one of the following ways:
@@ -35,21 +40,40 @@ type Attachment struct {
 	// Unspecified. When empty, Data is used.
 	AFRelationship string
 
-	objectNumber int // Filled when the content is embedded.
+	objectNumber   int    // Filled when the filespec is embedded.
+	mimeType       string // Normalized lazily or when cloned.
+	afRelationship string // Normalized lazily or when cloned.
+	checksum       string // PDF MD5 checksum, computed once per attachment content.
 }
 
-// checksum returns the hex-encoded checksum of data.
-func checksum(data []byte) string {
+type attachmentStreamKey struct {
+	size     int
+	checksum string
+	mimeType string
+}
+
+type attachmentFileKey struct {
+	stream       attachmentStreamKey
+	filename     string
+	description  string
+	relationship string
+}
+
+// checksum returns the hex-encoded PDF attachment checksum of data.
+func attachmentChecksum(data []byte) string {
 	tmp := md5.Sum(data)
 	return hex.EncodeToString(tmp[:])
 }
 
 // writeCompressedFileObject writes a deflate-compressed /EmbeddedFile object
 // with length, compressed length, and MD5 checksum metadata.
-func (f *Document) writeCompressedFileObject(content []byte, mimeType string) {
+func (f *Document) writeCompressedFileObject(content []byte, mimeType, sum string) {
 	lenUncompressed := len(content)
-	sum := checksum(content)
-	compressed := f.compressBytes(content)
+	streamKey := attachmentStreamKey{size: lenUncompressed, checksum: sum, mimeType: mimeType}
+	compressed := f.attachmentCompressed[streamKey]
+	if compressed == nil {
+		compressed = f.compressBytes(content)
+	}
 	if f.err != nil {
 		return
 	}
@@ -61,27 +85,179 @@ func (f *Document) writeCompressedFileObject(content []byte, mimeType string) {
 	f.out("endobj")
 }
 
+type attachmentCompressionTask struct {
+	attachment *Attachment
+	mimeType   string
+	content    []byte
+}
+
+func (f *Document) prepareAttachmentCompression() {
+	if f.err != nil {
+		return
+	}
+	tasks := f.attachmentCompressionTasks()
+	if len(tasks) == 0 {
+		return
+	}
+	workers := runtime.GOMAXPROCS(0)
+	if workers > len(tasks) {
+		workers = len(tasks)
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	jobs := make(chan attachmentCompressionTask)
+	type result struct {
+		attachment *Attachment
+		mimeType   string
+		checksum   string
+		data       []byte
+		err        error
+	}
+	results := make(chan result, len(tasks))
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for task := range jobs {
+				data, checksum, err := compressAttachmentWithChecksum(task.content, f.compressLevel)
+				results <- result{attachment: task.attachment, mimeType: task.mimeType, checksum: checksum, data: data, err: err}
+			}
+		}()
+	}
+	for _, task := range tasks {
+		jobs <- task
+	}
+	close(jobs)
+	wg.Wait()
+	close(results)
+	for result := range results {
+		if result.err != nil {
+			f.SetError(result.err)
+			return
+		}
+		if result.attachment.checksum == "" {
+			result.attachment.checksum = result.checksum
+		}
+		key := attachmentStreamKey{size: len(result.attachment.Content), checksum: result.attachment.checksum, mimeType: result.mimeType}
+		if f.attachmentCompressed[key] == nil {
+			f.attachmentCompressed[key] = result.data
+		}
+	}
+}
+
+func (f *Document) attachmentCompressionTasks() []attachmentCompressionTask {
+	seen := make(map[*Attachment]bool)
+	tasks := make([]attachmentCompressionTask, 0, len(f.attachments))
+	add := func(a *Attachment) {
+		if a == nil || seen[a] {
+			return
+		}
+		a.mimeType = attachmentMIMEType(*a)
+		a.afRelationship = attachmentAFRelationship(*a)
+		if a.checksum != "" {
+			key := attachmentStreamKey{size: len(a.Content), checksum: a.checksum, mimeType: a.mimeType}
+			if f.attachmentStreams[key] != 0 || f.attachmentCompressed[key] != nil {
+				return
+			}
+		}
+		seen[a] = true
+		tasks = append(tasks, attachmentCompressionTask{attachment: a, mimeType: a.mimeType, content: a.Content})
+	}
+	for i := range f.attachments {
+		add(&f.attachments[i])
+	}
+	for _, annotations := range f.pageAttachments {
+		for _, an := range annotations {
+			add(an.Attachment)
+		}
+	}
+	return tasks
+}
+
+func compressAttachmentWithChecksum(content []byte, level int) ([]byte, string, error) {
+	if !validCompressionLevel(level) {
+		level = zlib.BestSpeed
+	}
+	buf := compressBufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	sum := md5.New()
+	list := zlibFreeList(level)
+	cmp, err := pooledZlibWriter(list, buf, level)
+	if err != nil {
+		releaseCompressBuffer(buf)
+		return nil, "", err
+	}
+	if _, err = io.MultiWriter(cmp, sum).Write(content); err != nil {
+		_ = cmp.Close()
+		releaseZlibWriter(list, cmp)
+		releaseCompressBuffer(buf)
+		return nil, "", err
+	}
+	if err = cmp.Close(); err != nil {
+		releaseZlibWriter(list, cmp)
+		releaseCompressBuffer(buf)
+		return nil, "", err
+	}
+	releaseZlibWriter(list, cmp)
+	checksum := hex.EncodeToString(sum.Sum(nil))
+	if buf.Len() >= largeCompressedStreamNoCopyThreshold {
+		return buf.Bytes(), checksum, nil
+	}
+	defer releaseCompressBuffer(buf)
+	return append([]byte(nil), buf.Bytes()...), checksum, nil
+}
+
 // embed includes the attachment content and updates its internal reference.
 func (f *Document) embed(a *Attachment) {
 	if a.objectNumber != 0 { // Already embedded; object numbers start at 2.
 		return
 	}
+	normalizeAttachment(a)
+	streamKey := attachmentStreamKey{
+		size:     len(a.Content),
+		checksum: a.checksum,
+		mimeType: a.mimeType,
+	}
+	fileKey := attachmentFileKey{
+		stream:       streamKey,
+		filename:     a.Filename,
+		description:  a.Description,
+		relationship: a.afRelationship,
+	}
+	if objectNumber := f.attachmentFiles[fileKey]; objectNumber != 0 {
+		a.objectNumber = objectNumber
+		return
+	}
 	oldState := f.state
 	f.state = 1 // Write file content to the main buffer.
-	f.writeCompressedFileObject(a.Content, attachmentMIMEType(*a))
-	streamID := f.n
+	streamID := f.attachmentStreams[streamKey]
+	if streamID == 0 {
+		f.writeCompressedFileObject(a.Content, a.mimeType, a.checksum)
+		if f.err != nil {
+			f.state = oldState
+			return
+		}
+		streamID = f.n
+		f.attachmentStreams[streamKey] = streamID
+	}
 	f.newobj()
 	f.outf("<< /Type /Filespec /F () /UF %s /AFRelationship /%s /EF << /F %d 0 R >> /Desc %s\n>>",
 		f.textstring(utf8toutf16(a.Filename)),
-		attachmentAFRelationship(*a),
+		a.afRelationship,
 		streamID,
 		f.textstring(utf8toutf16(a.Description)))
 	f.out("endobj")
 	a.objectNumber = f.n
+	f.attachmentFiles[fileKey] = a.objectNumber
 	f.state = oldState
 }
 
 func attachmentMIMEType(a Attachment) string {
+	if a.mimeType != "" {
+		return a.mimeType
+	}
 	if strings.TrimSpace(a.MIMEType) != "" {
 		return strings.TrimSpace(a.MIMEType)
 	}
@@ -97,6 +273,9 @@ func attachmentMIMEType(a Attachment) string {
 }
 
 func attachmentAFRelationship(a Attachment) string {
+	if a.afRelationship != "" {
+		return a.afRelationship
+	}
 	switch strings.TrimSpace(a.AFRelationship) {
 	case "Source", "Data", "Alternative", "Supplement", "Unspecified":
 		return strings.TrimSpace(a.AFRelationship)
@@ -105,12 +284,31 @@ func attachmentAFRelationship(a Attachment) string {
 	}
 }
 
+func normalizeAttachment(a *Attachment) {
+	if a == nil {
+		return
+	}
+	a.mimeType = attachmentMIMEType(*a)
+	a.afRelationship = attachmentAFRelationship(*a)
+	if a.checksum == "" {
+		a.checksum = attachmentChecksum(a.Content)
+	}
+}
+
+var pdfNameReserved [256]bool
+
+func init() {
+	for _, c := range []byte("()<>[]{}/%#") {
+		pdfNameReserved[c] = true
+	}
+}
+
 func escapePDFName(name string) string {
 	const hexDigits = "0123456789ABCDEF"
 	var out strings.Builder
 	for i := 0; i < len(name); i++ {
 		c := name[i]
-		if c <= ' ' || c >= 0x7f || strings.ContainsRune("()<>[]{}/%#", rune(c)) {
+		if c <= ' ' || c >= 0x7f || pdfNameReserved[c] {
 			out.WriteByte('#')
 			out.WriteByte(hexDigits[c>>4])
 			out.WriteByte(hexDigits[c&0x0f])
@@ -134,6 +332,16 @@ func (f *Document) SetAttachments(as []Attachment) {
 	}
 }
 
+// SetAttachmentsImmutable writes attachments as embedded files without copying
+// each attachment's content slice. The caller must not mutate attachment content
+// until Output, OutputAndClose, or OutputFileAndClose returns.
+func (f *Document) SetAttachmentsImmutable(as []Attachment) {
+	f.attachments = make([]Attachment, len(as))
+	for i := range as {
+		f.attachments[i] = cloneAttachmentImmutable(as[i])
+	}
+}
+
 // putAttachments embeds the current attachments and stores their object numbers
 // for later use by getEmbeddedFiles().
 func (f *Document) putAttachments() {
@@ -145,12 +353,18 @@ func (f *Document) putAttachments() {
 
 // getEmbeddedFiles returns the /EmbeddedFiles name-tree catalog entry.
 func (f Document) getEmbeddedFiles() string {
-	names := make([]string, len(f.attachments))
+	var names strings.Builder
 	for i, as := range f.attachments {
-		names[i] = fmt.Sprintf("(Attachement%d) %d 0 R ", i+1, as.objectNumber)
+		if i > 0 {
+			names.WriteByte('\n')
+		}
+		names.WriteString("(Attachement")
+		names.WriteString(strconv.Itoa(i + 1))
+		names.WriteString(") ")
+		names.WriteString(strconv.Itoa(as.objectNumber))
+		names.WriteString(" 0 R ")
 	}
-	nameTree := fmt.Sprintf("<< /Names [\n %s \n] >>", strings.Join(names, "\n"))
-	return nameTree
+	return "<< /Names [\n " + names.String() + " \n] >>"
 }
 
 // ---------------------------------- Annotations ----------------------------------
@@ -185,6 +399,7 @@ func (f *Document) AddAttachmentAnnotation(a *Attachment, x, y, w, h float64) {
 		f.SetErrorf("invalid attachment annotation rectangle")
 		return
 	}
+	normalizeAttachment(a)
 	f.pageAttachments[f.page] = append(f.pageAttachments[f.page], annotationAttach{
 		Attachment: a,
 		x:          x * f.k, y: f.hPt - y*f.k, w: w * f.k, h: h * f.k,
@@ -193,6 +408,13 @@ func (f *Document) AddAttachmentAnnotation(a *Attachment, x, y, w, h float64) {
 
 func cloneAttachment(a Attachment) Attachment {
 	a.Content = append([]byte(nil), a.Content...)
+	normalizeAttachment(&a)
+	a.objectNumber = 0
+	return a
+}
+
+func cloneAttachmentImmutable(a Attachment) Attachment {
+	normalizeAttachment(&a)
 	a.objectNumber = 0
 	return a
 }
@@ -201,15 +423,9 @@ func cloneAttachment(a Attachment) Attachment {
 // their object numbers for appendAttachmentAnnotationLinks(), which is called for
 // each page.
 func (f *Document) putAnnotationsAttachments() {
-	// Avoid duplicate embedded attachments.
-	m := map[*Attachment]bool{}
 	for _, l := range f.pageAttachments {
 		for _, an := range l {
-			if m[an.Attachment] { // Already embedded.
-				continue
-			}
 			f.embed(an.Attachment)
-			m[an.Attachment] = true
 		}
 	}
 }

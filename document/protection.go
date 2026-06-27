@@ -7,7 +7,6 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/rc4"
-	"encoding/binary"
 )
 
 // Advisory bit flag constants that control document activities.
@@ -32,20 +31,20 @@ type protectType struct {
 
 func (p *protectType) rc4(n uint32, buf *[]byte) {
 	if p.rc4cipher == nil || p.rc4n != n {
-		p.rc4cipher, _ = rc4.NewCipher(p.objectKey(n))
+		var key [10]byte
+		p.objectKey(n, &key)
+		p.rc4cipher, _ = rc4.NewCipher(key[:])
 		p.rc4n = n
 	}
 	p.rc4cipher.XORKeyStream(*buf, *buf)
 }
 
-func (p *protectType) objectKey(n uint32) []byte {
-	var nbuf, b []byte
-	nbuf = make([]byte, 8)
-	binary.LittleEndian.PutUint32(nbuf, n)
-	b = append(b, p.encryptionKey...)
-	b = append(b, nbuf[0], nbuf[1], nbuf[2], 0, 0)
-	s := md5.Sum(b)
-	return s[0:10]
+func (p *protectType) objectKey(n uint32, key *[10]byte) {
+	var buf [32]byte
+	input := append(buf[:0], p.encryptionKey...)
+	input = append(input, byte(n), byte(n>>8), byte(n>>16), 0, 0)
+	sum := md5.Sum(input)
+	copy(key[:], sum[:10])
 }
 
 func oValueGen(userPass, ownerPass []byte) (v []byte) {

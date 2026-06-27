@@ -110,8 +110,5 @@ func (f *Document) Bookmark(txtStr string, level int, y float64) {
 		f.SetErrorf("invalid bookmark position")
 		return
 	}
-	if f.isCurrentUTF8 {
-		txtStr = utf8toutf16(txtStr)
-	}
-	f.outlines = append(f.outlines, outlineEntry{text: txtStr, level: level, y: y, p: f.PageNo(), prev: -1, last: -1, next: -1, first: -1})
+	f.outlines = append(f.outlines, outlineEntry{text: txtStr, level: level, y: y, p: f.PageNo(), utf8: f.isCurrentUTF8, prev: -1, last: -1, next: -1, first: -1})
 }

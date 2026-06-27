@@ -256,7 +256,7 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 		}
 	}
 	if len(s) > 0 {
-		f.outbytes(f.wrapTaggedContent(s, f.consumeNextTextTag(link > 0 || linkStr != "")))
+		f.outTaggedContent(s, f.consumeNextTextTag(link > 0 || linkStr != ""))
 	}
 	f.lasth = h
 	if ln > 0 {
@@ -369,7 +369,7 @@ func (f *Document) cellSimple(w, h float64, txtStr string) {
 		if f.colorFlag {
 			s = append(s, " Q"...)
 		}
-		f.outbytes(f.wrapTaggedContent(s, f.consumeNextTextTag(false)))
+		f.outTaggedContent(s, f.consumeNextTextTag(false))
 	}
 	f.lasth = h
 	f.x += w

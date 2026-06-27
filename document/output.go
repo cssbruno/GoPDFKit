@@ -121,6 +121,10 @@ func (f *Document) out(s string) {
 	} else {
 		_, _ = f.buffer.WriteString(s)
 		_, _ = f.buffer.WriteString("\n")
+		if f.fileIDHash != nil {
+			_, _ = f.fileIDHash.Write([]byte(s))
+			_, _ = f.fileIDHash.Write([]byte{'\n'})
+		}
 	}
 }
 
@@ -131,8 +135,14 @@ func (f *Document) outbuf(r io.Reader) {
 		_, _ = f.pages[f.page].ReadFrom(r)
 		_, _ = f.pages[f.page].WriteString("\n")
 	} else {
+		if f.fileIDHash != nil {
+			r = io.TeeReader(r, f.fileIDHash)
+		}
 		_, _ = f.buffer.ReadFrom(r)
 		_, _ = f.buffer.WriteString("\n")
+		if f.fileIDHash != nil {
+			_, _ = f.fileIDHash.Write([]byte{'\n'})
+		}
 	}
 }
 
@@ -144,6 +154,33 @@ func (f *Document) outbytes(b []byte) {
 	} else {
 		_, _ = f.buffer.Write(b)
 		_ = f.buffer.WriteByte('\n')
+		if f.fileIDHash != nil {
+			_, _ = f.fileIDHash.Write(b)
+			_, _ = f.fileIDHash.Write([]byte{'\n'})
+		}
+	}
+}
+
+func (f *Document) writeRawBytes(b []byte) {
+	if f.state == 2 {
+		f.markAliasPageBytes(b)
+		_, _ = f.pages[f.page].Write(b)
+	} else {
+		_, _ = f.buffer.Write(b)
+		if f.fileIDHash != nil {
+			_, _ = f.fileIDHash.Write(b)
+		}
+	}
+}
+
+func (f *Document) writeRawByte(b byte) {
+	if f.state == 2 {
+		_ = f.pages[f.page].WriteByte(b)
+	} else {
+		_ = f.buffer.WriteByte(b)
+		if f.fileIDHash != nil {
+			_, _ = f.fileIDHash.Write([]byte{b})
+		}
 	}
 }
 
@@ -162,7 +199,7 @@ func (f *Document) RawWriteStr(str string) {
 // RawWriteArtifactStr writes raw PDF content marked as an artifact when tagged
 // PDF output is enabled.
 func (f *Document) RawWriteArtifactStr(str string) {
-	f.outbytes(f.wrapTaggedContent([]byte(str), taggedContentOptions{Artifact: true}))
+	f.outTaggedContent([]byte(str), taggedContentOptions{Artifact: true})
 }
 
 // RawWriteBuf writes the contents of the specified buffer directly to the PDF

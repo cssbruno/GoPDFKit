@@ -134,11 +134,11 @@ func MeasureBlock(ctx MeasureContext, block Block) BlockMeasurement {
 }
 
 func measureParagraphBlock(ctx MeasureContext, block ParagraphBlock) BlockMeasurement {
-	block.Box = ParagraphBox(block.Box)
-	style := MergedTextStyle(ctx.DefaultStyle, block.Style)
-	contentWidth := InnerWidth(ctx.Width, block.Box)
+	box := ParagraphBox(block.EffectiveBox())
+	style := MergedTextStyle(ctx.DefaultStyle, block.EffectiveStyle())
+	contentWidth := InnerWidth(ctx.Width, box)
 	height := measureTextSegments(ctx, block.Segments, style, contentWidth)
-	height += VerticalSpacing(block.Box.Margin) + VerticalSpacing(block.Box.Padding) + BorderVertical(block.Box.Border)
+	height += VerticalSpacing(box.Margin) + VerticalSpacing(box.Padding) + BorderVertical(box.Border)
 	lineHeight := ResolvedLineHeight(style)
 	if height < lineHeight {
 		height = lineHeight
@@ -147,26 +147,27 @@ func measureParagraphBlock(ctx MeasureContext, block ParagraphBlock) BlockMeasur
 		Kind:         block.DocumentBlockKind(),
 		Width:        ctx.Width,
 		Height:       height,
-		MinHeight:    lineHeight + block.Box.Padding.Top + block.Box.Padding.Bottom + BorderVertical(block.Box.Border),
-		Splittable:   !block.Box.KeepTogether,
-		KeepTogether: block.Box.KeepTogether,
-		KeepWithNext: block.Box.KeepWithNext,
+		MinHeight:    lineHeight + box.Padding.Top + box.Padding.Bottom + BorderVertical(box.Border),
+		Splittable:   !box.KeepTogether,
+		KeepTogether: box.KeepTogether,
+		KeepWithNext: box.KeepWithNext,
 	}
 }
 
 func measureHeadingBlock(ctx MeasureContext, block HeadingBlock) BlockMeasurement {
-	block.Box = HeadingBox(block.Box)
-	style := MergedTextStyle(ctx.DefaultStyle, block.Style)
-	if block.Style.FontSize <= 0 {
+	box := HeadingBox(block.EffectiveBox())
+	blockStyle := block.EffectiveStyle()
+	style := MergedTextStyle(ctx.DefaultStyle, blockStyle)
+	if blockStyle.FontSize <= 0 {
 		style.FontSize = HeadingFontSize(ctx.DefaultStyle.FontSize, block.Level)
 	}
-	if block.Style.LineHeight <= 0 {
+	if blockStyle.LineHeight <= 0 {
 		style.LineHeight = scaledLineHeight(ctx.DefaultStyle, style.FontSize)
 	}
-	height := measureTextSegments(ctx, block.Segments, style, InnerWidth(ctx.Width, block.Box))
+	height := measureTextSegments(ctx, block.Segments, style, InnerWidth(ctx.Width, box))
 	height += ResolvedLineHeight(style) * 0.25
-	height += VerticalSpacing(block.Box.Margin) + VerticalSpacing(block.Box.Padding) + BorderVertical(block.Box.Border)
-	minHeight := ResolvedLineHeight(style) + block.Box.Padding.Top + block.Box.Padding.Bottom + BorderVertical(block.Box.Border)
+	height += VerticalSpacing(box.Margin) + VerticalSpacing(box.Padding) + BorderVertical(box.Border)
+	minHeight := ResolvedLineHeight(style) + box.Padding.Top + box.Padding.Bottom + BorderVertical(box.Border)
 	return BlockMeasurement{
 		Kind:          block.DocumentBlockKind(),
 		Width:         ctx.Width,
@@ -180,15 +181,17 @@ func measureHeadingBlock(ctx MeasureContext, block HeadingBlock) BlockMeasuremen
 }
 
 func measureListBlock(ctx MeasureContext, block ListBlock) BlockMeasurement {
+	box := block.EffectiveBox()
+	style := block.EffectiveStyle()
 	childCtx := ctx
-	childCtx.Width = InnerWidth(ctx.Width, block.Box)
+	childCtx.Width = InnerWidth(ctx.Width, box)
 	measures := make([]BlockMeasurement, 0, len(block.Items))
-	total := VerticalSpacing(block.Box.Margin) + VerticalSpacing(block.Box.Padding) + BorderVertical(block.Box.Border)
+	total := VerticalSpacing(box.Margin) + VerticalSpacing(box.Padding) + BorderVertical(box.Border)
 	minHeight := 0.0
 	for _, item := range block.Items {
 		itemMeasure := measureBlockSequence(childCtx, item.Blocks)
 		if itemMeasure.Height <= 0 {
-			itemMeasure.Height = ResolvedLineHeight(MergedTextStyle(ctx.DefaultStyle, block.Style))
+			itemMeasure.Height = ResolvedLineHeight(MergedTextStyle(ctx.DefaultStyle, style))
 			itemMeasure.MinHeight = itemMeasure.Height
 		}
 		measures = append(measures, itemMeasure)
@@ -201,18 +204,19 @@ func measureListBlock(ctx MeasureContext, block ListBlock) BlockMeasurement {
 		Kind:          block.DocumentBlockKind(),
 		Width:         ctx.Width,
 		Height:        total,
-		MinHeight:     minHeight + block.Box.Padding.Top + BorderVertical(block.Box.Border),
-		Splittable:    !block.Box.KeepTogether,
-		KeepTogether:  block.Box.KeepTogether,
-		KeepWithNext:  block.Box.KeepWithNext,
+		MinHeight:     minHeight + box.Padding.Top + BorderVertical(box.Border),
+		Splittable:    !box.KeepTogether,
+		KeepTogether:  box.KeepTogether,
+		KeepWithNext:  box.KeepWithNext,
 		ChildMeasures: measures,
 	}
 }
 
 func measureTableBlock(ctx MeasureContext, block TableBlock) BlockMeasurement {
+	box := block.EffectiveBox()
 	rowCount := len(block.Header) + len(block.Body) + len(block.Footer)
 	measures := make([]BlockMeasurement, 0, rowCount)
-	total := VerticalSpacing(block.Box.Margin) + VerticalSpacing(block.Box.Padding) + BorderVertical(block.Box.Border)
+	total := VerticalSpacing(box.Margin) + VerticalSpacing(box.Padding) + BorderVertical(box.Border)
 	if block.Caption != "" {
 		total += ResolvedLineHeight(ctx.DefaultStyle)
 	}
@@ -240,15 +244,16 @@ func measureTableBlock(ctx MeasureContext, block TableBlock) BlockMeasurement {
 		Kind:          block.DocumentBlockKind(),
 		Width:         ctx.Width,
 		Height:        total,
-		MinHeight:     minHeight + block.Box.Padding.Top + BorderVertical(block.Box.Border),
-		Splittable:    !block.Style.KeepRows && !block.Box.KeepTogether,
-		KeepTogether:  block.Style.KeepRows || block.Box.KeepTogether,
-		KeepWithNext:  block.Box.KeepWithNext,
+		MinHeight:     minHeight + box.Padding.Top + BorderVertical(box.Border),
+		Splittable:    !block.Style.KeepRows && !box.KeepTogether,
+		KeepTogether:  block.Style.KeepRows || box.KeepTogether,
+		KeepWithNext:  box.KeepWithNext,
 		ChildMeasures: measures,
 	}
 }
 
 func measureImageBlock(ctx MeasureContext, block ImageBlock) BlockMeasurement {
+	box := block.EffectiveBox()
 	width := FirstPositive(block.Width, block.MaxWidth, ctx.Width)
 	if width > ctx.Width && ctx.Width > 0 {
 		width = ctx.Width
@@ -266,7 +271,7 @@ func measureImageBlock(ctx MeasureContext, block ImageBlock) BlockMeasurement {
 	if len(block.Caption) > 0 {
 		height += ResolvedLineHeight(ctx.DefaultStyle)
 	}
-	height += VerticalSpacing(block.Box.Margin) + VerticalSpacing(block.Box.Padding) + BorderVertical(block.Box.Border)
+	height += VerticalSpacing(box.Margin) + VerticalSpacing(box.Padding) + BorderVertical(box.Border)
 	return BlockMeasurement{
 		Kind:         block.DocumentBlockKind(),
 		Width:        ctx.Width,
@@ -274,13 +279,14 @@ func measureImageBlock(ctx MeasureContext, block ImageBlock) BlockMeasurement {
 		MinHeight:    height,
 		Splittable:   false,
 		KeepTogether: true,
-		KeepWithNext: block.Box.KeepWithNext,
+		KeepWithNext: box.KeepWithNext,
 	}
 }
 
 func measureSignatureRowBlock(ctx MeasureContext, block SignatureRowBlock) BlockMeasurement {
+	box := block.EffectiveBox()
 	lineHeight := ResolvedLineHeight(ctx.DefaultStyle)
-	height := lineHeight*3 + VerticalSpacing(block.Box.Margin) + VerticalSpacing(block.Box.Padding) + BorderVertical(block.Box.Border)
+	height := lineHeight*3 + VerticalSpacing(box.Margin) + VerticalSpacing(box.Padding) + BorderVertical(box.Border)
 	return BlockMeasurement{
 		Kind:         block.DocumentBlockKind(),
 		Width:        ctx.Width,
@@ -288,36 +294,40 @@ func measureSignatureRowBlock(ctx MeasureContext, block SignatureRowBlock) Block
 		MinHeight:    height,
 		Splittable:   false,
 		KeepTogether: true,
-		KeepWithNext: block.Box.KeepWithNext,
+		KeepWithNext: box.KeepWithNext,
 	}
 }
 
 func measureMetadataGridBlock(ctx MeasureContext, block MetadataGridBlock) BlockMeasurement {
+	box := block.EffectiveBox()
+	style := block.EffectiveStyle()
 	columns := block.Columns
 	if columns <= 0 {
 		columns = 2
 	}
 	rows := (len(block.Fields) + columns - 1) / columns
-	lineHeight := ResolvedLineHeight(MergedTextStyle(ctx.DefaultStyle, block.Style))
-	height := float64(rows)*lineHeight + VerticalSpacing(block.Box.Margin) + VerticalSpacing(block.Box.Padding) + BorderVertical(block.Box.Border)
+	lineHeight := ResolvedLineHeight(MergedTextStyle(ctx.DefaultStyle, style))
+	height := float64(rows)*lineHeight + VerticalSpacing(box.Margin) + VerticalSpacing(box.Padding) + BorderVertical(box.Border)
 	return BlockMeasurement{
 		Kind:         block.DocumentBlockKind(),
 		Width:        ctx.Width,
 		Height:       height,
-		MinHeight:    lineHeight + block.Box.Padding.Top + BorderVertical(block.Box.Border),
-		Splittable:   !block.Box.KeepTogether,
-		KeepTogether: block.Box.KeepTogether,
-		KeepWithNext: block.Box.KeepWithNext,
+		MinHeight:    lineHeight + box.Padding.Top + BorderVertical(box.Border),
+		Splittable:   !box.KeepTogether,
+		KeepTogether: box.KeepTogether,
+		KeepWithNext: box.KeepWithNext,
 	}
 }
 
 func measureQRVerificationBlock(ctx MeasureContext, block QRVerificationBlock) BlockMeasurement {
+	box := block.EffectiveBox()
+	style := block.EffectiveStyle()
 	qrSize := block.QR.Size
 	if qrSize <= 0 {
 		qrSize = 25
 	}
-	textHeight := measureTextSegments(ctx, block.Text, MergedTextStyle(ctx.DefaultStyle, block.Style), ctx.Width-qrSize)
-	height := measureMaxFloat(qrSize, textHeight) + VerticalSpacing(block.Box.Margin) + VerticalSpacing(block.Box.Padding) + BorderVertical(block.Box.Border)
+	textHeight := measureTextSegments(ctx, block.Text, MergedTextStyle(ctx.DefaultStyle, style), ctx.Width-qrSize)
+	height := measureMaxFloat(qrSize, textHeight) + VerticalSpacing(box.Margin) + VerticalSpacing(box.Padding) + BorderVertical(box.Border)
 	return BlockMeasurement{
 		Kind:         block.DocumentBlockKind(),
 		Width:        ctx.Width,
@@ -325,13 +335,14 @@ func measureQRVerificationBlock(ctx MeasureContext, block QRVerificationBlock) B
 		MinHeight:    height,
 		Splittable:   false,
 		KeepTogether: true,
-		KeepWithNext: block.Box.KeepWithNext,
+		KeepWithNext: box.KeepWithNext,
 	}
 }
 
 func measureSectionBlock(ctx MeasureContext, block SectionBlock) BlockMeasurement {
+	box := block.EffectiveBox()
 	childCtx := ctx
-	childCtx.Width = InnerWidth(ctx.Width, block.Box)
+	childCtx.Width = InnerWidth(ctx.Width, box)
 	titleHeight := 0.0
 	if strings.TrimSpace(block.Title) != "" {
 		titleHeight = ResolvedLineHeight(ctx.DefaultStyle)
@@ -339,19 +350,20 @@ func measureSectionBlock(ctx MeasureContext, block SectionBlock) BlockMeasuremen
 	measure := measureBlockSequence(childCtx, block.Blocks)
 	measure.Kind = block.DocumentBlockKind()
 	measure.Width = ctx.Width
-	measure.Height += titleHeight + VerticalSpacing(block.Box.Margin) + VerticalSpacing(block.Box.Padding) + BorderVertical(block.Box.Border)
-	measure.MinHeight += titleHeight + block.Box.Padding.Top + BorderVertical(block.Box.Border)
-	measure.KeepTogether = block.Box.KeepTogether
-	measure.KeepWithNext = block.Box.KeepWithNext
-	measure.Splittable = !block.Box.KeepTogether
+	measure.Height += titleHeight + VerticalSpacing(box.Margin) + VerticalSpacing(box.Padding) + BorderVertical(box.Border)
+	measure.MinHeight += titleHeight + box.Padding.Top + BorderVertical(box.Border)
+	measure.KeepTogether = box.KeepTogether
+	measure.KeepWithNext = box.KeepWithNext
+	measure.Splittable = !box.KeepTogether
 	return measure
 }
 
 func measureClauseBlock(ctx MeasureContext, block ClauseBlock) BlockMeasurement {
-	measure := measureContainerBlock(ctx, block.DocumentBlockKind(), block.Blocks, block.Box)
+	box := block.EffectiveBox()
+	measure := measureContainerBlock(ctx, block.DocumentBlockKind(), block.Blocks, box)
 	measure.BreakBefore = block.BreakBefore
 	measure.BreakAfter = block.BreakAfter
-	measure.KeepTogether = block.KeepTogether || block.Box.KeepTogether
+	measure.KeepTogether = block.KeepTogether || box.KeepTogether
 	measure.Splittable = !measure.KeepTogether
 	return measure
 }
@@ -394,7 +406,8 @@ func measureTableRow(ctx MeasureContext, row TableRow, table TableBlock) BlockMe
 	if columnCount <= 0 {
 		columnCount = 1
 	}
-	widths := measureTableColumnWidths(InnerWidth(ctx.Width, table.Box), columnCount, table.Columns)
+	tableBox := table.EffectiveBox()
+	widths := measureTableColumnWidths(InnerWidth(ctx.Width, tableBox), columnCount, table.Columns)
 	maxHeight := 0.0
 	col := 0
 	for _, cell := range row.Cells {
@@ -407,12 +420,14 @@ func measureTableRow(ctx MeasureContext, row TableRow, table TableBlock) BlockMe
 		}
 		cellWidth := sumMeasureFloat64(widths[col:measureMinInt(col+span, len(widths))])
 		childCtx := ctx
-		childCtx.Width = cellWidth - horizontalSpacing(cell.Box.Padding) - borderHorizontal(cell.Box.Border)
+		cellBox := cell.EffectiveBox()
+		cellStyle := cell.EffectiveStyle()
+		childCtx.Width = cellWidth - horizontalSpacing(cellBox.Padding) - borderHorizontal(cellBox.Border)
 		cellMeasure := measureBlockSequence(childCtx, cell.Blocks)
 		if cellMeasure.Height <= 0 {
-			cellMeasure.Height = ResolvedLineHeight(MergedTextStyle(ctx.DefaultStyle, cell.Style))
+			cellMeasure.Height = ResolvedLineHeight(MergedTextStyle(ctx.DefaultStyle, cellStyle))
 		}
-		cellMeasure.Height += VerticalSpacing(cell.Box.Padding) + BorderVertical(cell.Box.Border)
+		cellMeasure.Height += VerticalSpacing(cellBox.Padding) + BorderVertical(cellBox.Border)
 		maxHeight = measureMaxFloat(maxHeight, cellMeasure.Height)
 		col += span
 	}

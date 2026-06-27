@@ -77,26 +77,16 @@ func svgPatternUnits(value string, fallback string) string {
 
 func svgNodeStyle(node svgNode, inherited SVGStyle, rules []htmlCSSRule, ancestors []HTMLSegmentType) SVGStyle {
 	style := inherited
-	attrs := map[string]string{}
-	for _, attr := range node.Attrs {
-		attrs[strings.ToLower(attr.Name.Local)] = attr.Value
-	}
-	declarations := map[string]string{}
+	el := svgHTMLSegment(node)
+	attrs := el.Attr
+	declarations := make(map[string]string, len(attrs))
 	for name, value := range attrs {
 		if name != "style" {
 			declarations[name] = value
 		}
 	}
-	el := HTMLSegmentType{Cat: 'O', Str: strings.ToLower(node.XMLName.Local), Attr: attrs}
-	for _, rule := range rules {
-		for _, selector := range rule.selectors {
-			if htmlCSSSelectorMatches(selector, el, ancestors) {
-				for name, value := range rule.declarations {
-					declarations[name] = value
-				}
-				break
-			}
-		}
+	for name, value := range htmlElementDeclarationsWithStyle(el, rules, nil, ancestors...) {
+		declarations[name] = value
 	}
 	for name, value := range parseStyleDeclarations(attrs["style"]) {
 		declarations[name] = value
@@ -179,8 +169,8 @@ func parseSVGPaint(value string, style SVGStyle) (CSSColorType, bool) {
 }
 
 func parseSVGVisibility(display, visibility string) (bool, bool) {
-	display = strings.TrimSpace(strings.ToLower(display))
-	visibility = strings.TrimSpace(strings.ToLower(visibility))
+	display = svgLowerTrim(display)
+	visibility = svgLowerTrim(visibility)
 	if display == "none" || visibility == "hidden" || visibility == "collapse" {
 		return true, true
 	}
@@ -188,7 +178,7 @@ func parseSVGVisibility(display, visibility string) (bool, bool) {
 }
 
 func parseSVGFillRule(value string) string {
-	switch strings.TrimSpace(strings.ToLower(value)) {
+	switch svgLowerTrim(value) {
 	case "evenodd":
 		return "evenodd"
 	case "nonzero":
@@ -199,25 +189,27 @@ func parseSVGFillRule(value string) string {
 }
 
 func parseSVGLineCap(value string) string {
-	switch strings.TrimSpace(strings.ToLower(value)) {
+	value = svgLowerTrim(value)
+	switch value {
 	case "butt", "round", "square":
-		return strings.TrimSpace(strings.ToLower(value))
+		return value
 	default:
 		return ""
 	}
 }
 
 func parseSVGLineJoin(value string) string {
-	switch strings.TrimSpace(strings.ToLower(value)) {
+	value = svgLowerTrim(value)
+	switch value {
 	case "miter", "round", "bevel":
-		return strings.TrimSpace(strings.ToLower(value))
+		return value
 	default:
 		return ""
 	}
 }
 
 func parseSVGOpacity(value string) (float64, bool) {
-	value = strings.TrimSpace(strings.ToLower(value))
+	value = strings.TrimSpace(value)
 	if value == "" {
 		return 0, false
 	}
@@ -241,11 +233,11 @@ func parseSVGOpacity(value string) (float64, bool) {
 }
 
 func parseSVGDashArray(value string) ([]float64, bool) {
-	value = strings.TrimSpace(strings.ToLower(value))
+	value = strings.TrimSpace(value)
 	if value == "" {
 		return nil, false
 	}
-	if value == "none" {
+	if strings.EqualFold(value, "none") {
 		return nil, true
 	}
 	fields := svgNumberFields(value)
@@ -268,6 +260,10 @@ func parseSVGDashArray(value string) ([]float64, bool) {
 		return nil, true
 	}
 	return dash, true
+}
+
+func svgLowerTrim(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
 }
 
 func parseSVGStyleNumber(value string) (float64, bool) {

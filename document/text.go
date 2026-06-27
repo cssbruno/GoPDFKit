@@ -48,7 +48,7 @@ func (f *Document) Text(x, y float64, txtStr string) {
 	if f.colorFlag {
 		buf = append(buf, " Q"...)
 	}
-	f.outbytes(f.wrapTaggedContent(buf, tag))
+	f.outTaggedContent(buf, tag)
 }
 
 // SetWordSpacing sets spacing between words of following text. See the
@@ -333,6 +333,27 @@ func (f *Document) textstring(s string) string {
 		s = string(b)
 	}
 	return "(" + f.escape(s) + ")"
+}
+
+func (f *Document) appendTextString(buf []byte, s string) []byte {
+	if f.protect.encrypted {
+		b := []byte(s)
+		f.protect.rc4(uint32(f.n), &b)
+		s = string(b)
+	}
+	buf = append(buf, '(')
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\\', '(', ')':
+			buf = append(buf, '\\', s[i])
+		case '\r':
+			buf = append(buf, "\\r"...)
+		default:
+			buf = append(buf, s[i])
+		}
+	}
+	buf = append(buf, ')')
+	return buf
 }
 
 func blankCount(str string) (count int) {

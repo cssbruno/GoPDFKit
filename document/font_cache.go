@@ -58,14 +58,14 @@ func (c *FontCache) AddUTF8FontFromBytes(family, style string, data []byte) erro
 	if !validPDFNameFragment(key) {
 		return fmt.Errorf("invalid UTF-8 font name: %s", key)
 	}
-	def, err := utf8FontDefinition(key, "", data)
+	// Parse the font-only tables once here so every document that embeds this
+	// cached font reuses them read-only instead of re-parsing per document.
+	stored := append([]byte(nil), data...)
+	def, err := utf8FontDefinitionOwned(key, "", stored)
 	if err != nil {
 		return err
 	}
 	def.utf8File = nil
-	// Parse the font-only tables once here so every document that embeds this
-	// cached font reuses them read-only instead of re-parsing per document.
-	stored := append([]byte(nil), data...)
 	static, err := buildUTF8StaticTables(stored)
 	if err != nil {
 		return err

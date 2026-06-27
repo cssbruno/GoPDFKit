@@ -20,6 +20,7 @@ import (
 // definition files.
 func (f *Document) SetFontLocation(fontDirStr string) {
 	f.fontpath = fontDirStr
+	f.utf8FontPathCache = make(map[string]utf8FontPathInfo)
 }
 
 // SetFontLoader sets a loader used to read font files (.json and .z) from an
@@ -102,36 +103,21 @@ func (f *Document) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 		if ok {
 			return
 		}
-		var ttfStat os.FileInfo
-		var err error
-		fileStr = joinFontPath(f.fontpath, fileStr)
-		ttfStat, err = os.Stat(fileStr)
-		if err != nil && strings.HasSuffix(strings.ToLower(fileStr), ".ttf") {
-			otfStr := strings.TrimSuffix(fileStr, filepath.Ext(fileStr)) + ".otf"
-			if otfStat, otfErr := os.Stat(otfStr); otfErr == nil {
-				fileStr = otfStr
-				ttfStat = otfStat
-				err = nil
-			}
-		}
-		if err != nil || ttfStat == nil {
-			if err == nil {
-				err = fmt.Errorf("font file not found: %s", fileStr)
-			}
-			f.SetError(err)
-			return
-		}
-		originalSize := ttfStat.Size()
-		if originalSize > maxFontSourceBytes {
-			f.SetError(errors.New("font data exceeds maximum size"))
-			return
-		}
-		utf8Bytes, err := readFontResourceFile(fileStr, maxFontSourceBytes)
+		fontPath, originalSize, err := f.resolveUTF8FontPath(fileStr)
 		if err != nil {
 			f.SetError(err)
 			return
 		}
-		def, err := utf8FontDefinition(fontKey, fileStr, utf8Bytes)
+		if originalSize > maxFontSourceBytes {
+			f.SetError(errors.New("font data exceeds maximum size"))
+			return
+		}
+		utf8Bytes, err := readFontResourceFile(fontPath, maxFontSourceBytes)
+		if err != nil {
+			f.SetError(err)
+			return
+		}
+		def, err := utf8FontDefinitionOwned(fontKey, fontPath, utf8Bytes)
 		if err != nil {
 			f.SetError(err)
 			return
@@ -139,7 +125,7 @@ func (f *Document) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 		def.usedRunes = defaultUTF8UsedRunes(f.aliasNbPagesStr)
 		f.fonts[fontKey] = def
 		f.fontFiles[fontKey] = fontFile{length1: originalSize, fontType: "UTF8"}
-		f.fontFiles[fileStr] = fontFile{fontType: "UTF8"}
+		f.fontFiles[fontPath] = fontFile{fontType: "UTF8"}
 	} else {
 		if !validFontResourceName(fileStr) {
 			f.SetErrorf("invalid font resource name: %s", fileStr)
@@ -166,6 +152,43 @@ func (f *Document) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 	}
 }
 
+type utf8FontPathInfo struct {
+	path string
+	size int64
+	err  error
+}
+
+func (f *Document) resolveUTF8FontPath(fileStr string) (string, int64, error) {
+	key := f.fontpath + "\x00" + fileStr
+	if f.utf8FontPathCache == nil {
+		f.utf8FontPathCache = make(map[string]utf8FontPathInfo)
+	}
+	if cached, ok := f.utf8FontPathCache[key]; ok {
+		return cached.path, cached.size, cached.err
+	}
+
+	path := joinFontPath(f.fontpath, fileStr)
+	stat, err := os.Stat(path)
+	if err != nil && strings.HasSuffix(strings.ToLower(path), ".ttf") {
+		otfPath := strings.TrimSuffix(path, filepath.Ext(path)) + ".otf"
+		if otfStat, otfErr := os.Stat(otfPath); otfErr == nil {
+			path = otfPath
+			stat = otfStat
+			err = nil
+		}
+	}
+	if err == nil && stat == nil {
+		err = fmt.Errorf("font file not found: %s", path)
+	}
+
+	info := utf8FontPathInfo{path: path, err: err}
+	if stat != nil {
+		info.size = stat.Size()
+	}
+	f.utf8FontPathCache[key] = info
+	return info.path, info.size, info.err
+}
+
 func validFontResourceName(name string) bool {
 	name = strings.TrimSpace(name)
 	return name != "" && name == path.Base(name) && name != "." && name != ".." && !strings.Contains(name, "\\")
@@ -188,11 +211,10 @@ func validFontFilePath(name string) bool {
 }
 
 func makeSubsetRange(end int) map[int]int {
-	answer := make(map[int]int)
-	for i := range end {
-		answer[i] = 0
+	if end < 0 {
+		end = 0
 	}
-	return answer
+	return make(map[int]int, end)
 }
 
 func validateFontDefinition(info fontDefinition) error {
@@ -234,23 +256,46 @@ func validateFontDefinition(info fontDefinition) error {
 }
 
 func validFontDiff(diff string) bool {
-	fields := strings.Fields(diff)
-	if len(fields) == 0 {
-		return false
-	}
-	for _, field := range fields {
-		if strings.HasPrefix(field, "/") {
+	hasField := false
+	for i := 0; i < len(diff); {
+		for i < len(diff) && isASCIISpace(diff[i]) {
+			i++
+		}
+		if i >= len(diff) {
+			break
+		}
+		start := i
+		for i < len(diff) && !isASCIISpace(diff[i]) {
+			i++
+		}
+		field := diff[start:i]
+		hasField = true
+		if field[0] == '/' {
 			if !validPDFResourceName(field) {
 				return false
 			}
 			continue
 		}
-		n, err := strconv.Atoi(field)
-		if err != nil || n < 0 || n > 255 {
+		n := 0
+		for j := 0; j < len(field); j++ {
+			c := field[j]
+			if c < '0' || c > '9' {
+				return false
+			}
+			n = n*10 + int(c-'0')
+			if n > 255 {
+				return false
+			}
+		}
+		if len(field) == 0 {
 			return false
 		}
 	}
-	return true
+	return hasField
+}
+
+func isASCIISpace(c byte) bool {
+	return c == ' ' || c == '\n' || c == '\r' || c == '\t' || c == '\f' || c == '\v'
 }
 
 func validPDFResourceName(name string) bool {
@@ -274,7 +319,15 @@ func validPDFNameFragment(name string) bool {
 }
 
 func utf8FontDefinition(fontKey, fileStr string, utf8Bytes []byte) (fontDefinition, error) {
-	reader := fileReader{readerPosition: 0, array: append([]byte(nil), utf8Bytes...)}
+	return utf8FontDefinitionFromBytes(fontKey, fileStr, append([]byte(nil), utf8Bytes...))
+}
+
+func utf8FontDefinitionOwned(fontKey, fileStr string, utf8Bytes []byte) (fontDefinition, error) {
+	return utf8FontDefinitionFromBytes(fontKey, fileStr, utf8Bytes)
+}
+
+func utf8FontDefinitionFromBytes(fontKey, fileStr string, utf8Bytes []byte) (fontDefinition, error) {
+	reader := fileReader{readerPosition: 0, array: utf8Bytes}
 	utf8File := newUTF8Font(&reader)
 	if err := utf8File.parseFile(); err != nil {
 		return fontDefinition{}, err

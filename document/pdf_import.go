@@ -192,7 +192,7 @@ func (f *Document) UseImportedPage(pageID int, x, y, w, h float64) {
 	content = append(content, "cm /IPG"...)
 	content = appendPDFInt(content, pageID)
 	content = append(content, " Do Q"...)
-	f.outbytes(f.wrapTaggedContent(content, taggedContentOptions{Artifact: true}))
+	f.outTaggedContent(content, taggedContentOptions{Artifact: true})
 }
 
 func documentPageSizes(sizes map[int]map[string]importpdf.Size) map[int]map[string]Size {

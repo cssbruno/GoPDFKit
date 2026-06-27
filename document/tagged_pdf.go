@@ -20,7 +20,10 @@ const (
 	taggedRoleCaption = "Caption"
 )
 
-var taggedArtifactMarkedContent = []byte("/Artifact BMC\n")
+var (
+	taggedArtifactMarkedContent = []byte("/Artifact BMC\n")
+	taggedEndMarkedContent      = []byte("EMC")
+)
 
 type taggedPDFState struct {
 	enabled           bool
@@ -235,25 +238,23 @@ func (f *Document) validateTaggedImageOptions(tag taggedContentOptions) bool {
 	return true
 }
 
-func (f *Document) wrapTaggedContent(content []byte, tag taggedContentOptions) []byte {
-	if !f.tagged.enabled || len(content) == 0 {
-		return content
-	}
-	if tag.Artifact && f.tagged.artifactDepth > 0 {
-		return content
+func (f *Document) outTaggedContent(content []byte, tag taggedContentOptions) {
+	if !f.tagged.enabled || len(content) == 0 || (tag.Artifact && f.tagged.artifactDepth > 0) {
+		f.outbytes(content)
+		return
 	}
 	begin := f.beginTaggedContent(tag)
 	if len(begin) == 0 {
-		return content
+		f.outbytes(content)
+		return
 	}
-	out := make([]byte, 0, len(begin)+len(content)+8)
-	out = append(out, begin...)
-	out = append(out, content...)
-	if len(out) > 0 && out[len(out)-1] != '\n' {
-		out = append(out, '\n')
+	f.writeRawBytes(begin)
+	f.writeRawBytes(content)
+	if content[len(content)-1] != '\n' {
+		f.writeRawByte('\n')
 	}
-	out = append(out, "EMC"...)
-	return out
+	f.writeRawBytes(taggedEndMarkedContent)
+	f.writeRawByte('\n')
 }
 
 func (f *Document) beginTaggedContent(tag taggedContentOptions) []byte {

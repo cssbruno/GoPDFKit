@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -87,7 +88,7 @@ func (f *Document) putresourcedict() {
 	{
 		if !f.catalogSort {
 			for _, font := range f.fonts {
-				f.outf("/F%s %d 0 R", font.i, font.N)
+				f.outbytes(appendPDFResourceRef(nil, "/F", font.i, font.N))
 			}
 		} else {
 			keyList := make([]string, 0, len(f.fonts))
@@ -99,7 +100,7 @@ func (f *Document) putresourcedict() {
 			})
 			for _, key := range keyList {
 				font := f.fonts[key]
-				f.outf("/F%s %d 0 R", font.i, font.N)
+				f.outbytes(appendPDFResourceRef(nil, "/F", font.i, font.N))
 			}
 		}
 	}
@@ -111,7 +112,11 @@ func (f *Document) putresourcedict() {
 	if count > 1 {
 		f.out("/ExtGState <<")
 		for j := 1; j < count; j++ {
-			f.outf("/GS%d %d 0 R", j, f.blendList[j].objNum)
+			buf := strconv.AppendInt([]byte("/GS"), int64(j), 10)
+			buf = append(buf, ' ')
+			buf = strconv.AppendInt(buf, int64(f.blendList[j].objNum), 10)
+			buf = append(buf, " 0 R"...)
+			f.outbytes(buf)
 		}
 		f.out(">>")
 	}
@@ -119,7 +124,11 @@ func (f *Document) putresourcedict() {
 	if count > 1 {
 		f.out("/Shading <<")
 		for j := 1; j < count; j++ {
-			f.outf("/Sh%d %d 0 R", j, f.gradientList[j].objNum)
+			buf := strconv.AppendInt([]byte("/Sh"), int64(j), 10)
+			buf = append(buf, ' ')
+			buf = strconv.AppendInt(buf, int64(f.gradientList[j].objNum), 10)
+			buf = append(buf, " 0 R"...)
+			f.outbytes(buf)
 		}
 		f.out(">>")
 	}
@@ -140,7 +149,7 @@ func (f *Document) putjavascript() {
 	f.newobj()
 	f.out("<<")
 	f.out("/S /JavaScript")
-	f.outf("/JS %s", f.textstring(*f.javascript))
+	f.outbytes(f.appendTextString([]byte("/JS "), *f.javascript))
 	f.out(">>")
 	f.out("endobj")
 }
@@ -181,6 +190,15 @@ func (f *Document) putresources() {
 		f.out(">>")
 		f.out("endobj")
 	}
+}
+
+func appendPDFResourceRef(buf []byte, prefix, name string, objNum int) []byte {
+	buf = append(buf, prefix...)
+	buf = append(buf, name...)
+	buf = append(buf, ' ')
+	buf = strconv.AppendInt(buf, int64(objNum), 10)
+	buf = append(buf, " 0 R"...)
+	return buf
 }
 
 // timeOrNow returns time.Now() if tm is zero.
@@ -266,12 +284,16 @@ func (f *Document) putcatalog() {
 		f.out("/PageMode /UseOutlines")
 	}
 	f.layerPutCatalog()
-	f.out("/Names <<")
-	if f.javascript != nil {
-		f.outf("/JavaScript %d 0 R", f.nJs)
+	if f.javascript != nil || len(f.attachments) > 0 {
+		f.out("/Names <<")
+		if f.javascript != nil {
+			f.outf("/JavaScript %d 0 R", f.nJs)
+		}
+		if len(f.attachments) > 0 {
+			f.outf("/EmbeddedFiles %s", f.getEmbeddedFiles())
+		}
+		f.out(">>")
 	}
-	f.outf("/EmbeddedFiles %s", f.getEmbeddedFiles())
-	f.out(">>")
 }
 
 func (f *Document) putheader() {
@@ -308,6 +330,9 @@ func (f *Document) omitDeprecatedPDF2Entries() bool {
 }
 
 func (f *Document) fileIdentifier() string {
+	if f.fileIDHash != nil {
+		return strings.ToUpper(hex.EncodeToString(f.fileIDHash.Sum(nil)[:16]))
+	}
 	sum := sha256.Sum256(f.buffer.Bytes())
 	return strings.ToUpper(hex.EncodeToString(sum[:16]))
 }
@@ -379,37 +404,60 @@ func (f *Document) putbookmarks() {
 			}
 		}
 		n := f.n + 1
+		pageHeights := make([]float64, f.page+1)
+		for page := 1; page <= f.page; page++ {
+			pageHeights[page] = f.pageHeightPt(page)
+		}
 		for _, o := range f.outlines {
-			pageObj := f.pageObjectNumber(o.p)
+			pageObj := 0
+			if o.p > 0 && o.p < len(f.pageObjectNumbers) {
+				pageObj = f.pageObjectNumbers[o.p]
+			}
 			if pageObj == 0 {
 				f.SetErrorf("invalid bookmark destination page: %d", o.p)
 				return
 			}
 			f.newobj()
-			f.outf("<</Title %s", f.textstring(o.text))
-			f.outf("/Parent %d 0 R", n+o.parent)
+			title := o.text
+			if o.utf8 {
+				title = utf8toutf16(title)
+			}
+			buf := append([]byte("<</Title "), f.textstring(title)...)
+			buf = append(buf, '\n')
+			buf = appendPDFNamedObjectRef(buf, "/Parent ", n+o.parent)
 			if o.prev != -1 {
-				f.outf("/Prev %d 0 R", n+o.prev)
+				buf = appendPDFNamedObjectRef(buf, "/Prev ", n+o.prev)
 			}
 			if o.next != -1 {
-				f.outf("/Next %d 0 R", n+o.next)
+				buf = appendPDFNamedObjectRef(buf, "/Next ", n+o.next)
 			}
 			if o.first != -1 {
-				f.outf("/First %d 0 R", n+o.first)
+				buf = appendPDFNamedObjectRef(buf, "/First ", n+o.first)
 			}
 			if o.last != -1 {
-				f.outf("/Last %d 0 R", n+o.last)
+				buf = appendPDFNamedObjectRef(buf, "/Last ", n+o.last)
 			}
-			f.outf("/Dest [%d 0 R /XYZ 0 %.2f null]", pageObj, f.pageHeightPt(o.p)-o.y*f.k)
-			f.out("/Count 0>>")
-			f.out("endobj")
+			buf = append(buf, "/Dest ["...)
+			buf = strconv.AppendInt(buf, int64(pageObj), 10)
+			buf = append(buf, " 0 R /XYZ 0 "...)
+			buf = strconv.AppendFloat(buf, pageHeights[o.p]-o.y*f.k, 'f', 2, 64)
+			buf = append(buf, " null]\n/Count 0>>\nendobj"...)
+			f.outbytes(buf)
 		}
 		f.newobj()
 		f.outlineRoot = f.n
-		f.outf("<</Type /Outlines /First %d 0 R", n+rootFirst)
-		f.outf("/Last %d 0 R>>", n+rootLast)
-		f.out("endobj")
+		buf := appendPDFNamedObjectRef([]byte("<</Type /Outlines "), "/First ", n+rootFirst)
+		buf = appendPDFNamedObjectRef(buf, "/Last ", n+rootLast)
+		buf = append(buf, ">>\nendobj"...)
+		f.outbytes(buf)
 	}
+}
+
+func appendPDFNamedObjectRef(buf []byte, prefix string, objNum int) []byte {
+	buf = append(buf, prefix...)
+	buf = strconv.AppendInt(buf, int64(objNum), 10)
+	buf = append(buf, " 0 R\n"...)
+	return buf
 }
 
 func (f *Document) enddoc() {
@@ -422,8 +470,10 @@ func (f *Document) enddoc() {
 	}
 	f.ensureComplianceMetadata()
 	f.buffer.Grow(f.estimateFinalBufferSize())
+	f.fileIDHash = sha256.New()
 	f.layerEndDoc()
 	f.putheader()
+	f.prepareAttachmentCompression()
 	f.putAttachments()
 	f.putAnnotationsAttachments()
 	f.putpages()
@@ -465,33 +515,14 @@ func (f *Document) enddoc() {
 }
 
 func (f *Document) estimateFinalBufferSize() int {
-	size := 4096 + len(f.pages)*512 + len(f.images)*512 + len(f.fonts)*1024 + len(f.attachments)*512
-	for page := 1; page < len(f.pages); page++ {
-		if f.pages[page] != nil {
-			size += f.pages[page].Len()
-		}
-	}
-	for _, image := range f.images {
-		if image == nil {
-			continue
-		}
-		size += len(image.data) + len(image.smask) + len(image.pal) + 256
-	}
-	for _, tpl := range f.templates {
-		size += len(tpl.Bytes()) + 512
-	}
-	for _, data := range f.importedObjs {
-		size += len(data)
-	}
-	for _, page := range f.importedPages {
-		if page == nil || page.page == nil {
-			continue
-		}
-		size += len(page.page.Resources()) + len(page.page.Content()) + 256
-	}
-	for _, attachment := range f.attachments {
-		size += len(attachment.Content) + 256
-	}
+	size := f.buffer.Len() + 4096
+	size += len(f.pages) * 1024
+	size += len(f.images) * 2048
+	size += len(f.fonts) * 1024
+	size += len(f.templates) * 1024
+	size += len(f.importedObjs) * 1024
+	size += len(f.importedPages) * 1024
+	size += len(f.attachments) * 1024
 	size += len(f.xmp)
 	if f.javascript != nil {
 		size += len(*f.javascript)

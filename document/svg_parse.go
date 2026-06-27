@@ -4,6 +4,7 @@
 package document
 
 import (
+	"crypto/sha256"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -13,38 +14,169 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 )
-
-var pathCmdSub *strings.Replacer
 
 const maxSVGSourceBytes = 4 * 1024 * 1024
 
-func init() {
-	pathCmdSub = strings.NewReplacer(",", " ", "A", " A ", "a", " a ", "L", " L ", "l", " l ", "C", " C ", "c", " c ", "M", " M ", "m", " m ", "H", " H ", "h", " h ", "S", " S ", "s", " s ", "T", " T ", "t", " t ", "V", " V ", "v", " v ", "Q", " Q ", "q", " q ", "Z", " Z ", "z", " z ")
+const svgParseCacheLimit = 32
+
+var svgParseCache = struct {
+	sync.Mutex
+	keys []svgParseCacheKey
+	data map[svgParseCacheKey]SVG
+}{data: make(map[svgParseCacheKey]SVG)}
+
+type svgParseCacheKey struct {
+	size int
+	sum  [32]byte
 }
 
 func pathFields(pathStr string) []string {
-	return svgNumberFields(pathCmdSub.Replace(pathStr))
+	return svgScanFields(pathStr, true)
 }
 
 func svgNumberFields(numStr string) []string {
-	strList := strings.Fields(strings.ReplaceAll(numStr, ",", " "))
-	fields := make([]string, 0, len(strList))
-	for _, str := range strList {
-		start := 0
-		for j := 1; j < len(str); j++ {
-			if (str[j] == '-' || str[j] == '+') && str[j-1] != 'e' && str[j-1] != 'E' {
-				if start < j {
-					fields = append(fields, str[start:j])
-				}
-				start = j
+	return svgScanFields(numStr, false)
+}
+
+func svgScanFields(s string, commands bool) []string {
+	fields := make([]string, 0, 8)
+	for i := 0; i < len(s); {
+		for i < len(s) && (isASCIISpace(s[i]) || s[i] == ',') {
+			i++
+		}
+		if i >= len(s) {
+			break
+		}
+		start := i
+		if commands && ((s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= 'a' && s[i] <= 'z')) {
+			fields = append(fields, s[i:i+1])
+			i++
+			continue
+		}
+		if s[i] == '-' || s[i] == '+' {
+			i++
+		}
+		digits := 0
+		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+			i++
+			digits++
+		}
+		if i < len(s) && s[i] == '.' {
+			i++
+			for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+				i++
+				digits++
 			}
 		}
-		if start < len(str) {
-			fields = append(fields, str[start:])
+		if digits > 0 && i < len(s) && (s[i] == 'e' || s[i] == 'E') {
+			exp := i + 1
+			if exp < len(s) && (s[exp] == '-' || s[exp] == '+') {
+				exp++
+			}
+			expDigits := exp
+			for exp < len(s) && s[exp] >= '0' && s[exp] <= '9' {
+				exp++
+			}
+			if exp > expDigits {
+				i = exp
+			}
 		}
+		if i == start || (i == start+1 && (s[start] == '-' || s[start] == '+')) {
+			for i < len(s) && !isASCIISpace(s[i]) && s[i] != ',' {
+				i++
+			}
+		}
+		fields = append(fields, s[start:i])
 	}
 	return fields
+}
+
+func svgParseCacheGet(key svgParseCacheKey) (SVG, bool) {
+	svgParseCache.Lock()
+	defer svgParseCache.Unlock()
+	sig, ok := svgParseCache.data[key]
+	if !ok {
+		return SVG{}, false
+	}
+	return cloneSVG(sig), true
+}
+
+func svgParseCachePut(key svgParseCacheKey, sig SVG) {
+	svgParseCache.Lock()
+	defer svgParseCache.Unlock()
+	if _, ok := svgParseCache.data[key]; ok {
+		svgParseCache.data[key] = cloneSVG(sig)
+		return
+	}
+	if len(svgParseCache.keys) >= svgParseCacheLimit {
+		evict := svgParseCache.keys[0]
+		copy(svgParseCache.keys, svgParseCache.keys[1:])
+		svgParseCache.keys = svgParseCache.keys[:len(svgParseCache.keys)-1]
+		delete(svgParseCache.data, evict)
+	}
+	svgParseCache.keys = append(svgParseCache.keys, key)
+	svgParseCache.data[key] = cloneSVG(sig)
+}
+
+func cloneSVG(sig SVG) SVG {
+	sig.Segments = cloneSVGSegmentGroups(sig.Segments)
+	sig.Paths = cloneSVGPaths(sig.Paths)
+	sig.Texts = append([]SVGText(nil), sig.Texts...)
+	sig.Images = append([]SVGImage(nil), sig.Images...)
+	sig.Elements = cloneSVGElements(sig.Elements)
+	return sig
+}
+
+func cloneSVGSegmentGroups(groups [][]SVGSegment) [][]SVGSegment {
+	if len(groups) == 0 {
+		return nil
+	}
+	out := make([][]SVGSegment, len(groups))
+	for i, group := range groups {
+		out[i] = append([]SVGSegment(nil), group...)
+	}
+	return out
+}
+
+func cloneSVGPaths(paths []SVGPath) []SVGPath {
+	if len(paths) == 0 {
+		return nil
+	}
+	out := make([]SVGPath, len(paths))
+	for i, path := range paths {
+		out[i] = cloneSVGPath(path)
+	}
+	return out
+}
+
+func cloneSVGPath(path SVGPath) SVGPath {
+	path.Segments = append([]SVGSegment(nil), path.Segments...)
+	path.Style = cloneSVGStyle(path.Style)
+	return path
+}
+
+func cloneSVGStyle(style SVGStyle) SVGStyle {
+	style.ClipPath = append([]SVGSegment(nil), style.ClipPath...)
+	style.StrokeDashArray = append([]float64(nil), style.StrokeDashArray...)
+	style.FillGradient.Stops = append([]SVGGradientStop(nil), style.FillGradient.Stops...)
+	style.FillPattern.Elements = cloneSVGElements(style.FillPattern.Elements)
+	return style
+}
+
+func cloneSVGElements(elements []SVGElement) []SVGElement {
+	if len(elements) == 0 {
+		return nil
+	}
+	out := make([]SVGElement, len(elements))
+	for i, element := range elements {
+		out[i] = element
+		out[i].Path = cloneSVGPath(element.Path)
+		out[i].Text.widthCache = svgTextWidthCache{}
+		out[i].Image.Data = append([]byte(nil), element.Image.Data...)
+	}
+	return out
 }
 
 func pathArgStart(c byte) bool {
@@ -61,7 +193,8 @@ func svgParseNumber(value, context string) (float64, error) {
 
 type svgPathRawSegment struct {
 	cmd  byte
-	args []float64
+	args [7]float64
+	n    int
 }
 
 func svgPathCommandArgCount(cmd byte) (int, bool) {
@@ -121,7 +254,7 @@ func normalizePathSegments(raw []svgPathRawSegment) ([]SVGSegment, error) {
 	for _, rawSeg := range raw {
 		cmd := svgPathCommandUpper(rawSeg.cmd)
 		relative := svgPathCommandRelative(rawSeg.cmd)
-		args := rawSeg.args
+		args := rawSeg.args[:rawSeg.n]
 		switch cmd {
 		case 'M':
 			x, y = point(args, 0, relative)
@@ -301,7 +434,8 @@ func svgArcSegments(x1, y1, rx, ry, xAxisRotation float64, largeArc, sweep bool,
 
 func pathParse(pathStr string) (segs []SVGSegment, err error) {
 	raw := []svgPathRawSegment{}
-	var args []float64
+	var args [7]float64
+	argLen := 0
 	var cmd byte
 	var argCount int
 	strList := pathFields(pathStr)
@@ -310,8 +444,8 @@ func pathParse(pathStr string) (segs []SVGSegment, err error) {
 			continue
 		}
 		if !pathArgStart(str[0]) {
-			if len(args) > 0 {
-				return nil, fmt.Errorf("expecting additional (%d) numeric arguments", argCount-len(args))
+			if argLen > 0 {
+				return nil, fmt.Errorf("expecting additional (%d) numeric arguments", argCount-argLen)
 			}
 			cmd = str[0]
 			var ok bool
@@ -332,12 +466,11 @@ func pathParse(pathStr string) (segs []SVGSegment, err error) {
 		if err != nil {
 			return nil, err
 		}
-		args = append(args, n)
-		if len(args) == argCount {
-			rawArgs := make([]float64, len(args))
-			copy(rawArgs, args)
-			raw = append(raw, svgPathRawSegment{cmd: cmd, args: rawArgs})
-			args = args[:0]
+		args[argLen] = n
+		argLen++
+		if argLen == argCount {
+			raw = append(raw, svgPathRawSegment{cmd: cmd, args: args, n: argCount})
+			argLen = 0
 			switch cmd {
 			case 'M':
 				cmd = 'L'
@@ -348,17 +481,18 @@ func pathParse(pathStr string) (segs []SVGSegment, err error) {
 			}
 		}
 	}
-	if len(args) > 0 {
-		return nil, fmt.Errorf("expecting additional (%d) numeric arguments", argCount-len(args))
+	if argLen > 0 {
+		return nil, fmt.Errorf("expecting additional (%d) numeric arguments", argCount-argLen)
 	}
 	return normalizePathSegments(raw)
 }
 
 type svgNode struct {
 	XMLName  xml.Name
-	Attrs    []xml.Attr `xml:",any,attr"`
-	Text     string     `xml:",chardata"`
-	Children []svgNode  `xml:",any"`
+	Attrs    []xml.Attr      `xml:",any,attr"`
+	Text     string          `xml:",chardata"`
+	Children []svgNode       `xml:",any"`
+	html     HTMLSegmentType `xml:"-"`
 }
 
 func (node svgNode) attr(name string) string {
@@ -459,9 +593,12 @@ func svgApplyGradientNode(gradient SVGGradient, node svgNode) SVGGradient {
 		}
 	}
 	if len(stops) > 0 {
-		sort.SliceStable(stops, func(i, j int) bool {
+		less := func(i, j int) bool {
 			return stops[i].Offset < stops[j].Offset
-		})
+		}
+		if !sort.SliceIsSorted(stops, less) {
+			sort.SliceStable(stops, less)
+		}
 		gradient.Stops = stops
 	}
 	return gradient
@@ -481,7 +618,7 @@ func svgApplyPatternNode(pattern SVGPattern, node svgNode) SVGPattern {
 	return pattern
 }
 
-func svgResolvePattern(id string, refs map[string]svgNode, gradients map[string]SVGGradient, cache map[string]SVGPattern, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int, seen map[string]bool) (SVGPattern, bool, error) {
+func svgResolvePattern(id string, refs map[string]svgNode, gradients map[string]SVGGradient, cache map[string]SVGPattern, clipCache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int, seen map[string]bool) (SVGPattern, bool, error) {
 	if depth > svgMaxNestingDepth {
 		return SVGPattern{}, false, fmt.Errorf("SVG nesting depth exceeds %d", svgMaxNestingDepth)
 	}
@@ -498,7 +635,7 @@ func svgResolvePattern(id string, refs map[string]svgNode, gradients map[string]
 	seen[id] = true
 	pattern := svgDefaultPattern()
 	if refID := svgUseRef(node); refID != "" {
-		if base, ok, err := svgResolvePattern(refID, refs, gradients, cache, rules, ancestors, depth+1, seen); err != nil {
+		if base, ok, err := svgResolvePattern(refID, refs, gradients, cache, clipCache, rules, ancestors, depth+1, seen); err != nil {
 			return SVGPattern{}, false, err
 		} else if ok {
 			pattern = base
@@ -511,7 +648,7 @@ func svgResolvePattern(id string, refs map[string]svgNode, gradients map[string]
 		cache[id] = SVGPattern{}
 		return SVGPattern{}, false, nil
 	}
-	elements, err := svgPatternElements(node, pattern, refs, gradients, rules, ancestors, depth+1)
+	elements, err := svgPatternElements(node, pattern, refs, gradients, clipCache, rules, ancestors, depth+1)
 	if err != nil {
 		return SVGPattern{}, false, err
 	}
@@ -523,15 +660,16 @@ func svgResolvePattern(id string, refs map[string]svgNode, gradients map[string]
 	return pattern, pattern.Set && len(pattern.Elements) > 0, nil
 }
 
-func svgPatternElements(node svgNode, pattern SVGPattern, refs map[string]svgNode, gradients map[string]SVGGradient, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) ([]SVGElement, error) {
+func svgPatternElements(node svgNode, pattern SVGPattern, refs map[string]svgNode, gradients map[string]SVGGradient, clipCache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) ([]SVGElement, error) {
 	transform, err := svgViewBoxTransform(node.attr("viewBox"), node.attr("preserveAspectRatio"), pattern.Wd, pattern.Ht)
 	if err != nil {
 		return nil, err
 	}
 	style := svgNodeStyle(node, SVGStyle{}, rules, ancestors)
 	sig := SVG{}
+	childAncestors := append(ancestors, svgHTMLSegment(node))
 	for _, child := range node.Children {
-		if err := svgCollectDepth(child, style, transform, &sig, refs, gradients, nil, rules, append(ancestors, svgHTMLSegment(node)), depth+1, false); err != nil {
+		if err := svgCollectDepth(child, style, transform, &sig, refs, gradients, nil, clipCache, rules, childAncestors, depth+1, false); err != nil {
 			return nil, err
 		}
 	}
@@ -543,8 +681,9 @@ func svgCollect(node svgNode, style SVGStyle, transform svgMatrix, sig *SVG) err
 	svgIndexRefs(node, refs)
 	gradients := map[string]SVGGradient{}
 	patterns := map[string]SVGPattern{}
+	clipCache := map[svgClipCacheKey]svgClipCacheEntry{}
 	rules := svgCollectStyleRules(node)
-	return svgCollectDepth(node, style, transform, sig, refs, gradients, patterns, rules, nil, 0, false)
+	return svgCollectDepth(node, style, transform, sig, refs, gradients, patterns, clipCache, rules, nil, 0, false)
 }
 
 func svgCollectStyleRules(node svgNode) []htmlCSSRule {
@@ -562,11 +701,25 @@ func svgCollectStyleRules(node svgNode) []htmlCSSRule {
 }
 
 func svgHTMLSegment(node svgNode) HTMLSegmentType {
+	if node.html.Str != "" || node.html.Attr != nil {
+		return node.html
+	}
 	attrs := map[string]string{}
 	for _, attr := range node.Attrs {
 		attrs[strings.ToLower(attr.Name.Local)] = attr.Value
 	}
 	return HTMLSegmentType{Cat: 'O', Str: strings.ToLower(node.XMLName.Local), Attr: attrs}
+}
+
+func svgPrepareNodes(node *svgNode) {
+	attrs := make(map[string]string, len(node.Attrs))
+	for _, attr := range node.Attrs {
+		attrs[strings.ToLower(attr.Name.Local)] = attr.Value
+	}
+	node.html = HTMLSegmentType{Cat: 'O', Str: strings.ToLower(node.XMLName.Local), Attr: attrs}
+	for i := range node.Children {
+		svgPrepareNodes(&node.Children[i])
+	}
 }
 
 func svgIndexRefs(node svgNode, refs map[string]svgNode) {
@@ -616,7 +769,17 @@ func svgUseTransform(node, ref svgNode, transform svgMatrix) (svgMatrix, error) 
 	return transform.multiply(svgMatrix{A: scaleX, D: scaleY}).multiply(svgMatrix{A: 1, D: 1, E: -minX, F: -minY}), nil
 }
 
-func svgResolveStyleRefs(style SVGStyle, transform svgMatrix, refs map[string]svgNode, gradients map[string]SVGGradient, patterns map[string]SVGPattern, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) (SVGStyle, error) {
+type svgClipCacheKey struct {
+	id        string
+	transform svgMatrix
+}
+
+type svgClipCacheEntry struct {
+	segments []SVGSegment
+	rule     string
+}
+
+func svgResolveStyleRefs(style SVGStyle, transform svgMatrix, refs map[string]svgNode, gradients map[string]SVGGradient, patterns map[string]SVGPattern, clipCache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) (SVGStyle, error) {
 	if style.FillRef != "" {
 		gradient, ok, err := svgResolveGradient(style.FillRef, refs, gradients, map[string]bool{})
 		if err != nil {
@@ -625,7 +788,7 @@ func svgResolveStyleRefs(style SVGStyle, transform svgMatrix, refs map[string]sv
 		if ok {
 			style.FillGradient = gradient
 		} else if patterns != nil {
-			pattern, ok, err := svgResolvePattern(style.FillRef, refs, gradients, patterns, rules, ancestors, depth+1, map[string]bool{})
+			pattern, ok, err := svgResolvePattern(style.FillRef, refs, gradients, patterns, clipCache, rules, ancestors, depth+1, map[string]bool{})
 			if err != nil {
 				return style, err
 			}
@@ -635,7 +798,7 @@ func svgResolveStyleRefs(style SVGStyle, transform svgMatrix, refs map[string]sv
 		}
 	}
 	if style.ClipRef != "" {
-		clip, rule, err := svgResolveClipPath(style.ClipRef, refs, transform, rules, ancestors, depth+1)
+		clip, rule, err := svgResolveClipPath(style.ClipRef, refs, transform, clipCache, rules, ancestors, depth+1)
 		if err != nil {
 			return style, err
 		}
@@ -645,7 +808,7 @@ func svgResolveStyleRefs(style SVGStyle, transform svgMatrix, refs map[string]sv
 	return style, nil
 }
 
-func svgResolveClipPath(id string, refs map[string]svgNode, transform svgMatrix, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) ([]SVGSegment, string, error) {
+func svgResolveClipPath(id string, refs map[string]svgNode, transform svgMatrix, cache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) ([]SVGSegment, string, error) {
 	if depth > svgMaxNestingDepth {
 		return nil, "", fmt.Errorf("SVG nesting depth exceeds %d", svgMaxNestingDepth)
 	}
@@ -658,12 +821,21 @@ func svgResolveClipPath(id string, refs map[string]svgNode, transform svgMatrix,
 		return nil, "", err
 	}
 	transform = transform.multiply(nodeTransform)
+	key := svgClipCacheKey{id: id, transform: transform}
+	if cache != nil {
+		if cached, ok := cache[key]; ok {
+			return cached.segments, cached.rule, nil
+		}
+	}
 	rule := parseSVGFillRule(firstNonEmpty(node.attr("clip-rule"), node.attr("fill-rule")))
-	segs, err := svgCollectClipSegments(node, SVGStyle{}, transform, refs, rules, ancestors, depth+1)
+	segs, err := svgCollectClipSegments(node, SVGStyle{}, transform, refs, cache, rules, ancestors, depth+1)
+	if err == nil && cache != nil {
+		cache[key] = svgClipCacheEntry{segments: segs, rule: rule}
+	}
 	return segs, rule, err
 }
 
-func svgCollectClipSegments(node svgNode, style SVGStyle, transform svgMatrix, refs map[string]svgNode, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) ([]SVGSegment, error) {
+func svgCollectClipSegments(node svgNode, style SVGStyle, transform svgMatrix, refs map[string]svgNode, cache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) ([]SVGSegment, error) {
 	if depth > svgMaxNestingDepth {
 		return nil, fmt.Errorf("SVG nesting depth exceeds %d", svgMaxNestingDepth)
 	}
@@ -677,6 +849,7 @@ func svgCollectClipSegments(node svgNode, style SVGStyle, transform svgMatrix, r
 	if style.Hidden {
 		return nil, nil
 	}
+	childAncestors := append(ancestors, el)
 	if node.XMLName.Local == "use" {
 		refID := svgUseRef(node)
 		if refID == "" {
@@ -690,7 +863,7 @@ func svgCollectClipSegments(node svgNode, style SVGStyle, transform svgMatrix, r
 		if err != nil {
 			return nil, err
 		}
-		return svgCollectClipSegments(ref, style, useTransform, refs, rules, append(ancestors, el), depth+1)
+		return svgCollectClipSegments(ref, style, useTransform, refs, cache, rules, childAncestors, depth+1)
 	}
 	out := []SVGSegment{}
 	if path, ok, err := svgElementPath(node, style, transform); err != nil {
@@ -699,7 +872,7 @@ func svgCollectClipSegments(node svgNode, style SVGStyle, transform svgMatrix, r
 		out = append(out, path.Segments...)
 	}
 	for _, child := range node.Children {
-		childSegs, err := svgCollectClipSegments(child, style, transform, refs, rules, append(ancestors, el), depth+1)
+		childSegs, err := svgCollectClipSegments(child, style, transform, refs, cache, rules, childAncestors, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -708,7 +881,7 @@ func svgCollectClipSegments(node svgNode, style SVGStyle, transform svgMatrix, r
 	return out, nil
 }
 
-func svgCollectDepth(node svgNode, style SVGStyle, transform svgMatrix, sig *SVG, refs map[string]svgNode, gradients map[string]SVGGradient, patterns map[string]SVGPattern, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int, renderingRef bool) error {
+func svgCollectDepth(node svgNode, style SVGStyle, transform svgMatrix, sig *SVG, refs map[string]svgNode, gradients map[string]SVGGradient, patterns map[string]SVGPattern, clipCache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int, renderingRef bool) error {
 	if depth > svgMaxNestingDepth {
 		return fmt.Errorf("SVG nesting depth exceeds %d", svgMaxNestingDepth)
 	}
@@ -719,6 +892,7 @@ func svgCollectDepth(node svgNode, style SVGStyle, transform svgMatrix, sig *SVG
 		return err
 	}
 	transform = transform.multiply(nodeTransform)
+	childAncestors := append(ancestors, el)
 	switch node.XMLName.Local {
 	case "clipPath", "defs", "linearGradient", "radialGradient", "pattern":
 		return nil
@@ -739,9 +913,9 @@ func svgCollectDepth(node svgNode, style SVGStyle, transform svgMatrix, sig *SVG
 		if err != nil {
 			return err
 		}
-		return svgCollectDepth(ref, style, useTransform, sig, refs, gradients, patterns, rules, append(ancestors, el), depth+1, true)
+		return svgCollectDepth(ref, style, useTransform, sig, refs, gradients, patterns, clipCache, rules, childAncestors, depth+1, true)
 	}
-	style, err = svgResolveStyleRefs(style, transform, refs, gradients, patterns, rules, ancestors, depth)
+	style, err = svgResolveStyleRefs(style, transform, refs, gradients, patterns, clipCache, rules, ancestors, depth)
 	if err != nil {
 		return err
 	}
@@ -780,7 +954,7 @@ func svgCollectDepth(node svgNode, style SVGStyle, transform svgMatrix, sig *SVG
 		sig.Elements = append(sig.Elements, SVGElement{Kind: "image", Image: image})
 	}
 	for _, child := range node.Children {
-		if err := svgCollectDepth(child, style, transform, sig, refs, gradients, patterns, rules, append(ancestors, el), depth+1, renderingRef); err != nil {
+		if err := svgCollectDepth(child, style, transform, sig, refs, gradients, patterns, clipCache, rules, childAncestors, depth+1, renderingRef); err != nil {
 			return err
 		}
 	}
@@ -795,8 +969,15 @@ func SVGParse(buf []byte) (sig SVG, err error) {
 	if len(buf) > maxSVGSourceBytes {
 		return SVG{}, errors.New("SVG source exceeds maximum size")
 	}
+	cacheKey := svgParseCacheKey{size: len(buf), sum: sha256.Sum256(buf)}
+	if cached, ok := svgParseCacheGet(cacheKey); ok {
+		return cached, nil
+	}
 	var src svgNode
 	err = xml.Unmarshal(buf, &src)
+	if err == nil {
+		svgPrepareNodes(&src)
+	}
 	if err == nil {
 		sig.Wd, sig.Ht, err = svgExtent(src)
 	}
@@ -809,6 +990,8 @@ func SVGParse(buf []byte) (sig SVG, err error) {
 	}
 	if err != nil {
 		sig = SVG{}
+	} else {
+		svgParseCachePut(cacheKey, sig)
 	}
 	return
 }

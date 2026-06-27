@@ -75,6 +75,7 @@ type outlineEntry struct {
 	level, parent, first, last, next, prev int
 	y                                      float64
 	p                                      int
+	utf8                                   bool
 }
 
 // The phpOrderedIntMap structure and its methods are copyrighted 2019 by

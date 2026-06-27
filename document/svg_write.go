@@ -5,8 +5,6 @@ package document
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"fmt"
 	"math"
 )
 
@@ -24,7 +22,10 @@ func (f *Document) SVGWrite(sb *SVG, scale float64) {
 	lineWidth := f.GetLineWidth()
 	capStyle := f.capStyle
 	joinStyle := f.joinStyle
-	dashArray := append([]float64(nil), f.dashArray...)
+	dashArray := f.dashArray
+	if len(f.dashArray) > 0 {
+		dashArray = append([]float64(nil), f.dashArray...)
+	}
 	dashPhase := f.dashPhase
 	alpha, blendMode := f.GetAlpha()
 	defer func() {
@@ -34,9 +35,10 @@ func (f *Document) SVGWrite(sb *SVG, scale float64) {
 		f.SetLineWidth(lineWidth)
 		f.SetLineCapStyle(svgLineCapName(capStyle))
 		f.SetLineJoinStyle(svgLineJoinName(joinStyle))
+		dashChanged := !equalFloat64Slices(f.dashArray, dashArray) || f.dashPhase != dashPhase
 		f.dashArray = dashArray
 		f.dashPhase = dashPhase
-		if f.page > 0 {
+		if dashChanged && f.page > 0 {
 			f.outputDashPattern()
 		}
 		if f.alpha != alpha || f.blendMode != blendMode {
@@ -48,8 +50,8 @@ func (f *Document) SVGWrite(sb *SVG, scale float64) {
 	}()
 
 	if len(sb.Elements) > 0 {
-		for _, element := range sb.Elements {
-			f.svgWriteElement(originX, originY, scale, element)
+		for i := range sb.Elements {
+			f.svgWriteElement(originX, originY, scale, &sb.Elements[i])
 			if f.alpha != alpha || f.blendMode != blendMode {
 				f.SetAlpha(alpha, blendMode)
 			}
@@ -76,20 +78,20 @@ func (f *Document) SVGWrite(sb *SVG, scale float64) {
 			f.SetAlpha(alpha, blendMode)
 		}
 	}
-	for _, text := range sb.Texts {
-		f.svgWriteText(originX, originY, scale, text)
+	for i := range sb.Texts {
+		f.svgWriteText(originX, originY, scale, &sb.Texts[i])
 		if f.alpha != alpha || f.blendMode != blendMode {
 			f.SetAlpha(alpha, blendMode)
 		}
 	}
 }
 
-func (f *Document) svgWriteElement(originX, originY, scale float64, element SVGElement) {
+func (f *Document) svgWriteElement(originX, originY, scale float64, element *SVGElement) {
 	switch element.Kind {
 	case "path":
 		f.svgWritePath(originX, originY, scale, element.Path)
 	case "text":
-		f.svgWriteText(originX, originY, scale, element.Text)
+		f.svgWriteText(originX, originY, scale, &element.Text)
 	case "image":
 		f.svgWriteImage(originX, originY, scale, element.Image)
 	}
@@ -99,17 +101,18 @@ func (f *Document) svgWritePath(originX, originY, scale float64, path SVGPath) {
 	if clipped := f.svgClipStart(originX, originY, scale, path.Style); clipped {
 		defer f.svgClipEnd()
 	}
-	if path.Style.FillPattern.Set && svgPathHasFill(path.Style, path.Segments) {
+	stroke, fill := svgPathPaint(path.Style, path.Segments)
+	if path.Style.FillPattern.Set && fill {
 		f.svgWritePatternFill(originX, originY, scale, path)
-		if !svgPathHasStroke(path.Style, path.Segments) {
+		if !stroke {
 			return
 		}
 		path.Style.Fill = CSSColorType{Set: true, None: true}
 		path.Style.FillPattern = SVGPattern{}
 	}
-	if path.Style.FillGradient.Set && svgPathHasFill(path.Style, path.Segments) {
+	if path.Style.FillGradient.Set && fill {
 		f.svgWriteGradientFill(originX, originY, scale, path)
-		if !svgPathHasStroke(path.Style, path.Segments) {
+		if !stroke {
 			return
 		}
 		path.Style.Fill = CSSColorType{Set: true, None: true}
@@ -131,10 +134,14 @@ func (f *Document) svgWriteImage(originX, originY, scale float64, image SVGImage
 	if opacity := svgStyleOpacity(image.Style, false, true); opacity < 1 {
 		f.SetAlpha(opacity, "Normal")
 	}
-	sum := sha256.Sum256(image.Data)
-	name := fmt.Sprintf("svg-image-%s-%x", image.ImageType, sum)
+	name := image.Name
+	if name == "" {
+		name = svgImageName(image.ImageType, image.Data)
+	}
 	options := ImageOptions{ImageType: image.ImageType, ReadDpi: true, Artifact: true}
-	f.RegisterImageOptionsReader(name, options, bytes.NewReader(image.Data))
+	if f.images[name] == nil {
+		f.RegisterImageOptionsReader(name, options, bytes.NewReader(image.Data))
+	}
 	if !f.Ok() {
 		return
 	}
@@ -240,20 +247,14 @@ func svgPathOpen(segs []SVGSegment) bool {
 	return true
 }
 
-func svgPathHasStroke(style SVGStyle, segs []SVGSegment) bool {
+func svgPathPaint(style SVGStyle, segs []SVGSegment) (stroke, fill bool) {
 	explicitPaint := style.Stroke.Set || style.Fill.Set || style.FillGradient.Set || style.FillPattern.Set
 	if explicitPaint {
-		return style.Stroke.Set && !style.Stroke.None
+		return style.Stroke.Set && !style.Stroke.None,
+			style.FillGradient.Set || style.FillPattern.Set || (style.Fill.Set && !style.Fill.None)
 	}
-	return svgPathOpen(segs)
-}
-
-func svgPathHasFill(style SVGStyle, segs []SVGSegment) bool {
-	explicitPaint := style.Stroke.Set || style.Fill.Set || style.FillGradient.Set || style.FillPattern.Set
-	if explicitPaint {
-		return style.FillGradient.Set || style.FillPattern.Set || (style.Fill.Set && !style.Fill.None)
-	}
-	return !svgPathOpen(segs)
+	open := svgPathOpen(segs)
+	return open, !open
 }
 
 func (f *Document) svgClipStart(originX, originY, scale float64, style SVGStyle) bool {
@@ -288,15 +289,16 @@ func svgStyleOpacity(style SVGStyle, stroke, fill bool) float64 {
 	return opacity
 }
 
-func svgScaledValues(values []float64, scale float64) []float64 {
-	if len(values) == 0 {
-		return nil
+func equalFloat64Slices(a, b []float64) bool {
+	if len(a) != len(b) {
+		return false
 	}
-	out := make([]float64, len(values))
-	for j, value := range values {
-		out[j] = value * scale
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
 	}
-	return out
+	return true
 }
 
 func svgPathBounds(segs []SVGSegment) (minX, minY, maxX, maxY float64, ok bool) {
@@ -352,6 +354,13 @@ func svgPathBounds(segs []SVGSegment) (minX, minY, maxX, maxY float64, ok bool) 
 	return minX, minY, maxX, maxY, ok
 }
 
+func svgPathCachedBounds(path SVGPath) (minX, minY, maxX, maxY float64, ok bool) {
+	if path.HasBounds {
+		return path.Bounds[0], path.Bounds[1], path.Bounds[2], path.Bounds[3], true
+	}
+	return svgPathBounds(path.Segments)
+}
+
 func svgGradientPDFStops(gradient SVGGradient) ([]gradientStopType, bool) {
 	if len(gradient.Stops) < 2 {
 		return nil, false
@@ -392,7 +401,7 @@ func svgPatternTile(pattern SVGPattern, minX, minY, maxX, maxY float64) (x, y, w
 }
 
 func (f *Document) svgWritePatternFill(originX, originY, scale float64, path SVGPath) {
-	minX, minY, maxX, maxY, ok := svgPathBounds(path.Segments)
+	minX, minY, maxX, maxY, ok := svgPathCachedBounds(path)
 	if !ok || maxX <= minX || maxY <= minY {
 		return
 	}
@@ -406,8 +415,9 @@ func (f *Document) svgWritePatternFill(originX, originY, scale float64, path SVG
 	}
 	alpha, blendMode := f.GetAlpha()
 	defer f.SetAlpha(alpha, blendMode)
-	if opacity := svgStyleOpacity(path.Style, false, true); opacity < 1 {
-		f.SetAlpha(opacity, "Normal")
+	fillOpacity := svgStyleOpacity(path.Style, false, true)
+	if fillOpacity < 1 {
+		f.SetAlpha(fillOpacity, "Normal")
 	}
 	minCol := int(math.Floor((minX-tileX)/tileWd)) - 1
 	maxCol := int(math.Ceil((maxX-tileX)/tileWd)) + 1
@@ -431,6 +441,7 @@ func (f *Document) svgWritePatternFill(originX, originY, scale float64, path SVG
 		f.out("W n")
 	}
 	tileClip := svgRectSegments(0, 0, tileWd, tileHt, 0, 0)
+	tileTemplate := f.svgPatternTileTemplate(pattern, tileWd, tileHt, scale)
 	for row := minRow; row <= maxRow && f.Ok(); row++ {
 		for col := minCol; col <= maxCol && f.Ok(); col++ {
 			x := originX + (tileX+float64(col)*tileWd)*scale
@@ -438,12 +449,16 @@ func (f *Document) svgWritePatternFill(originX, originY, scale float64, path SVG
 			f.out("q")
 			f.svgEmitPath(x, y, scale, tileClip)
 			f.out("W n")
-			for _, element := range pattern.Elements {
-				f.svgWriteElement(x, y, scale, element)
-				if opacity := svgStyleOpacity(path.Style, false, true); opacity < 1 {
-					f.SetAlpha(opacity, "Normal")
-				} else {
-					f.SetAlpha(alpha, blendMode)
+			if tileTemplate != nil {
+				f.UseTemplateScaled(tileTemplate, Point{X: x, Y: y}, Size{Wd: tileWd * scale, Ht: tileHt * scale})
+			} else {
+				for i := range pattern.Elements {
+					f.svgWriteElement(x, y, scale, &pattern.Elements[i])
+					if fillOpacity < 1 {
+						f.SetAlpha(fillOpacity, "Normal")
+					} else {
+						f.SetAlpha(alpha, blendMode)
+					}
 				}
 			}
 			f.out("Q")
@@ -452,8 +467,23 @@ func (f *Document) svgWritePatternFill(originX, originY, scale float64, path SVG
 	f.out("Q")
 }
 
+func (f *Document) svgPatternTileTemplate(pattern SVGPattern, tileWd, tileHt, scale float64) Template {
+	if len(pattern.Elements) == 0 || tileWd <= 0 || tileHt <= 0 || f.err != nil {
+		return nil
+	}
+	size := Size{Wd: tileWd * scale, Ht: tileHt * scale}
+	if err := validateTemplateGeometry(Point{}, size); err != nil {
+		return nil
+	}
+	return f.CreateTemplateCustom(Point{}, size, func(tpl *Tpl) {
+		for i := range pattern.Elements {
+			tpl.svgWriteElement(0, 0, scale, &pattern.Elements[i])
+		}
+	})
+}
+
 func (f *Document) svgWriteGradientFill(originX, originY, scale float64, path SVGPath) {
-	minX, minY, maxX, maxY, ok := svgPathBounds(path.Segments)
+	minX, minY, maxX, maxY, ok := svgPathCachedBounds(path)
 	if !ok || maxX <= minX || maxY <= minY {
 		return
 	}
@@ -505,8 +535,7 @@ func (f *Document) svgApplyPathStyle(path SVGPath, scale float64) string {
 		return ""
 	}
 	explicitPaint := style.Stroke.Set || style.Fill.Set || style.FillGradient.Set || style.FillPattern.Set
-	stroke := svgPathHasStroke(style, path.Segments)
-	fill := svgPathHasFill(style, path.Segments)
+	stroke, fill := svgPathPaint(style, path.Segments)
 	if !stroke && !fill {
 		return ""
 	}
@@ -541,7 +570,7 @@ func (f *Document) svgApplyPathStyle(path SVGPath, scale float64) string {
 			f.SetLineJoinStyle(lineJoin)
 		}
 		if style.StrokeDashSet {
-			f.SetDashPattern(svgScaledValues(style.StrokeDashArray, scale), style.StrokeDashOffset*scale)
+			f.setDashPatternScaled(style.StrokeDashArray, scale, style.StrokeDashOffset*scale)
 		} else if explicitPaint && (len(f.dashArray) > 0 || f.dashPhase != 0) {
 			f.SetDashPattern(nil, 0)
 		}
@@ -565,7 +594,7 @@ func (f *Document) svgApplyPathStyle(path SVGPath, scale float64) string {
 	}
 }
 
-func (f *Document) svgWriteText(originX, originY, scale float64, text SVGText) {
+func (f *Document) svgWriteText(originX, originY, scale float64, text *SVGText) {
 	if text.Text == "" || text.Style.Hidden || text.Style.Fill.None {
 		return
 	}
@@ -590,12 +619,28 @@ func (f *Document) svgWriteText(originX, originY, scale float64, text SVGText) {
 	}
 	switch text.Style.TextAnchor {
 	case "middle":
-		x -= f.GetStringWidth(text.Text) / 2
+		x -= f.svgTextWidth(text) / 2
 	case "end":
-		x -= f.GetStringWidth(text.Text)
+		x -= f.svgTextWidth(text)
 	}
 	if text.Role != "" {
 		f.SetNextTextRole(text.Role)
 	}
 	f.Text(x, y, text.Text)
+}
+
+func (f *Document) svgTextWidth(text *SVGText) float64 {
+	cache := &text.widthCache
+	if cache.ok && cache.font == f.currentFont.i && cache.fontSize == f.fontSize && cache.text == text.Text {
+		return cache.width
+	}
+	width := f.GetStringWidth(text.Text)
+	*cache = svgTextWidthCache{
+		font:     f.currentFont.i,
+		fontSize: f.fontSize,
+		text:     text.Text,
+		width:    width,
+		ok:       true,
+	}
+	return width
 }

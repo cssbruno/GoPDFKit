@@ -194,9 +194,27 @@ func (f *Document) SetLineJoinStyle(styleStr string) {
 //
 // The Beziergon() example demonstrates this method.
 func (f *Document) SetDashPattern(dashArray []float64, dashPhase float64) {
-	scaled := make([]float64, len(dashArray))
+	f.setDashPatternScaled(dashArray, 1, dashPhase)
+}
+
+func (f *Document) setDashPatternScaled(dashArray []float64, valueScale, dashPhase float64) {
+	if len(dashArray) == 0 {
+		f.dashArray = nil
+		f.dashPhase = dashPhase * f.k
+		if f.page > 0 {
+			f.outputDashPattern()
+		}
+		return
+	}
+	scaled := f.dashArray
+	if cap(scaled) < len(dashArray) {
+		scaled = make([]float64, len(dashArray))
+	} else {
+		scaled = scaled[:len(dashArray)]
+	}
+	multiplier := valueScale * f.k
 	for i, value := range dashArray {
-		scaled[i] = value * f.k
+		scaled[i] = value * multiplier
 	}
 	dashPhase *= f.k
 	f.dashArray = scaled

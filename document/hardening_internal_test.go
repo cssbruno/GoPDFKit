@@ -153,6 +153,63 @@ func TestSetAttachmentsCopiesContent(t *testing.T) {
 	}
 }
 
+func TestSetAttachmentsImmutableSharesContent(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	content := []byte("original")
+	pdf.SetAttachmentsImmutable([]Attachment{{Content: content, Filename: "a.txt", MIMEType: " text/plain ", AFRelationship: " Source "}})
+	content[0] = 'X'
+
+	if got := string(pdf.attachments[0].Content); got != "Xriginal" {
+		t.Fatalf("attachment content = %q, want shared content", got)
+	}
+	if got := pdf.attachments[0].mimeType; got != "text/plain" {
+		t.Fatalf("normalized MIME type = %q, want text/plain", got)
+	}
+	if got := pdf.attachments[0].afRelationship; got != "Source" {
+		t.Fatalf("normalized AFRelationship = %q, want Source", got)
+	}
+}
+
+func TestAttachmentOutputDedupesEquivalentFiles(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	a1 := Attachment{Content: []byte("same attachment"), Filename: "a.txt", Description: "same"}
+	a2 := Attachment{Content: []byte("same attachment"), Filename: "a.txt", Description: "same"}
+	pdf.SetAttachments([]Attachment{a1})
+	pdf.AddPage()
+	pdf.AddAttachmentAnnotation(&a2, 10, 10, 20, 10)
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if got := bytes.Count(out.Bytes(), []byte("/Type /EmbeddedFile")); got != 1 {
+		t.Fatalf("embedded file stream count = %d, want 1", got)
+	}
+	if got := bytes.Count(out.Bytes(), []byte("/Type /Filespec")); got != 1 {
+		t.Fatalf("filespec count = %d, want 1", got)
+	}
+}
+
+func TestCatalogOmitsNamesWhenUnused(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(10, 10, "plain")
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if bytes.Contains(out.Bytes(), []byte("/Names <<")) {
+		t.Fatal("catalog contains /Names without JavaScript or attachments")
+	}
+	if bytes.Contains(out.Bytes(), []byte("/EmbeddedFiles")) {
+		t.Fatal("catalog contains /EmbeddedFiles without attachments")
+	}
+}
+
 func TestGetImageInfoReturnsClone(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	info := pdf.newImageInfo()

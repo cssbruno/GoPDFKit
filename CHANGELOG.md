@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.6.1 - 2026-06-27
+
+Patch release for the follow-up non-HTML performance checklist.
+
+### Added
+
+- Added the v0.6.0 pprof target checklist as a completed audit record.
+
+### Changed
+
+- Reduced allocation and CPU overhead in attachment output, SVG parsing and
+  rendering, template serialization, font loading, layout rendering, QR image
+  generation, signing dictionary updates, and PDF parser utilities.
+- Regenerated tracked PDF fixtures after the output-path performance changes.
+
 ## v0.6.0 - 2026-06-27
 
 Minor release for non-HTML generation performance work.
