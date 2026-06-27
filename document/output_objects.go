@@ -9,7 +9,7 @@ func (f *Document) newobj() {
 		f.offsets = append(f.offsets, 0)
 	}
 	f.offsets[f.n] = f.buffer.Len()
-	f.outf("%d 0 obj", f.n)
+	f.outPDFObjHeader(f.n)
 }
 
 func (f *Document) putstream(b []byte) {

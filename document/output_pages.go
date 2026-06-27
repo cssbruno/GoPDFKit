@@ -6,12 +6,29 @@ package document
 import (
 	"bytes"
 	"sort"
-	"strings"
 )
 
 func (f *Document) replaceAliases() {
 	if len(f.aliasMap) == 0 {
 		return
+	}
+	pairs := f.compiledAliasPairs()
+	if len(pairs) == 0 {
+		return
+	}
+	for n := 1; n <= f.page; n++ {
+		pageBytes := f.pages[n].Bytes()
+		replaced := replaceAliasBytes(pageBytes, pairs)
+		if replaced != nil {
+			f.pages[n].Truncate(0)
+			_, _ = f.pages[n].Write(replaced)
+		}
+	}
+}
+
+func (f *Document) compiledAliasPairs() []aliasReplacementBytes {
+	if !f.aliasPairsDirty && f.aliasPairs != nil {
+		return f.aliasPairs
 	}
 	aliases := make([]aliasReplacement, 0, len(f.aliasMap))
 	for alias, replacement := range f.aliasMap {
@@ -21,7 +38,9 @@ func (f *Document) replaceAliases() {
 		aliases = append(aliases, aliasReplacement{alias: alias, replacement: replacement})
 	}
 	if len(aliases) == 0 {
-		return
+		f.aliasPairs = nil
+		f.aliasPairsDirty = false
+		return f.aliasPairs
 	}
 	sort.Slice(aliases, func(i, j int) bool {
 		if len(aliases[i].alias) == len(aliases[j].alias) {
@@ -29,28 +48,21 @@ func (f *Document) replaceAliases() {
 		}
 		return len(aliases[i].alias) > len(aliases[j].alias)
 	})
-	pairs := make([]string, 0, len(aliases)*4)
-	needles := make([][]byte, 0, len(aliases)*2)
+	pairs := make([]aliasReplacementBytes, 0, len(aliases)*2)
 	for _, alias := range aliases {
-		pairs = append(pairs, alias.alias, f.escape(alias.replacement))
-		needles = append(needles, []byte(alias.alias))
+		pairs = append(pairs, aliasReplacementBytes{
+			old: []byte(alias.alias),
+			new: []byte(f.escape(alias.replacement)),
+		})
 		utf16Alias := utf8toutf16(alias.alias, false)
-		pairs = append(pairs, utf16Alias, f.escape(utf8toutf16(alias.replacement, false)))
-		needles = append(needles, []byte(utf16Alias))
+		pairs = append(pairs, aliasReplacementBytes{
+			old: []byte(utf16Alias),
+			new: []byte(f.escape(utf8toutf16(alias.replacement, false))),
+		})
 	}
-	replacer := strings.NewReplacer(pairs...)
-	for n := 1; n <= f.page; n++ {
-		pageBytes := f.pages[n].Bytes()
-		if !containsAnyBytes(pageBytes, needles) {
-			continue
-		}
-		s := f.pages[n].String()
-		replaced := replacer.Replace(s)
-		if replaced != s {
-			f.pages[n].Truncate(0)
-			_, _ = f.pages[n].WriteString(replaced)
-		}
-	}
+	f.aliasPairs = pairs
+	f.aliasPairsDirty = false
+	return f.aliasPairs
 }
 
 type aliasReplacement struct {
@@ -58,13 +70,24 @@ type aliasReplacement struct {
 	replacement string
 }
 
-func containsAnyBytes(data []byte, needles [][]byte) bool {
-	for _, needle := range needles {
-		if bytes.Contains(data, needle) {
-			return true
+type aliasReplacementBytes struct {
+	old []byte
+	new []byte
+}
+
+func replaceAliasBytes(data []byte, pairs []aliasReplacementBytes) []byte {
+	var out []byte
+	for _, pair := range pairs {
+		if len(pair.old) == 0 || !bytes.Contains(data, pair.old) {
+			continue
 		}
+		if out == nil {
+			out = append([]byte(nil), data...)
+		}
+		out = bytes.ReplaceAll(out, pair.old, pair.new)
+		data = out
 	}
-	return false
+	return out
 }
 
 func (f *Document) pageObjectNumber(page int) int {

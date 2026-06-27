@@ -103,6 +103,38 @@ func TestHTMLCSSSpecificityAndInlinePrecedence(t *testing.T) {
 	}
 }
 
+func TestHTMLCSSIndexedDeclarationsMatchScan(t *testing.T) {
+	tokens := HTMLTokenize(`<style>
+		p { color: #111111; text-align: left; }
+		.notice { color: #222222; }
+		.report .group > p.notice { text-align: center; line-height: 1.2; }
+		#target { color: #333333; }
+		p.notice { line-height: 1.4; }
+	</style>`)
+	rules := htmlCollectCSSRules(tokens)
+	el := HTMLSegmentType{Cat: 'O', Str: "p", Attr: map[string]string{
+		"id":    "target",
+		"class": "notice",
+		"style": "color: #444444",
+	}}
+	ancestors := []HTMLSegmentType{
+		{Cat: 'O', Str: "section", Attr: map[string]string{"class": "report"}},
+		{Cat: 'O', Str: "div", Attr: map[string]string{"class": "group"}},
+	}
+	style := parseStyleDeclarations(el.Attr["style"])
+	indexed := htmlElementDeclarationsWithStyle(el, rules, style, ancestors...)
+	scanned := htmlElementDeclarationsWithStyleScan(el, rules, style, ancestors)
+
+	if len(indexed) != len(scanned) {
+		t.Fatalf("indexed declarations len = %d, scan len = %d: indexed=%#v scan=%#v", len(indexed), len(scanned), indexed, scanned)
+	}
+	for name, want := range scanned {
+		if got := indexed[name]; got != want {
+			t.Fatalf("indexed declarations[%q] = %q, scan = %q; indexed=%#v scan=%#v", name, got, want, indexed, scanned)
+		}
+	}
+}
+
 func TestHTMLTextStyleInheritanceAndOverrides(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	inherited := htmlTextStyle{

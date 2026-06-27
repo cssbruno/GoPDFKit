@@ -287,9 +287,12 @@ func (utf *utf8FontFile) splice(stream []byte, offset int, value []byte) []byte 
 }
 
 func (utf *utf8FontFile) insertUint16(stream []byte, offset int, value int) []byte {
-	up := make([]byte, 2)
-	binary.BigEndian.PutUint16(up, uint16(value))
-	return utf.splice(stream, offset, up)
+	if offset < 0 || offset+2 > len(stream) {
+		utf.fileReader.err = errors.New("font table uint16 patch out of range")
+		return stream
+	}
+	binary.BigEndian.PutUint16(stream[offset:], uint16(value))
+	return stream
 }
 
 func (utf *utf8FontFile) getRange(pos, length int) []byte {
@@ -609,6 +612,10 @@ func (utf *utf8FontFile) parseSymbols(usedRunes map[int]int) (map[int]int, map[i
 		return symbolCollection, charSymbolPairCollection, nil, nil
 	}
 	begin := utf.tableDescriptions["glyf"].position
+	glyfData := utf.getTableData("glyf")
+	if utf.fileReader.err != nil {
+		return symbolCollection, charSymbolPairCollection, nil, nil
+	}
 
 	symbolArray := make(map[int]int)
 	symbolCollectionKeys := keySortInt(symbolCollection)
@@ -629,7 +636,7 @@ func (utf *utf8FontFile) parseSymbols(usedRunes map[int]int) (map[int]int, map[i
 
 	symbolCollectionKeys = keySortInt(symbolCollection)
 	for _, oldSymbolIndex := range symbolCollectionKeys {
-		_, symbolArray, symbolCollection, symbolCollectionKeys = utf.getSymbols(oldSymbolIndex, &begin, symbolArray, symbolCollection, symbolCollectionKeys)
+		_, symbolArray, symbolCollection, symbolCollectionKeys = utf.getSymbols(oldSymbolIndex, glyfData, &begin, symbolArray, symbolCollection, symbolCollectionKeys)
 	}
 
 	return runeSymbolPairCollection, symbolArray, symbolCollection, symbolCollectionKeys
@@ -822,10 +829,19 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 		return nil
 	}
 
-	offsets := make([]int, 0)
-	glyfData := make([]byte, 0)
+	glyphDataCapacity := 0
+	for _, originalSymbolIdx := range symbolCollectionKeys {
+		_, symbolLen, ok := utf.glyphBounds(originalSymbolIdx, symbolData)
+		if !ok {
+			return nil
+		}
+		glyphDataCapacity += symbolLen + 3
+	}
+
+	offsets := make([]int, 0, len(symbolCollectionKeys)+1)
+	glyfData := make([]byte, 0, glyphDataCapacity)
 	pos := 0
-	hmtxData := make([]byte, 0)
+	hmtxData := make([]byte, 0, len(symbolCollectionKeys)*4)
 	utf.symbolData = make(map[int]map[string][]int, 0)
 
 	for _, originalSymbolIdx := range symbolCollectionKeys {
@@ -848,6 +864,7 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 		}
 
 		if symbolLen > 2 && (up&(1<<15)) != 0 {
+			data = append([]byte(nil), data...)
 			posInSymbol := 10
 			flags := symbolContinue
 			nComponentElements := 0
@@ -895,7 +912,14 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 		pos += symbolLen
 		if pos%4 != 0 {
 			padding := 4 - (pos % 4)
-			glyfData = append(glyfData, make([]byte, padding)...)
+			switch padding {
+			case 1:
+				glyfData = append(glyfData, 0)
+			case 2:
+				glyfData = append(glyfData, 0, 0)
+			case 3:
+				glyfData = append(glyfData, 0, 0, 0)
+			}
 			pos += padding
 		}
 	}
@@ -905,7 +929,7 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 
 	utf.setOutTable("hmtx", hmtxData)
 
-	locaData := make([]byte, 0)
+	locaData := make([]byte, 0, len(offsets)*4)
 	LocaFormat := 0
 	if ((pos + 1) >> 1) > 0xFFFF {
 		LocaFormat = 1
@@ -947,8 +971,8 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 	return utf.assembleTables()
 }
 
-func (utf *utf8FontFile) getSymbols(originalSymbolIdx int, start *int, symbolSet map[int]int, symbolsCollection map[int]int, symbolsCollectionKeys []int) (*int, map[int]int, map[int]int, []int) {
-	symbolPos, symbolSize, ok := utf.glyphBounds(originalSymbolIdx, utf.getTableData("glyf"))
+func (utf *utf8FontFile) getSymbols(originalSymbolIdx int, glyfData []byte, start *int, symbolSet map[int]int, symbolsCollection map[int]int, symbolsCollectionKeys []int) (*int, map[int]int, map[int]int, []int) {
+	symbolPos, symbolSize, ok := utf.glyphBounds(originalSymbolIdx, glyfData)
 	if !ok {
 		return start, symbolSet, symbolsCollection, symbolsCollectionKeys
 	}
@@ -970,7 +994,7 @@ func (utf *utf8FontFile) getSymbols(originalSymbolIdx int, start *int, symbolSet
 				symbolsCollection[symbolIndex] = 1
 				symbolsCollectionKeys = append(symbolsCollectionKeys, symbolIndex)
 				oldPosition, _ := utf.fileReader.seek(0, 1)
-				_, _, _, symbolsCollectionKeys = utf.getSymbols(symbolIndex, start, symbolSet, symbolsCollection, symbolsCollectionKeys)
+				_, _, _, symbolsCollectionKeys = utf.getSymbols(symbolIndex, glyfData, start, symbolSet, symbolsCollection, symbolsCollectionKeys)
 				utf.seek(int(oldPosition))
 			}
 			if flags&symbolWords != 0 {

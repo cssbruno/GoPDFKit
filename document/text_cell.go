@@ -132,11 +132,20 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 	if len(txtStr) > 0 {
 		s = ensurePDFBuffer(s, 128+len(txtStr)*2+len(f.color.text.str))
 		var dx, dy float64
+		var textWidth float64
+		textWidthSet := false
+		getTextWidth := func() float64 {
+			if !textWidthSet {
+				textWidth = f.GetStringWidth(txtStr)
+				textWidthSet = true
+			}
+			return textWidth
+		}
 		switch {
 		case strings.Contains(alignStr, "R"):
-			dx = w - f.cMargin - f.GetStringWidth(txtStr)
+			dx = w - f.cMargin - getTextWidth()
 		case strings.Contains(alignStr, "C"):
-			dx = (w - f.GetStringWidth(txtStr)) / 2
+			dx = (w - getTextWidth()) / 2
 		default:
 			dx = f.cMargin
 		}
@@ -162,8 +171,8 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 			s = append(s, f.color.text.str...)
 			s = append(s, ' ')
 		}
-		utf8JustifyParts := strings.Fields(txtStr)
-		if (f.ws != 0 || alignStr == "J") && f.isCurrentUTF8 && len(utf8JustifyParts) > 1 {
+		utf8Justify := (f.ws != 0 || alignStr == "J") && f.isCurrentUTF8
+		if utf8Justify && len(strings.Fields(txtStr)) > 1 {
 			if f.isRTL {
 				txtStr = reverseText(txtStr)
 			}
@@ -203,10 +212,6 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 				for _, uni := range txtStr {
 					f.currentFont.usedRunes[int(uni)] = int(uni)
 				}
-			} else {
-				txt2 = strings.ReplaceAll(txtStr, "\\", "\\\\")
-				txt2 = strings.ReplaceAll(txt2, "(", "\\(")
-				txt2 = strings.ReplaceAll(txt2, ")", "\\)")
 			}
 			bt := (f.x + dx) * k
 			td := (f.h - (f.y + dy + .5*h + .3*f.fontSize)) * k
@@ -214,7 +219,11 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 			s = appendPDFNumberSpace(s, bt, 2)
 			s = appendPDFNumberSpace(s, td, 2)
 			s = append(s, "Td ("...)
-			s = append(s, txt2...)
+			if f.isCurrentUTF8 {
+				s = append(s, txt2...)
+			} else {
+				s = appendEscapedPDFCellText(s, txtStr)
+			}
 			s = append(s, ")Tj ET"...)
 		}
 		if f.underline {
@@ -229,7 +238,7 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 			s = append(s, " Q"...)
 		}
 		if link > 0 || len(linkStr) > 0 {
-			f.newLink(f.x+dx, f.y+dy+.5*h-.5*f.fontSize, f.GetStringWidth(txtStr), f.fontSize, link, linkStr)
+			f.newLink(f.x+dx, f.y+dy+.5*h-.5*f.fontSize, getTextWidth(), f.fontSize, link, linkStr)
 		}
 	}
 	if len(s) > 0 {
@@ -244,6 +253,18 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 	} else {
 		f.x += w
 	}
+}
+
+func appendEscapedPDFCellText(buf []byte, text string) []byte {
+	for i := 0; i < len(text); i++ {
+		switch text[i] {
+		case '\\', '(', ')':
+			buf = append(buf, '\\', text[i])
+		default:
+			buf = append(buf, text[i])
+		}
+	}
+	return buf
 }
 
 func reverseText(text string) string {

@@ -8,6 +8,11 @@ import (
 	"strconv"
 )
 
+const (
+	stringWidthCacheLimit  = 512
+	stringWidthCacheMaxLen = 256
+)
+
 // GetStringWidth returns the length of a string in user units. A font must be
 // currently selected.
 func (f *Document) GetStringWidth(s string) float64 {
@@ -31,6 +36,18 @@ func (f *Document) GetStringSymbolWidth(s string) int {
 		f.SetErrorf("font must be selected before measuring text")
 		return 0
 	}
+	if key, ok := f.stringWidthCacheKey(s); ok {
+		if width, cached := f.stringWidthCache[key]; cached {
+			return width
+		}
+		width := f.computeStringSymbolWidth(s)
+		f.cacheStringSymbolWidth(key, width)
+		return width
+	}
+	return f.computeStringSymbolWidth(s)
+}
+
+func (f *Document) computeStringSymbolWidth(s string) int {
 	w := 0
 	if f.isCurrentUTF8 {
 		for _, char := range s {
@@ -45,6 +62,35 @@ func (f *Document) GetStringSymbolWidth(s string) int {
 		}
 	}
 	return w
+}
+
+func (f *Document) stringWidthCacheKey(s string) (string, bool) {
+	if s == "" || len(s) > stringWidthCacheMaxLen || f.currentFont.i == "" {
+		return "", false
+	}
+	mode := "8"
+	if f.isCurrentUTF8 {
+		mode = "u"
+	}
+	return mode + "\x00" + f.currentFont.i + "\x00" + s, true
+}
+
+func (f *Document) cacheStringSymbolWidth(key string, width int) {
+	if f.stringWidthCache == nil {
+		f.stringWidthCache = make(map[string]int, stringWidthCacheLimit)
+	}
+	if _, exists := f.stringWidthCache[key]; exists {
+		f.stringWidthCache[key] = width
+		return
+	}
+	if len(f.stringWidthCache) >= stringWidthCacheLimit {
+		evict := f.stringWidthKeys[0]
+		delete(f.stringWidthCache, evict)
+		copy(f.stringWidthKeys, f.stringWidthKeys[1:])
+		f.stringWidthKeys = f.stringWidthKeys[:len(f.stringWidthKeys)-1]
+	}
+	f.stringWidthCache[key] = width
+	f.stringWidthKeys = append(f.stringWidthKeys, key)
 }
 
 func (f *Document) currentFontRuneWidth(char rune) int {

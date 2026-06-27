@@ -88,3 +88,38 @@ func (f *Document) outPDFIntOperator(value int, operator byte) {
 	buf = append(buf, ' ', operator)
 	f.outbytes(buf)
 }
+
+func (f *Document) outPDFObjHeader(n int) {
+	var scratch [32]byte
+	buf := appendPDFInt(scratch[:0], n)
+	buf = append(buf, " 0 obj"...)
+	f.outbytes(buf)
+}
+
+func (f *Document) outPDFXrefRange(count int) {
+	var scratch [32]byte
+	buf := append(scratch[:0], '0', ' ')
+	buf = appendPDFInt(buf, count)
+	f.outbytes(buf)
+}
+
+func (f *Document) outPDFXrefOffset(offset int) {
+	var scratch [32]byte
+	buf := appendPDFPaddedInt(scratch[:0], offset, 10)
+	buf = append(buf, " 00000 n "...)
+	f.outbytes(buf)
+}
+
+func (f *Document) outPDFIntLine(value int) {
+	var scratch [24]byte
+	f.outbytes(appendPDFInt(scratch[:0], value))
+}
+
+func appendPDFPaddedInt(dst []byte, value, width int) []byte {
+	var scratch [32]byte
+	raw := appendPDFInt(scratch[:0], value)
+	for i := len(raw); i < width; i++ {
+		dst = append(dst, '0')
+	}
+	return append(dst, raw...)
+}

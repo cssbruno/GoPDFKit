@@ -25,6 +25,7 @@ type CompiledHTML struct {
 	elementEnd        []int
 	elementDecl       []map[string]string
 	elementText       []compiledHTMLText
+	elementMeta       []htmlElementMetadata
 	maxDepth          int
 	tables            map[int]compiledHTMLTable
 	inlineSVGs        map[int]compiledInlineSVG
@@ -122,6 +123,7 @@ func compileHTMLTokens(tokens []HTMLSegmentType, cacheReusableData bool) *Compil
 		compiled.styleDeclarations = make(map[string]map[string]string)
 		compiled.elementDecl = make([]map[string]string, len(tokens))
 		compiled.elementText = make([]compiledHTMLText, len(tokens))
+		compiled.elementMeta = make([]htmlElementMetadata, len(tokens))
 	}
 	for i := range compiled.tokenNode {
 		compiled.tokenNode[i] = -1
@@ -131,13 +133,10 @@ func compileHTMLTokens(tokens []HTMLSegmentType, cacheReusableData bool) *Compil
 	}
 	compiled.buildNodeIndexes()
 
-	if cacheReusableData {
-		compiled.compileElementDeclarations()
-	}
-
 	for i, token := range tokens {
 		if token.Cat == 'O' && cacheReusableData {
 			compiled.compileStyleDeclarations(token.Attr)
+			compiled.elementMeta[i] = htmlElementMetadataFromSegment(token)
 			compiled.compileElementText(i, token.Str)
 		}
 		if token.Cat == 'O' && token.Str == "table" {
@@ -145,12 +144,16 @@ func compileHTMLTokens(tokens []HTMLSegmentType, cacheReusableData bool) *Compil
 			compiled.tables[i] = compiledHTMLTable{table: table, end: end, start: i}
 		}
 	}
+	if cacheReusableData {
+		compiled.compileElementDeclarations()
+	}
 	return compiled
 }
 
 func (compiled *CompiledHTML) buildNodeIndexes() {
 	compiled.nodeIndexes = make([]compiledHTMLNode, 0, len(compiled.tokens))
 	stack := make([]int, 0, 16)
+	lastChildByParent := make([]int, 0, len(compiled.tokens))
 	for i, token := range compiled.tokens {
 		switch token.Cat {
 		case 'O':
@@ -169,18 +172,15 @@ func (compiled *CompiledHTML) buildNodeIndexes() {
 				Token:       i,
 				EndToken:    i,
 			})
+			lastChildByParent = append(lastChildByParent, -1)
 			compiled.tokenNode[i] = nodeIndex
 			if parent >= 0 {
 				if compiled.nodeIndexes[parent].FirstChild < 0 {
 					compiled.nodeIndexes[parent].FirstChild = nodeIndex
 				} else {
-					for sibling := compiled.nodeIndexes[parent].FirstChild; sibling >= 0; sibling = compiled.nodeIndexes[sibling].NextSibling {
-						if compiled.nodeIndexes[sibling].NextSibling < 0 {
-							compiled.nodeIndexes[sibling].NextSibling = nodeIndex
-							break
-						}
-					}
+					compiled.nodeIndexes[lastChildByParent[parent]].NextSibling = nodeIndex
 				}
+				lastChildByParent[parent] = nodeIndex
 			}
 			stack = append(stack, nodeIndex)
 			if len(stack) > compiled.maxDepth {
@@ -216,11 +216,31 @@ func (compiled *CompiledHTML) buildNodeIndexes() {
 }
 
 func (compiled *CompiledHTML) compileElementDeclarations() {
+	ancestors := make([]HTMLSegmentType, 0, compiled.maxDepth)
+	ancestorMeta := make([]htmlElementMetadata, 0, compiled.maxDepth)
 	for i, token := range compiled.tokens {
-		if token.Cat != 'O' {
+		switch token.Cat {
+		case 'O':
+			compiled.elementDecl[i] = htmlElementDeclarationsWithStyleMeta(token, compiled.elementMeta[i], compiled.cssRules, compiled.inlineStyleDeclarations(token.Attr), ancestors, ancestorMeta)
+			if htmlClosePops(token.Str) {
+				ancestors = append(ancestors, token)
+				ancestorMeta = append(ancestorMeta, compiled.elementMeta[i])
+			}
+		case 'C':
+			if !htmlClosePops(token.Str) {
+				continue
+			}
+			for len(ancestors) > 0 {
+				last := len(ancestors) - 1
+				open := ancestors[last]
+				ancestors = ancestors[:last]
+				ancestorMeta = ancestorMeta[:last]
+				if open.Str == token.Str {
+					break
+				}
+			}
 			continue
 		}
-		compiled.elementDecl[i] = htmlElementDeclarationsWithStyle(token, compiled.cssRules, compiled.inlineStyleDeclarations(token.Attr), compiled.ancestorsForToken(i)...)
 	}
 }
 
@@ -271,6 +291,9 @@ func (compiled *CompiledHTML) compileElementText(start int, tag string) {
 		return
 	}
 	inner := tokens[1 : len(tokens)-1]
+	if htmlCompiledTextHasNestedBlock(inner) {
+		return
+	}
 	compiled.elementText[start] = compiledHTMLText{
 		plain:     htmlPlainTextWithMode(inner, false),
 		preserved: htmlPlainTextWithMode(inner, true),
@@ -278,10 +301,28 @@ func (compiled *CompiledHTML) compileElementText(start int, tag string) {
 	}
 }
 
-func htmlCompiledTextTag(tag string) bool {
+func htmlCompiledTextHasNestedBlock(tokens []HTMLSegmentType) bool {
+	for _, token := range tokens {
+		if token.Cat == 'O' && htmlCompiledNestedTextTag(token.Str) {
+			return true
+		}
+	}
+	return false
+}
+
+func htmlCompiledNestedTextTag(tag string) bool {
 	switch tag {
 	case "p", "div", "section", "article", "header", "footer", "figure", "figcaption",
-		"li", "caption", "h1", "h2", "h3", "h4", "h5", "h6":
+		"li", "caption", "h1", "h2", "h3", "h4", "h5", "h6", "dt", "dd":
+		return true
+	default:
+		return false
+	}
+}
+
+func htmlCompiledTextTag(tag string) bool {
+	switch tag {
+	case "p", "figcaption", "li", "caption", "h1", "h2", "h3", "h4", "h5", "h6", "dt", "dd":
 		return true
 	default:
 		return false
@@ -303,6 +344,7 @@ func (compiled *CompiledHTML) compileStyleDeclarations(attrs map[string]string) 
 }
 
 func (compiled *CompiledHTML) compileInlineSVGs() error {
+	var cache map[string]SVG
 	for i := 0; i < len(compiled.tokens); i++ {
 		token := compiled.tokens[i]
 		if token.Cat != 'O' || token.Str != "svg" {
@@ -315,9 +357,18 @@ func (compiled *CompiledHTML) compileInlineSVGs() error {
 		if len(svgTokens) == 0 {
 			continue
 		}
-		svg, err := SVGParse([]byte(htmlSerializeTokens(svgTokens)))
-		if err != nil {
-			return err
+		svgText := htmlSerializeTokens(svgTokens)
+		svg, ok := cache[svgText]
+		if !ok {
+			parsed, err := SVGParse([]byte(svgText))
+			if err != nil {
+				return err
+			}
+			svg = parsed
+			if cache == nil {
+				cache = make(map[string]SVG)
+			}
+			cache[svgText] = svg
 		}
 		compiled.inlineSVGs[i] = compiledInlineSVG{svg: svg, end: end}
 		i = end
@@ -329,15 +380,27 @@ func (compiled *CompiledHTML) compileDataImages(maxBytes int) error {
 	if compiled == nil {
 		return nil
 	}
+	var cache map[string]compiledHTMLDataImage
 	for i, token := range compiled.tokens {
 		if token.Cat != 'O' || token.Str != "img" {
 			continue
 		}
-		source, ok, err := compileHTMLDataImageSource(token.Attr["src"], maxBytes)
+		src := strings.TrimSpace(token.Attr["src"])
+		if cache != nil {
+			if source, ok := cache[src]; ok {
+				compiled.dataImages[i] = source
+				continue
+			}
+		}
+		source, ok, err := compileHTMLDataImageSource(src, maxBytes)
 		if err != nil {
 			return err
 		}
 		if ok {
+			if cache == nil {
+				cache = make(map[string]compiledHTMLDataImage)
+			}
+			cache[src] = source
 			compiled.dataImages[i] = source
 		}
 	}

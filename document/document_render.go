@@ -278,28 +278,31 @@ func (r *documentRenderer) renderTable(block TableBlock) {
 		if block.Caption != "" {
 			r.renderParagraph(ParagraphBlock{Segments: []TextSegment{{Text: block.Caption}}, Style: TextStyle{Bold: true, Align: "C"}})
 		}
-		rows := append([]TableRow{}, block.Header...)
-		rows = append(rows, block.Body...)
-		rows = append(rows, block.Footer...)
-		colCount := tableColumnCount(block, rows)
+		colCount := tableColumnCount(block)
 		if colCount <= 0 {
 			return
 		}
-		widths := tableRenderWidths(block, rows, r.contentWidth(), colCount)
-		for rowIndex, row := range rows {
-			r.renderTableRow(row, widths, rowIndex < len(block.Header))
+		widths := tableRenderWidths(block, r.contentWidth(), colCount)
+		widthOffsets := documentTableSpanPrefix(widths)
+		renderRows := func(rows []TableRow, header bool) {
+			for _, row := range rows {
+				r.renderTableRow(row, widths, widthOffsets, header)
+			}
 		}
+		renderRows(block.Header, true)
+		renderRows(block.Body, false)
+		renderRows(block.Footer, false)
 	})
 }
 
-func (r *documentRenderer) renderTableRow(row TableRow, widths []float64, header bool) {
+func (r *documentRenderer) renderTableRow(row TableRow, widths, widthOffsets []float64, header bool) {
 	if len(widths) == 0 {
 		return
 	}
 	r.pdf.BeginStructure("TR")
 	defer r.pdf.EndStructure()
 	x, y := r.pdf.GetXY()
-	rowHeight := r.measureRenderedTableRow(row, widths)
+	rowHeight := r.measureRenderedTableRowWithOffsets(row, widths, widthOffsets)
 	if rowHeight <= 0 {
 		rowHeight = 6
 	}
@@ -316,7 +319,7 @@ func (r *documentRenderer) renderTableRow(row TableRow, widths []float64, header
 		if span <= 0 {
 			span = 1
 		}
-		wd := sumFloat64(widths[col:minInt(col+span, len(widths))])
+		wd := documentTablePrefixSpanWidth(widthOffsets, col, span)
 		r.renderTableCell(cell, x, y, wd, rowHeight, header, taggedTableAttributes{
 			Scope:   tableCellHeaderScope(header),
 			RowSpan: cell.RowSpan,
@@ -329,6 +332,10 @@ func (r *documentRenderer) renderTableRow(row TableRow, widths []float64, header
 }
 
 func (r *documentRenderer) measureRenderedTableRow(row TableRow, widths []float64) float64 {
+	return r.measureRenderedTableRowWithOffsets(row, widths, documentTableSpanPrefix(widths))
+}
+
+func (r *documentRenderer) measureRenderedTableRowWithOffsets(row TableRow, widths, widthOffsets []float64) float64 {
 	maxHeight := 0.0
 	col := 0
 	for _, cell := range row.Cells {
@@ -339,7 +346,7 @@ func (r *documentRenderer) measureRenderedTableRow(row TableRow, widths []float6
 		if span <= 0 {
 			span = 1
 		}
-		wd := sumFloat64(widths[col:minInt(col+span, len(widths))])
+		wd := documentTablePrefixSpanWidth(widthOffsets, col, span)
 		cellHeight := r.measureRenderedTableCell(cell, wd)
 		if cellHeight > maxHeight {
 			maxHeight = cellHeight
@@ -754,25 +761,35 @@ func documentAttachments(blocks []AttachmentBlock) []Attachment {
 	return attachments
 }
 
-func tableColumnCount(table TableBlock, rows []TableRow) int {
+func tableColumnCount(table TableBlock) int {
 	count := len(table.Columns)
-	for _, row := range rows {
-		rowCount := 0
-		for _, cell := range row.Cells {
-			span := cell.ColSpan
-			if span <= 0 {
-				span = 1
+	measureRows := func(rows []TableRow) {
+		for _, row := range rows {
+			rowCount := tableRowColumnCount(row)
+			if rowCount > count {
+				count = rowCount
 			}
-			rowCount += span
 		}
-		if rowCount > count {
-			count = rowCount
+	}
+	measureRows(table.Header)
+	measureRows(table.Body)
+	measureRows(table.Footer)
+	return count
+}
+
+func tableRowColumnCount(row TableRow) int {
+	count := 0
+	for _, cell := range row.Cells {
+		span := cell.ColSpan
+		if span <= 0 {
+			span = 1
 		}
+		count += span
 	}
 	return count
 }
 
-func tableRenderWidths(table TableBlock, rows []TableRow, total float64, count int) []float64 {
+func tableRenderWidths(table TableBlock, total float64, count int) []float64 {
 	widths := make([]float64, count)
 	fixed := 0.0
 	for i := 0; i < count && i < len(table.Columns); i++ {
@@ -800,6 +817,25 @@ func tableRenderWidths(table TableBlock, rows []TableRow, total float64, count i
 		}
 	}
 	return widths
+}
+
+func documentTableSpanPrefix(widths []float64) []float64 {
+	offsets := make([]float64, len(widths)+1)
+	for i, wd := range widths {
+		offsets[i+1] = offsets[i] + wd
+	}
+	return offsets
+}
+
+func documentTablePrefixSpanWidth(offsets []float64, start, span int) float64 {
+	if span <= 0 || start < 0 || start >= len(offsets)-1 {
+		return 0
+	}
+	end := start + span
+	if end > len(offsets)-1 {
+		end = len(offsets) - 1
+	}
+	return offsets[end] - offsets[start]
 }
 
 func borderVisible(border BorderStyle) bool {

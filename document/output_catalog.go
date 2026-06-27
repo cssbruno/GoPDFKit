@@ -70,7 +70,11 @@ func (f *Document) SetJavascript(script string) {
 // is closed. Functions ExampleDocument_RegisterAlias() and
 // ExampleDocument_RegisterAlias_utf8() in document_test.go demonstrate this method.
 func (f *Document) RegisterAlias(alias, replacement string) {
+	if current, ok := f.aliasMap[alias]; ok && current == replacement {
+		return
+	}
 	f.aliasMap[alias] = replacement
+	f.aliasPairsDirty = true
 }
 
 func (f *Document) putresourcedict() {
@@ -440,17 +444,17 @@ func (f *Document) enddoc() {
 	f.out("endobj")
 	o := f.buffer.Len()
 	f.out("xref")
-	f.outf("0 %d", f.n+1)
+	f.outPDFXrefRange(f.n + 1)
 	f.out("0000000000 65535 f ")
 	for j := 1; j <= f.n; j++ {
-		f.outf("%010d 00000 n ", f.offsets[j])
+		f.outPDFXrefOffset(f.offsets[j])
 	}
 	f.out("trailer")
 	f.out("<<")
 	f.puttrailer()
 	f.out(">>")
 	f.out("startxref")
-	f.outf("%d", o)
+	f.outPDFIntLine(o)
 	f.out("%%EOF")
 	f.state = 3
 }

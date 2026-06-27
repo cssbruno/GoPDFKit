@@ -3,7 +3,10 @@
 
 package document
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // Text prints a character string. The origin (x, y) is at the left edge of the
 // first character's baseline. This method allows a string to be placed
@@ -84,37 +87,24 @@ func (f *Document) write(h float64, txtStr string, link int, linkStr string) {
 	w := f.w - f.rMargin - f.x
 	wmax := (w - 2*f.cMargin) * 1000 / f.fontSize
 	s := strings.ReplaceAll(txtStr, "\r", "")
-	srune := []rune{ // write outputs text in flowing mode
-	}
-	var nb int
 	if f.isCurrentUTF8 {
-		srune = []rune(s)
-		nb = len(srune)
-		if nb == 1 && s == " " {
+		if s == " " {
 			f.x += f.GetStringWidth(s)
 			return
 		}
-	} else {
-		nb = len(s)
+		f.writeUTF8(h, s, link, linkStr, w, wmax)
+		return
 	}
+	nb := len(s)
 	sep := -1
 	i := 0
 	j := 0
 	l := 0.0
 	nl := 1
 	for i < nb {
-		var c rune
-		if f.isCurrentUTF8 {
-			c = srune[i]
-		} else {
-			c = rune(s[i])
-		}
+		c := rune(s[i])
 		if c == '\n' {
-			if f.isCurrentUTF8 {
-				f.CellFormat(w, h, string(srune[j:i]), "", 2, "", false, link, linkStr)
-			} else {
-				f.CellFormat(w, h, s[j:i], "", 2, "", false, link, linkStr)
-			}
+			f.CellFormat(w, h, s[j:i], "", 2, "", false, link, linkStr)
 			i++
 			sep = -1
 			j = i
@@ -130,11 +120,7 @@ func (f *Document) write(h float64, txtStr string, link int, linkStr string) {
 		if c == ' ' {
 			sep = i
 		}
-		if f.isCurrentUTF8 {
-			l += float64(f.currentFontRuneWidth(c))
-		} else {
-			l += float64(cw[int(c)])
-		}
+		l += float64(cw[int(c)])
 		if l > wmax {
 			if sep == -1 {
 				if f.x > f.lMargin {
@@ -149,17 +135,9 @@ func (f *Document) write(h float64, txtStr string, link int, linkStr string) {
 				if i == j {
 					i++
 				}
-				if f.isCurrentUTF8 {
-					f.CellFormat(w, h, string(srune[j:i]), "", 2, "", false, link, linkStr)
-				} else {
-					f.CellFormat(w, h, s[j:i], "", 2, "", false, link, linkStr)
-				}
+				f.CellFormat(w, h, s[j:i], "", 2, "", false, link, linkStr)
 			} else {
-				if f.isCurrentUTF8 {
-					f.CellFormat(w, h, string(srune[j:sep]), "", 2, "", false, link, linkStr)
-				} else {
-					f.CellFormat(w, h, s[j:sep], "", 2, "", false, link, linkStr)
-				}
+				f.CellFormat(w, h, s[j:sep], "", 2, "", false, link, linkStr)
 				i = sep + 1
 			}
 			sep = -1
@@ -176,11 +154,74 @@ func (f *Document) write(h float64, txtStr string, link int, linkStr string) {
 		}
 	}
 	if i != j {
-		if f.isCurrentUTF8 {
-			f.CellFormat(l/1000*f.fontSize, h, string(srune[j:]), "", 0, "", false, link, linkStr)
-		} else {
-			f.CellFormat(l/1000*f.fontSize, h, s[j:], "", 0, "", false, link, linkStr)
+		f.CellFormat(l/1000*f.fontSize, h, s[j:], "", 0, "", false, link, linkStr)
+	}
+}
+
+func (f *Document) writeUTF8(h float64, s string, link int, linkStr string, w, wmax float64) {
+	sep := -1
+	i := 0
+	j := 0
+	l := 0.0
+	nl := 1
+	for i < len(s) {
+		c, size := utf8.DecodeRuneInString(s[i:])
+		if size <= 0 {
+			break
 		}
+		next := i + size
+		if c == '\n' {
+			f.CellFormat(w, h, s[j:i], "", 2, "", false, link, linkStr)
+			i = next
+			sep = -1
+			j = i
+			l = 0.0
+			if nl == 1 {
+				f.x = f.lMargin
+				w = f.w - f.rMargin - f.x
+				wmax = (w - 2*f.cMargin) * 1000 / f.fontSize
+			}
+			nl++
+			continue
+		}
+		if c == ' ' {
+			sep = i
+		}
+		l += float64(f.currentFontRuneWidth(c))
+		if l > wmax {
+			if sep == -1 {
+				if f.x > f.lMargin {
+					f.x = f.lMargin
+					f.y += h
+					w = f.w - f.rMargin - f.x
+					wmax = (w - 2*f.cMargin) * 1000 / f.fontSize
+					i = next
+					nl++
+					continue
+				}
+				if i == j {
+					i = next
+				}
+				f.CellFormat(w, h, s[j:i], "", 2, "", false, link, linkStr)
+			} else {
+				f.CellFormat(w, h, s[j:sep], "", 2, "", false, link, linkStr)
+				i = sep + 1
+			}
+			sep = -1
+			j = i
+			l = 0.0
+			if nl == 1 {
+				f.x = f.lMargin
+				w = f.w - f.rMargin - f.x
+				wmax = (w - 2*f.cMargin) * 1000 / f.fontSize
+			}
+			nl++
+		} else {
+			i = next
+		}
+	}
+	if i != j {
+		f.CellFormat(l/1000*f.fontSize, h, s[j:], "", 0, "", false, link, linkStr)
 	}
 }
 

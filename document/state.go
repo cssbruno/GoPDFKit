@@ -66,9 +66,13 @@ type Document struct {
 	currentFont      fontDefinition             // current font info
 	fontSizePt       float64                    // current font size in points
 	fontSize         float64                    // current font size in user unit
+	stringWidthCache map[string]int             // bounded cache of glyph-unit string widths for current document
+	stringWidthKeys  []string                   // insertion order for stringWidthCache eviction
 	ws               float64                    // word spacing
 	images           map[string]*ImageInfo      // map of used images
 	aliasMap         map[string]string          // map of alias->replacement
+	aliasPairs       []aliasReplacementBytes    // compiled alias replacements
+	aliasPairsDirty  bool                       // whether aliasPairs needs rebuilding
 	pageLinks        [][]pageLink               // pageLinks[page][link], both 1-based
 	links            []internalLink             // array of internal links
 	attachments      []Attachment               // slice of content to embed globally

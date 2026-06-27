@@ -278,7 +278,7 @@ func htmlCollectCSSRules(tokens []HTMLSegmentType) []htmlCSSRule {
 		}
 		i = end
 	}
-	return rules
+	return htmlIndexCSSRules(rules)
 }
 
 func htmlTokenText(tokens []HTMLSegmentType) string {
@@ -540,8 +540,8 @@ func (html *HTML) compiledTableHeight(compiled *CompiledHTML, tokens []HTMLSegme
 	tableAncestors := appendHTMLAncestors(ancestors, tableEl)
 	colWidths := html.tableColumnWidths(layoutRows, colCount, tableWd, html.pdf)
 	colOffsets := htmlTableSpanPrefix(colWidths)
-	rowHeights := html.tableRowHeights(layoutRows, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors)
-	return html.tableCaptionHeight(table, tableWd, lineHt, inherited, fallback, cssRules, tableAncestors) + sumFloat64(rowHeights) + lineHt
+	_, rowHeights := html.measureTableRows(compiled, layoutRows, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors, htmlBorderStyle{}, table.attrs)
+	return html.tableCaptionHeight(compiled, table, tableWd, lineHt, inherited, fallback, cssRules, tableAncestors) + sumFloat64(rowHeights) + lineHt
 }
 
 func collapseHTMLWhitespace(text string) string {

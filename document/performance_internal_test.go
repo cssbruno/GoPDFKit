@@ -253,6 +253,43 @@ func BenchmarkGenerationHTMLBlockBoxesCompiled(b *testing.B) {
 	}
 }
 
+func BenchmarkHTMLWrappedLineCountLongUnbrokenASCII(b *testing.B) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetFont("Helvetica", "", 9)
+	text := strings.Repeat("A", 4096)
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		count := htmlWrappedLineCount(pdf, text, 20)
+		if count <= 1 {
+			b.Fatalf("line count = %d, want wrapped lines", count)
+		}
+	}
+}
+
+func BenchmarkHTMLWrappedLineCountLongUnbrokenUTF8(b *testing.B) {
+	fontBytes, err := os.ReadFile("../assets/static/font/DejaVuSansCondensed.ttf")
+	if err != nil {
+		b.Fatalf("ReadFile(font) error = %v", err)
+	}
+	cache := NewFontCache()
+	if err := cache.AddUTF8FontFromBytes("DejaVu", "", fontBytes); err != nil {
+		b.Fatalf("AddUTF8FontFromBytes() error = %v", err)
+	}
+	pdf := New("P", "mm", "A4", "")
+	pdf.AddUTF8FontFromCache("DejaVu", "", cache)
+	pdf.SetFont("DejaVu", "", 9)
+	text := strings.Repeat("界", 2048)
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		count := htmlWrappedLineCount(pdf, text, 20)
+		if count <= 1 {
+			b.Fatalf("line count = %d, want wrapped lines", count)
+		}
+	}
+}
+
 func benchmarkAlphaPNG(tb testing.TB, width, height int) []byte {
 	tb.Helper()
 
