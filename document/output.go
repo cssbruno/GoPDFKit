@@ -115,6 +115,7 @@ func isNilWriter(w io.Writer) bool {
 // out adds a line to the document.
 func (f *Document) out(s string) {
 	if f.state == 2 {
+		f.markAliasPageString(s)
 		_, _ = f.pages[f.page].WriteString(s)
 		_, _ = f.pages[f.page].WriteString("\n")
 	} else {
@@ -126,6 +127,7 @@ func (f *Document) out(s string) {
 // outbuf adds a buffered line to the document.
 func (f *Document) outbuf(r io.Reader) {
 	if f.state == 2 {
+		f.markAliasPageConservative()
 		_, _ = f.pages[f.page].ReadFrom(r)
 		_, _ = f.pages[f.page].WriteString("\n")
 	} else {
@@ -136,6 +138,7 @@ func (f *Document) outbuf(r io.Reader) {
 
 func (f *Document) outbytes(b []byte) {
 	if f.state == 2 {
+		f.markAliasPageBytes(b)
 		_, _ = f.pages[f.page].Write(b)
 		_ = f.pages[f.page].WriteByte('\n')
 	} else {

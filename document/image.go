@@ -9,6 +9,7 @@ import (
 	"io"
 	"maps"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -132,11 +133,8 @@ func (f *Document) RegisterImageOptionsReader(imgName string, options ImageOptio
 		f.err = errors.New("image type should be specified if reading from custom reader")
 		return
 	}
-	options.ImageType = strings.ToLower(options.ImageType)
-	if options.ImageType == "jpeg" {
-		options.ImageType = "jpg"
-	}
-	switch options.ImageType {
+	imageType := normalizeImageType(options.ImageType)
+	switch imageType {
 	case "jpg":
 		info = f.parsejpg(r)
 	case "png":
@@ -146,7 +144,7 @@ func (f *Document) RegisterImageOptionsReader(imgName string, options ImageOptio
 	case "webp":
 		info = f.parsewebp(r)
 	default:
-		f.err = fmt.Errorf("unsupported image type: %s", options.ImageType)
+		f.err = fmt.Errorf("unsupported image type: %s", imageType)
 	}
 	if f.err != nil {
 		return
@@ -179,14 +177,42 @@ func (f *Document) RegisterImageOptions(fileStr string, options ImageOptions) (i
 	}
 	defer func() { _ = file.Close() }()
 	if options.ImageType == "" {
-		pos := strings.LastIndex(fileStr, ".")
-		if pos < 0 {
+		imageType, ok := inferImageTypeFromPath(fileStr)
+		if !ok {
 			f.err = fmt.Errorf("image file has no extension and no type was specified: %s", fileStr)
 			return
 		}
-		options.ImageType = fileStr[pos+1:]
+		options.ImageType = imageType
+	} else {
+		options.ImageType = normalizeImageType(options.ImageType)
 	}
 	return f.RegisterImageOptionsReader(fileStr, options, file)
+}
+
+func normalizeImageType(imageType string) string {
+	switch imageType {
+	case "jpg", "png", "gif", "webp":
+		return imageType
+	case "jpeg":
+		return "jpg"
+	case "JPG", "PNG", "GIF", "WEBP":
+		return strings.ToLower(imageType)
+	case "JPEG":
+		return "jpg"
+	}
+	normalized := strings.ToLower(strings.TrimSpace(imageType))
+	if normalized == "jpeg" {
+		return "jpg"
+	}
+	return normalized
+}
+
+func inferImageTypeFromPath(path string) (string, bool) {
+	ext := filepath.Ext(path)
+	if len(ext) <= 1 {
+		return "", false
+	}
+	return normalizeImageType(ext[1:]), true
 }
 
 // ImportObjects imports external template objects into the current document.

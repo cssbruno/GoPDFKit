@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"strconv"
 	"strings"
+	"unsafe"
 )
 
 const (
@@ -61,14 +62,129 @@ func (f *Document) WriteDocument(doc *LayoutDocument) {
 }
 
 type documentRenderer struct {
-	pdf             *Document
-	template        PageTemplate
-	renderedFooters map[int]bool
-	renderingShell  bool
+	pdf               *Document
+	template          PageTemplate
+	renderedFooters   map[int]bool
+	renderingShell    bool
+	contentWidthVal   float64
+	contentWidthW     float64
+	contentWidthL     float64
+	contentWidthR     float64
+	contentWidthOK    bool
+	scopedWidth       float64
+	scopedWidthOK     bool
+	measureCtx        MeasureContext
+	measureCtxWidth   float64
+	measureCtxFont    string
+	measureCtxPt      float64
+	measureCtxUnit    float64
+	measureCtxOK      bool
+	imageNameCache    map[documentImageCacheKey]string
+	plainTextCache    map[documentTextSegmentsCacheKey]string
+	tableRowCache     map[documentTableRowCacheKey]documentTableRowMeasurement
+	blockMeasureCache map[documentBlockMeasureCacheKey][]BlockMeasurement
+}
+
+type documentImageCacheKey struct {
+	format string
+	ptr    uintptr
+	len    int
+}
+
+type documentTextSegmentsCacheKey struct {
+	ptr uintptr
+	len int
+}
+
+type documentTableRowCacheKey struct {
+	rowPtr    uintptr
+	widthsPtr uintptr
+	widthsLen int
+}
+
+type documentTableRowMeasurement struct {
+	height float64
+	cells  []documentTableCellMeasurement
+}
+
+type documentTableCellMeasurement struct {
+	width         float64
+	height        float64
+	blockMeasures []BlockMeasurement
+}
+
+type documentBlockMeasureCacheKey struct {
+	ptr   uintptr
+	len   int
+	width float64
+	font  string
+	pt    float64
+	unit  float64
 }
 
 func (r *documentRenderer) contentWidth() float64 {
-	return r.pdf.w - r.pdf.lMargin - r.pdf.rMargin
+	if r.scopedWidthOK {
+		return r.scopedWidth
+	}
+	if !r.contentWidthOK || r.contentWidthW != r.pdf.w || r.contentWidthL != r.pdf.lMargin || r.contentWidthR != r.pdf.rMargin {
+		r.contentWidthW = r.pdf.w
+		r.contentWidthL = r.pdf.lMargin
+		r.contentWidthR = r.pdf.rMargin
+		r.contentWidthVal = r.pdf.w - r.pdf.lMargin - r.pdf.rMargin
+		r.contentWidthOK = true
+	}
+	return r.contentWidthVal
+}
+
+func (r *documentRenderer) withContentWidth(width float64, render func()) {
+	if width < 0 {
+		width = 0
+	}
+	oldWidth, oldOK := r.scopedWidth, r.scopedWidthOK
+	r.scopedWidth, r.scopedWidthOK = width, true
+	defer func() {
+		r.scopedWidth, r.scopedWidthOK = oldWidth, oldOK
+	}()
+	render()
+}
+
+func (r *documentRenderer) measureContext() MeasureContext {
+	return r.measureContextForWidth(r.contentWidth())
+}
+
+func (r *documentRenderer) measureContextForWidth(width float64) MeasureContext {
+	if !r.measureCtxOK || r.measureCtxWidth != width || r.measureCtxFont != r.pdf.fontFamily || r.measureCtxPt != r.pdf.fontSizePt || r.measureCtxUnit != r.pdf.fontSize {
+		r.measureCtx = NewMeasureContext(r.pdf, width)
+		r.measureCtxWidth = width
+		r.measureCtxFont = r.pdf.fontFamily
+		r.measureCtxPt = r.pdf.fontSizePt
+		r.measureCtxUnit = r.pdf.fontSize
+		r.measureCtxOK = true
+	}
+	return r.measureCtx
+}
+
+func (r *documentRenderer) mergedStyle(style TextStyle) TextStyle {
+	return mergedTextStyle(r.measureContext().DefaultStyle, style)
+}
+
+func (r *documentRenderer) textSegmentsPlainText(segments []TextSegment) string {
+	if len(segments) == 0 {
+		return ""
+	}
+	key := documentTextSegmentsCacheKey{
+		ptr: uintptr(unsafe.Pointer(&segments[0])),
+		len: len(segments),
+	}
+	if text, ok := r.plainTextCache[key]; ok {
+		return text
+	}
+	text := textSegmentsPlainText(segments)
+	if r.plainTextCache == nil {
+		r.plainTextCache = make(map[documentTextSegmentsCacheKey]string)
+	}
+	r.plainTextCache[key] = text
+	return text
 }
 
 func (r *documentRenderer) availableHeight() float64 {
@@ -85,7 +201,7 @@ func (r *documentRenderer) renderHeader() {
 	wasRenderingShell := r.renderingShell
 	r.renderingShell = true
 	defer func() { r.renderingShell = wasRenderingShell }()
-	r.renderBlocks(header.Blocks)
+	r.renderRepeatedBlocks(header.Blocks)
 	if header.Height > 0 && r.pdf.GetY() < startY+header.Height {
 		r.pdf.SetY(startY + header.Height)
 	}
@@ -113,7 +229,7 @@ func (r *documentRenderer) renderFooter() {
 	r.renderingShell = true
 	defer func() { r.renderingShell = wasRenderingShell }()
 	if footer != nil {
-		r.renderBlocks(footer.Blocks)
+		r.renderRepeatedBlocks(footer.Blocks)
 	}
 	if text := r.template.PageNumberText(r.pdf.page); text != "" {
 		r.applyTextStyle(TextStyle{FontFamily: "Helvetica", FontSize: 9})
@@ -130,7 +246,56 @@ func (r *documentRenderer) renderBlocks(blocks []Block) {
 	}
 }
 
+func (r *documentRenderer) renderBlocksWithMeasurements(blocks []Block, measurements []BlockMeasurement) {
+	for i, block := range blocks {
+		if i < len(measurements) {
+			r.renderBlockMeasured(block, measurements[i], true)
+		} else {
+			r.renderBlock(block)
+		}
+		if r.pdf.err != nil {
+			return
+		}
+	}
+}
+
+func (r *documentRenderer) renderRepeatedBlocks(blocks []Block) {
+	measurements, ok := r.cachedBlockMeasurements(blocks)
+	if !ok {
+		r.renderBlocks(blocks)
+		return
+	}
+	r.renderBlocksWithMeasurements(blocks, measurements)
+}
+
+func (r *documentRenderer) cachedBlockMeasurements(blocks []Block) ([]BlockMeasurement, bool) {
+	if len(blocks) == 0 {
+		return nil, true
+	}
+	key := documentBlockMeasureCacheKey{
+		ptr:   uintptr(unsafe.Pointer(&blocks[0])),
+		len:   len(blocks),
+		width: r.contentWidth(),
+		font:  r.pdf.fontFamily,
+		pt:    r.pdf.fontSizePt,
+		unit:  r.pdf.fontSize,
+	}
+	if measurements, ok := r.blockMeasureCache[key]; ok {
+		return measurements, true
+	}
+	measurements := MeasureBlocks(r.measureContext(), blocks)
+	if r.blockMeasureCache == nil {
+		r.blockMeasureCache = make(map[documentBlockMeasureCacheKey][]BlockMeasurement)
+	}
+	r.blockMeasureCache[key] = measurements
+	return measurements, true
+}
+
 func (r *documentRenderer) renderBlock(block Block) {
+	r.renderBlockMeasured(block, BlockMeasurement{}, false)
+}
+
+func (r *documentRenderer) renderBlockMeasured(block Block, measure BlockMeasurement, measured bool) {
 	if block == nil || r.pdf.err != nil {
 		return
 	}
@@ -140,7 +305,9 @@ func (r *documentRenderer) renderBlock(block Block) {
 		}
 		return
 	}
-	measure := MeasureBlock(NewMeasureContext(r.pdf, r.contentWidth()), block)
+	if !measured {
+		measure = MeasureBlock(r.measureContext(), block)
+	}
 	if !r.renderingShell && (measure.BreakBefore || measure.ShouldMoveToNextPage(r.availableHeight())) {
 		r.addPageWithTemplate()
 	}
@@ -197,26 +364,26 @@ func (r *documentRenderer) addPageWithTemplate() {
 func (r *documentRenderer) renderParagraph(block ParagraphBlock) {
 	block.Box = documentParagraphBox(block.Box)
 	r.renderBox(block.Box, func() {
-		style := mergedTextStyle(NewMeasureContext(r.pdf, r.contentWidth()).DefaultStyle, block.Style)
+		style := r.mergedStyle(block.Style)
 		r.applyTextStyle(style)
 		r.pdf.SetNextTextRole(taggedRoleP)
-		r.pdf.MultiCell(0, resolvedLineHeight(style), textSegmentsPlainText(block.Segments), "", textAlign(style.Align), false)
+		r.pdf.MultiCell(r.contentWidth(), resolvedLineHeight(style), r.textSegmentsPlainText(block.Segments), "", textAlign(style.Align), false)
 	})
 }
 
 func (r *documentRenderer) renderHeading(block HeadingBlock) {
 	block.Box = documentHeadingBox(block.Box)
 	r.renderBox(block.Box, func() {
-		style := mergedTextStyle(NewMeasureContext(r.pdf, r.contentWidth()).DefaultStyle, block.Style)
+		defaultStyle := r.measureContext().DefaultStyle
+		style := mergedTextStyle(defaultStyle, block.Style)
 		style.Bold = true
 		if block.Style.FontSize <= 0 {
-			defaultStyle := NewMeasureContext(r.pdf, r.contentWidth()).DefaultStyle
 			style.FontSize = documentHeadingFontSize(defaultStyle.FontSize, block.Level)
 			style.LineHeight = firstPositive(block.Style.LineHeight, defaultStyle.LineHeight*style.FontSize/defaultStyle.FontSize)
 		}
 		r.applyTextStyle(style)
 		r.pdf.SetNextTextRole(documentHeadingRole(block.Level))
-		r.pdf.MultiCell(0, resolvedLineHeight(style), textSegmentsPlainText(block.Segments), "", textAlign(style.Align), false)
+		r.pdf.MultiCell(r.contentWidth(), resolvedLineHeight(style), r.textSegmentsPlainText(block.Segments), "", textAlign(style.Align), false)
 		r.pdf.Ln(resolvedLineHeight(style) * 0.25)
 	})
 }
@@ -225,24 +392,30 @@ func documentHeadingRole(level int) string {
 	switch {
 	case level <= 1:
 		return "H1"
-	case level >= 6:
-		return "H6"
+	case level == 2:
+		return "H2"
+	case level == 3:
+		return "H3"
+	case level == 4:
+		return "H4"
+	case level == 5:
+		return "H5"
 	default:
-		return sprintf("H%d", level)
+		return "H6"
 	}
 }
 
 func (r *documentRenderer) renderList(block ListBlock) {
 	r.renderBox(block.Box, func() {
-		r.pdf.BeginStructure("L")
+		r.pdf.BeginStructure(taggedRoleL)
 		defer r.pdf.EndStructure()
 		markerWidth := r.listMarkerWidth(block)
 		for i, item := range block.Items {
-			r.pdf.BeginStructure("LI")
+			r.pdf.BeginStructure(taggedRoleLI)
 			marker := listMarker(block, i)
 			x, y := r.pdf.GetXY()
-			r.applyTextStyle(mergedTextStyle(NewMeasureContext(r.pdf, r.contentWidth()).DefaultStyle, block.Style))
-			r.pdf.SetNextTextRole("Lbl")
+			r.applyTextStyle(r.mergedStyle(block.Style))
+			r.pdf.SetNextTextRole(taggedRoleLbl)
 			r.pdf.CellFormat(markerWidth, 5, marker, "", 0, "R", false, 0, "")
 			itemX := x + markerWidth + 2
 			r.pdf.SetXY(itemX, y)
@@ -250,7 +423,7 @@ func (r *documentRenderer) renderList(block ListBlock) {
 			oldLeft, oldRight := r.pdf.lMargin, r.pdf.rMargin
 			r.pdf.lMargin = itemX
 			r.pdf.rMargin = r.pdf.w - r.pdf.GetX() - itemWidth
-			r.pdf.BeginStructure("LBody")
+			r.pdf.BeginStructure(taggedRoleLBody)
 			r.renderBlocks(item.Blocks)
 			r.pdf.EndStructure()
 			r.pdf.lMargin, r.pdf.rMargin = oldLeft, oldRight
@@ -261,19 +434,24 @@ func (r *documentRenderer) renderList(block ListBlock) {
 }
 
 func (r *documentRenderer) listMarkerWidth(block ListBlock) float64 {
-	r.applyTextStyle(mergedTextStyle(NewMeasureContext(r.pdf, r.contentWidth()).DefaultStyle, block.Style))
+	r.applyTextStyle(r.mergedStyle(block.Style))
 	wd := 5.0
-	for i := range block.Items {
-		if markerWd := r.pdf.GetStringWidth(listMarker(block, i)); markerWd+1 > wd {
-			wd = markerWd + 1
-		}
+	if len(block.Items) == 0 {
+		return wd
+	}
+	markerIndex := 0
+	if block.Ordered {
+		markerIndex = len(block.Items) - 1
+	}
+	if markerWd := r.pdf.GetStringWidth(listMarker(block, markerIndex)); markerWd+1 > wd {
+		wd = markerWd + 1
 	}
 	return wd
 }
 
 func (r *documentRenderer) renderTable(block TableBlock) {
 	r.renderBox(block.Box, func() {
-		r.pdf.BeginStructure("Table")
+		r.pdf.BeginStructure(taggedRoleTable)
 		defer r.pdf.EndStructure()
 		if block.Caption != "" {
 			r.renderParagraph(ParagraphBlock{Segments: []TextSegment{{Text: block.Caption}}, Style: TextStyle{Bold: true, Align: "C"}})
@@ -285,8 +463,8 @@ func (r *documentRenderer) renderTable(block TableBlock) {
 		widths := tableRenderWidths(block, r.contentWidth(), colCount)
 		widthOffsets := documentTableSpanPrefix(widths)
 		renderRows := func(rows []TableRow, header bool) {
-			for _, row := range rows {
-				r.renderTableRow(row, widths, widthOffsets, header)
+			for i := range rows {
+				r.renderTableRow(&rows[i], widths, widthOffsets, header)
 			}
 		}
 		renderRows(block.Header, true)
@@ -295,14 +473,18 @@ func (r *documentRenderer) renderTable(block TableBlock) {
 	})
 }
 
-func (r *documentRenderer) renderTableRow(row TableRow, widths, widthOffsets []float64, header bool) {
+func (r *documentRenderer) renderTableRow(row *TableRow, widths, widthOffsets []float64, header bool) {
+	if row == nil {
+		return
+	}
 	if len(widths) == 0 {
 		return
 	}
-	r.pdf.BeginStructure("TR")
+	r.pdf.BeginStructure(taggedRoleTR)
 	defer r.pdf.EndStructure()
 	x, y := r.pdf.GetXY()
-	rowHeight := r.measureRenderedTableRowWithOffsets(row, widths, widthOffsets)
+	rowMeasurement := r.measureRenderedTableRowCached(row, widths, widthOffsets)
+	rowHeight := rowMeasurement.height
 	if rowHeight <= 0 {
 		rowHeight = 6
 	}
@@ -311,7 +493,7 @@ func (r *documentRenderer) renderTableRow(row TableRow, widths, widthOffsets []f
 		x, y = r.pdf.GetXY()
 	}
 	col := 0
-	for _, cell := range row.Cells {
+	for i, cell := range row.Cells {
 		if col >= len(widths) {
 			break
 		}
@@ -319,8 +501,12 @@ func (r *documentRenderer) renderTableRow(row TableRow, widths, widthOffsets []f
 		if span <= 0 {
 			span = 1
 		}
-		wd := documentTablePrefixSpanWidth(widthOffsets, col, span)
-		r.renderTableCell(cell, x, y, wd, rowHeight, header, taggedTableAttributes{
+		if i >= len(rowMeasurement.cells) {
+			break
+		}
+		cellMeasurement := rowMeasurement.cells[i]
+		wd := cellMeasurement.width
+		r.renderTableCell(cell, cellMeasurement, x, y, wd, rowHeight, header, taggedTableAttributes{
 			Scope:   tableCellHeaderScope(header),
 			RowSpan: cell.RowSpan,
 			ColSpan: span,
@@ -336,6 +522,35 @@ func (r *documentRenderer) measureRenderedTableRow(row TableRow, widths []float6
 }
 
 func (r *documentRenderer) measureRenderedTableRowWithOffsets(row TableRow, widths, widthOffsets []float64) float64 {
+	return r.measureRenderedTableRowDetailed(row, widths, widthOffsets).height
+}
+
+func (r *documentRenderer) measureRenderedTableRowCached(row *TableRow, widths, widthOffsets []float64) documentTableRowMeasurement {
+	key := documentTableRowCacheKey{
+		rowPtr:    uintptr(unsafe.Pointer(row)),
+		widthsPtr: documentFloatSlicePointer(widths),
+		widthsLen: len(widths),
+	}
+	if cached, ok := r.tableRowCache[key]; ok {
+		return cached
+	}
+	measurement := r.measureRenderedTableRowDetailed(*row, widths, widthOffsets)
+	if r.tableRowCache == nil {
+		r.tableRowCache = make(map[documentTableRowCacheKey]documentTableRowMeasurement)
+	}
+	r.tableRowCache[key] = measurement
+	return measurement
+}
+
+func documentFloatSlicePointer(values []float64) uintptr {
+	if len(values) == 0 {
+		return 0
+	}
+	return uintptr(unsafe.Pointer(&values[0]))
+}
+
+func (r *documentRenderer) measureRenderedTableRowDetailed(row TableRow, widths, widthOffsets []float64) documentTableRowMeasurement {
+	measurement := documentTableRowMeasurement{cells: make([]documentTableCellMeasurement, 0, len(row.Cells))}
 	maxHeight := 0.0
 	col := 0
 	for _, cell := range row.Cells {
@@ -347,40 +562,52 @@ func (r *documentRenderer) measureRenderedTableRowWithOffsets(row TableRow, widt
 			span = 1
 		}
 		wd := documentTablePrefixSpanWidth(widthOffsets, col, span)
-		cellHeight := r.measureRenderedTableCell(cell, wd)
-		if cellHeight > maxHeight {
-			maxHeight = cellHeight
+		cellMeasurement := r.measureRenderedTableCellDetailed(cell, wd)
+		measurement.cells = append(measurement.cells, cellMeasurement)
+		if cellMeasurement.height > maxHeight {
+			maxHeight = cellMeasurement.height
 		}
 		col += span
 	}
-	return maxHeight
+	measurement.height = maxHeight
+	return measurement
 }
 
 func (r *documentRenderer) measureRenderedTableCell(cell TableCell, width float64) float64 {
+	return r.measureRenderedTableCellDetailed(cell, width).height
+}
+
+func (r *documentRenderer) measureRenderedTableCellDetailed(cell TableCell, width float64) documentTableCellMeasurement {
+	measurement := documentTableCellMeasurement{width: width}
 	contentWidth := width - 2
 	if contentWidth < 0 {
 		contentWidth = 0
 	}
-	ctx := NewMeasureContext(r.pdf, contentWidth)
+	ctx := r.measureContextForWidth(contentWidth)
 	if len(cell.Blocks) == 0 {
 		style := mergedTextStyle(ctx.DefaultStyle, cell.Style)
-		return maxPositive(4, resolvedLineHeight(style))
+		measurement.height = maxPositive(4, resolvedLineHeight(style))
+		return measurement
 	}
 	total := 0.0
-	for _, block := range cell.Blocks {
-		total += MeasureBlock(ctx, block).Height
+	measurement.blockMeasures = make([]BlockMeasurement, len(cell.Blocks))
+	for i, block := range cell.Blocks {
+		blockMeasure := MeasureBlock(ctx, block)
+		measurement.blockMeasures[i] = blockMeasure
+		total += blockMeasure.Height
 	}
 	if total <= 0 {
 		total = resolvedLineHeight(mergedTextStyle(ctx.DefaultStyle, cell.Style))
 	}
-	return total + 2
+	measurement.height = total + 2
+	return measurement
 }
 
-func (r *documentRenderer) renderTableCell(cell TableCell, x, y, wd, ht float64, header bool, tableAttrs taggedTableAttributes) {
+func (r *documentRenderer) renderTableCell(cell TableCell, measurement documentTableCellMeasurement, x, y, wd, ht float64, header bool, tableAttrs taggedTableAttributes) {
 	if header {
-		r.pdf.beginTableCellStructure("TH", tableAttrs)
+		r.pdf.beginTableCellStructure(taggedRoleTH, tableAttrs)
 	} else {
-		r.pdf.beginTableCellStructure("TD", tableAttrs)
+		r.pdf.beginTableCellStructure(taggedRoleTD, tableAttrs)
 	}
 	defer r.pdf.EndStructure()
 	r.pdf.BeginArtifact()
@@ -388,21 +615,11 @@ func (r *documentRenderer) renderTableCell(cell TableCell, x, y, wd, ht float64,
 	r.pdf.EndArtifact()
 	cellX := x + 1
 	r.pdf.SetXY(cellX, y+1)
-	oldLeft, oldRight := r.pdf.lMargin, r.pdf.rMargin
-	r.pdf.lMargin = cellX
-	r.pdf.rMargin = r.pdf.w - x - wd + 1
-	if len(cell.Blocks) == 0 {
-		r.applyTextStyle(cell.Style)
-		if header {
-			r.pdf.SetNextTextRole("TH")
-		} else {
-			r.pdf.SetNextTextRole("TD")
-		}
-		r.pdf.MultiCell(wd-2, maxPositive(4, ht-2), "", "", textAlign(cell.Align), false)
-	} else {
-		r.renderBlocks(cell.Blocks)
+	if len(cell.Blocks) > 0 {
+		r.withContentWidth(wd-2, func() {
+			r.renderBlocksWithMeasurements(cell.Blocks, measurement.blockMeasures)
+		})
 	}
-	r.pdf.lMargin, r.pdf.rMargin = oldLeft, oldRight
 }
 
 func tableCellHeaderScope(header bool) string {
@@ -455,7 +672,7 @@ func (r *documentRenderer) registerImageBlock(block ImageBlock) (string, ImageOp
 	options := ImageOptions{ImageType: block.Format, ReadDpi: block.DPI > 0}
 	switch {
 	case len(block.Data) > 0 && block.Format != "":
-		name := documentImageName(block)
+		name := r.documentImageName(block)
 		info := r.pdf.RegisterImageOptionsReader(name, options, bytes.NewReader(block.Data))
 		if block.DPI > 0 && info != nil {
 			info.SetDpi(block.DPI)
@@ -470,6 +687,23 @@ func (r *documentRenderer) registerImageBlock(block ImageBlock) (string, ImageOp
 	default:
 		return "", options, nil
 	}
+}
+
+func (r *documentRenderer) documentImageName(block ImageBlock) string {
+	key := documentImageCacheKey{
+		format: strings.ToLower(block.Format),
+		ptr:    uintptr(unsafe.Pointer(&block.Data[0])),
+		len:    len(block.Data),
+	}
+	if name, ok := r.imageNameCache[key]; ok {
+		return name
+	}
+	name := documentImageName(block)
+	if r.imageNameCache == nil {
+		r.imageNameCache = make(map[documentImageCacheKey]string)
+	}
+	r.imageNameCache[key] = name
+	return name
 }
 
 func documentImageName(block ImageBlock) string {
@@ -575,20 +809,28 @@ func (r *documentRenderer) renderMetadataGrid(block MetadataGridBlock) {
 			columns = 2
 		}
 		wd := r.contentWidth() / float64(columns)
-		r.applyTextStyle(mergedTextStyle(NewMeasureContext(r.pdf, r.contentWidth()).DefaultStyle, block.Style))
+		r.applyTextStyle(r.mergedStyle(block.Style))
 		for i, field := range block.Fields {
 			if i > 0 && i%columns == 0 {
 				r.pdf.Ln(6)
 			}
-			text := field.Label
-			if field.Value != "" {
-				text += ": " + field.Value
-			}
-			r.pdf.SetNextTextRole("Lbl")
-			r.pdf.CellFormat(wd, 6, text, "", 0, "L", false, 0, "")
+			r.pdf.SetNextTextRole(taggedRoleLbl)
+			r.pdf.CellFormat(wd, 6, metadataFieldText(field), "", 0, "L", false, 0, "")
 		}
 		r.pdf.Ln(6)
 	})
+}
+
+func metadataFieldText(field MetadataField) string {
+	if field.Value == "" {
+		return field.Label
+	}
+	var builder strings.Builder
+	builder.Grow(len(field.Label) + len(field.Value) + 2)
+	builder.WriteString(field.Label)
+	builder.WriteString(": ")
+	builder.WriteString(field.Value)
+	return builder.String()
 }
 
 func (r *documentRenderer) renderQRVerification(block QRVerificationBlock) {
@@ -620,9 +862,9 @@ func (r *documentRenderer) renderQRVerification(block QRVerificationBlock) {
 			}
 			segments = []TextSegment{{Text: text}}
 		}
-		r.applyTextStyle(mergedTextStyle(NewMeasureContext(r.pdf, r.contentWidth()).DefaultStyle, block.Style))
+		r.applyTextStyle(r.mergedStyle(block.Style))
 		r.pdf.SetNextTextRole(taggedRoleP)
-		r.pdf.MultiCell(r.contentWidth()-size-4, 5, textSegmentsPlainText(segments), "", "L", false)
+		r.pdf.MultiCell(r.contentWidth()-size-4, 5, r.textSegmentsPlainText(segments), "", "L", false)
 		if r.pdf.GetY() < y+size {
 			r.pdf.SetY(y + size)
 		}

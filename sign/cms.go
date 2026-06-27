@@ -78,25 +78,51 @@ type CMSVerifyResult struct {
 
 // CreateCMS creates CMS SignedData using this package's own DER encoder.
 func CreateCMS(content []byte, options CMSOptions) ([]byte, error) {
+	digest, signingTime, err := prepareCMSOptions(options)
+	if err != nil {
+		return nil, err
+	}
+	contentDigest := hashBytes(digest, content)
+	return createCMSWithDigest(content, contentDigest, digest, signingTime, options)
+}
+
+func createDetachedCMSWithPreparedDigest(contentDigest []byte, options preparedOptions) ([]byte, error) {
+	if len(contentDigest) != options.DigestAlgorithm.Size() {
+		return nil, fmt.Errorf("pdfsigning: content digest has %d bytes, want %d", len(contentDigest), options.DigestAlgorithm.Size())
+	}
+	cmsOptions := CMSOptions{
+		Signer:           options.Signer,
+		Certificate:      options.Certificate,
+		CertificateChain: options.CertificateChain,
+		DigestAlgorithm:  options.DigestAlgorithm,
+		Detached:         true,
+		SigningTime:      options.SigningTime,
+	}
+	return createCMSWithDigest(nil, contentDigest, options.DigestAlgorithm, options.SigningTime, cmsOptions)
+}
+
+func prepareCMSOptions(options CMSOptions) (crypto.Hash, time.Time, error) {
 	if options.Signer == nil {
-		return nil, ErrMissingSigner
+		return 0, time.Time{}, ErrMissingSigner
 	}
 	if options.Certificate == nil {
-		return nil, ErrMissingCertificate
+		return 0, time.Time{}, ErrMissingCertificate
 	}
 	if !publicKeysEqual(options.Signer.Public(), options.Certificate.PublicKey) {
-		return nil, errors.New("pdfsigning: signer public key does not match certificate")
+		return 0, time.Time{}, errors.New("pdfsigning: signer public key does not match certificate")
 	}
 	digest, err := normalizeDigest(options.DigestAlgorithm)
 	if err != nil {
-		return nil, err
+		return 0, time.Time{}, err
 	}
 	signingTime := options.SigningTime
 	if signingTime.IsZero() {
 		signingTime = time.Now().UTC()
 	}
+	return digest, signingTime, nil
+}
 
-	contentDigest := hashBytes(digest, content)
+func createCMSWithDigest(content, contentDigest []byte, digest crypto.Hash, signingTime time.Time, options CMSOptions) ([]byte, error) {
 	signedAttrs, err := signedAttributes(contentDigest, signingTime)
 	if err != nil {
 		return nil, err

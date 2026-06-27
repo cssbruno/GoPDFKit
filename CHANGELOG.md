@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.6.0 - 2026-06-27
+
+Minor release for non-HTML generation performance work.
+
+### Added
+
+- Added reusable imported PDF source workflows, including immutable byte parsing,
+  seekable `ReaderAt` parsing, and parsed source caching for repeated imports.
+- Added the v0.5.6 non-HTML performance checklist as a completed audit record.
+
+### Changed
+
+- Reduced allocation and formatting overhead across text/cell rendering,
+  document-model rendering, image output, page serialization, UTF-8 font
+  subsetting, imported PDF output, signing, metadata, tags, and compliance paths.
+- Preserved compatible imported FlateDecode page streams and cached rewritten
+  imported object bodies when output mappings are unchanged.
+- Regenerated tracked PDF fixtures after the performance changes.
+
+### Security
+
+- Updated `golang.org/x/image` to a WebP decoder release with current
+  `govulncheck` fixes.
+
 ## v0.5.5 - 2026-06-13
 
 Patch release for CI benchmark workflow cleanup.

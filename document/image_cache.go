@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"sync"
 )
 
@@ -18,13 +17,27 @@ import (
 // same document. ImageCache is for server-style workloads that create many
 // documents with the same logos or other repeated assets.
 type ImageCache struct {
-	mu     sync.RWMutex
-	images map[string]*ImageInfo
+	mu         sync.RWMutex
+	images     map[string]*ImageInfo
+	fileImages map[imageFileCacheKey]*ImageInfo
+	fileTypes  map[string]string
+}
+
+type imageFileCacheKey struct {
+	path      string
+	size      int64
+	modTime   int64
+	imageType string
+	readDpi   bool
 }
 
 // NewImageCache creates an empty reusable image cache.
 func NewImageCache() *ImageCache {
-	return &ImageCache{images: make(map[string]*ImageInfo)}
+	return &ImageCache{
+		images:     make(map[string]*ImageInfo),
+		fileImages: make(map[imageFileCacheKey]*ImageInfo),
+		fileTypes:  make(map[string]string),
+	}
 }
 
 // RegisterImageOptionsReader parses and stores an image read from r.
@@ -42,6 +55,7 @@ func (c *ImageCache) RegisterImageOptionsReader(name string, options ImageOption
 	if options.ImageType == "" {
 		return nil, errors.New("image type should be specified if reading from custom reader")
 	}
+	options.ImageType = normalizeImageType(options.ImageType)
 
 	pdf := New("P", "mm", "A4", "")
 	info := pdf.RegisterImageOptionsReader(name, options, r)
@@ -63,22 +77,84 @@ func (c *ImageCache) RegisterImageOptionsReader(name string, options ImageOption
 
 // RegisterImageOptions parses and stores an image from a file.
 func (c *ImageCache) RegisterImageOptions(name, fileStr string, options ImageOptions) (*ImageInfo, error) {
+	if c == nil {
+		return nil, errors.New("image cache is nil")
+	}
 	if name == "" {
 		name = fileStr
+	}
+	imageType, err := c.imageTypeForFile(fileStr, options.ImageType)
+	if err != nil {
+		return nil, err
+	}
+	options.ImageType = imageType
+	stat, err := os.Stat(fileStr)
+	if err != nil {
+		return nil, err
+	}
+	key := imageFileCacheKey{
+		path:      fileStr,
+		size:      stat.Size(),
+		modTime:   stat.ModTime().UnixNano(),
+		imageType: options.ImageType,
+		readDpi:   options.ReadDpi,
+	}
+	c.mu.RLock()
+	cached := c.fileImages[key]
+	c.mu.RUnlock()
+	if cached != nil {
+		c.mu.Lock()
+		if c.images == nil {
+			c.images = make(map[string]*ImageInfo)
+		}
+		c.images[name] = cached.clone()
+		info := c.images[name].cloneMetadata()
+		c.mu.Unlock()
+		return info, nil
 	}
 	file, err := os.Open(fileStr)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = file.Close() }()
-	if options.ImageType == "" {
-		pos := strings.LastIndex(fileStr, ".")
-		if pos < 0 {
-			return nil, fmt.Errorf("image file has no extension and no type was specified: %s", fileStr)
-		}
-		options.ImageType = fileStr[pos+1:]
+	info, err := c.RegisterImageOptionsReader(name, options, file)
+	if err != nil {
+		return nil, err
 	}
-	return c.RegisterImageOptionsReader(name, options, file)
+	c.mu.Lock()
+	if c.fileImages == nil {
+		c.fileImages = make(map[imageFileCacheKey]*ImageInfo)
+	}
+	if cached := c.images[name]; cached != nil {
+		c.fileImages[key] = cached.clone()
+	}
+	c.mu.Unlock()
+	return info, nil
+}
+
+func (c *ImageCache) imageTypeForFile(fileStr, imageType string) (string, error) {
+	if imageType != "" {
+		return normalizeImageType(imageType), nil
+	}
+	c.mu.RLock()
+	if c.fileTypes != nil {
+		if cached, ok := c.fileTypes[fileStr]; ok {
+			c.mu.RUnlock()
+			return cached, nil
+		}
+	}
+	c.mu.RUnlock()
+	inferred, ok := inferImageTypeFromPath(fileStr)
+	if !ok {
+		return "", fmt.Errorf("image file has no extension and no type was specified: %s", fileStr)
+	}
+	c.mu.Lock()
+	if c.fileTypes == nil {
+		c.fileTypes = make(map[string]string)
+	}
+	c.fileTypes[fileStr] = inferred
+	c.mu.Unlock()
+	return inferred, nil
 }
 
 // Get returns a copy of the parsed image stored under name.

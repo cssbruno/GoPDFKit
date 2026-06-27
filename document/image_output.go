@@ -6,7 +6,6 @@ package document
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"sort"
 
 	"github.com/cssbruno/gopdfkit/importpdf"
@@ -64,7 +63,20 @@ func (f *Document) resolveImagePlacement(info *ImageInfo, x, y, w, h float64, al
 }
 
 func (f *Document) drawImageXObject(imageID string, x, y, w, h float64) {
-	f.outf("q %.5f 0 0 %.5f %.5f %.5f cm /I%s Do Q", w*f.k, h*f.k, x*f.k, (f.h-(y+h))*f.k, imageID)
+	f.outbytes(f.appendImageXObject(nil, imageID, x, y, w, h))
+}
+
+func (f *Document) appendImageXObject(buf []byte, imageID string, x, y, w, h float64) []byte {
+	buf = append(buf, "q "...)
+	buf = appendPDFNumberSpace(buf, w*f.k, 5)
+	buf = append(buf, "0 0 "...)
+	buf = appendPDFNumberSpace(buf, h*f.k, 5)
+	buf = appendPDFNumberSpace(buf, x*f.k, 5)
+	buf = appendPDFNumberSpace(buf, (f.h-(y+h))*f.k, 5)
+	buf = append(buf, "cm /I"...)
+	buf = append(buf, imageID...)
+	buf = append(buf, " Do Q"...)
+	return buf
 }
 
 func (f *Document) imageOut(info *ImageInfo, x, y, w, h float64, allowNegativeX, flow bool, link int, linkStr string, tag taggedContentOptions) {
@@ -79,7 +91,7 @@ func (f *Document) imageOut(info *ImageInfo, x, y, w, h float64, allowNegativeX,
 	if !f.validateTaggedImageOptions(tag) {
 		return
 	}
-	content := []byte(sprintf("q %.5f 0 0 %.5f %.5f %.5f cm /I%s Do Q", placement.w*f.k, placement.h*f.k, placement.x*f.k, (f.h-(placement.y+placement.h))*f.k, info.i))
+	content := f.appendImageXObject(make([]byte, 0, len(info.i)+96), info.i, placement.x, placement.y, placement.w, placement.h)
 	f.outbytes(f.wrapTaggedContent(content, tag))
 	if link > 0 || len(linkStr) > 0 {
 		f.newLink(placement.x, placement.y, placement.w, placement.h, link, linkStr)
@@ -113,56 +125,60 @@ func (f *Document) putImportedTemplates() {
 				f.SetErrorf("invalid imported object replacement offset: %d", pos)
 				return
 			}
-			objIDPadded := fmt.Sprintf("%40d", objID)
-			objIDBytes := []byte(objIDPadded)
-			for j := pos; j < pos+40; j++ {
-				objsIDData[i][j] = objIDBytes[j-pos]
-			}
+			writePaddedObjectID(objsIDData[i][pos:pos+40], objID)
 		}
 		f.importedTplIDs[hash] = i + nOffset
 	}
 	for i = range objsIDData {
 		f.newobj()
-		f.out(string(objsIDData[i]))
+		f.outbytes(objsIDData[i])
 	}
+}
+
+func writePaddedObjectID(dst []byte, objID int) {
+	for i := range dst {
+		dst[i] = ' '
+	}
+	var scratch [20]byte
+	raw := appendPDFInt(scratch[:0], objID)
+	copy(dst[len(dst)-len(raw):], raw)
 }
 
 func (f *Document) putImportedPages() {
 	if len(f.importedPages) == 0 {
 		return
 	}
-	ids := make([]int, 0, len(f.importedPages))
-	for id := range f.importedPages {
-		ids = append(ids, id)
-	}
-	sort.Ints(ids)
-	for _, id := range ids {
+	for id := 1; id <= f.importedPageSeq; id++ {
 		page := f.importedPages[id]
 		if page == nil || page.page == nil {
 			continue
 		}
 		objects := page.page.Objects()
 		refMap := make(map[importpdf.ObjRef]int, len(objects))
-		nextID := f.n + 1
+		baseID := f.n + 1
+		nextID := baseID
 		for _, object := range objects {
 			refMap[object.Ref] = nextID
 			nextID++
 		}
-		for _, object := range objects {
-			body := importpdf.RewriteIndirectRefs(object.Body, refMap)
+		rewrittenObjects, resources := page.rewrittenImportData(baseID, objects, refMap)
+		for _, body := range rewrittenObjects {
 			f.newobj()
 			f.outbuf(bytes.NewReader(body))
 			f.out("endobj")
 		}
-		resources := importpdf.RewriteIndirectRefs(page.page.Resources(), refMap)
-		content := page.page.Content()
 		filter := ""
-		if f.compress {
-			content = f.compressBytes(content)
-			if f.err != nil {
+		content, encodedFilter, encoded := page.page.EncodedContent()
+		if encoded {
+			filter = "/Filter /" + encodedFilter + "\n"
+		} else {
+			content = page.page.Content()
+			if compressedContent, compressed := f.compressStreamBytes(content); compressed {
+				content = compressedContent
+				filter = "/Filter /FlateDecode\n"
+			} else if f.err != nil {
 				return
 			}
-			filter = "/Filter /FlateDecode\n"
 		}
 		f.newobj()
 		page.objectID = f.n
@@ -174,31 +190,36 @@ func (f *Document) putImportedPages() {
 }
 
 func (f *Document) putimages() {
+	insertedImages := make(map[string]int, len(f.images))
+	if !f.catalogSort {
+		for _, image := range f.images {
+			f.putImageOnce(image, insertedImages)
+		}
+		return
+	}
 	keyList := make([]string, 0, len(f.images))
-
-	var key string
-	for key = range f.images {
+	for key := range f.images {
 		keyList = append(keyList, key)
 	}
-	if f.catalogSort {
-		sort.SliceStable(keyList, func(i, j int) bool {
-			return f.images[keyList[i]].w < f.images[keyList[j]].w
-		})
-	}
-	insertedImages := make(map[string]int, len(f.images))
-	for _, key = range keyList {
+	sort.SliceStable(keyList, func(i, j int) bool {
+		return f.images[keyList[i]].w < f.images[keyList[j]].w
+	})
+	for _, key := range keyList {
 		image := f.images[key]
-		if image == nil {
-			continue
-		}
-		insertedImageObjN, isFound := insertedImages[image.i]
-		if isFound {
-			image.n = insertedImageObjN
-		} else {
-			f.putimage(image)
-			insertedImages[image.i] = image.n
-		}
+		f.putImageOnce(image, insertedImages)
 	}
+}
+
+func (f *Document) putImageOnce(image *ImageInfo, insertedImages map[string]int) {
+	if image == nil {
+		return
+	}
+	if insertedImageObjN, isFound := insertedImages[image.i]; isFound {
+		image.n = insertedImageObjN
+		return
+	}
+	f.putimage(image)
+	insertedImages[image.i] = image.n
 }
 
 func (f *Document) putimage(info *ImageInfo) {
@@ -228,11 +249,14 @@ func (f *Document) putimage(info *ImageInfo) {
 		f.outf("/DecodeParms <<%s>>", info.dp)
 	}
 	if len(info.trns) > 0 {
-		var trns fmtBuffer
+		trns := make([]byte, 0, len(info.trns)*8)
 		for _, v := range info.trns {
-			trns.printf("%d %d ", v, v)
+			trns = appendPDFInt(trns, v)
+			trns = append(trns, ' ')
+			trns = appendPDFInt(trns, v)
+			trns = append(trns, ' ')
 		}
-		f.outf("/Mask [%s]", trns.String())
+		f.outbytes(append(append([]byte("/Mask ["), trns...), ']'))
 	}
 	if info.smask != nil {
 		f.outf("/SMask %d 0 R", f.n+1)
@@ -241,8 +265,7 @@ func (f *Document) putimage(info *ImageInfo) {
 	f.putstream(info.data)
 	f.out("endobj")
 	if len(info.smask) > 0 {
-		smask := &ImageInfo{w: info.w, h: info.h, cs: "DeviceGray", bpc: 8, f: "FlateDecode", dp: sprintf("/Predictor 15 /Colors 1 /BitsPerComponent 8 /Columns %d", int(info.w)), data: info.smask, scale: f.k}
-		f.putimage(smask)
+		f.putSoftMaskImage(info)
 	}
 	if info.cs == "Indexed" {
 		f.newobj()
@@ -261,25 +284,45 @@ func (f *Document) putimage(info *ImageInfo) {
 	}
 }
 
+func (f *Document) putSoftMaskImage(info *ImageInfo) {
+	f.newobj()
+	f.out("<</Type /XObject")
+	f.out("/Subtype /Image")
+	f.outf("/Width %d", int(info.w))
+	f.outf("/Height %d", int(info.h))
+	f.out("/ColorSpace /DeviceGray")
+	f.out("/BitsPerComponent 8")
+	f.out("/Filter /FlateDecode")
+	f.outf("/DecodeParms <</Predictor 15 /Colors 1 /BitsPerComponent 8 /Columns %d>>", int(info.w))
+	f.outf("/Length %d>>", len(info.smask))
+	f.putstream(info.smask)
+	f.out("endobj")
+}
+
 func (f *Document) putxobjectdict() {
 	{
-		var image *ImageInfo
-		var key string
-		keyList := make([]string, 0, len(f.images))
-		for key = range f.images {
-			keyList = append(keyList, key)
-		}
-		if f.catalogSort {
+		if !f.catalogSort {
+			for _, image := range f.images {
+				if image == nil {
+					continue
+				}
+				f.outf("/I%s %d 0 R", image.i, image.n)
+			}
+		} else {
+			keyList := make([]string, 0, len(f.images))
+			for key := range f.images {
+				keyList = append(keyList, key)
+			}
 			sort.SliceStable(keyList, func(i, j int) bool {
 				return f.images[keyList[i]].i < f.images[keyList[j]].i
 			})
-		}
-		for _, key = range keyList {
-			image = f.images[key]
-			if image == nil {
-				continue
+			for _, key := range keyList {
+				image := f.images[key]
+				if image == nil {
+					continue
+				}
+				f.outf("/I%s %d 0 R", image.i, image.n)
 			}
-			f.outf("/I%s %d 0 R", image.i, image.n)
 		}
 	}
 	{
@@ -308,12 +351,7 @@ func (f *Document) putxobjectdict() {
 		}
 	}
 	{
-		ids := make([]int, 0, len(f.importedPages))
-		for id := range f.importedPages {
-			ids = append(ids, id)
-		}
-		sort.Ints(ids)
-		for _, id := range ids {
+		for id := 1; id <= f.importedPageSeq; id++ {
 			page := f.importedPages[id]
 			if page != nil && page.objectID > 0 {
 				f.outf("/IPG%d %d 0 R", id, page.objectID)

@@ -6,6 +6,7 @@ package document
 import (
 	"bytes"
 	"strconv"
+	"unicode/utf8"
 )
 
 const (
@@ -50,11 +51,18 @@ func (f *Document) GetStringSymbolWidth(s string) int {
 func (f *Document) computeStringSymbolWidth(s string) int {
 	w := 0
 	if f.isCurrentUTF8 {
-		for _, char := range s {
-			w += f.currentFontRuneWidth(char)
+		if isASCIIString(s) {
+			for i := 0; i < len(s); i++ {
+				w += f.currentFontRuneWidth(rune(s[i]))
+			}
+		} else {
+			for _, char := range s {
+				w += f.currentFontRuneWidth(char)
+			}
 		}
 	} else {
-		for _, ch := range []byte(s) {
+		for i := 0; i < len(s); i++ {
+			ch := s[i]
 			if ch == 0 {
 				break
 			}
@@ -62,6 +70,15 @@ func (f *Document) computeStringSymbolWidth(s string) int {
 		}
 	}
 	return w
+}
+
+func isASCIIString(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
 }
 
 func (f *Document) stringWidthCacheKey(s string) (string, bool) {

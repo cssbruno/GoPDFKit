@@ -483,6 +483,7 @@ func (f *Document) beginpage(orientationStr string, size Size, rotation int) {
 	f.pageBoxes[f.page] = make(map[string]PageBox)
 	maps.Copy(f.pageBoxes[f.page], f.defPageBoxes)
 	f.pages = append(f.pages, bytes.NewBufferString(""))
+	f.aliasPages = append(f.aliasPages, false)
 	f.pageLinks = append(f.pageLinks, make([]pageLink, 0))
 	f.pageAttachments = append(f.pageAttachments, []annotationAttach{})
 	f.state = 2

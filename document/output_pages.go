@@ -5,7 +5,11 @@ package document
 
 import (
 	"bytes"
+	"compress/zlib"
+	"runtime"
 	"sort"
+	"strings"
+	"sync"
 )
 
 func (f *Document) replaceAliases() {
@@ -17,6 +21,9 @@ func (f *Document) replaceAliases() {
 		return
 	}
 	for n := 1; n <= f.page; n++ {
+		if n < len(f.aliasPages) && !f.aliasPages[n] {
+			continue
+		}
 		pageBytes := f.pages[n].Bytes()
 		replaced := replaceAliasBytes(pageBytes, pairs)
 		if replaced != nil {
@@ -65,6 +72,97 @@ func (f *Document) compiledAliasPairs() []aliasReplacementBytes {
 	return f.aliasPairs
 }
 
+func (f *Document) compiledAliasNeedles() [][]byte {
+	if !f.aliasNeedlesDirty && f.aliasNeedles != nil {
+		return f.aliasNeedles
+	}
+	seen := make(map[string]bool, len(f.aliasMap)+1)
+	aliases := make([]string, 0, len(f.aliasMap)+1)
+	if f.aliasNbPagesStr != "" {
+		seen[f.aliasNbPagesStr] = true
+		aliases = append(aliases, f.aliasNbPagesStr)
+	}
+	for alias := range f.aliasMap {
+		if alias == "" || seen[alias] {
+			continue
+		}
+		seen[alias] = true
+		aliases = append(aliases, alias)
+	}
+	needles := make([][]byte, 0, len(aliases)*2)
+	needleStrings := make([]string, 0, len(aliases)*2)
+	for _, alias := range aliases {
+		utf16Alias := utf8toutf16(alias, false)
+		needles = append(needles, []byte(alias), []byte(utf16Alias))
+		needleStrings = append(needleStrings, alias, utf16Alias)
+	}
+	f.aliasNeedles = needles
+	f.aliasNeedleStrings = needleStrings
+	f.aliasNeedlesDirty = false
+	return needles
+}
+
+func (f *Document) markAliasPageString(s string) {
+	if s == "" || (len(f.aliasMap) == 0 && f.aliasNbPagesStr == "") {
+		return
+	}
+	f.compiledAliasNeedles()
+	for _, needle := range f.aliasNeedleStrings {
+		if needle != "" && strings.Contains(s, needle) {
+			f.markCurrentPageAliasCandidate()
+			return
+		}
+	}
+}
+
+func (f *Document) markAliasPageBytes(data []byte) {
+	if len(data) == 0 || (len(f.aliasMap) == 0 && f.aliasNbPagesStr == "") {
+		return
+	}
+	for _, needle := range f.compiledAliasNeedles() {
+		if len(needle) > 0 && bytes.Contains(data, needle) {
+			f.markCurrentPageAliasCandidate()
+			return
+		}
+	}
+}
+
+func (f *Document) markAliasPageConservative() {
+	if len(f.aliasMap) == 0 && f.aliasNbPagesStr == "" {
+		return
+	}
+	f.markCurrentPageAliasCandidate()
+}
+
+func (f *Document) markCurrentPageAliasCandidate() {
+	if f.page <= 0 {
+		return
+	}
+	for len(f.aliasPages) <= f.page {
+		f.aliasPages = append(f.aliasPages, false)
+	}
+	f.aliasPages[f.page] = true
+}
+
+func (f *Document) markPagesContainingAlias(alias string) {
+	if alias == "" || f.page <= 0 {
+		return
+	}
+	needles := [][]byte{[]byte(alias), []byte(utf8toutf16(alias, false))}
+	for n := 1; n <= f.page && n < len(f.pages); n++ {
+		pageBytes := f.pages[n].Bytes()
+		for _, needle := range needles {
+			if len(needle) > 0 && bytes.Contains(pageBytes, needle) {
+				for len(f.aliasPages) <= n {
+					f.aliasPages = append(f.aliasPages, false)
+				}
+				f.aliasPages[n] = true
+				break
+			}
+		}
+	}
+}
+
 type aliasReplacement struct {
 	alias       string
 	replacement string
@@ -73,6 +171,13 @@ type aliasReplacement struct {
 type aliasReplacementBytes struct {
 	old []byte
 	new []byte
+}
+
+type pageStreamData struct {
+	data       []byte
+	compressed bool
+	ready      bool
+	err        error
 }
 
 func replaceAliasBytes(data []byte, pairs []aliasReplacementBytes) []byte {
@@ -124,13 +229,20 @@ func (f *Document) putpages() {
 		hPt = f.defPageSize.Wd * f.k
 	}
 	pagesObjectNumbers := make([]int, nb+1)
+	pageHeights := make([]float64, nb+1)
+	pageHeights[0] = hPt
 	nextObj := f.n + 1
 	for n := 1; n <= nb; n++ {
 		pagesObjectNumbers[n] = nextObj
+		pageHeights[n] = hPt
+		if size, ok := f.pageSizes[n]; ok {
+			pageHeights[n] = size.Ht
+		}
 		nextObj += 2 + len(f.pageLinks[n])
 	}
 	f.pageObjectNumbers = pagesObjectNumbers
 	f.tagged.pageObjNums = ensureIntSliceLen(f.tagged.pageObjNums, nb+1)
+	pageStreams := f.precompressPageStreams(nb)
 	for n := 1; n <= nb; n++ {
 		f.newobj()
 		f.tagged.pageObjNums[n] = f.n
@@ -151,20 +263,21 @@ func (f *Document) putpages() {
 			f.outf("/StructParents %d", structParents)
 		}
 		if len(f.pageLinks[n])+len(f.pageAttachments[n]) > 0 {
-			var annots fmtBuffer
-			annots.printf("/Annots [")
+			annots := make([]byte, 0, 32+len(f.pageLinks[n])*8+len(f.pageAttachments[n])*128)
+			annots = append(annots, "/Annots ["...)
 			linkObjNum := f.n + 2
 			for i := range f.pageLinks[n] {
 				f.pageLinks[n][i].objNum = linkObjNum
 				if f.pageLinks[n][i].structElem != nil {
 					f.pageLinks[n][i].structElem.ObjRef = linkObjNum
 				}
-				annots.printf("%d 0 R ", linkObjNum)
+				annots = appendPDFObjectRef(annots, linkObjNum)
+				annots = append(annots, ' ')
 				linkObjNum++
 			}
-			f.putAttachmentAnnotationLinks(&annots, n)
-			annots.printf("]")
-			f.out(annots.String())
+			annots = f.appendAttachmentAnnotationLinks(annots, n)
+			annots = append(annots, ']')
+			f.outbytes(annots)
 			if f.compliance.PDFUA2 {
 				f.out("/Tabs /S")
 			}
@@ -175,11 +288,8 @@ func (f *Document) putpages() {
 		f.outf("/Contents %d 0 R>>", f.n+1)
 		f.out("endobj")
 		f.newobj()
-		if f.compress {
-			data := f.compressBytes(f.pages[n].Bytes())
-			if f.err != nil {
-				return
-			}
+		data, compressed := f.pageStreamBytes(n, pageStreams)
+		if compressed {
 			f.outf("<</Filter /FlateDecode /Length %d>>", len(data))
 			f.putstream(data)
 		} else {
@@ -188,26 +298,78 @@ func (f *Document) putpages() {
 		}
 		f.out("endobj")
 		for _, pl := range f.pageLinks[n] {
-			f.putLinkAnnotation(pl, pagesObjectNumbers, hPt)
+			f.putLinkAnnotation(pl, pagesObjectNumbers, pageHeights)
 		}
 	}
 	f.offsets[1] = f.buffer.Len()
 	f.out("1 0 obj")
 	f.out("<</Type /Pages")
-	var kids fmtBuffer
-	kids.printf("/Kids [")
+	kids := make([]byte, 0, 16+nb*8)
+	kids = append(kids, "/Kids ["...)
 	for i := 1; i <= nb; i++ {
-		kids.printf("%d 0 R ", pagesObjectNumbers[i])
+		kids = appendPDFObjectRef(kids, pagesObjectNumbers[i])
+		kids = append(kids, ' ')
 	}
-	kids.printf("]")
-	f.out(kids.String())
+	kids = append(kids, ']')
+	f.outbytes(kids)
 	f.outf("/Count %d", nb)
 	f.outf("/MediaBox [0 0 %.2f %.2f]", wPt, hPt)
 	f.out(">>")
 	f.out("endobj")
 }
 
-func (f *Document) putLinkAnnotation(pl pageLink, pagesObjectNumbers []int, defaultPageHeight float64) {
+func (f *Document) pageStreamBytes(page int, pageStreams []pageStreamData) ([]byte, bool) {
+	if page < len(pageStreams) && pageStreams[page].ready {
+		if pageStreams[page].err != nil {
+			f.SetError(pageStreams[page].err)
+			return nil, false
+		}
+		return pageStreams[page].data, pageStreams[page].compressed
+	}
+	data, compressed := f.compressStreamBytes(f.pages[page].Bytes())
+	if f.err != nil {
+		return nil, false
+	}
+	return data, compressed
+}
+
+func (f *Document) precompressPageStreams(nb int) []pageStreamData {
+	if !f.compress || nb < 4 {
+		return nil
+	}
+	level := f.compressLevel
+	if !validCompressionLevel(level) {
+		level = zlib.BestSpeed
+	}
+	pageStreams := make([]pageStreamData, nb+1)
+	workers := runtime.GOMAXPROCS(0)
+	if workers < 1 {
+		workers = 1
+	}
+	sem := make(chan struct{}, workers)
+	var wg sync.WaitGroup
+	for page := 1; page <= nb; page++ {
+		data := f.pages[page].Bytes()
+		if len(data) < tinyStreamCompressionThreshold {
+			continue
+		}
+		pageStreams[page].ready = true
+		sem <- struct{}{}
+		wg.Add(1)
+		go func(page int, data []byte) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			compressed, err := sliceCompressLevel(data, level)
+			pageStreams[page].data = compressed
+			pageStreams[page].compressed = err == nil
+			pageStreams[page].err = err
+		}(page, data)
+	}
+	wg.Wait()
+	return pageStreams
+}
+
+func (f *Document) putLinkAnnotation(pl pageLink, pagesObjectNumbers []int, pageHeights []float64) {
 	f.newobj()
 	f.outf("<< /Type /Annot /Subtype /Link /Rect [%.2f %.2f %.2f %.2f] /Border [0 0 0] /F 4", pl.x, pl.y, pl.x+pl.wd, pl.y-pl.ht)
 	if pl.structParent >= 0 {
@@ -217,13 +379,13 @@ func (f *Document) putLinkAnnotation(pl pageLink, pagesObjectNumbers []int, defa
 		f.outf("/A << /S /URI /URI %s >>", f.textstring(pl.linkStr))
 	} else {
 		l := f.links[pl.link]
-		h := defaultPageHeight
-		if sz, ok := f.pageSizes[l.page]; ok {
-			h = sz.Ht
-		}
+		h := pageHeights[0]
 		pageObj := 0
 		if l.page > 0 && l.page < len(pagesObjectNumbers) {
 			pageObj = pagesObjectNumbers[l.page]
+		}
+		if l.page > 0 && l.page < len(pageHeights) {
+			h = pageHeights[l.page]
 		}
 		f.outf("/Dest [%d 0 R /XYZ 0 %.2f null]", pageObj, h-l.y*f.k)
 	}

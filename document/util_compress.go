@@ -15,25 +15,33 @@ import (
 func sliceCompressLevel(data []byte, level int) ([]byte, error) {
 	buf := compressBufferPool.Get().(*bytes.Buffer)
 	buf.Reset()
-	defer releaseCompressBuffer(buf)
 
 	list := zlibFreeList(level)
 	cmp, err := pooledZlibWriter(list, buf, level)
 	if err != nil {
+		releaseCompressBuffer(buf)
 		return nil, err
 	}
 	if _, err = cmp.Write(data); err != nil {
 		_ = cmp.Close()
 		releaseZlibWriter(list, cmp)
+		releaseCompressBuffer(buf)
 		return nil, err
 	}
 	if err = cmp.Close(); err != nil {
 		releaseZlibWriter(list, cmp)
+		releaseCompressBuffer(buf)
 		return nil, err
 	}
 	releaseZlibWriter(list, cmp)
+	if buf.Len() >= largeCompressedStreamNoCopyThreshold {
+		return buf.Bytes(), nil
+	}
+	defer releaseCompressBuffer(buf)
 	return append([]byte(nil), buf.Bytes()...), nil
 }
+
+const largeCompressedStreamNoCopyThreshold = 64 << 10
 
 // zlibWriterFreeLists holds reusable zlib writers per compression level. A
 // channel-based free list is used instead of sync.Pool deliberately: a

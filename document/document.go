@@ -72,6 +72,8 @@ func documentNew(orientationStr, unitStr, sizeStr, fontDirStr string, size Size)
 	f.pageAttachments = make([][]annotationAttach, 0, 8)
 	f.pageAttachments = append(f.pageAttachments, []annotationAttach{}) //
 	f.aliasMap = make(map[string]string)
+	f.aliasNeedlesDirty = true
+	f.aliasPages = []bool{false}
 	f.inHeader = false
 	f.inFooter = false
 	f.lasth = 0

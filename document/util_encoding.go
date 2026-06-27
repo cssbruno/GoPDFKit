@@ -34,6 +34,41 @@ func utf8toutf16(s string, withBOM ...bool) string {
 	return string(res)
 }
 
+func appendEscapedUTF16BE(dst []byte, s string, withBOM bool, usedRunes map[int]int) []byte {
+	if withBOM {
+		dst = appendEscapedPDFLiteralByte(dst, 0xFE)
+		dst = appendEscapedPDFLiteralByte(dst, 0xFF)
+	}
+	for _, r := range s {
+		if usedRunes != nil {
+			usedRunes[int(r)] = int(r)
+		}
+		if r <= 0xFFFF {
+			dst = appendEscapedPDFLiteralByte(dst, byte(r>>8))
+			dst = appendEscapedPDFLiteralByte(dst, byte(r))
+			continue
+		}
+		r1, r2 := utf16.EncodeRune(r)
+		dst = appendEscapedPDFLiteralByte(dst, byte(r1>>8))
+		dst = appendEscapedPDFLiteralByte(dst, byte(r1))
+		dst = appendEscapedPDFLiteralByte(dst, byte(r2>>8))
+		dst = appendEscapedPDFLiteralByte(dst, byte(r2))
+	}
+	return dst
+}
+
+func appendEscapedPDFLiteralByte(dst []byte, b byte) []byte {
+	switch b {
+	case '\\', '(', ')':
+		dst = append(dst, '\\', b)
+	case '\r':
+		dst = append(dst, '\\', 'r')
+	default:
+		dst = append(dst, b)
+	}
+	return dst
+}
+
 // doNothing returns the passed string with no translation.
 func doNothing(s string) string {
 	return s

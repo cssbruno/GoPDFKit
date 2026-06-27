@@ -6,6 +6,8 @@ package document
 import (
 	"bytes"
 	"encoding/base64"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -70,6 +72,32 @@ func TestImageCacheRegistersImageAcrossDocuments(t *testing.T) {
 		if !strings.Contains(out.String(), "/Subtype /Image") {
 			t.Fatalf("generated PDF %d missing image object", i)
 		}
+	}
+}
+
+func TestImageCacheReusesFileRegistrationByPathStatAndOptions(t *testing.T) {
+	cache := NewImageCache()
+	imagePath := filepath.Join(t.TempDir(), "pixel.PNG")
+	if err := os.WriteFile(imagePath, decodeTinyPNG(t), 0o600); err != nil {
+		t.Fatalf("write image fixture: %v", err)
+	}
+
+	first, err := cache.RegisterImageOptions("first", imagePath, ImageOptions{})
+	if err != nil {
+		t.Fatalf("first RegisterImageOptions(cache) error = %v", err)
+	}
+	second, err := cache.RegisterImageOptions("second", imagePath, ImageOptions{})
+	if err != nil {
+		t.Fatalf("second RegisterImageOptions(cache) error = %v", err)
+	}
+	if first.Width() != second.Width() || first.Height() != second.Height() {
+		t.Fatalf("cached dimensions differ: %.2fx%.2f vs %.2fx%.2f", first.Width(), first.Height(), second.Width(), second.Height())
+	}
+	if got := len(cache.fileImages); got != 1 {
+		t.Fatalf("cached file images = %d, want 1", got)
+	}
+	if got := len(cache.fileTypes); got != 1 {
+		t.Fatalf("cached file types = %d, want 1", got)
 	}
 }
 

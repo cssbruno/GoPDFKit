@@ -103,6 +103,15 @@ func (f *Document) compressBytes(data []byte) []byte {
 	return out
 }
 
+const tinyStreamCompressionThreshold = 32
+
+func (f *Document) compressStreamBytes(data []byte) ([]byte, bool) {
+	if !f.compress || len(data) < tinyStreamCompressionThreshold {
+		return data, false
+	}
+	return f.compressBytes(data), f.err == nil
+}
+
 // AliasNbPages defines an alias for the total number of pages. It will be
 // substituted as the document is closed. An empty string is replaced with the
 // string "{nb}".
@@ -113,6 +122,8 @@ func (f *Document) AliasNbPages(aliasStr string) {
 		aliasStr = "{nb}"
 	}
 	f.aliasNbPagesStr = aliasStr
+	f.aliasNeedlesDirty = true
+	f.markPagesContainingAlias(aliasStr)
 }
 
 // RTL enables right-to-left text layout mode.

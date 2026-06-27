@@ -8,10 +8,13 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"math"
 	"slices"
 	"sort"
 	"strings"
+	"sync"
+	"unsafe"
 )
 
 // Composite glyph flags.
@@ -22,18 +25,35 @@ const symbolAllScale = 1 << 6
 const symbol2x2 = 1 << 7
 
 func utf8ToUnicodeCMap() string {
-	var out strings.Builder
-	out.WriteString("/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo\n")
-	out.WriteString("<</Registry (Adobe)\n/Ordering (UCS)\n/Supplement 0\n>> def\n")
-	out.WriteString("/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n")
-	out.WriteString("1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n")
-	out.WriteString("256 beginbfrange\n")
+	return utf8ToUnicodeCMapText
+}
+
+var utf8ToUnicodeCMapText = buildUTF8ToUnicodeCMap()
+
+func buildUTF8ToUnicodeCMap() string {
+	out := make([]byte, 0, 8192)
+	out = append(out, "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo\n"...)
+	out = append(out, "<</Registry (Adobe)\n/Ordering (UCS)\n/Supplement 0\n>> def\n"...)
+	out = append(out, "/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n"...)
+	out = append(out, "1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n"...)
+	out = append(out, "256 beginbfrange\n"...)
 	for start := 0; start <= 0xff00; start += 0x100 {
 		end := start + 0xff
-		out.WriteString(fmt.Sprintf("<%04X> <%04X> <%04X>\n", start, end, start))
+		out = append(out, '<')
+		out = appendPDFHexUint16(out, start)
+		out = append(out, "> <"...)
+		out = appendPDFHexUint16(out, end)
+		out = append(out, "> <"...)
+		out = appendPDFHexUint16(out, start)
+		out = append(out, ">\n"...)
 	}
-	out.WriteString("endbfrange\nendcmap\nCMapName currentdict /CMap defineresource pop\nend")
-	return out.String()
+	out = append(out, "endbfrange\nendcmap\nCMapName currentdict /CMap defineresource pop\nend"...)
+	return string(out)
+}
+
+func appendPDFHexUint16(dst []byte, value int) []byte {
+	const hex = "0123456789ABCDEF"
+	return append(dst, hex[(value>>12)&0xf], hex[(value>>8)&0xf], hex[(value>>4)&0xf], hex[value&0xf])
 }
 
 type utf8FontFile struct {
@@ -55,7 +75,6 @@ type utf8FontFile struct {
 	UnderlineThickness   float64
 	CharWidths           []int
 	DefaultWidth         float64
-	symbolData           map[int]map[string][]int
 	CodeSymbolDictionary map[int]int
 	// static holds parsed tables that depend only on the font file (not the
 	// per-document used-rune subset). When non-nil, GenerateCutFont reuses it
@@ -76,6 +95,28 @@ type utf8StaticTables struct {
 	locaFormat           int // head indexToLocFormat
 }
 
+type utf8SubsetCacheKey struct {
+	fontPtr uintptr
+	hash    uint64
+	count   int
+}
+
+type utf8SubsetCacheValue struct {
+	data                 []byte
+	codeSymbolDictionary map[int]int
+	lastRune             int
+}
+
+var utf8SubsetCache = struct {
+	sync.Mutex
+	entries map[utf8SubsetCacheKey]utf8SubsetCacheValue
+	order   []utf8SubsetCacheKey
+}{
+	entries: make(map[utf8SubsetCacheKey]utf8SubsetCacheValue),
+}
+
+const maxUTF8SubsetCacheEntries = 32
+
 type tableDescription struct {
 	name     string
 	checksum []int
@@ -89,6 +130,8 @@ type fileReader struct {
 	err            error
 }
 
+var fontReadZeroPadding [4096]byte
+
 func (fr *fileReader) Read(s int) []byte {
 	if s < 0 {
 		fr.err = fmt.Errorf("invalid font read length: %d", s)
@@ -99,6 +142,13 @@ func (fr *fileReader) Read(s int) []byte {
 	if start < 0 || end < start || end > int64(len(fr.array)) {
 		if fr.err == nil {
 			fr.err = errors.New("unexpected end of font data")
+		}
+		if start >= int64(len(fr.array)) {
+			fr.readerPosition = int64(len(fr.array))
+			if s <= len(fontReadZeroPadding) {
+				return fontReadZeroPadding[:s]
+			}
+			return make([]byte, s)
 		}
 		out := make([]byte, s)
 		if start < 0 {
@@ -277,13 +327,13 @@ func (utf *utf8FontFile) getUint16(pos int) int {
 	return (int(s[0]) << 8) + int(s[1])
 }
 
-func (utf *utf8FontFile) splice(stream []byte, offset int, value []byte) []byte {
+func (utf *utf8FontFile) patchBytes(stream []byte, offset int, value []byte) []byte {
 	if offset < 0 || offset+len(value) > len(stream) {
-		utf.fileReader.err = errors.New("font table splice out of range")
+		utf.fileReader.err = errors.New("font table patch out of range")
 		return stream
 	}
-	stream = append([]byte{}, stream...)
-	return append(append(stream[:offset], value...), stream[offset+len(value):]...)
+	copy(stream[offset:offset+len(value)], value)
+	return stream
 }
 
 func (utf *utf8FontFile) insertUint16(stream []byte, offset int, value int) []byte {
@@ -322,7 +372,7 @@ func (utf *utf8FontFile) setOutTable(name string, data []byte) {
 		return
 	}
 	if name == "head" {
-		data = utf.splice(data, 8, []byte{0, 0, 0, 0})
+		data = utf.patchBytes(data, 8, []byte{0, 0, 0, 0})
 	}
 	utf.outTablesData[name] = data
 }
@@ -634,7 +684,6 @@ func (utf *utf8FontFile) parseSymbols(usedRunes map[int]int) (map[int]int, map[i
 	}
 	utf.CodeSymbolDictionary = runeSymbolPairCollection
 
-	symbolCollectionKeys = keySortInt(symbolCollection)
 	for _, oldSymbolIndex := range symbolCollectionKeys {
 		_, symbolArray, symbolCollection, symbolCollectionKeys = utf.getSymbols(oldSymbolIndex, glyfData, &begin, symbolArray, symbolCollection, symbolCollectionKeys)
 	}
@@ -775,6 +824,13 @@ func (utf *utf8FontFile) parseStaticTables() (*utf8StaticTables, error) {
 
 // GenerateCutFont builds a font subset containing only the runes in usedRunes.
 func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
+	cacheKey := utf.subsetCacheKey(usedRunes)
+	if cached, ok := lookupUTF8SubsetCache(cacheKey); ok {
+		utf.CodeSymbolDictionary = cloneIntMap(cached.codeSymbolDictionary)
+		utf.LastRune = cached.lastRune
+		utf.fileReader.err = nil
+		return append([]byte(nil), cached.data...)
+	}
 	utf.fileReader.readerPosition = 0
 	utf.outTablesData = make(map[string][]byte)
 	utf.Ascent = 0
@@ -842,10 +898,16 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 	glyfData := make([]byte, 0, glyphDataCapacity)
 	pos := 0
 	hmtxData := make([]byte, 0, len(symbolCollectionKeys)*4)
-	utf.symbolData = make(map[int]map[string][]int, 0)
+	hmtxTable := utf.getTableData("hmtx")
+	if utf.fileReader.err != nil {
+		return nil
+	}
 
 	for _, originalSymbolIdx := range symbolCollectionKeys {
-		hm := utf.getMetrics(oldMetrics, originalSymbolIdx)
+		hm := utf.getMetricsFromTable(hmtxTable, oldMetrics, originalSymbolIdx)
+		if utf.fileReader.err != nil {
+			return nil
+		}
 		hmtxData = append(hmtxData, hm...)
 
 		offsets = append(offsets, pos)
@@ -883,13 +945,6 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 					utf.fileReader.err = errors.New("invalid composite glyph index")
 					return nil
 				}
-				if _, OK := utf.symbolData[originalSymbolIdx]; !OK {
-					utf.symbolData[originalSymbolIdx] = make(map[string][]int)
-				}
-				if _, OK := utf.symbolData[originalSymbolIdx]["compSymbols"]; !OK {
-					utf.symbolData[originalSymbolIdx]["compSymbols"] = make([]int, 0)
-				}
-				utf.symbolData[originalSymbolIdx]["compSymbols"] = append(utf.symbolData[originalSymbolIdx]["compSymbols"], symbolIdx)
 				data = utf.insertUint16(data, posInSymbol+2, newSymbolIdx)
 				posInSymbol += 4
 				if (flags & symbolWords) != 0 {
@@ -968,7 +1023,65 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 	os2Data := utf.getTableData("OS/2")
 	utf.setOutTable("OS/2", os2Data)
 
-	return utf.assembleTables()
+	out := utf.assembleTables()
+	if utf.fileReader.err == nil && len(out) > 0 {
+		storeUTF8SubsetCache(cacheKey, utf8SubsetCacheValue{
+			data:                 append([]byte(nil), out...),
+			codeSymbolDictionary: cloneIntMap(utf.CodeSymbolDictionary),
+			lastRune:             utf.LastRune,
+		})
+	}
+	return out
+}
+
+func (utf *utf8FontFile) subsetCacheKey(usedRunes map[int]int) utf8SubsetCacheKey {
+	fontPtr := uintptr(unsafe.Pointer(utf))
+	if utf.static != nil {
+		fontPtr = uintptr(unsafe.Pointer(utf.static))
+	} else if utf.fileReader != nil && len(utf.fileReader.array) > 0 {
+		fontPtr = uintptr(unsafe.Pointer(&utf.fileReader.array[0]))
+	}
+	keys := keySortInt(usedRunes)
+	h := fnv.New64a()
+	var scratch [8]byte
+	for _, key := range keys {
+		binary.LittleEndian.PutUint64(scratch[:], uint64(key))
+		_, _ = h.Write(scratch[:])
+	}
+	return utf8SubsetCacheKey{fontPtr: fontPtr, hash: h.Sum64(), count: len(keys)}
+}
+
+func lookupUTF8SubsetCache(key utf8SubsetCacheKey) (utf8SubsetCacheValue, bool) {
+	utf8SubsetCache.Lock()
+	defer utf8SubsetCache.Unlock()
+	value, ok := utf8SubsetCache.entries[key]
+	return value, ok
+}
+
+func storeUTF8SubsetCache(key utf8SubsetCacheKey, value utf8SubsetCacheValue) {
+	utf8SubsetCache.Lock()
+	defer utf8SubsetCache.Unlock()
+	if _, ok := utf8SubsetCache.entries[key]; !ok {
+		utf8SubsetCache.order = append(utf8SubsetCache.order, key)
+	}
+	utf8SubsetCache.entries[key] = value
+	for len(utf8SubsetCache.order) > maxUTF8SubsetCacheEntries {
+		oldest := utf8SubsetCache.order[0]
+		copy(utf8SubsetCache.order, utf8SubsetCache.order[1:])
+		utf8SubsetCache.order = utf8SubsetCache.order[:len(utf8SubsetCache.order)-1]
+		delete(utf8SubsetCache.entries, oldest)
+	}
+}
+
+func cloneIntMap(in map[int]int) map[int]int {
+	if in == nil {
+		return nil
+	}
+	out := make(map[int]int, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }
 
 func (utf *utf8FontFile) getSymbols(originalSymbolIdx int, glyfData []byte, start *int, symbolSet map[int]int, symbolsCollection map[int]int, symbolsCollectionKeys []int) (*int, map[int]int, map[int]int, []int) {
@@ -1082,18 +1195,24 @@ func (utf *utf8FontFile) parseHMTXTable(numberOfHMetrics, numSymbols int, symbol
 	utf.CharWidths[0] = charCount
 }
 
-func (utf *utf8FontFile) getMetrics(metricCount, gid int) []byte {
-	start := utf.SeekTable("hmtx")
-	var metrics []byte
+func (utf *utf8FontFile) getMetricsFromTable(hmtx []byte, metricCount, gid int) []byte {
 	if gid < metricCount {
-		utf.seek(start + (gid * 4))
-		metrics = utf.fileReader.Read(4)
-	} else {
-		utf.seek(start + ((metricCount - 1) * 4))
-		metrics = utf.fileReader.Read(2)
-		utf.seek(start + (metricCount * 2) + (gid * 2))
-		metrics = append(metrics, utf.fileReader.Read(2)...)
+		offset := gid * 4
+		if offset < 0 || offset+4 > len(hmtx) {
+			utf.fileReader.err = errors.New("invalid hmtx metric bounds")
+			return nil
+		}
+		return hmtx[offset : offset+4]
 	}
+	advanceOffset := (metricCount - 1) * 4
+	leftSideBearingOffset := (metricCount * 2) + (gid * 2)
+	if advanceOffset < 0 || advanceOffset+2 > len(hmtx) || leftSideBearingOffset < 0 || leftSideBearingOffset+2 > len(hmtx) {
+		utf.fileReader.err = errors.New("invalid hmtx metric bounds")
+		return nil
+	}
+	metrics := make([]byte, 0, 4)
+	metrics = append(metrics, hmtx[advanceOffset:advanceOffset+2]...)
+	metrics = append(metrics, hmtx[leftSideBearingOffset:leftSideBearingOffset+2]...)
 	return metrics
 }
 
@@ -1213,7 +1332,7 @@ func (utf *utf8FontFile) assembleTables() []byte {
 
 	checksum := utf.generateChecksum(answer)
 	checksum = utf.calcInt32([]int{0xB1B0, 0xAFBA}, checksum)
-	answer = utf.splice(answer, (begin + 8), pack2Uint16(checksum[0], checksum[1]))
+	answer = utf.patchBytes(answer, (begin + 8), pack2Uint16(checksum[0], checksum[1]))
 	return answer
 }
 

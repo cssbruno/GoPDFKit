@@ -5,7 +5,10 @@ package importpdf_test
 
 import (
 	"bytes"
+	"io"
 	"math"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/cssbruno/gopdfkit/document"
@@ -44,6 +47,76 @@ func TestOpenBytesPageAndSizes(t *testing.T) {
 	if got := sizes[1]["MediaBox"]; math.Abs(got.Wd-595.28) > 0.01 || math.Abs(got.Ht-841.89) > 0.01 {
 		t.Fatalf("unexpected MediaBox size: %#v", got)
 	}
+}
+
+func TestOpenBytesImmutablePageAndSizes(t *testing.T) {
+	source := importSourcePDF(t)
+
+	pdf, err := importpdf.OpenBytesImmutable(source)
+	if err != nil {
+		t.Fatalf("OpenBytesImmutable() error = %v", err)
+	}
+	if got := pdf.PageCount(); got != 1 {
+		t.Fatalf("PageCount() = %d, want 1", got)
+	}
+	if _, err := pdf.Page(1, "MediaBox"); err != nil {
+		t.Fatalf("Page() error = %v", err)
+	}
+}
+
+func TestOpenReaderAtPageAndSizes(t *testing.T) {
+	source := importSourcePDF(t)
+
+	pdf, err := importpdf.OpenReaderAt(byteReaderAt(source), int64(len(source)))
+	if err != nil {
+		t.Fatalf("OpenReaderAt() error = %v", err)
+	}
+	if got := pdf.PageCount(); got != 1 {
+		t.Fatalf("PageCount() = %d, want 1", got)
+	}
+	page, err := pdf.Page(1, "MediaBox")
+	if err != nil {
+		t.Fatalf("Page() error = %v", err)
+	}
+	if math.Abs(page.WidthPoints()-595.28) > 0.01 || math.Abs(page.HeightPoints()-841.89) > 0.01 {
+		t.Fatalf("unexpected page size %.2fx%.2f", page.WidthPoints(), page.HeightPoints())
+	}
+}
+
+func TestSourceCacheOpenFileReusesParsedSource(t *testing.T) {
+	source := importSourcePDF(t)
+	path := filepath.Join(t.TempDir(), "source.pdf")
+	if err := os.WriteFile(path, source, 0o600); err != nil {
+		t.Fatalf("write source PDF: %v", err)
+	}
+	cache := importpdf.NewSourceCache()
+	first, err := cache.OpenFile(path)
+	if err != nil {
+		t.Fatalf("first OpenFile(cache) error = %v", err)
+	}
+	second, err := cache.OpenFile(path)
+	if err != nil {
+		t.Fatalf("second OpenFile(cache) error = %v", err)
+	}
+	if first != second {
+		t.Fatal("SourceCache returned different source pointers for unchanged file")
+	}
+	if _, err := importpdf.Open(first); err != nil {
+		t.Fatalf("Open(*Source) error = %v", err)
+	}
+}
+
+type byteReaderAt []byte
+
+func (r byteReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	if off < 0 || off >= int64(len(r)) {
+		return 0, os.ErrInvalid
+	}
+	n := copy(p, r[off:])
+	if n < len(p) {
+		return n, io.EOF
+	}
+	return n, nil
 }
 
 func importSourcePDF(t *testing.T) []byte {

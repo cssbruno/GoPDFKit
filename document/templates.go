@@ -165,37 +165,34 @@ type Template interface {
 }
 
 func (f *Document) templateFontCatalog() {
-	var keyList []string
-	var font fontDefinition
-	var key string
 	f.out("/Font <<")
-	for key = range f.fonts {
-		keyList = append(keyList, key)
-	}
-	if f.catalogSort {
+	if !f.catalogSort {
+		for _, font := range f.fonts {
+			f.outf("/F%s %d 0 R", font.i, font.N)
+		}
+	} else {
+		keyList := make([]string, 0, len(f.fonts))
+		for key := range f.fonts {
+			keyList = append(keyList, key)
+		}
 		sort.Strings(keyList)
-	}
-	for _, key = range keyList {
-		font = f.fonts[key]
-		f.outf("/F%s %d 0 R", font.i, font.N)
+		for _, key := range keyList {
+			font := f.fonts[key]
+			f.outf("/F%s %d 0 R", font.i, font.N)
+		}
 	}
 	f.out(">>")
 }
 
 // putTemplates writes the templates to the PDF.
 func (f *Document) putTemplates() {
-	filter := ""
-	if f.compress {
-		filter = "/Filter /FlateDecode "
-	}
-
 	templates := sortTemplates(f.templates, f.catalogSort)
 	for _, t := range templates {
 		corner, size := t.Size()
 
 		f.newobj()
 		f.templateObjects[t.ID()] = f.n
-		f.outf("<<%s/Type /XObject", filter)
+		f.out("<< /Type /XObject")
 		f.out("/Subtype /Form")
 		f.out("/Formtype 1")
 		f.outf("/BBox [%.2f %.2f %.2f %.2f]", corner.X*f.k, corner.Y*f.k, (corner.X+size.Wd)*f.k, (corner.Y+size.Ht)*f.k)
@@ -216,11 +213,12 @@ func (f *Document) putTemplates() {
 		f.out(">>")
 
 		buffer := t.Bytes()
-		if f.compress {
-			buffer = f.compressBytes(buffer)
-			if f.err != nil {
-				return
-			}
+		buffer, compressed := f.compressStreamBytes(buffer)
+		if f.err != nil {
+			return
+		}
+		if compressed {
+			f.out("/Filter /FlateDecode")
 		}
 		f.outf("/Length %d >>", len(buffer))
 		f.putstream(buffer)
@@ -242,6 +240,14 @@ func (f *Document) templateXObjectCatalog(t Template) {
 }
 
 func (f *Document) templateImageCatalog(images map[string]*ImageInfo) {
+	if !f.catalogSort {
+		for _, image := range images {
+			if image != nil {
+				f.outf("/I%s %d 0 R", image.i, image.n)
+			}
+		}
+		return
+	}
 	keyList := make([]string, 0, len(images))
 	for key := range images {
 		keyList = append(keyList, key)

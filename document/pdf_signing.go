@@ -17,7 +17,7 @@ func (f *Document) OutputSigned(w io.Writer, options sign.Options) error {
 	if err := f.Output(&buf); err != nil {
 		return err
 	}
-	signed, err := sign.Bytes(buf.Bytes(), options)
+	signed, err := sign.AppendBytes(buf.Bytes(), options)
 	if err != nil {
 		f.SetError(err)
 		return err

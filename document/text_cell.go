@@ -71,7 +71,16 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 		f.err = errors.New("font has not been set; unable to render text")
 		return
 	}
-	borderStr = strings.ToUpper(borderStr)
+	switch borderStr {
+	case "", "1":
+	default:
+		borderStr = strings.ToUpper(borderStr)
+	}
+	alignRight := strings.Contains(alignStr, "R")
+	alignCenter := strings.Contains(alignStr, "C")
+	alignTop := strings.Contains(alignStr, "T")
+	alignBottom := strings.Contains(alignStr, "B")
+	alignBaseline := strings.Contains(alignStr, "A")
 	k := f.k
 	if f.y+h > f.pageBreakTrigger && !f.inHeader && !f.inFooter && f.acceptPageBreak() {
 		x := f.x
@@ -94,6 +103,9 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 		w = f.w - f.rMargin - f.x
 	}
 	var s []byte
+	if capacity := f.estimateCellFormatBufferCapacity(txtStr, borderStr, fill); capacity > 0 {
+		s = make([]byte, 0, capacity)
+	}
 	if fill || borderStr == "1" {
 		var op string
 		if fill {
@@ -105,11 +117,9 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 		} else {
 			op = "S"
 		}
-		s = ensurePDFBuffer(s, 128+len(txtStr))
 		s = appendPDFRectPaint(s, f.x*k, (f.h-f.y)*k, w*k, -h*k, op, true)
 	}
 	if len(borderStr) > 0 && borderStr != "1" {
-		s = ensurePDFBuffer(s, 128+len(txtStr))
 		x := f.x
 		y := f.y
 		left := x * k
@@ -130,7 +140,6 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 		}
 	}
 	if len(txtStr) > 0 {
-		s = ensurePDFBuffer(s, 128+len(txtStr)*2+len(f.color.text.str))
 		var dx, dy float64
 		var textWidth float64
 		textWidthSet := false
@@ -142,19 +151,19 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 			return textWidth
 		}
 		switch {
-		case strings.Contains(alignStr, "R"):
+		case alignRight:
 			dx = w - f.cMargin - getTextWidth()
-		case strings.Contains(alignStr, "C"):
+		case alignCenter:
 			dx = (w - getTextWidth()) / 2
 		default:
 			dx = f.cMargin
 		}
 		switch {
-		case strings.Contains(alignStr, "T"):
+		case alignTop:
 			dy = (f.fontSize - h) / 2.0
-		case strings.Contains(alignStr, "B"):
+		case alignBottom:
 			dy = (h - f.fontSize) / 2.0
-		case strings.Contains(alignStr, "A"):
+		case alignBaseline:
 			var descent float64
 			d := f.currentFont.Desc
 			if d.Descent == 0 {
@@ -177,10 +186,7 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 				txtStr = reverseText(txtStr)
 			}
 			wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
-			for _, uni := range txtStr {
-				f.currentFont.usedRunes[int(uni)] = int(uni)
-			}
-			space := f.escape(utf8toutf16(" ", false))
+			space := appendEscapedUTF16BE(nil, " ", false, f.currentFont.usedRunes)
 			strSize := f.GetStringSymbolWidth(txtStr)
 			s = append(s, "BT 0 Tw "...)
 			s = appendPDFNumberSpace(s, (f.x+dx)*k, 2)
@@ -189,10 +195,23 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 			t := strings.Split(txtStr, " ")
 			shift := float64((wmax - strSize)) / float64(len(t)-1)
 			numt := len(t)
+			encodedWords := make(map[string][]byte, numt)
+			appendEncodedWord := func(dst []byte, word string) []byte {
+				if word == "" {
+					return dst
+				}
+				if encoded, ok := encodedWords[word]; ok {
+					return append(dst, encoded...)
+				}
+				start := len(dst)
+				dst = appendEscapedUTF16BE(dst, word, false, f.currentFont.usedRunes)
+				encodedWords[word] = dst[start:len(dst):len(dst)]
+				return dst
+			}
 			for i := range numt {
 				tx := t[i]
 				s = append(s, '(')
-				s = append(s, f.escape(utf8toutf16(tx, false))...)
+				s = appendEncodedWord(s, tx)
 				s = append(s, ") "...)
 				if (i + 1) < numt {
 					s = appendPDFNumber(s, -shift, 3)
@@ -203,14 +222,9 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 			}
 			s = append(s, "] TJ ET"...)
 		} else {
-			var txt2 string
 			if f.isCurrentUTF8 {
 				if f.isRTL {
 					txtStr = reverseText(txtStr)
-				}
-				txt2 = f.escape(utf8toutf16(txtStr, false))
-				for _, uni := range txtStr {
-					f.currentFont.usedRunes[int(uni)] = int(uni)
 				}
 			}
 			bt := (f.x + dx) * k
@@ -220,7 +234,7 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 			s = appendPDFNumberSpace(s, td, 2)
 			s = append(s, "Td ("...)
 			if f.isCurrentUTF8 {
-				s = append(s, txt2...)
+				s = appendEscapedUTF16BE(s, txtStr, false, f.currentFont.usedRunes)
 			} else {
 				s = appendEscapedPDFCellText(s, txtStr)
 			}
@@ -228,11 +242,11 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 		}
 		if f.underline {
 			s = append(s, ' ')
-			s = f.appendUnderlineRect(s, f.x+dx, f.y+dy+.5*h+.3*f.fontSize, txtStr)
+			s = f.appendUnderlineRectWidth(s, f.x+dx, f.y+dy+.5*h+.3*f.fontSize, getTextWidth()+f.ws*float64(blankCount(txtStr)))
 		}
 		if f.strikeout {
 			s = append(s, ' ')
-			s = f.appendStrikeoutRect(s, f.x+dx, f.y+dy+.5*h+.3*f.fontSize, txtStr)
+			s = f.appendStrikeoutRectWidth(s, f.x+dx, f.y+dy+.5*h+.3*f.fontSize, getTextWidth()+f.ws*float64(blankCount(txtStr)))
 		}
 		if f.colorFlag {
 			s = append(s, " Q"...)
@@ -255,14 +269,115 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 	}
 }
 
+func (f *Document) estimateCellFormatBufferCapacity(txtStr, borderStr string, fill bool) int {
+	capacity := 0
+	if fill || borderStr == "1" {
+		capacity += 96
+	}
+	if len(borderStr) > 0 && borderStr != "1" {
+		capacity += 44 * len(borderStr)
+	}
+	if len(txtStr) > 0 {
+		textCapacity := 64 + len(txtStr)
+		if f.isCurrentUTF8 {
+			textCapacity += len(txtStr) * 2
+		}
+		if f.colorFlag {
+			textCapacity += len(f.color.text.str) + 4
+		}
+		if f.underline {
+			textCapacity += 64
+		}
+		if f.strikeout {
+			textCapacity += 64
+		}
+		capacity += textCapacity
+	}
+	if capacity == 0 {
+		return 0
+	}
+	return capacity + 16
+}
+
+func (f *Document) cellSimple(w, h float64, txtStr string) {
+	if f.err != nil {
+		return
+	}
+	if f.currentFont.Name == "" {
+		f.err = errors.New("font has not been set; unable to render text")
+		return
+	}
+	k := f.k
+	if f.y+h > f.pageBreakTrigger && !f.inHeader && !f.inFooter && f.acceptPageBreak() {
+		x := f.x
+		f.addPageFormatRotation(f.curOrientation, f.curPageSize, f.curRotation)
+		if f.err != nil {
+			return
+		}
+		f.x = x
+	}
+	if w == 0 {
+		w = f.w - f.rMargin - f.x
+	}
+	if len(txtStr) > 0 {
+		drawText := txtStr
+		if f.isCurrentUTF8 && f.isRTL {
+			drawText = reverseText(drawText)
+		}
+		capacity := 64 + len(drawText) + 16
+		if f.isCurrentUTF8 {
+			capacity += len(drawText) * 2
+		}
+		if f.colorFlag {
+			capacity += len(f.color.text.str) + 4
+		}
+		if f.underline {
+			capacity += 64
+		}
+		if f.strikeout {
+			capacity += 64
+		}
+		s := make([]byte, 0, capacity)
+		if f.colorFlag {
+			s = append(s, "q "...)
+			s = append(s, f.color.text.str...)
+			s = append(s, ' ')
+		}
+		x := f.x + f.cMargin
+		y := f.y + .5*h + .3*f.fontSize
+		s = append(s, "BT "...)
+		s = appendPDFNumberSpace(s, x*k, 2)
+		s = appendPDFNumberSpace(s, (f.h-y)*k, 2)
+		s = append(s, "Td ("...)
+		if f.isCurrentUTF8 {
+			s = appendEscapedUTF16BE(s, drawText, false, f.currentFont.usedRunes)
+		} else {
+			s = appendEscapedPDFCellText(s, drawText)
+		}
+		s = append(s, ")Tj ET"...)
+		if f.underline || f.strikeout {
+			textWidth := f.GetStringWidth(txtStr)
+			if f.underline {
+				s = append(s, ' ')
+				s = f.appendUnderlineRectWidth(s, x, y, textWidth)
+			}
+			if f.strikeout {
+				s = append(s, ' ')
+				s = f.appendStrikeoutRectWidth(s, x, y, textWidth)
+			}
+		}
+		if f.colorFlag {
+			s = append(s, " Q"...)
+		}
+		f.outbytes(f.wrapTaggedContent(s, f.consumeNextTextTag(false)))
+	}
+	f.lasth = h
+	f.x += w
+}
+
 func appendEscapedPDFCellText(buf []byte, text string) []byte {
 	for i := 0; i < len(text); i++ {
-		switch text[i] {
-		case '\\', '(', ')':
-			buf = append(buf, '\\', text[i])
-		default:
-			buf = append(buf, text[i])
-		}
+		buf = appendEscapedPDFLiteralByte(buf, text[i])
 	}
 	return buf
 }
@@ -281,6 +396,10 @@ func reverseText(text string) string {
 // Cell is a simpler version of CellFormat with no fill, border, links or
 // special alignment. The Cell_strikeout() example demonstrates this method.
 func (f *Document) Cell(w, h float64, txtStr string) {
+	if f.ws == 0 {
+		f.cellSimple(w, h, txtStr)
+		return
+	}
 	f.CellFormat(w, h, txtStr, "", 0, "L", false, 0, "")
 }
 
@@ -288,5 +407,9 @@ func (f *Document) Cell(w, h float64, txtStr string) {
 // links or special alignment. See documentation for the fmt package for
 // details on fmtStr and args.
 func (f *Document) Cellf(w, h float64, fmtStr string, args ...any) {
+	if f.ws == 0 {
+		f.cellSimple(w, h, sprintf(fmtStr, args...))
+		return
+	}
 	f.CellFormat(w, h, sprintf(fmtStr, args...), "", 0, "L", false, 0, "")
 }

@@ -135,7 +135,7 @@ func (html *HTML) writeParsedTable(compiled *CompiledHTML, table htmlTableType, 
 		return end
 	}
 	pdf := html.pdf
-	pdf.BeginStructure("Table")
+	pdf.BeginStructure(taggedRoleTable)
 	defer pdf.EndStructure()
 	if len(table.rows) > html.maxTableRows() {
 		pdf.SetErrorf("HTML table row count exceeds maximum size")
@@ -201,13 +201,13 @@ func (html *HTML) writeParsedTable(compiled *CompiledHTML, table htmlTableType, 
 		html.renderTableCaption(compiled, table, startX, tableWd, lineHt, inherited, fallback, cssRules, tableAncestors)
 	}
 	renderRow := func(measuredRow htmlTableMeasuredRow, rowHt float64, forceTopBorder bool) float64 {
-		pdf.BeginStructure("TR")
+		pdf.BeginStructure(taggedRoleTR)
 		defer pdf.EndStructure()
 		y := pdf.GetY()
 		for _, measuredCell := range measuredRow.cells {
-			cellRole := "TD"
+			cellRole := taggedRoleTD
 			if measuredCell.placement.cellIndex >= 0 && measuredCell.placement.cellIndex < len(measuredRow.row.row.cells) && measuredRow.row.row.cells[measuredCell.placement.cellIndex].header {
-				cellRole = "TH"
+				cellRole = taggedRoleTH
 			}
 			placement := measuredCell.placement
 			pdf.beginTableCellStructure(cellRole, taggedTableAttributes{
@@ -349,7 +349,7 @@ func (html *HTML) renderTableCellStructuredTokens(tokens []HTMLSegmentType, meas
 		case 'T':
 			if len(items) > 0 {
 				item := items[len(items)-1]
-				writeText("LBody", token.Str, item.bodyX, item.bodyWd)
+				writeText(taggedRoleLBody, token.Str, item.bodyX, item.bodyWd)
 			} else {
 				writeText(currentTextRole(), token.Str, baseX, baseWd)
 			}
@@ -362,13 +362,13 @@ func (html *HTML) renderTableCellStructuredTokens(tokens []HTMLSegmentType, meas
 				i = html.writeTable(tokens, i, effectiveLineHt, measuredCell.style, fallback, nil, nil)
 				pdf.SetX(baseX)
 			case "p", "div", "section", "article", "header", "footer":
-				pdf.BeginStructure("P")
-				blockRoles = append(blockRoles, "P")
+				pdf.BeginStructure(taggedRoleP)
+				blockRoles = append(blockRoles, taggedRoleP)
 			case "ul", "ol":
 				st := measuredCell.style
 				st.list = token.Str
 				lists = append(lists, htmlListStateFromElement(st, token.Attr, effectiveLineHt))
-				pdf.BeginStructure("L")
+				pdf.BeginStructure(taggedRoleL)
 			case "li":
 				if len(lists) == 0 {
 					continue
@@ -395,11 +395,11 @@ func (html *HTML) renderTableCellStructuredTokens(tokens []HTMLSegmentType, meas
 					bodyWd = baseWd - (bodyX - baseX)
 				}
 				y := pdf.GetY()
-				pdf.BeginStructure("LI")
+				pdf.BeginStructure(taggedRoleLI)
 				pdf.SetXY(markerX, y)
-				pdf.SetNextTextRole("Lbl")
+				pdf.SetNextTextRole(taggedRoleLbl)
 				pdf.CellFormat(markerWd, effectiveLineHt, list.marker(), "", 0, "R", false, 0, "")
-				pdf.BeginStructure("LBody")
+				pdf.BeginStructure(taggedRoleLBody)
 				pdf.SetXY(bodyX, y)
 				items = append(items, htmlTableCellListContext{bodyX: bodyX, bodyWd: bodyWd, startY: y})
 			case "br":
@@ -478,7 +478,7 @@ func htmlTableCellStructuredTag(tag string) bool {
 }
 
 func htmlTableCellScope(role string, row htmlTableRow, placement htmlTableCellPlacement) string {
-	if role != "TH" {
+	if role != taggedRoleTH {
 		return ""
 	}
 	if scope := strings.ToLower(strings.TrimSpace(row.cells[placement.cellIndex].attrs["scope"])); scope != "" {
@@ -1124,7 +1124,7 @@ func (html *HTML) renderTableCaption(compiled *CompiledHTML, table htmlTableType
 		return
 	}
 	html.pdf.SetX(x)
-	html.pdf.SetNextTextRole("Caption")
+	html.pdf.SetNextTextRole(taggedRoleCaption)
 	html.pdf.MultiCell(tableWd, htmlEffectiveLineHeight(style, lineHt), text, "", style.align, false)
 	html.pdf.Ln(htmlEffectiveLineHeight(style, lineHt) * 0.5)
 }

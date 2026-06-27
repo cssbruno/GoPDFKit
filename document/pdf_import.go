@@ -16,9 +16,13 @@ const (
 )
 
 type importedPDFPage struct {
-	id       int
-	page     *importpdf.PageRef
-	objectID int
+	id                 int
+	page               *importpdf.PageRef
+	objectID           int
+	rewrittenBaseID    int
+	rewrittenRefs      []importpdf.ObjRef
+	rewrittenObjects   [][]byte
+	rewrittenResources []byte
 }
 
 // ImportPage imports one page from a PDF file and returns its imported page ID.
@@ -47,8 +51,18 @@ func (f *Document) ImportPageStream(source io.Reader, pageNo int, box string) in
 	return f.importPageFromSource(sourcePDF, pageNo, box)
 }
 
+// ImportPageSource imports one page from an already parsed PDF source.
+func (f *Document) ImportPageSource(source *importpdf.Source, pageNo int, box string) int {
+	if source == nil {
+		f.SetErrorf("PDF import source is nil")
+		return 0
+	}
+	return f.importPageFromSource(source, pageNo, box)
+}
+
 // ImportPagesFromSource imports every page from source and returns the imported
-// page IDs. source may be a file path string, []byte, or io.Reader.
+// page IDs. source may be a file path string, []byte, io.Reader, or
+// *importpdf.Source.
 func (f *Document) ImportPagesFromSource(source any, box string) []int {
 	sourcePDF, err := importpdf.Open(source)
 	if err != nil {
@@ -107,6 +121,35 @@ func (f *Document) addImportedPDFPage(page *importpdf.PageRef) int {
 	return f.importedPageSeq
 }
 
+func (page *importedPDFPage) rewrittenImportData(baseID int, objects []importpdf.Object, refMap map[importpdf.ObjRef]int) ([][]byte, []byte) {
+	if page.rewrittenImportDataMatches(baseID, objects) {
+		return page.rewrittenObjects, page.rewrittenResources
+	}
+	rewrittenObjects := make([][]byte, len(objects))
+	rewrittenRefs := make([]importpdf.ObjRef, len(objects))
+	for i, object := range objects {
+		rewrittenObjects[i] = importpdf.RewriteIndirectRefs(object.Body, refMap)
+		rewrittenRefs[i] = object.Ref
+	}
+	page.rewrittenBaseID = baseID
+	page.rewrittenRefs = rewrittenRefs
+	page.rewrittenObjects = rewrittenObjects
+	page.rewrittenResources = importpdf.RewriteIndirectRefs(page.page.Resources(), refMap)
+	return page.rewrittenObjects, page.rewrittenResources
+}
+
+func (page *importedPDFPage) rewrittenImportDataMatches(baseID int, objects []importpdf.Object) bool {
+	if page.rewrittenBaseID != baseID || len(page.rewrittenObjects) != len(objects) || len(page.rewrittenRefs) != len(objects) || page.rewrittenResources == nil {
+		return false
+	}
+	for i, object := range objects {
+		if page.rewrittenRefs[i] != object.Ref {
+			return false
+		}
+	}
+	return true
+}
+
 // UseImportedPage draws a page imported by ImportPage, ImportPageStream, or
 // ImportPagesFromSource. Coordinates and dimensions use the document unit.
 // Passing zero for one dimension preserves the imported page aspect ratio;
@@ -139,7 +182,16 @@ func (f *Document) UseImportedPage(pageID int, x, y, w, h float64) {
 		f.SetErrorf("invalid imported page placement: %.4f %.4f %.4f %.4f", x, y, w, h)
 		return
 	}
-	content := []byte(sprintf("q %.5f 0 0 %.5f %.5f %.5f cm /IPG%d Do Q", w*f.k, h*f.k, x*f.k, (f.h-(y+h))*f.k, pageID))
+	content := make([]byte, 0, 64)
+	content = append(content, "q "...)
+	content = appendPDFNumberSpace(content, w*f.k, 5)
+	content = append(content, "0 0 "...)
+	content = appendPDFNumberSpace(content, h*f.k, 5)
+	content = appendPDFNumberSpace(content, x*f.k, 5)
+	content = appendPDFNumberSpace(content, (f.h-(y+h))*f.k, 5)
+	content = append(content, "cm /IPG"...)
+	content = appendPDFInt(content, pageID)
+	content = append(content, " Do Q"...)
 	f.outbytes(f.wrapTaggedContent(content, taggedContentOptions{Artifact: true}))
 }
 

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/cssbruno/gopdfkit/document"
+	"github.com/cssbruno/gopdfkit/importpdf"
 )
 
 func importSourcePDF(t *testing.T, compress bool) []byte {
@@ -78,10 +79,38 @@ func TestImportPageFromFileBytesAndReader(t *testing.T) {
 		t.Fatalf("target Output() error = %v", err)
 	}
 	output := out.String()
-	for _, needle := range []string{"/Subtype /Form", "/IPG1", "/IPG2", "/IPG3", "Imported PDF source page"} {
+	for _, needle := range []string{"/Subtype /Form", "/IPG1", "/IPG2", "/IPG3", "/Filter /FlateDecode"} {
 		if !strings.Contains(output, needle) {
 			t.Fatalf("imported PDF output missing %q", needle)
 		}
+	}
+}
+
+func TestImportPageFromParsedSource(t *testing.T) {
+	source := importSourcePDF(t, true)
+	sourcePDF, err := importpdf.OpenBytes(source)
+	if err != nil {
+		t.Fatalf("OpenBytes() error = %v", err)
+	}
+
+	pdf := document.New("P", "pt", "A4", "")
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	pageID := pdf.ImportPageSource(sourcePDF, 1, "MediaBox")
+	if pageID == 0 {
+		t.Fatalf("ImportPageSource() page ID = 0, error = %v", pdf.Error())
+	}
+	pdf.UseImportedPage(pageID, 72, 72, 200, 0)
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if !bytes.Contains(out.Bytes(), []byte("/Subtype /Form")) {
+		t.Fatal("output missing imported page form XObject")
+	}
+	if !bytes.Contains(out.Bytes(), []byte("/Filter /FlateDecode")) {
+		t.Fatal("output did not preserve imported FlateDecode content")
 	}
 }
 

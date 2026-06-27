@@ -8,8 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"path/filepath"
-	"strings"
 
 	"golang.org/x/image/webp"
 )
@@ -197,14 +195,12 @@ func decodeMaskImage(path string, options ImageOptions) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	imageType := strings.ToLower(options.ImageType)
-	if imageType == "jpeg" {
-		imageType = "jpg"
-	}
+	imageType := normalizeImageType(options.ImageType)
 	if imageType == "" {
-		imageType = strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")
-		if imageType == "jpeg" {
-			imageType = "jpg"
+		var ok bool
+		imageType, ok = inferImageTypeFromPath(path)
+		if !ok {
+			return nil, fmt.Errorf("image file has no extension and no type was specified: %s", path)
 		}
 	}
 	if imageType == "webp" {

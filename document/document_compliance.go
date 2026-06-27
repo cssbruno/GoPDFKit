@@ -229,6 +229,7 @@ func (f *Document) buildComplianceXMP() []byte {
 	creation := timeOrNow(f.creationDate)
 	mod := timeOrNow(f.modDate)
 	title := firstNonEmpty(f.compliance.Title, f.title)
+	out.Grow(f.estimateComplianceXMPSize(title))
 
 	out.WriteString(`<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>` + "\n")
 	out.WriteString(`<x:xmpmeta xmlns:x="adobe:ns:meta/">` + "\n")
@@ -309,6 +310,21 @@ func (f *Document) buildComplianceXMP() []byte {
 	out.WriteString(`</x:xmpmeta>` + "\n")
 	out.WriteString(`<?xpacket end="w"?>`)
 	return out.Bytes()
+}
+
+func (f *Document) estimateComplianceXMPSize(title string) int {
+	size := 640
+	size += 2 * (len(title) + len(f.author) + len(f.subject) + len(f.keywords) + len(f.producer) + len(f.creator) + len(f.compliance.Identifier))
+	if f.compliance.PDFA != PDFAModeNone {
+		size += 160
+	}
+	if f.compliance.PDFUA2 {
+		size += 128
+	}
+	if f.compliance.Arlington {
+		size += 128
+	}
+	return size
 }
 
 func pdfA4Conformance(mode PDFAMode) string {

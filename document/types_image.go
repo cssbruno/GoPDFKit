@@ -6,10 +6,13 @@ package document
 import (
 	"bytes"
 	"crypto/sha1"
+	"encoding/binary"
 	"encoding/gob"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
+	"io"
 	"math"
 	"strconv"
 	"strings"
@@ -61,15 +64,53 @@ func generateImageID(info *ImageInfo) (string, error) {
 		return "", errors.New("image info is nil")
 	}
 	h := sha1.New()
-	fields := []any{info.data, info.smask, info.n, info.w, info.h, info.cs,
-		info.pal, info.bpc, info.f, info.dp, info.trns, info.scale, info.dpi}
-	encoder := gob.NewEncoder(h)
-	for _, field := range fields {
-		if err := encoder.Encode(field); err != nil {
-			return "", err
-		}
+	hashImageBytes(h, 'd', info.data)
+	hashImageBytes(h, 'm', info.smask)
+	hashImageInt(h, 'n', info.n)
+	hashImageFloat(h, 'w', info.w)
+	hashImageFloat(h, 'h', info.h)
+	hashImageString(h, 'c', info.cs)
+	hashImageBytes(h, 'p', info.pal)
+	hashImageInt(h, 'b', info.bpc)
+	hashImageString(h, 'f', info.f)
+	hashImageString(h, 'q', info.dp)
+	hashImageInt(h, 't', len(info.trns))
+	for _, value := range info.trns {
+		hashImageInt(h, 'v', value)
 	}
+	hashImageFloat(h, 's', info.scale)
+	hashImageFloat(h, 'i', info.dpi)
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func hashImageBytes(h hash.Hash, tag byte, value []byte) {
+	var scratch [9]byte
+	scratch[0] = tag
+	binary.BigEndian.PutUint64(scratch[1:], uint64(len(value)))
+	h.Write(scratch[:])
+	h.Write(value)
+}
+
+func hashImageString(h hash.Hash, tag byte, value string) {
+	var scratch [9]byte
+	scratch[0] = tag
+	binary.BigEndian.PutUint64(scratch[1:], uint64(len(value)))
+	h.Write(scratch[:])
+	io.WriteString(h, value)
+}
+
+func hashImageInt(h hash.Hash, tag byte, value int) {
+	var scratch [9]byte
+	scratch[0] = tag
+	binary.BigEndian.PutUint64(scratch[1:], uint64(int64(value)))
+	h.Write(scratch[:])
+}
+
+func hashImageFloat(h hash.Hash, tag byte, value float64) {
+	var scratch [9]byte
+	scratch[0] = tag
+	binary.BigEndian.PutUint64(scratch[1:], math.Float64bits(value))
+	h.Write(scratch[:])
 }
 
 // GobEncode encodes the receiving image to a byte slice.

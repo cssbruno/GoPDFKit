@@ -14,20 +14,14 @@ import (
 // or Write(), which are the standard methods for printing text.
 func (f *Document) Text(x, y float64, txtStr string) {
 	tag := f.consumeNextTextTag(false)
-	var txt2 string
+	utf8Text := f.isCurrentUTF8
 	if f.isCurrentUTF8 {
 		if f.isRTL {
 			txtStr = reverseText(txtStr)
 			x -= f.GetStringWidth(txtStr)
 		}
-		txt2 = f.escape(utf8toutf16(txtStr, false))
-		for _, uni := range txtStr {
-			f.currentFont.usedRunes[int(uni)] = int(uni)
-		}
-	} else {
-		txt2 = f.escape(txtStr)
 	}
-	buf := make([]byte, 0, len(txt2)+len(f.color.text.str)+96)
+	buf := make([]byte, 0, len(txtStr)*2+len(f.color.text.str)+96)
 	if f.colorFlag {
 		buf = append(buf, "q "...)
 		buf = append(buf, f.color.text.str...)
@@ -37,7 +31,11 @@ func (f *Document) Text(x, y float64, txtStr string) {
 	buf = appendPDFNumberSpace(buf, x*f.k, 2)
 	buf = appendPDFNumberSpace(buf, (f.h-y)*f.k, 2)
 	buf = append(buf, "Td ("...)
-	buf = append(buf, txt2...)
+	if utf8Text {
+		buf = appendEscapedUTF16BE(buf, txtStr, false, f.currentFont.usedRunes)
+	} else {
+		buf = appendEscapedPDFCellText(buf, txtStr)
+	}
 	buf = append(buf, ") Tj ET"...)
 	if f.underline && txtStr != "" {
 		buf = append(buf, ' ')
@@ -86,7 +84,10 @@ func (f *Document) write(h float64, txtStr string, link int, linkStr string) {
 	cw := f.currentFont.Cw
 	w := f.w - f.rMargin - f.x
 	wmax := (w - 2*f.cMargin) * 1000 / f.fontSize
-	s := strings.ReplaceAll(txtStr, "\r", "")
+	s := txtStr
+	if strings.Contains(txtStr, "\r") {
+		s = strings.ReplaceAll(txtStr, "\r", "")
+	}
 	if f.isCurrentUTF8 {
 		if s == " " {
 			f.x += f.GetStringWidth(s)
@@ -351,15 +352,21 @@ func (f *Document) SetUnderlineThickness(thickness float64) {
 }
 
 func (f *Document) appendUnderlineRect(buf []byte, x, y float64, txt string) []byte {
+	return f.appendUnderlineRectWidth(buf, x, y, f.GetStringWidth(txt)+f.ws*float64(blankCount(txt)))
+}
+
+func (f *Document) appendUnderlineRectWidth(buf []byte, x, y, width float64) []byte {
 	up := float64(f.currentFont.Up)
 	ut := float64(f.currentFont.Ut) * f.userUnderlineThickness
-	w := f.GetStringWidth(txt) + f.ws*float64(blankCount(txt))
-	return appendPDFRectPaint(buf, x*f.k, (f.h-(y-up/1000*f.fontSize))*f.k, w*f.k, -ut/1000*f.fontSizePt, "f", false)
+	return appendPDFRectPaint(buf, x*f.k, (f.h-(y-up/1000*f.fontSize))*f.k, width*f.k, -ut/1000*f.fontSizePt, "f", false)
 }
 
 func (f *Document) appendStrikeoutRect(buf []byte, x, y float64, txt string) []byte {
+	return f.appendStrikeoutRectWidth(buf, x, y, f.GetStringWidth(txt)+f.ws*float64(blankCount(txt)))
+}
+
+func (f *Document) appendStrikeoutRectWidth(buf []byte, x, y, width float64) []byte {
 	up := float64(f.currentFont.Up)
 	ut := float64(f.currentFont.Ut)
-	w := f.GetStringWidth(txt) + f.ws*float64(blankCount(txt))
-	return appendPDFRectPaint(buf, x*f.k, (f.h-(y+4*up/1000*f.fontSize))*f.k, w*f.k, -ut/1000*f.fontSizePt, "f", false)
+	return appendPDFRectPaint(buf, x*f.k, (f.h-(y+4*up/1000*f.fontSize))*f.k, width*f.k, -ut/1000*f.fontSizePt, "f", false)
 }

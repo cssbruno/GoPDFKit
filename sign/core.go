@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -73,19 +74,45 @@ type Options struct {
 	SignatureSize int
 }
 
+type preparedOptions struct {
+	Options
+	DigestAlgorithm crypto.Hash
+	SubFilter       string
+	SigningTime     time.Time
+	SignatureBytes  int
+}
+
 // Bytes signs a PDF byte slice and returns a new signed PDF.
 func Bytes(input []byte, options Options) ([]byte, error) {
 	if len(input) == 0 {
 		return nil, ErrMissingInput
 	}
-	if err := options.validate(); err != nil {
+	prepared, err := prepareSigningOptions(options)
+	if err != nil {
 		return nil, err
 	}
 	ctx, err := analyzePDF(input)
 	if err != nil {
 		return nil, err
 	}
-	return signPDFContext(ctx, options)
+	return signPDFContext(ctx, prepared, false)
+}
+
+// AppendBytes signs a PDF byte slice and may reuse input's backing array for
+// the returned signed PDF. Callers must not use input after calling AppendBytes.
+func AppendBytes(input []byte, options Options) ([]byte, error) {
+	if len(input) == 0 {
+		return nil, ErrMissingInput
+	}
+	prepared, err := prepareSigningOptions(options)
+	if err != nil {
+		return nil, err
+	}
+	ctx, err := analyzePDF(input)
+	if err != nil {
+		return nil, err
+	}
+	return signPDFContext(ctx, prepared, true)
 }
 
 // File signs inputPath and writes the signed PDF to outputPath.
@@ -111,20 +138,50 @@ func File(inputPath, outputPath string, options Options) error {
 }
 
 func (options Options) validate() error {
+	_, err := prepareSigningOptions(options)
+	return err
+}
+
+func prepareSigningOptions(options Options) (preparedOptions, error) {
 	if options.Signer == nil {
-		return ErrMissingSigner
+		return preparedOptions{}, ErrMissingSigner
 	}
 	if options.Certificate == nil {
-		return ErrMissingCertificate
+		return preparedOptions{}, ErrMissingCertificate
 	}
 	if !publicKeysEqual(options.Signer.Public(), options.Certificate.PublicKey) {
-		return errors.New("pdfsigning: signer public key does not match certificate")
+		return preparedOptions{}, errors.New("pdfsigning: signer public key does not match certificate")
 	}
-	if _, err := normalizeSubFilter(options.SubFilter); err != nil {
-		return err
+	subFilter, err := normalizeSubFilter(options.SubFilter)
+	if err != nil {
+		return preparedOptions{}, err
 	}
-	_, err := normalizeDigest(options.DigestAlgorithm)
-	return err
+	digest, err := normalizeDigest(options.DigestAlgorithm)
+	if err != nil {
+		return preparedOptions{}, err
+	}
+	signatureBytes := options.SignatureSize
+	if signatureBytes == 0 {
+		signatureBytes = defaultSignatureBytes
+	}
+	if signatureBytes < 2048 || signatureBytes > maxSignatureBytes {
+		return preparedOptions{}, fmt.Errorf("pdfsigning: SignatureSize must be between 2048 and %d bytes", maxSignatureBytes)
+	}
+	signingTime := options.SigningTime
+	if signingTime.IsZero() {
+		signingTime = time.Now().UTC()
+	}
+	options.SubFilter = subFilter
+	options.DigestAlgorithm = digest
+	options.SigningTime = signingTime
+	options.SignatureSize = signatureBytes
+	return preparedOptions{
+		Options:         options,
+		DigestAlgorithm: digest,
+		SubFilter:       subFilter,
+		SigningTime:     signingTime,
+		SignatureBytes:  signatureBytes,
+	}, nil
 }
 
 func normalizeSubFilter(subFilter string) (string, error) {
@@ -138,47 +195,33 @@ func normalizeSubFilter(subFilter string) (string, error) {
 	}
 }
 
-func signPDFContext(ctx pdfContext, options Options) ([]byte, error) {
-	signatureBytes := options.SignatureSize
-	if signatureBytes == 0 {
-		signatureBytes = defaultSignatureBytes
+func signPDFContext(ctx pdfContext, options preparedOptions, reuseInput bool) ([]byte, error) {
+	placeholderHex := make([]byte, options.SignatureBytes*2)
+	for i := range placeholderHex {
+		placeholderHex[i] = '0'
 	}
-	if signatureBytes < 2048 || signatureBytes > maxSignatureBytes {
-		return nil, fmt.Errorf("pdfsigning: SignatureSize must be between 2048 and %d bytes", maxSignatureBytes)
-	}
-	signingTime := options.SigningTime
-	if signingTime.IsZero() {
-		signingTime = time.Now().UTC()
-	}
-	options.SigningTime = signingTime
-	placeholderHex := strings.Repeat("0", signatureBytes*2)
 	byteRangePlaceholder := byteRangePlaceholder()
 	increment, err := buildIncrement(ctx, options, byteRangePlaceholder, placeholderHex)
 	if err != nil {
 		return nil, err
 	}
-	output := make([]byte, 0, len(ctx.Data)+len(increment))
-	output = append(output, ctx.Data...)
-	output = append(output, increment...)
-	incrementStart := len(ctx.Data)
-	contentsStart, contentsEnd, err := findContentsRange(output[incrementStart:], placeholderHex)
-	if err != nil {
-		return nil, err
+	var output []byte
+	if reuseInput {
+		output = append(ctx.Data, increment.data...)
+	} else {
+		output = make([]byte, 0, len(ctx.Data)+len(increment.data))
+		output = append(output, ctx.Data...)
+		output = append(output, increment.data...)
 	}
-	contentsStart += incrementStart
-	contentsEnd += incrementStart
+	incrementStart := len(ctx.Data)
+	contentsStart := incrementStart + increment.contentsStart
+	contentsEnd := incrementStart + increment.contentsEnd
 	byteRange := []int{0, contentsStart, contentsEnd, len(output) - contentsEnd}
 	byteRangeValue := formatByteRange(byteRange)
-	byteRangeOffset := bytes.Index(output[incrementStart:], []byte(byteRangePlaceholder))
-	if byteRangeOffset < 0 {
-		return nil, errors.New("pdfsigning: ByteRange placeholder not found")
-	}
-	byteRangeOffset += incrementStart
+	byteRangeOffset := incrementStart + increment.byteRangeOffset
 	copy(output[byteRangeOffset:byteRangeOffset+len(byteRangeValue)], byteRangeValue)
-	signedContent := make([]byte, 0, byteRange[1]+byteRange[3])
-	signedContent = append(signedContent, output[:contentsStart]...)
-	signedContent = append(signedContent, output[contentsEnd:]...)
-	cms, err := CreateCMS(signedContent, CMSOptions{Signer: options.Signer, Certificate: options.Certificate, CertificateChain: options.CertificateChain, DigestAlgorithm: options.DigestAlgorithm, Detached: true, SigningTime: signingTime})
+	contentDigest := digestByteRange(output, contentsStart, contentsEnd, options.DigestAlgorithm)
+	cms, err := createDetachedCMSWithPreparedDigest(contentDigest, options)
 	if err != nil {
 		return nil, err
 	}
@@ -192,60 +235,103 @@ func signPDFContext(ctx pdfContext, options Options) ([]byte, error) {
 	return output, nil
 }
 
-func buildIncrement(ctx pdfContext, options Options, byteRangePlaceholder, contentsPlaceholder string) ([]byte, error) {
+func digestByteRange(output []byte, contentsStart, contentsEnd int, digest crypto.Hash) []byte {
+	h := digest.New()
+	h.Write(output[:contentsStart])
+	h.Write(output[contentsEnd:])
+	return h.Sum(nil)
+}
+
+type signingIncrement struct {
+	data            []byte
+	byteRangeOffset int
+	contentsStart   int
+	contentsEnd     int
+}
+
+type signatureDictionaryData struct {
+	body            []byte
+	byteRangeOffset int
+	contentsStart   int
+	contentsEnd     int
+}
+
+func buildIncrement(ctx pdfContext, options preparedOptions, byteRangePlaceholder string, contentsPlaceholder []byte) (signingIncrement, error) {
 	rootDict, err := readObjectDict(ctx.Data, ctx.Root, ctx.ObjectOffsets[ctx.Root.Object])
 	if err != nil {
-		return nil, fmt.Errorf("read root object: %w", err)
+		return signingIncrement{}, fmt.Errorf("read root object: %w", err)
 	}
 	pageDict, err := readObjectDict(ctx.Data, ctx.Page, ctx.ObjectOffsets[ctx.Page.Object])
 	if err != nil {
-		return nil, fmt.Errorf("read page object: %w", err)
+		return signingIncrement{}, fmt.Errorf("read page object: %w", err)
 	}
 	acroObject := ctx.Size
 	fieldObject := ctx.Size + 1
 	signatureObject := ctx.Size + 2
-	if subFilter, _ := normalizeSubFilter(options.SubFilter); subFilter == SubFilterETSI_CAdESDetached {
+	if options.SubFilter == SubFilterETSI_CAdESDetached {
 		rootDict, err = addPAdESExtension(rootDict)
 		if err != nil {
-			return nil, err
+			return signingIncrement{}, err
 		}
 	}
 	rootDict, err = addDictEntry(rootDict, "/AcroForm", fmt.Sprintf("%d 0 R", acroObject))
 	if err != nil {
-		return nil, err
+		return signingIncrement{}, err
 	}
 	pageDict, err = addAnnotation(pageDict, fmt.Sprintf("%d 0 R", fieldObject))
 	if err != nil {
-		return nil, err
+		return signingIncrement{}, err
 	}
 	fieldName := options.FieldName
 	if fieldName == "" {
 		fieldName = "Signature1"
 	}
-	signingTime := options.SigningTime
-	if signingTime.IsZero() {
-		signingTime = time.Now().UTC()
-	}
 	var buf bytes.Buffer
 	entries := make([]xrefEntry, 0, 5)
-	addObject := func(ref pdfRef, body string) {
+	addObjectBytes := func(ref pdfRef, body []byte) int {
 		buf.WriteByte('\n')
 		entries = append(entries, xrefEntry{Object: ref.Object, Generation: ref.Generation, Offset: len(ctx.Data) + buf.Len()})
-		fmt.Fprintf(&buf, "%d %d obj\n%s\nendobj\n", ref.Object, ref.Generation, body)
+		writeBufferInt(&buf, ref.Object)
+		buf.WriteByte(' ')
+		writeBufferInt(&buf, ref.Generation)
+		buf.WriteString(" obj\n")
+		bodyStart := buf.Len()
+		buf.Write(body)
+		buf.WriteString("\nendobj\n")
+		return bodyStart
 	}
-	addObject(ctx.Root, string(rootDict))
-	addObject(ctx.Page, string(pageDict))
+	addObject := func(ref pdfRef, body string) {
+		addObjectBytes(ref, []byte(body))
+	}
+	addObjectBytes(ctx.Root, rootDict)
+	addObjectBytes(ctx.Page, pageDict)
 	addObject(pdfRef{Object: acroObject}, fmt.Sprintf("<< /Fields [%d 0 R] /SigFlags 3 >>", fieldObject))
 	addObject(pdfRef{Object: fieldObject}, fmt.Sprintf("<< /Type /Annot /Subtype /Widget /FT /Sig /T %s /Rect [0 0 0 0] /F 132 /P %d %d R /V %d 0 R >>", pdfString(fieldName), ctx.Page.Object, ctx.Page.Generation, signatureObject))
-	addObject(pdfRef{Object: signatureObject}, signatureDictionary(options, byteRangePlaceholder, contentsPlaceholder, signingTime))
+	signatureDict := signatureDictionaryBytes(options, byteRangePlaceholder, contentsPlaceholder)
+	signatureBodyStart := addObjectBytes(pdfRef{Object: signatureObject}, signatureDict.body)
+	byteRangeOffset := signatureBodyStart + signatureDict.byteRangeOffset
+	contentsStart := signatureBodyStart + signatureDict.contentsStart
+	contentsEnd := signatureBodyStart + signatureDict.contentsEnd
 	xrefOffset := len(ctx.Data) + buf.Len()
 	writeXref(&buf, entries)
 	trailerExtras, err := preservedTrailerEntries(ctx.Trailer)
 	if err != nil {
-		return nil, err
+		return signingIncrement{}, err
 	}
-	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root %d %d R%s /Prev %d >>\nstartxref\n%d\n%%%%EOF\n", ctx.Size+3, ctx.Root.Object, ctx.Root.Generation, trailerExtras, ctx.PreviousXref, xrefOffset)
-	return buf.Bytes(), nil
+	buf.WriteString("trailer\n<< /Size ")
+	writeBufferInt(&buf, ctx.Size+3)
+	buf.WriteString(" /Root ")
+	writeBufferInt(&buf, ctx.Root.Object)
+	buf.WriteByte(' ')
+	writeBufferInt(&buf, ctx.Root.Generation)
+	buf.WriteString(" R")
+	buf.WriteString(trailerExtras)
+	buf.WriteString(" /Prev ")
+	writeBufferInt(&buf, ctx.PreviousXref)
+	buf.WriteString(" >>\nstartxref\n")
+	writeBufferInt(&buf, xrefOffset)
+	buf.WriteString("\n%%EOF\n")
+	return signingIncrement{data: buf.Bytes(), byteRangeOffset: byteRangeOffset, contentsStart: contentsStart, contentsEnd: contentsEnd}, nil
 }
 
 func addPAdESExtension(rootDict []byte) ([]byte, error) {
@@ -255,23 +341,37 @@ func addPAdESExtension(rootDict []byte) ([]byte, error) {
 	return addDictEntry(rootDict, "/Extensions", "<< /ESIC << /BaseVersion /1.7 /ExtensionLevel 1 >> >>")
 }
 
-func signatureDictionary(options Options, byteRangePlaceholder, contentsPlaceholder string, signingTime time.Time) string {
-	subFilter, _ := normalizeSubFilter(options.SubFilter)
-	fields := []string{"<< /Type /Sig", "/Filter /Adobe.PPKLite", "/SubFilter /" + subFilter, "/ByteRange " + byteRangePlaceholder, "/Contents <" + contentsPlaceholder + ">", "/M " + pdfString(pdfDate(signingTime))}
+func signatureDictionaryBytes(options preparedOptions, byteRangePlaceholder string, contentsPlaceholder []byte) signatureDictionaryData {
+	buf := make([]byte, 0, len(contentsPlaceholder)+256)
+	buf = append(buf, "<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /"...)
+	buf = append(buf, options.SubFilter...)
+	buf = append(buf, " /ByteRange "...)
+	byteRangeOffset := len(buf)
+	buf = append(buf, byteRangePlaceholder...)
+	buf = append(buf, " /Contents <"...)
+	contentsStart := len(buf) - 1
+	buf = append(buf, contentsPlaceholder...)
+	contentsEnd := len(buf) + 1
+	buf = append(buf, "> /M "...)
+	buf = append(buf, pdfString(pdfDate(options.SigningTime))...)
 	if options.Name != "" {
-		fields = append(fields, "/Name "+pdfString(options.Name))
+		buf = append(buf, " /Name "...)
+		buf = append(buf, pdfString(options.Name)...)
 	}
 	if options.Location != "" {
-		fields = append(fields, "/Location "+pdfString(options.Location))
+		buf = append(buf, " /Location "...)
+		buf = append(buf, pdfString(options.Location)...)
 	}
 	if options.Reason != "" {
-		fields = append(fields, "/Reason "+pdfString(options.Reason))
+		buf = append(buf, " /Reason "...)
+		buf = append(buf, pdfString(options.Reason)...)
 	}
 	if options.ContactInfo != "" {
-		fields = append(fields, "/ContactInfo "+pdfString(options.ContactInfo))
+		buf = append(buf, " /ContactInfo "...)
+		buf = append(buf, pdfString(options.ContactInfo)...)
 	}
-	fields = append(fields, ">>")
-	return strings.Join(fields, " ")
+	buf = append(buf, " >>"...)
+	return signatureDictionaryData{body: buf, byteRangeOffset: byteRangeOffset, contentsStart: contentsStart, contentsEnd: contentsEnd}
 }
 
 func writeXref(buf *bytes.Buffer, entries []xrefEntry) {
@@ -285,23 +385,32 @@ func writeXref(buf *bytes.Buffer, entries []xrefEntry) {
 		for j < len(entries) && entries[j].Object == entries[j-1].Object+1 {
 			j++
 		}
-		fmt.Fprintf(buf, "%d %d\n", first, j-i)
+		writeBufferInt(buf, first)
+		buf.WriteByte(' ')
+		writeBufferInt(buf, j-i)
+		buf.WriteByte('\n')
 		for _, entry := range entries[i:j] {
-			fmt.Fprintf(buf, "%010d %05d n \n", entry.Offset, entry.Generation)
+			writeBufferPaddedInt(buf, entry.Offset, 10)
+			buf.WriteByte(' ')
+			writeBufferPaddedInt(buf, entry.Generation, 5)
+			buf.WriteString(" n \n")
 		}
 		i = j
 	}
 }
 
-func findContentsRange(input []byte, placeholderHex string) (int, int, error) {
-	needle := []byte("/Contents <" + placeholderHex + ">")
-	idx := bytes.Index(input, needle)
-	if idx < 0 {
-		return 0, 0, errors.New("pdfsigning: signature contents placeholder not found")
+func writeBufferInt(buf *bytes.Buffer, value int) {
+	var scratch [20]byte
+	buf.Write(strconv.AppendInt(scratch[:0], int64(value), 10))
+}
+
+func writeBufferPaddedInt(buf *bytes.Buffer, value, width int) {
+	var scratch [20]byte
+	raw := strconv.AppendInt(scratch[:0], int64(value), 10)
+	for padding := width - len(raw); padding > 0; padding-- {
+		buf.WriteByte('0')
 	}
-	start := idx + len("/Contents ")
-	end := start + 1 + len(placeholderHex) + 1
-	return start, end, nil
+	buf.Write(raw)
 }
 
 func byteRangePlaceholder() string {

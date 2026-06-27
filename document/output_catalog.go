@@ -75,6 +75,8 @@ func (f *Document) RegisterAlias(alias, replacement string) {
 	}
 	f.aliasMap[alias] = replacement
 	f.aliasPairsDirty = true
+	f.aliasNeedlesDirty = true
+	f.markPagesContainingAlias(alias)
 }
 
 func (f *Document) putresourcedict() {
@@ -83,20 +85,22 @@ func (f *Document) putresourcedict() {
 	}
 	f.out("/Font <<")
 	{
-		var keyList []string
-		var font fontDefinition
-		var key string
-		for key = range f.fonts {
-			keyList = append(keyList, key)
-		}
-		if f.catalogSort {
+		if !f.catalogSort {
+			for _, font := range f.fonts {
+				f.outf("/F%s %d 0 R", font.i, font.N)
+			}
+		} else {
+			keyList := make([]string, 0, len(f.fonts))
+			for key := range f.fonts {
+				keyList = append(keyList, key)
+			}
 			sort.SliceStable(keyList, func(i, j int) bool {
 				return f.fonts[keyList[i]].i < f.fonts[keyList[j]].i
 			})
-		}
-		for _, key = range keyList {
-			font = f.fonts[key]
-			f.outf("/F%s %d 0 R", font.i, font.N)
+			for _, key := range keyList {
+				font := f.fonts[key]
+				f.outf("/F%s %d 0 R", font.i, font.N)
+			}
 		}
 	}
 	f.out(">>")
@@ -417,6 +421,7 @@ func (f *Document) enddoc() {
 		return
 	}
 	f.ensureComplianceMetadata()
+	f.buffer.Grow(f.estimateFinalBufferSize())
 	f.layerEndDoc()
 	f.putheader()
 	f.putAttachments()
@@ -457,4 +462,42 @@ func (f *Document) enddoc() {
 	f.outPDFIntLine(o)
 	f.out("%%EOF")
 	f.state = 3
+}
+
+func (f *Document) estimateFinalBufferSize() int {
+	size := 4096 + len(f.pages)*512 + len(f.images)*512 + len(f.fonts)*1024 + len(f.attachments)*512
+	for page := 1; page < len(f.pages); page++ {
+		if f.pages[page] != nil {
+			size += f.pages[page].Len()
+		}
+	}
+	for _, image := range f.images {
+		if image == nil {
+			continue
+		}
+		size += len(image.data) + len(image.smask) + len(image.pal) + 256
+	}
+	for _, tpl := range f.templates {
+		size += len(tpl.Bytes()) + 512
+	}
+	for _, data := range f.importedObjs {
+		size += len(data)
+	}
+	for _, page := range f.importedPages {
+		if page == nil || page.page == nil {
+			continue
+		}
+		size += len(page.page.Resources()) + len(page.page.Content()) + 256
+	}
+	for _, attachment := range f.attachments {
+		size += len(attachment.Content) + 256
+	}
+	size += len(f.xmp)
+	if f.javascript != nil {
+		size += len(*f.javascript)
+	}
+	if size < 0 {
+		return 0
+	}
+	return size
 }

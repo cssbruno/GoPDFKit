@@ -6,10 +6,21 @@ package document
 import "strings"
 
 const (
-	taggedRoleP      = "P"
-	taggedRoleFigure = "Figure"
-	taggedRoleLink   = "Link"
+	taggedRoleP       = "P"
+	taggedRoleFigure  = "Figure"
+	taggedRoleLink    = "Link"
+	taggedRoleTable   = "Table"
+	taggedRoleTR      = "TR"
+	taggedRoleTD      = "TD"
+	taggedRoleTH      = "TH"
+	taggedRoleL       = "L"
+	taggedRoleLI      = "LI"
+	taggedRoleLbl     = "Lbl"
+	taggedRoleLBody   = "LBody"
+	taggedRoleCaption = "Caption"
 )
+
+var taggedArtifactMarkedContent = []byte("/Artifact BMC\n")
 
 type taggedPDFState struct {
 	enabled           bool
@@ -250,7 +261,7 @@ func (f *Document) beginTaggedContent(tag taggedContentOptions) []byte {
 		return nil
 	}
 	if tag.Artifact {
-		return []byte("/Artifact BMC\n")
+		return taggedArtifactMarkedContent
 	}
 	role := normalizeTaggedRole(tag.Role)
 	if role == "" {
@@ -260,7 +271,13 @@ func (f *Document) beginTaggedContent(tag taggedContentOptions) []byte {
 	if role == taggedRoleLink {
 		f.tagged.pendingLinkElem = elem
 	}
-	return []byte(sprintf("/%s <</MCID %d>> BDC\n", role, mcid))
+	out := make([]byte, 0, len(role)+24)
+	out = append(out, '/')
+	out = append(out, role...)
+	out = append(out, " <</MCID "...)
+	out = appendPDFInt(out, mcid)
+	out = append(out, ">> BDC\n"...)
+	return out
 }
 
 func (f *Document) registerTaggedElement(role, alt string) (*taggedElement, int) {
@@ -361,7 +378,7 @@ func (f *Document) putTaggedElement(elem *taggedElement) {
 	}
 	if attr := f.taggedTableAttributeString(elem); attr != "" {
 		f.outf("/A %s", attr)
-	} else if elem.Role == "L" {
+	} else if elem.Role == taggedRoleL {
 		f.out("/A << /O /List /ListNumbering /Disc >>")
 	}
 	kids := f.taggedElementKids(elem)
@@ -371,13 +388,14 @@ func (f *Document) putTaggedElement(elem *taggedElement) {
 	case 1:
 		f.outf("/K %s", kids[0])
 	default:
-		var out fmtBuffer
-		out.printf("/K [")
+		out := make([]byte, 0, 8+len(kids)*16)
+		out = append(out, "/K ["...)
 		for _, kid := range kids {
-			out.printf("%s ", kid)
+			out = append(out, kid...)
+			out = append(out, ' ')
 		}
-		out.printf("]")
-		f.out(out.String())
+		out = append(out, ']')
+		f.outbytes(out)
 	}
 	f.out(">>")
 	f.out("endobj")
@@ -387,24 +405,27 @@ func (f *Document) taggedTableAttributeString(elem *taggedElement) string {
 	if elem == nil || (elem.Table.Scope == "" && elem.Table.RowSpan <= 1 && elem.Table.ColSpan <= 1) {
 		return ""
 	}
-	var out fmtBuffer
-	out.printf("<< /O /Table")
+	out := make([]byte, 0, 64)
+	out = append(out, "<< /O /Table"...)
 	if elem.Table.Scope != "" {
-		out.printf(" /Scope /%s", elem.Table.Scope)
+		out = append(out, " /Scope /"...)
+		out = append(out, elem.Table.Scope...)
 	}
 	if elem.Table.RowSpan > 1 {
-		out.printf(" /RowSpan %d", elem.Table.RowSpan)
+		out = append(out, " /RowSpan "...)
+		out = appendPDFInt(out, elem.Table.RowSpan)
 	}
 	if elem.Table.ColSpan > 1 {
-		out.printf(" /ColSpan %d", elem.Table.ColSpan)
+		out = append(out, " /ColSpan "...)
+		out = appendPDFInt(out, elem.Table.ColSpan)
 	}
-	out.printf(" >>")
-	return out.String()
+	out = append(out, " >>"...)
+	return string(out)
 }
 
 func normalizeTaggedTableAttributes(role string, attrs taggedTableAttributes) taggedTableAttributes {
 	role = normalizeTaggedRole(role)
-	if role != "TH" && role != "TD" {
+	if role != taggedRoleTH && role != taggedRoleTD {
 		return taggedTableAttributes{}
 	}
 	if attrs.RowSpan < 1 {
@@ -414,7 +435,7 @@ func normalizeTaggedTableAttributes(role string, attrs taggedTableAttributes) ta
 		attrs.ColSpan = 1
 	}
 	scope := normalizeTaggedRole(attrs.Scope)
-	if role == "TH" {
+	if role == taggedRoleTH {
 		switch scope {
 		case "Row", "Column", "Both":
 			attrs.Scope = scope
@@ -436,16 +457,24 @@ func (f *Document) taggedElementKids(elem *taggedElement) []string {
 		kids = append(kids, f.taggedMCR(marked.Page, marked.MCID))
 	}
 	for _, child := range elem.Children {
-		kids = append(kids, sprintf("%d 0 R", child.ObjNum))
+		kids = append(kids, string(appendPDFObjectRef(nil, child.ObjNum)))
 	}
 	if elem.ObjRef > 0 {
-		kids = append(kids, sprintf("<< /Type /OBJR /Obj %d 0 R >>", elem.ObjRef))
+		objr := []byte("<< /Type /OBJR /Obj ")
+		objr = appendPDFObjectRef(objr, elem.ObjRef)
+		objr = append(objr, " >>"...)
+		kids = append(kids, string(objr))
 	}
 	return kids
 }
 
 func (f *Document) taggedMCR(page, mcid int) string {
-	return sprintf("<< /Type /MCR /Pg %d 0 R /MCID %d >>", f.tagged.pageObjNums[page], mcid)
+	out := []byte("<< /Type /MCR /Pg ")
+	out = appendPDFObjectRef(out, f.tagged.pageObjNums[page])
+	out = append(out, " /MCID "...)
+	out = appendPDFInt(out, mcid)
+	out = append(out, " >>"...)
+	return string(out)
 }
 
 func (f *Document) putTaggedDocumentElement() {
@@ -458,15 +487,16 @@ func (f *Document) putTaggedDocumentElement() {
 		f.outf("/NS %d 0 R", f.tagged.namespaceObj)
 	}
 	if len(f.tagged.elems) > 0 {
-		var kids fmtBuffer
-		kids.printf("/K [")
+		kids := make([]byte, 0, 8+len(f.tagged.elems)*8)
+		kids = append(kids, "/K ["...)
 		for _, elem := range f.tagged.elems {
 			if elem.Parent == nil {
-				kids.printf("%d 0 R ", elem.ObjNum)
+				kids = appendPDFObjectRef(kids, elem.ObjNum)
+				kids = append(kids, ' ')
 			}
 		}
-		kids.printf("]")
-		f.out(kids.String())
+		kids = append(kids, ']')
+		f.outbytes(kids)
 	} else {
 		f.out("/K []")
 	}
@@ -477,27 +507,32 @@ func (f *Document) putTaggedDocumentElement() {
 func (f *Document) putTaggedParentTree() {
 	f.newobj()
 	f.out("<<")
-	var nums fmtBuffer
-	nums.printf("/Nums [")
+	nums := make([]byte, 0, 64)
+	nums = append(nums, "/Nums ["...)
 	for page := 1; page < len(f.tagged.pageElems); page++ {
 		key := f.taggedPageStructParents(page)
 		if key < 0 {
 			continue
 		}
-		nums.printf("%d [", key)
+		nums = appendPDFInt(nums, key)
+		nums = append(nums, " ["...)
 		for _, elem := range f.tagged.pageElems[page] {
-			nums.printf("%d 0 R ", elem.ObjNum)
+			nums = appendPDFObjectRef(nums, elem.ObjNum)
+			nums = append(nums, ' ')
 		}
-		nums.printf("] ")
+		nums = append(nums, "] "...)
 	}
 	for _, obj := range f.tagged.parentTreeObjects {
 		if obj.Elem == nil {
 			continue
 		}
-		nums.printf("%d %d 0 R ", obj.Key, obj.Elem.ObjNum)
+		nums = appendPDFInt(nums, obj.Key)
+		nums = append(nums, ' ')
+		nums = appendPDFObjectRef(nums, obj.Elem.ObjNum)
+		nums = append(nums, ' ')
 	}
-	nums.printf("]")
-	f.out(nums.String())
+	nums = append(nums, ']')
+	f.outbytes(nums)
 	f.out(">>")
 	f.out("endobj")
 }

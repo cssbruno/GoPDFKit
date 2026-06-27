@@ -198,7 +198,7 @@ func cloneAttachment(a Attachment) Attachment {
 }
 
 // putAnnotationsAttachments embeds attachments used by annotations and stores
-// their object numbers for putAttachmentAnnotationLinks(), which is called for
+// their object numbers for appendAttachmentAnnotationLinks(), which is called for
 // each page.
 func (f *Document) putAnnotationsAttachments() {
 	// Avoid duplicate embedded attachments.
@@ -214,18 +214,26 @@ func (f *Document) putAnnotationsAttachments() {
 	}
 }
 
-func (f *Document) putAttachmentAnnotationLinks(out *fmtBuffer, page int) {
+func (f *Document) appendAttachmentAnnotationLinks(out []byte, page int) []byte {
 	for _, an := range f.pageAttachments[page] {
 		x1, y1, x2, y2 := an.x, an.y, an.x+an.w, an.y-an.h
-		as := fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [%.2f %.2f %.2f %.2f] /Length 0 >>",
-			x1, y1, x2, y2)
-		as += "\nstream\nendstream"
-
-		out.printf("<< /Type /Annot /Subtype /FileAttachment /Rect [%.2f %.2f %.2f %.2f] /Border [0 0 0]\n",
-			x1, y1, x2, y2)
-		out.printf("/Contents %s ", f.textstring(utf8toutf16(an.Description)))
-		out.printf("/T %s ", f.textstring(utf8toutf16(an.Filename)))
-		out.printf("/AP << /N %s>>", as)
-		out.printf("/FS %d 0 R >>\n", an.objectNumber)
+		out = append(out, "<< /Type /Annot /Subtype /FileAttachment /Rect ["...)
+		out = appendPDFNumberSpace(out, x1, 2)
+		out = appendPDFNumberSpace(out, y1, 2)
+		out = appendPDFNumberSpace(out, x2, 2)
+		out = appendPDFNumber(out, y2, 2)
+		out = append(out, "] /Border [0 0 0]\n/Contents "...)
+		out = append(out, f.textstring(utf8toutf16(an.Description))...)
+		out = append(out, " /T "...)
+		out = append(out, f.textstring(utf8toutf16(an.Filename))...)
+		out = append(out, " /AP << /N << /Type /XObject /Subtype /Form /BBox ["...)
+		out = appendPDFNumberSpace(out, x1, 2)
+		out = appendPDFNumberSpace(out, y1, 2)
+		out = appendPDFNumberSpace(out, x2, 2)
+		out = appendPDFNumber(out, y2, 2)
+		out = append(out, "] /Length 0 >>\nstream\nendstream>>/FS "...)
+		out = appendPDFObjectRef(out, an.objectNumber)
+		out = append(out, " >>\n"...)
 	}
+	return out
 }

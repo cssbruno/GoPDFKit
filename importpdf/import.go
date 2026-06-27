@@ -31,6 +31,11 @@ type PageUser interface {
 // Open parses a PDF source. source may be a file path string, []byte, or io.Reader.
 func Open(source any) (*Source, error) {
 	switch src := source.(type) {
+	case *Source:
+		if src == nil {
+			return nil, errors.New("PDF import source is nil")
+		}
+		return src, nil
 	case string:
 		return OpenFile(src)
 	case []byte:
@@ -52,7 +57,17 @@ func OpenFile(path string) (*Source, error) {
 	if info, err := file.Stat(); err == nil && info.Mode().IsRegular() && info.Size() > MaxSourceBytes {
 		return nil, errors.New("PDF import source exceeds maximum size")
 	}
-	return OpenReader(file)
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	source, err := OpenReaderAt(file, info.Size())
+	if err != nil {
+		return nil, err
+	}
+	source.path = path
+	source.readerAt = nil
+	return source, nil
 }
 
 // OpenBytes parses PDF bytes.
@@ -60,7 +75,31 @@ func OpenBytes(data []byte) (*Source, error) {
 	if len(data) > MaxSourceBytes {
 		return nil, errors.New("PDF import source exceeds maximum size")
 	}
-	return parseSource(append([]byte(nil), data...))
+	return OpenBytesImmutable(append([]byte(nil), data...))
+}
+
+// OpenBytesImmutable parses PDF bytes without copying them. The caller must not
+// mutate data while the returned Source is in use.
+func OpenBytesImmutable(data []byte) (*Source, error) {
+	if len(data) > MaxSourceBytes {
+		return nil, errors.New("PDF import source exceeds maximum size")
+	}
+	return parseSource(data)
+}
+
+// OpenReaderAt parses a seekable PDF source without copying the whole file.
+// The caller must keep r readable while the returned Source is used.
+func OpenReaderAt(r io.ReaderAt, size int64) (*Source, error) {
+	if r == nil {
+		return nil, errors.New("PDF import source is nil")
+	}
+	if size < 0 {
+		return nil, errors.New("PDF import source size is invalid")
+	}
+	if size > MaxSourceBytes {
+		return nil, errors.New("PDF import source exceeds maximum size")
+	}
+	return parseSourceReaderAt(r, size)
 }
 
 // OpenReader reads and parses a PDF stream.
@@ -72,7 +111,7 @@ func OpenReader(r io.Reader) (*Source, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseSource(data)
+	return OpenBytesImmutable(data)
 }
 
 // GetPageSizes returns available page box sizes for a PDF source. Sizes are
