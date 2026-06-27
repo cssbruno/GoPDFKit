@@ -35,18 +35,18 @@ func (f *Document) WriteDocument(doc *LayoutDocument) {
 	if doc.Metadata.Author != "" {
 		f.SetAuthor(doc.Metadata.Author, true)
 	}
-	chrome := doc.PageChrome()
-	f.applyPageChromeMargins(chrome)
+	template := doc.PageTemplate
+	f.applyPageTemplateMargins(template)
 	if len(doc.Attachments) > 0 {
 		f.SetAttachments(documentAttachments(doc.Attachments))
 	}
 	if f.page == 0 {
 		f.AddPage()
 	}
-	if alias := chrome.PageTotalAlias(); alias != "" {
+	if alias := template.PageTotalAlias(); alias != "" {
 		f.AliasNbPages(alias)
 	}
-	renderer := documentRenderer{pdf: f, chrome: chrome, renderedFooters: make(map[int]bool)}
+	renderer := documentRenderer{pdf: f, template: template, renderedFooters: make(map[int]bool)}
 	renderer.renderHeader()
 	renderer.renderBlocks(doc.Body)
 	if doc.Signature != nil {
@@ -62,9 +62,9 @@ func (f *Document) WriteDocument(doc *LayoutDocument) {
 
 type documentRenderer struct {
 	pdf             *Document
-	chrome          PageChrome
+	template        PageTemplate
 	renderedFooters map[int]bool
-	renderingChrome bool
+	renderingShell  bool
 }
 
 func (r *documentRenderer) contentWidth() float64 {
@@ -72,22 +72,19 @@ func (r *documentRenderer) contentWidth() float64 {
 }
 
 func (r *documentRenderer) availableHeight() float64 {
-	reservedFooter := r.chrome.FooterReservedHeightForPage(r.pdf.page)
+	reservedFooter := r.template.FooterReservedHeightForPage(r.pdf.page)
 	return r.pdf.h - r.pdf.bMargin - reservedFooter - r.pdf.GetY()
 }
 
 func (r *documentRenderer) renderHeader() {
-	header := r.chrome.Header
-	if r.pdf.page == 1 && r.chrome.FirstPageHeader != nil {
-		header = r.chrome.FirstPageHeader
-	}
+	header := r.template.HeaderForPage(r.pdf.page)
 	if header == nil {
 		return
 	}
 	startY := r.pdf.GetY()
-	wasRenderingChrome := r.renderingChrome
-	r.renderingChrome = true
-	defer func() { r.renderingChrome = wasRenderingChrome }()
+	wasRenderingShell := r.renderingShell
+	r.renderingShell = true
+	defer func() { r.renderingShell = wasRenderingShell }()
 	r.renderBlocks(header.Blocks)
 	if header.Height > 0 && r.pdf.GetY() < startY+header.Height {
 		r.pdf.SetY(startY + header.Height)
@@ -98,8 +95,8 @@ func (r *documentRenderer) renderFooter() {
 	if r.pdf.page <= 0 || r.renderedFooters[r.pdf.page] {
 		return
 	}
-	footer := r.chrome.FooterForPage(r.pdf.page)
-	if footer == nil && r.chrome.PageNumberText(r.pdf.page) == "" {
+	footer := r.template.FooterForPage(r.pdf.page)
+	if footer == nil && r.template.PageNumberText(r.pdf.page) == "" {
 		return
 	}
 	r.renderedFooters[r.pdf.page] = true
@@ -112,13 +109,13 @@ func (r *documentRenderer) renderFooter() {
 		y = r.pdf.tMargin
 	}
 	r.pdf.SetY(y)
-	wasRenderingChrome := r.renderingChrome
-	r.renderingChrome = true
-	defer func() { r.renderingChrome = wasRenderingChrome }()
+	wasRenderingShell := r.renderingShell
+	r.renderingShell = true
+	defer func() { r.renderingShell = wasRenderingShell }()
 	if footer != nil {
 		r.renderBlocks(footer.Blocks)
 	}
-	if text := r.chrome.PageNumberText(r.pdf.page); text != "" {
+	if text := r.template.PageNumberText(r.pdf.page); text != "" {
 		r.applyTextStyle(TextStyle{FontFamily: "Helvetica", FontSize: 9})
 		r.pdf.CellFormat(r.contentWidth(), 5, text, "", 1, "R", false, 0, "")
 	}
@@ -138,14 +135,14 @@ func (r *documentRenderer) renderBlock(block Block) {
 		return
 	}
 	if pageBreak, ok := block.(PageBreakBlock); ok {
-		if !r.renderingChrome && (pageBreak.Before || pageBreak.After) {
-			r.addPageWithChrome()
+		if !r.renderingShell && (pageBreak.Before || pageBreak.After) {
+			r.addPageWithTemplate()
 		}
 		return
 	}
 	measure := MeasureBlock(NewMeasureContext(r.pdf, r.contentWidth()), block)
-	if !r.renderingChrome && (measure.BreakBefore || measure.ShouldMoveToNextPage(r.availableHeight())) {
-		r.addPageWithChrome()
+	if !r.renderingShell && (measure.BreakBefore || measure.ShouldMoveToNextPage(r.availableHeight())) {
+		r.addPageWithTemplate()
 	}
 	switch b := block.(type) {
 	case ParagraphBlock:
@@ -183,12 +180,12 @@ func (r *documentRenderer) renderBlock(block Block) {
 		}
 		r.renderBox(b.Box, func() { r.renderBlocks(b.Blocks) })
 	}
-	if !r.renderingChrome && measure.BreakAfter {
-		r.addPageWithChrome()
+	if !r.renderingShell && measure.BreakAfter {
+		r.addPageWithTemplate()
 	}
 }
 
-func (r *documentRenderer) addPageWithChrome() {
+func (r *documentRenderer) addPageWithTemplate() {
 	r.renderFooter()
 	if r.pdf.err != nil {
 		return
@@ -283,7 +280,7 @@ func (r *documentRenderer) renderTableRow(row TableRow, widths []float64) {
 		rowHeight = 6
 	}
 	if rowHeight > r.availableHeight() && r.pdf.GetY() > r.pdf.tMargin {
-		r.addPageWithChrome()
+		r.addPageWithTemplate()
 		x, y = r.pdf.GetXY()
 	}
 	col := 0
@@ -653,8 +650,8 @@ func documentHeadingBox(box BoxStyle) BoxStyle {
 	return box
 }
 
-func (f *Document) applyPageChromeMargins(chrome PageChrome) {
-	margins := chrome.Margins
+func (f *Document) applyPageTemplateMargins(template PageTemplate) {
+	margins := template.Margins
 	if margins.Top <= 0 && margins.Right <= 0 && margins.Bottom <= 0 && margins.Left <= 0 {
 		return
 	}

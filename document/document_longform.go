@@ -18,7 +18,7 @@ func LongFormHTMLDocumentModel(title, htmlStr string) (*LayoutDocument, []string
 		doc.Body = append(doc.Body, HeadingBlock{Level: 1, Segments: []TextSegment{{Text: doc.Title}}})
 	}
 	doc.Body = append(doc.Body, htmlBlocksFromTokens(HTMLTokenize(bodyHTML))...)
-	doc.Footer = footer
+	doc.PageTemplate.Footer = footer
 	return doc, messages
 }
 

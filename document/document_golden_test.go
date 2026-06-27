@@ -23,7 +23,7 @@ func TestWriteDocumentGoldenPDFs(t *testing.T) {
 		{name: "attestation", doc: goldenAttestationDocument(), want: "5687e7e68bf85ef8bf8d1804941c98fdff8a8b2176279ef11536b96d78dfc889"},
 		{name: "statement", doc: goldenStatementDocument(), want: "dced39394068a3f88cc13b7adffd8927993ac1e03ef4a77a2b3b3e54157e5260"},
 		{name: "generic-free-text", doc: goldenGenericDocument(), want: "29a5c5d6fff0e779252e67ced3b7ac4f57741e05093e94117a59cd174c3d34c9"},
-		{name: "long-form", doc: goldenLongFormDocument(), want: "e7bfe7fbb22b655ff5db81636198aaafc35e45ce952c5a066e66664567c39fe3"},
+		{name: "long-form", doc: goldenLongFormDocument(), want: "9f7d4f7aae6e07d285abda83e9cdac0f3ddddbfa468488d4006f4bf45e50e22e"},
 		{name: "form", doc: FormDocumentModel(testFormDocument()), want: "9872be18e4a4297ca791483fa5b79f3be58df02c363ac366bcdb2c38804a388b"},
 		{name: "qr-signature", doc: goldenQRSignatureDocument(), want: "35b2abdce636d94e848b6db999fed1478414ae11a3d0435949971cce6932af78"},
 	}
@@ -59,8 +59,9 @@ func goldenDocumentPDFSHA(t *testing.T, doc *LayoutDocument) string {
 func goldenStructuredReportDocument() *LayoutDocument {
 	doc := NewLayoutDocument(DocumentKindReport)
 	doc.Title = "Structured Report"
-	doc.Header = &HeaderBlock{Height: 8, Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Structured Header"}}, Style: TextStyle{FontSize: 9}}}}
-	doc.Footer = &FooterBlock{Height: 8, ShowPageNumber: true, TotalPageAlias: "{total}", ReservePageArea: true}
+	doc.PageTemplate.Header = &HeaderBlock{Height: 8, Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Structured Header"}}, Style: TextStyle{FontSize: 9}}}}
+	doc.PageTemplate.Footer = &FooterBlock{Height: 8, ReservePageArea: true}
+	doc.PageTemplate.PageNumbers = PageNumberOptions{Enabled: true, TotalPageAlias: "{total}"}
 	doc.Body = []Block{
 		HeadingBlock{Level: 1, Segments: []TextSegment{{Text: "Structured Report"}}},
 		MetadataGridBlock{Fields: []MetadataField{{Label: "ID", Value: "SR-001"}, {Label: "Status", Value: "Final"}}},

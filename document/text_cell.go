@@ -162,7 +162,8 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 			s = append(s, f.color.text.str...)
 			s = append(s, ' ')
 		}
-		if (f.ws != 0 || alignStr == "J") && f.isCurrentUTF8 {
+		utf8JustifyParts := strings.Fields(txtStr)
+		if (f.ws != 0 || alignStr == "J") && f.isCurrentUTF8 && len(utf8JustifyParts) > 1 {
 			if f.isRTL {
 				txtStr = reverseText(txtStr)
 			}

@@ -5,6 +5,8 @@ package document
 
 import (
 	"bytes"
+	"encoding/base64"
+	"os"
 	"strings"
 	"testing"
 )
@@ -15,16 +17,15 @@ func TestWriteDocumentRendersSharedBlocks(t *testing.T) {
 	doc := NewLayoutDocument(DocumentKindReport)
 	doc.Title = "Shared renderer"
 	doc.Metadata.Subject = "Renderer test"
-	doc.Header = &HeaderBlock{
+	doc.PageTemplate.Header = &HeaderBlock{
 		Height: 8,
 		Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Header text"}}, Style: TextStyle{FontSize: 9}}},
 	}
-	doc.Footer = &FooterBlock{
+	doc.PageTemplate.Footer = &FooterBlock{
 		Height:          8,
-		ShowPageNumber:  true,
-		TotalPageAlias:  "{total}",
 		ReservePageArea: true,
 	}
+	doc.PageTemplate.PageNumbers = PageNumberOptions{Enabled: true, TotalPageAlias: "{total}"}
 	doc.Body = []Block{
 		HeadingBlock{Level: 1, Segments: []TextSegment{{Text: "Shared Document"}}},
 		MetadataGridBlock{Fields: []MetadataField{{Label: "ID", Value: "ABC-123"}, {Label: "Status", Value: "Ready"}}},
@@ -149,6 +150,172 @@ func TestWriteDocumentErrorsForEmptyQRVerificationBlock(t *testing.T) {
 	if err := pdf.Error(); err == nil || !strings.Contains(err.Error(), "QR verification block requires a value or URL") {
 		t.Fatalf("Error() = %v, want QR value error", err)
 	}
+}
+
+func TestCellFormatUTF8JustifiedSingleWordDoesNotWriteInvalidNumber(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	fontBytes, err := os.ReadFile("../assets/static/font/DejaVuSansCondensed.ttf")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	pdf.AddUTF8FontFromBytes("dejavu", "", fontBytes)
+	pdf.SetFont("dejavu", "", 12)
+	pdf.AddPage()
+
+	pdf.CellFormat(80, 8, "Alone", "", 1, "J", false, 0, "")
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	content := out.String()
+	if strings.Contains(content, "+Inf") || strings.Contains(content, "-Inf") || strings.Contains(content, "NaN") {
+		t.Fatalf("PDF output contains invalid numeric token")
+	}
+}
+
+func TestWriteDocumentAppliesPageTemplateMargins(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc.PageTemplate.Margins = Spacing{Left: 18, Top: 16, Right: 14, Bottom: 22}
+	doc.Body = []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Body"}}}}
+
+	pdf.WriteDocument(doc)
+
+	left, top, right, bottom := pdf.GetMargins()
+	if left != 18 || top != 16 || right != 14 || bottom != 22 {
+		t.Fatalf("margins = %.1f %.1f %.1f %.1f, want 18 16 14 22", left, top, right, bottom)
+	}
+}
+
+func TestWriteDocumentRendersTemplateFooterOnEveryRendererPage(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc.PageTemplate.Footer = &FooterBlock{
+		Height:          8,
+		ReservePageArea: true,
+		Blocks:          []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Repeated footer"}}}},
+	}
+	doc.Body = []Block{
+		ParagraphBlock{Segments: []TextSegment{{Text: "Page one"}}},
+		PageBreakBlock{After: true},
+		ParagraphBlock{Segments: []TextSegment{{Text: "Page two"}}},
+	}
+
+	pdf.WriteDocument(doc)
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if got := strings.Count(out.String(), "Repeated footer"); got != 2 {
+		t.Fatalf("footer count = %d, want 2", got)
+	}
+}
+
+func TestWriteDocumentSelectsTemplateHeadersAndFootersPerPage(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc.PageTemplate.Header = &HeaderBlock{
+		Height: 6,
+		Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Default header"}}}},
+	}
+	doc.PageTemplate.FirstPageHeader = &HeaderBlock{
+		Height: 6,
+		Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "First header"}}}},
+	}
+	doc.PageTemplate.Footer = &FooterBlock{
+		Height:          6,
+		ReservePageArea: true,
+		Blocks:          []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Default footer"}}}},
+	}
+	doc.PageTemplate.FirstPageFooter = &FooterBlock{
+		Height:          6,
+		ReservePageArea: true,
+		Blocks:          []Block{ParagraphBlock{Segments: []TextSegment{{Text: "First footer"}}}},
+	}
+	doc.PageTemplate.EvenPageFooter = &FooterBlock{
+		Height:          6,
+		ReservePageArea: true,
+		Blocks:          []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Even footer"}}}},
+	}
+	doc.Body = []Block{
+		ParagraphBlock{Segments: []TextSegment{{Text: "Page one body"}}},
+		PageBreakBlock{After: true},
+		ParagraphBlock{Segments: []TextSegment{{Text: "Page two body"}}},
+		PageBreakBlock{After: true},
+		ParagraphBlock{Segments: []TextSegment{{Text: "Page three body"}}},
+	}
+
+	pdf.WriteDocument(doc)
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	content := out.String()
+	for _, want := range []string{"First header", "Default header", "First footer", "Even footer", "Default footer"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("PDF output missing %q", want)
+		}
+	}
+	if got := strings.Count(content, "Default header"); got != 2 {
+		t.Fatalf("default header count = %d, want 2", got)
+	}
+}
+
+func TestWriteDocumentMapsLayoutAttachments(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc.Attachments = []AttachmentBlock{{
+		Name:        "evidence.txt",
+		Description: "Evidence",
+		Data:        []byte("attached"),
+	}}
+
+	pdf.WriteDocument(doc)
+
+	if len(pdf.attachments) != 1 {
+		t.Fatalf("attachments = %d, want 1", len(pdf.attachments))
+	}
+	if pdf.attachments[0].Filename != "evidence.txt" || !bytes.Equal(pdf.attachments[0].Content, []byte("attached")) {
+		t.Fatalf("attachment = %#v, want mapped layout attachment", pdf.attachments[0])
+	}
+}
+
+func TestWriteDocumentInlineImagesUseContentHashAndFit(t *testing.T) {
+	pixel := decodeDocumentRenderTestPNG(t)
+	pdf := New("P", "mm", "A4", "")
+	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc.Body = []Block{
+		ImageBlock{Data: pixel, Format: "png", Width: 16, Height: 8, Fit: ImageFitContain},
+		ImageBlock{Data: pixel, Format: "png", Width: 16, Height: 8, Fit: ImageFitCover},
+	}
+
+	pdf.WriteDocument(doc)
+
+	if err := pdf.Error(); err != nil {
+		t.Fatalf("WriteDocument() error = %v", err)
+	}
+	if got := len(pdf.images); got != 1 {
+		t.Fatalf("registered images = %d, want deterministic reuse of identical inline data", got)
+	}
+	for name := range pdf.images {
+		if !strings.HasPrefix(name, "document-image-") {
+			t.Fatalf("registered image name = %q, want hash-based document image name", name)
+		}
+	}
+}
+
+func decodeDocumentRenderTestPNG(t *testing.T) []byte {
+	t.Helper()
+	const pixelPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+	data, err := base64.StdEncoding.DecodeString(pixelPNG)
+	if err != nil {
+		t.Fatalf("DecodeString() error = %v", err)
+	}
+	return data
 }
 
 func TestDocumentListMarkerWidthUsesWidestMarker(t *testing.T) {

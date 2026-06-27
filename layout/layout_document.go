@@ -36,17 +36,15 @@ const (
 // LayoutDocument is the shared model that document builders and HTML parsers can
 // produce before PDF layout and drawing.
 type LayoutDocument struct {
-	Kind        DocumentKind      // High-level document category.
-	Title       string            // Human-readable document title.
-	Language    string            // Optional BCP 47 language tag.
-	Metadata    DocumentMetadata  // Document metadata and summary fields.
-	Chrome      *PageChrome       // Page-level header, footer, and margin settings.
-	Header      *HeaderBlock      // Legacy/default header content.
-	Footer      *FooterBlock      // Legacy/default footer content.
-	Body        []Block           // Main document body blocks in render order.
-	Signature   *SignatureBlock   // Optional signature block.
-	QR          *QRBlock          // Optional standalone QR block.
-	Attachments []AttachmentBlock // Files embedded during document output.
+	Kind         DocumentKind      // High-level document category.
+	Title        string            // Human-readable document title.
+	Language     string            // Optional BCP 47 language tag.
+	Metadata     DocumentMetadata  // Document metadata and summary fields.
+	PageTemplate PageTemplate      // Page margins, headers, footers, and numbering.
+	Body         []Block           // Main document body blocks in render order.
+	Signature    *SignatureBlock   // Optional signature block.
+	QR           *QRBlock          // Optional standalone QR block.
+	Attachments  []AttachmentBlock // Files embedded during document output.
 }
 
 // NewLayoutDocument creates a document model with a generic kind when kind is empty.
@@ -63,24 +61,6 @@ func (d *LayoutDocument) AddBlock(block Block) {
 		return
 	}
 	d.Body = append(d.Body, block)
-}
-
-// PageChrome returns normalized page-level header and footer configuration.
-func (d *LayoutDocument) PageChrome() PageChrome {
-	if d == nil {
-		return PageChrome{}
-	}
-	chrome := PageChrome{}
-	if d.Chrome != nil {
-		chrome = *d.Chrome
-	}
-	if chrome.Header == nil {
-		chrome.Header = d.Header
-	}
-	if chrome.Footer == nil {
-		chrome.Footer = d.Footer
-	}
-	return chrome
 }
 
 // DocumentMetadata holds common metadata used by headers, footers,
@@ -382,33 +362,32 @@ type QRBlock struct {
 	KeepTogether bool    // Whether the QR block should stay on one page.
 }
 
-// PageChrome describes reusable page-level header, footer, and margin options.
-type PageChrome struct {
-	Header                *HeaderBlock // Default page header.
-	Footer                *FooterBlock // Default page footer.
-	FirstPageHeader       *HeaderBlock // Header used only on page one.
-	FirstPageFooter       *FooterBlock // Footer used only on page one.
-	AlternateFooter       *FooterBlock // Footer used on even pages.
-	Margins               Spacing      // Page margins.
-	PageNumberFormat      string       // fmt.Sprintf format for page numbers.
-	TotalPageAlias        string       // Alias replaced with total page count.
-	ReserveFooterHeight   float64      // Body space reserved for the default footer.
-	AlternateFooterHeight float64      // Body space reserved for alternate footers.
+// PageTemplate describes the reusable page shell around body content.
+type PageTemplate struct {
+	Margins              Spacing           // Page margins.
+	Header               *HeaderBlock      // Default page header.
+	Footer               *FooterBlock      // Default page footer.
+	FirstPageHeader      *HeaderBlock      // Header used only on page one.
+	FirstPageFooter      *FooterBlock      // Footer used only on page one.
+	EvenPageFooter       *FooterBlock      // Footer used on even pages.
+	PageNumbers          PageNumberOptions // Automatic page-number rendering.
+	ReserveFooterHeight  float64           // Body space reserved for the default footer.
+	EvenPageFooterHeight float64           // Body space reserved for even-page footers.
 }
 
 // FooterReservedHeight returns the body-layout space reserved for the footer.
-func (pc PageChrome) FooterReservedHeight() float64 {
-	return pc.FooterReservedHeightForPage(0)
+func (pt PageTemplate) FooterReservedHeight() float64 {
+	return pt.FooterReservedHeightForPage(0)
 }
 
 // FooterReservedHeightForPage returns the body-layout footer space for a page.
-func (pc PageChrome) FooterReservedHeightForPage(page int) float64 {
-	footer := pc.FooterForPage(page)
-	if page > 0 && page%2 == 0 && pc.AlternateFooterHeight > 0 {
-		return pc.AlternateFooterHeight
+func (pt PageTemplate) FooterReservedHeightForPage(page int) float64 {
+	footer := pt.FooterForPage(page)
+	if page > 0 && page%2 == 0 && pt.EvenPageFooterHeight > 0 {
+		return pt.EvenPageFooterHeight
 	}
-	if pc.ReserveFooterHeight > 0 {
-		return pc.ReserveFooterHeight
+	if pt.ReserveFooterHeight > 0 {
+		return pt.ReserveFooterHeight
 	}
 	if footer != nil && footer.ReservePageArea {
 		return footer.Height
@@ -416,30 +395,44 @@ func (pc PageChrome) FooterReservedHeightForPage(page int) float64 {
 	return 0
 }
 
+// HeaderForPage returns the header block selected for a page.
+func (pt PageTemplate) HeaderForPage(page int) *HeaderBlock {
+	if page == 1 && pt.FirstPageHeader != nil {
+		return pt.FirstPageHeader
+	}
+	return pt.Header
+}
+
 // FooterForPage returns the footer block selected for a page.
-func (pc PageChrome) FooterForPage(page int) *FooterBlock {
-	if page == 1 && pc.FirstPageFooter != nil {
-		return pc.FirstPageFooter
+func (pt PageTemplate) FooterForPage(page int) *FooterBlock {
+	if page == 1 && pt.FirstPageFooter != nil {
+		return pt.FirstPageFooter
 	}
-	if page > 0 && page%2 == 0 && pc.AlternateFooter != nil {
-		return pc.AlternateFooter
+	if page > 0 && page%2 == 0 && pt.EvenPageFooter != nil {
+		return pt.EvenPageFooter
 	}
-	return pc.Footer
+	return pt.Footer
+}
+
+// PageNumberOptions controls automatic page-number text in page footers.
+type PageNumberOptions struct {
+	Enabled        bool   // Whether automatic page numbers are rendered.
+	Format         string // fmt.Sprintf format for page numbers.
+	TotalPageAlias string // Alias replaced with total page count.
 }
 
 // PageNumberText formats the footer page number label when enabled.
-func (pc PageChrome) PageNumberText(page int) string {
+func (pt PageTemplate) PageNumberText(page int) string {
 	if page <= 0 {
 		return ""
 	}
-	footer := pc.FooterForPage(page)
-	if pc.PageNumberFormat == "" && (footer == nil || !footer.ShowPageNumber) {
+	format := strings.TrimSpace(pt.PageNumbers.Format)
+	if !pt.PageNumbers.Enabled && format == "" {
 		return ""
 	}
-	format := strings.TrimSpace(pc.PageNumberFormat)
 	if format == "" {
 		format = "Page %d"
-		if alias := pc.pageTotalAlias(); alias != "" {
+		if alias := pt.pageTotalAlias(); alias != "" {
 			format += " / " + alias
 		}
 	}
@@ -447,18 +440,12 @@ func (pc PageChrome) PageNumberText(page int) string {
 }
 
 // PageTotalAlias returns the alias replaced with the total page count.
-func (pc PageChrome) PageTotalAlias() string {
-	return pc.pageTotalAlias()
+func (pt PageTemplate) PageTotalAlias() string {
+	return pt.pageTotalAlias()
 }
 
-func (pc PageChrome) pageTotalAlias() string {
-	if pc.TotalPageAlias != "" {
-		return pc.TotalPageAlias
-	}
-	if footer := pc.FooterForPage(0); footer != nil {
-		return footer.TotalPageAlias
-	}
-	return ""
+func (pt PageTemplate) pageTotalAlias() string {
+	return pt.PageNumbers.TotalPageAlias
 }
 
 // QRVerificationBlock combines a QR code with verification text.
@@ -528,8 +515,6 @@ type HeaderBlock struct {
 type FooterBlock struct {
 	Blocks          []Block  // Footer content blocks.
 	Height          float64  // Reserved footer height.
-	ShowPageNumber  bool     // Whether to show automatic page numbers.
-	TotalPageAlias  string   // Alias replaced with total page count.
 	ReservePageArea bool     // Whether body layout reserves footer height.
 	Box             BoxStyle // Footer box style.
 }
