@@ -75,26 +75,37 @@ func (f *Document) SplitText(txt string, w float64) (lines []string) {
 	}
 	s = s[0:nb]
 	sep := -1
+	sepInclude := false
 	i := 0
 	j := 0
 	l := 0
 	for i < nb {
 		c := s[i]
 		l += f.currentFontRuneWidth(c)
-		if unicode.IsSpace(c) || isChinese(c) {
+		if unicode.IsSpace(c) {
 			sep = i
+			sepInclude = false
+		} else if isChinese(c) {
+			sep = i
+			sepInclude = true
 		}
 		if c == '\n' || l > wmax {
+			lineEnd := sep
 			if sep == -1 {
 				if i == j {
 					i++
 				}
 				sep = i
+				lineEnd = sep
 			} else {
+				if sepInclude {
+					lineEnd = sep + 1
+				}
 				i = sep + 1
 			}
-			lines = append(lines, string(s[j:sep]))
+			lines = append(lines, string(s[j:lineEnd]))
 			sep = -1
+			sepInclude = false
 			j = i
 			l = 0
 		} else {

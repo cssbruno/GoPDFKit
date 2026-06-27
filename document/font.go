@@ -138,7 +138,7 @@ func (f *Document) SetFontStyle(styleStr string) {
 func (f *Document) SetFontSize(size float64) {
 	f.fontSizePt = size
 	f.fontSize = size / f.k
-	if f.page > 0 {
+	if f.page > 0 && f.currentFont.Name != "" {
 		f.outPDFFontSelect()
 	}
 }
@@ -148,7 +148,7 @@ func (f *Document) SetFontSize(size float64) {
 func (f *Document) SetFontUnitSize(size float64) {
 	f.fontSizePt = size * f.k
 	f.fontSize = size
-	if f.page > 0 {
+	if f.page > 0 && f.currentFont.Name != "" {
 		f.outPDFFontSelect()
 	}
 }

@@ -112,6 +112,13 @@ func (f *Document) addImportedPDFPage(page *importpdf.PageRef) int {
 // Passing zero for one dimension preserves the imported page aspect ratio;
 // passing zero for both draws the page at its native size.
 func (f *Document) UseImportedPage(pageID int, x, y, w, h float64) {
+	if f.err != nil {
+		return
+	}
+	if f.page <= 0 {
+		f.SetErrorf("cannot use an imported page without first adding a page")
+		return
+	}
 	page, ok := f.importedPages[pageID]
 	if !ok || page == nil || page.page == nil {
 		f.SetErrorf("unknown imported page ID: %d", pageID)

@@ -15,6 +15,9 @@ func (f *Document) GetStringWidth(s string) float64 {
 		return 0
 	}
 	w := f.GetStringSymbolWidth(s)
+	if f.err != nil {
+		return 0
+	}
 	return float64(w) * f.fontSize / 1000
 }
 
@@ -22,6 +25,10 @@ func (f *Document) GetStringWidth(s string) float64 {
 // must be currently selected.
 func (f *Document) GetStringSymbolWidth(s string) int {
 	if f.err != nil {
+		return 0
+	}
+	if f.currentFont.Name == "" {
+		f.SetErrorf("font must be selected before measuring text")
 		return 0
 	}
 	w := 0

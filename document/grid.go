@@ -33,6 +33,8 @@ type StateType struct {
 	alpha                     float64
 	blendStr                  string
 	cellMargin                float64
+	autoPageBreak             bool
+	bottomMargin              float64
 }
 
 // StateGet returns common state values from pdf.
@@ -44,6 +46,7 @@ func StateGet(pdf *Document) (st StateType) {
 	_, st.fontSize = pdf.GetFontSize()
 	st.alpha, st.blendStr = pdf.GetAlpha()
 	st.cellMargin = pdf.GetCellMargin()
+	st.autoPageBreak, st.bottomMargin = pdf.GetAutoPageBreak()
 	return
 }
 
@@ -56,6 +59,7 @@ func (st StateType) Put(pdf *Document) {
 	pdf.SetFontUnitSize(st.fontSize)
 	pdf.SetAlpha(st.alpha, st.blendStr)
 	pdf.SetCellMargin(st.cellMargin)
+	pdf.SetAutoPageBreak(st.autoPageBreak, st.bottomMargin)
 }
 
 // TickFormatFncType defines a callback for label drawing.

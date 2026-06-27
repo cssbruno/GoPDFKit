@@ -120,7 +120,11 @@ func documentNew(orientationStr, unitStr, sizeStr, fontDirStr string, size Size)
 	f.stdPageSizes["letter"] = Size{612, 792}
 	f.stdPageSizes["legal"] = Size{612, 1008}
 	f.stdPageSizes["tabloid"] = Size{792, 1224}
-	if size.Wd > 0 && size.Ht > 0 {
+	if size.Wd != 0 || size.Ht != 0 {
+		if err := validatePageSize(size); err != nil {
+			f.err = err
+			return
+		}
 		f.defPageSize = size
 	} else {
 		f.defPageSize = f.getpagesizestr(sizeStr)

@@ -272,29 +272,54 @@ func (f *Document) putxmp() {
 func (f *Document) putbookmarks() {
 	nb := len(f.outlines)
 	if nb > 0 {
-		lru := make(map[int]int)
-		level := 0
-		for i, o := range f.outlines {
-			if o.level > 0 {
-				parent := lru[o.level-1]
+		stack := make([]int, 0, nb)
+		rootFirst, rootLast := -1, -1
+		for i := range f.outlines {
+			level := f.outlines[i].level
+			if level < 0 || level > len(stack) {
+				f.SetErrorf("invalid bookmark level: %d", level)
+				return
+			}
+			if level < len(stack) {
+				stack = stack[:level+1]
+			}
+
+			f.outlines[i].parent = nb
+			f.outlines[i].first = -1
+			f.outlines[i].last = -1
+			f.outlines[i].next = -1
+			f.outlines[i].prev = -1
+
+			if level > 0 {
+				parent := stack[level-1]
 				f.outlines[i].parent = parent
-				f.outlines[parent].last = i
-				if o.level > level {
+				if f.outlines[parent].first == -1 {
 					f.outlines[parent].first = i
 				}
+				f.outlines[parent].last = i
 			} else {
-				f.outlines[i].parent = nb
+				if rootFirst == -1 {
+					rootFirst = i
+				}
+				rootLast = i
 			}
-			if o.level <= level && i > 0 {
-				prev := lru[o.level]
+
+			if level < len(stack) {
+				prev := stack[level]
 				f.outlines[prev].next = i
 				f.outlines[i].prev = prev
+				stack[level] = i
+			} else {
+				stack = append(stack, i)
 			}
-			lru[o.level] = i
-			level = o.level
 		}
 		n := f.n + 1
 		for _, o := range f.outlines {
+			pageObj := f.pageObjectNumber(o.p)
+			if pageObj == 0 {
+				f.SetErrorf("invalid bookmark destination page: %d", o.p)
+				return
+			}
 			f.newobj()
 			f.outf("<</Title %s", f.textstring(o.text))
 			f.outf("/Parent %d 0 R", n+o.parent)
@@ -310,14 +335,14 @@ func (f *Document) putbookmarks() {
 			if o.last != -1 {
 				f.outf("/Last %d 0 R", n+o.last)
 			}
-			f.outf("/Dest [%d 0 R /XYZ 0 %.2f null]", 1+2*o.p, (f.h-o.y)*f.k)
+			f.outf("/Dest [%d 0 R /XYZ 0 %.2f null]", pageObj, f.pageHeightPt(o.p)-o.y*f.k)
 			f.out("/Count 0>>")
 			f.out("endobj")
 		}
 		f.newobj()
 		f.outlineRoot = f.n
-		f.outf("<</Type /Outlines /First %d 0 R", n)
-		f.outf("/Last %d 0 R>>", n+lru[0])
+		f.outf("<</Type /Outlines /First %d 0 R", n+rootFirst)
+		f.outf("/Last %d 0 R>>", n+rootLast)
 		f.out("endobj")
 	}
 }

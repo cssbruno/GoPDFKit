@@ -67,6 +67,23 @@ func containsAnyBytes(data []byte, needles [][]byte) bool {
 	return false
 }
 
+func (f *Document) pageObjectNumber(page int) int {
+	if page > 0 && page < len(f.pageObjectNumbers) {
+		return f.pageObjectNumbers[page]
+	}
+	return 0
+}
+
+func (f *Document) pageHeightPt(page int) float64 {
+	if pageSize, ok := f.pageSizes[page]; ok {
+		return pageSize.Ht
+	}
+	if f.defOrientation == "P" {
+		return f.defPageSize.Ht * f.k
+	}
+	return f.defPageSize.Wd * f.k
+}
+
 func (f *Document) putpages() {
 	var wPt, hPt float64
 	var pageSize Size
@@ -85,8 +102,11 @@ func (f *Document) putpages() {
 	}
 	pagesObjectNumbers := make([]int, nb+1)
 	for n := 1; n <= nb; n++ {
+		pagesObjectNumbers[n] = f.n + 2*n - 1
+	}
+	f.pageObjectNumbers = pagesObjectNumbers
+	for n := 1; n <= nb; n++ {
 		f.newobj()
-		pagesObjectNumbers[n] = f.n
 		f.out("<</Type /Page")
 		f.out("/Parent 1 0 R")
 		pageSize, ok = f.pageSizes[n]
@@ -117,7 +137,7 @@ func (f *Document) putpages() {
 					} else {
 						h = hPt
 					}
-					annots.printf("/Dest [%d 0 R /XYZ 0 %.2f null]>>", 1+2*l.page, h-l.y*f.k)
+					annots.printf("/Dest [%d 0 R /XYZ 0 %.2f null]>>", f.pageObjectNumber(l.page), h-l.y*f.k)
 				}
 			}
 			f.putAttachmentAnnotationLinks(&annots, n)

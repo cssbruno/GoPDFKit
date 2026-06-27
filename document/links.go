@@ -74,6 +74,25 @@ func (f *Document) LinkString(x, y, w, h float64, linkStr string) {
 // vertical position of the bookmark destination in the current page; -1
 // indicates the current position.
 func (f *Document) Bookmark(txtStr string, level int, y float64) {
+	if f.err != nil {
+		return
+	}
+	if f.page <= 0 {
+		f.SetErrorf("bookmark requires an active page")
+		return
+	}
+	if level < 0 {
+		f.SetErrorf("invalid bookmark level: %d", level)
+		return
+	}
+	if len(f.outlines) == 0 && level != 0 {
+		f.SetErrorf("first bookmark level must be 0")
+		return
+	}
+	if len(f.outlines) > 0 && level > f.outlines[len(f.outlines)-1].level+1 {
+		f.SetErrorf("bookmark level cannot jump from %d to %d", f.outlines[len(f.outlines)-1].level, level)
+		return
+	}
 	if y == -1 {
 		y = f.y
 	}

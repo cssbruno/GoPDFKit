@@ -18,6 +18,13 @@ import (
 //
 // This ClipText() example demonstrates this method.
 func (f *Document) ClipRect(x, y, w, h float64, outline bool) {
+	if f.err != nil {
+		return
+	}
+	if !finiteNumbers(x, y, w, h) {
+		f.SetErrorf("invalid clipping rectangle")
+		return
+	}
 	f.clipNest++
 	f.outf("q %.2f %.2f %.2f %.2f re W %s", x*f.k, (f.h-y)*f.k, w*f.k, -h*f.k, strIf(outline, "S", "n"))
 }
@@ -31,6 +38,13 @@ func (f *Document) ClipRect(x, y, w, h float64, outline bool) {
 // example, ImageOptions(), LinearGradient(), etc.) will be clipped. Call
 // ClipEnd() to restore unclipped operations.
 func (f *Document) ClipText(x, y float64, txtStr string, outline bool) {
+	if f.err != nil {
+		return
+	}
+	if !finiteNumbers(x, y) {
+		f.SetErrorf("invalid clipping text position")
+		return
+	}
 	f.clipNest++
 	f.outf("q BT %.5f %.5f Td %d Tr (%s) Tj ET", x*f.k, (f.h-y)*f.k, intIf(outline, 5, 7), f.escape(txtStr))
 }
@@ -60,6 +74,13 @@ func (f *Document) ClipRoundedRect(x, y, w, h, r float64, outline bool) {
 // rBR (bottom-right), rBL (bottom-left). See ClipRoundedRect() for more
 // details. This method is demonstrated in the ClipText() example.
 func (f *Document) ClipRoundedRectExt(x, y, w, h, rTL, rTR, rBR, rBL float64, outline bool) {
+	if f.err != nil {
+		return
+	}
+	if !finiteNumbers(x, y, w, h, rTL, rTR, rBR, rBL) {
+		f.SetErrorf("invalid rounded clipping rectangle")
+		return
+	}
 	f.clipNest++
 	f.roundedRectPath(x, y, w, h, rTL, rTR, rBR, rBL)
 	f.outf(" W %s", strIf(outline, "S", "n"))
@@ -108,6 +129,13 @@ func (f *Document) roundedRectPath(x, y, w, h, rTL, rTR, rBR, rBL float64) {
 //
 // This ClipText() example demonstrates this method.
 func (f *Document) ClipEllipse(x, y, rx, ry float64, outline bool) {
+	if f.err != nil {
+		return
+	}
+	if !finiteNumbers(x, y, rx, ry) {
+		f.SetErrorf("invalid clipping ellipse")
+		return
+	}
 	f.clipNest++
 	lx := (4.0 / 3.0) * rx * (math.Sqrt2 - 1)
 	ly := (4.0 / 3.0) * ry * (math.Sqrt2 - 1)
@@ -144,6 +172,19 @@ func (f *Document) ClipCircle(x, y, r float64, outline bool) {
 //
 // The ClipText() example demonstrates this method.
 func (f *Document) ClipPolygon(points []Point, outline bool) {
+	if f.err != nil {
+		return
+	}
+	if len(points) < 3 {
+		f.SetErrorf("clipping polygon requires at least 3 points")
+		return
+	}
+	for _, pt := range points {
+		if !finiteNumbers(pt.X, pt.Y) {
+			f.SetErrorf("invalid clipping polygon point")
+			return
+		}
+	}
 	f.clipNest++
 	var s fmtBuffer
 	h := f.h
