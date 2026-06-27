@@ -41,6 +41,7 @@ func (f *Document) OutputFileAndClose(fileStr string) error {
 	}
 	dir := filepath.Dir(fileStr)
 	base := filepath.Base(fileStr)
+	mode := outputFileMode(fileStr)
 	pdfFile, err := os.CreateTemp(dir, "."+base+".tmp-*")
 	if err != nil {
 		return err
@@ -61,6 +62,10 @@ func (f *Document) OutputFileAndClose(fileStr string) error {
 		_ = pdfFile.Close()
 		return err
 	}
+	if err := pdfFile.Chmod(mode); err != nil {
+		_ = pdfFile.Close()
+		return err
+	}
 	if err := pdfFile.Close(); err != nil {
 		return err
 	}
@@ -69,6 +74,13 @@ func (f *Document) OutputFileAndClose(fileStr string) error {
 	}
 	removeTemp = false
 	return nil
+}
+
+func outputFileMode(fileStr string) os.FileMode {
+	if info, err := os.Stat(fileStr); err == nil {
+		return info.Mode().Perm()
+	}
+	return 0o644
 }
 
 // Output sends the PDF document to the writer specified by w. No output will

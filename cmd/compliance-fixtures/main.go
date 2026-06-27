@@ -43,6 +43,9 @@ func main() {
 	if err := generatePDFUAArlingtonFoundation(path, root, fontPath, boldFontPath); err != nil {
 		exitErr(err)
 	}
+	if err := makeArtifactReadable(path); err != nil {
+		exitErr(err)
+	}
 	fmt.Printf("generated %s\n", path)
 
 	if *iccPath == "" {
@@ -66,11 +69,17 @@ func main() {
 		if err := generatePDFAFoundation(path, fontPath, boldFontPath, icc, fixture.mode, fixture.attachment); err != nil {
 			exitErr(err)
 		}
+		if err := makeArtifactReadable(path); err != nil {
+			exitErr(err)
+		}
 		fmt.Printf("generated %s\n", path)
 	}
 
 	path = filepath.Join(*outDir, "pdfa4f-pdfua2-arlington-signed.pdf")
 	if err := generateSignedComplianceFoundation(path, root, fontPath, boldFontPath, icc); err != nil {
+		exitErr(err)
+	}
+	if err := makeArtifactReadable(path); err != nil {
 		exitErr(err)
 	}
 	fmt.Printf("generated %s\n", path)
@@ -241,4 +250,11 @@ func baseDocument(fontPath, boldFontPath string) *document.Document {
 func exitErr(err error) {
 	fmt.Fprintln(os.Stderr, err)
 	os.Exit(1)
+}
+
+func makeArtifactReadable(path string) error {
+	if err := os.Chmod(path, 0o644); err != nil {
+		return fmt.Errorf("make artifact readable %s: %w", path, err)
+	}
+	return nil
 }

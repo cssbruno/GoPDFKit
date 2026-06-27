@@ -118,3 +118,46 @@ func TestOutputFileAndCloseDoesNotTruncateOnCloseValidationError(t *testing.T) {
 		t.Fatalf("OutputFileAndClose() changed destination on failure: got %q, want %q", got, original)
 	}
 }
+
+func TestOutputFileAndCloseNewFileIsReadableByGroupAndOthers(t *testing.T) {
+	fileStr := filepath.Join(t.TempDir(), "out.pdf")
+
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(20, 10, "hello")
+
+	if err := pdf.OutputFileAndClose(fileStr); err != nil {
+		t.Fatalf("OutputFileAndClose() error = %v", err)
+	}
+	info, err := os.Stat(fileStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := info.Mode().Perm(), os.FileMode(0o644); got != want {
+		t.Fatalf("output file mode = %v, want %v", got, want)
+	}
+}
+
+func TestOutputFileAndClosePreservesExistingFileMode(t *testing.T) {
+	fileStr := filepath.Join(t.TempDir(), "out.pdf")
+	if err := os.WriteFile(fileStr, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(20, 10, "hello")
+
+	if err := pdf.OutputFileAndClose(fileStr); err != nil {
+		t.Fatalf("OutputFileAndClose() error = %v", err)
+	}
+	info, err := os.Stat(fileStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := info.Mode().Perm(), os.FileMode(0o600); got != want {
+		t.Fatalf("output file mode = %v, want %v", got, want)
+	}
+}
