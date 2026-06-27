@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.6.2 - 2026-06-27
+
+Patch release for compliance baseline CI stability after v0.6.1.
+
+### Fixed
+
+- Ensured generated compliance fixture PDFs are readable by external validator
+  containers.
+- Preserved readable default permissions for new files written through
+  `OutputFileAndClose` while keeping existing destination permissions.
+- Normalized volatile Arlington validator metadata in compliance baseline
+  comparisons.
+
 ## v0.6.1 - 2026-06-27
 
 Patch release for the follow-up non-HTML performance checklist.
