@@ -18,12 +18,17 @@ func createTemplate(corner Point, size Size, orientationStr, unitStr, fontDirStr
 	sizeStr := ""
 
 	pdf := documentNew(orientationStr, unitStr, sizeStr, fontDirStr, size)
+	if pdf == nil || pdf.err != nil {
+		return nil
+	}
 	tpl := Tpl{*pdf}
 	if copyFrom != nil {
 		tpl.loadParamsFromDocument(copyFrom)
 	}
 	tpl.AddPage()
-	fn(&tpl)
+	if fn != nil {
+		fn(&tpl)
+	}
 
 	bytes := make([][]byte, len(tpl.pages))
 	// Skip the first page because it is always empty.

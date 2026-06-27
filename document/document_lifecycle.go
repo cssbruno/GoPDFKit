@@ -53,8 +53,10 @@ func (f *Document) SetDisplayMode(zoomStr, layoutStr string) {
 
 // SetDefaultCompression controls the default setting of the internal
 // compression flag. See SetCompression for more details. Compression is on by
-// default.
+// default. Prefer NewWithDefaults for per-document configuration.
 func SetDefaultCompression(compress bool) {
+	_gl.Lock()
+	defer _gl.Unlock()
 	_gl.noCompress = !compress
 }
 

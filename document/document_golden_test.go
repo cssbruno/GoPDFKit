@@ -17,15 +17,15 @@ func TestWriteDocumentGoldenPDFs(t *testing.T) {
 		doc  *LayoutDocument
 		want string
 	}{
-		{name: "structured-report", doc: goldenStructuredReportDocument(), want: "aa21ba0157fce52acbad7b5804da62ccbda4efa2135b5ff27f238e0448ebb9d0"},
-		{name: "tabular-report", doc: goldenTabularReportDocument(), want: "cac30204cc5bb416f5bed5c00d9bb6c6570df845e86135575ca6711d11582af5"},
-		{name: "transactional", doc: goldenTransactionalDocument(), want: "41eab88324d00f9d738522d3b172e8a6464218290bad3352c264da42ea6945f3"},
-		{name: "attestation", doc: goldenAttestationDocument(), want: "0c782dbd66f58e11d385a620fd695e1aa6a2e724649395314240704ab0449e8e"},
-		{name: "statement", doc: goldenStatementDocument(), want: "96dd689d8998b320c79a73c8e95763cbf03ff691ba68750421f62273abd63d55"},
-		{name: "generic-free-text", doc: goldenGenericDocument(), want: "7ec99cb7cf2a73ec2c56eb103f69a86587f4a9880c2340a5e860b401114fe8f3"},
-		{name: "long-form", doc: goldenLongFormDocument(), want: "5574646134671082be0e30a09c7b4755edc7118a3d4dd114d0995df3810a7076"},
-		{name: "form", doc: FormDocumentModel(testFormDocument()), want: "eeadec653874d11a96d76f66ba075cfce68f8e3ec67faa05887e2ff051c329ee"},
-		{name: "qr-signature", doc: goldenQRSignatureDocument(), want: "570a92edc56f4691f8f6bd9b3d3060039ddd22ce842c2c63bbc243731c7d1d89"},
+		{name: "structured-report", doc: goldenStructuredReportDocument(), want: "7e78a7322e182d9326f35d45e9c31eb4a9217445d61297b5514fc2128cd42579"},
+		{name: "tabular-report", doc: goldenTabularReportDocument(), want: "64f04df3558aeaec48592b59309b8ffbd7197a87bca47d246ba922e3d1a52165"},
+		{name: "transactional", doc: goldenTransactionalDocument(), want: "601beba91d168b81200da29e97f7318e80c21fbf6e3514077b0a72e278495b1a"},
+		{name: "attestation", doc: goldenAttestationDocument(), want: "5687e7e68bf85ef8bf8d1804941c98fdff8a8b2176279ef11536b96d78dfc889"},
+		{name: "statement", doc: goldenStatementDocument(), want: "dced39394068a3f88cc13b7adffd8927993ac1e03ef4a77a2b3b3e54157e5260"},
+		{name: "generic-free-text", doc: goldenGenericDocument(), want: "29a5c5d6fff0e779252e67ced3b7ac4f57741e05093e94117a59cd174c3d34c9"},
+		{name: "long-form", doc: goldenLongFormDocument(), want: "9f7d4f7aae6e07d285abda83e9cdac0f3ddddbfa468488d4006f4bf45e50e22e"},
+		{name: "form", doc: FormDocumentModel(testFormDocument()), want: "9872be18e4a4297ca791483fa5b79f3be58df02c363ac366bcdb2c38804a388b"},
+		{name: "qr-signature", doc: goldenQRSignatureDocument(), want: "35b2abdce636d94e848b6db999fed1478414ae11a3d0435949971cce6932af78"},
 	}
 
 	for _, tc := range cases {
@@ -59,8 +59,9 @@ func goldenDocumentPDFSHA(t *testing.T, doc *LayoutDocument) string {
 func goldenStructuredReportDocument() *LayoutDocument {
 	doc := NewLayoutDocument(DocumentKindReport)
 	doc.Title = "Structured Report"
-	doc.Header = &HeaderBlock{Height: 8, Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Structured Header"}}, Style: TextStyle{FontSize: 9}}}}
-	doc.Footer = &FooterBlock{Height: 8, ShowPageNumber: true, TotalPageAlias: "{total}", ReservePageArea: true}
+	doc.PageTemplate.Header = &HeaderBlock{Height: 8, Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Structured Header"}}, Style: TextStyle{FontSize: 9}}}}
+	doc.PageTemplate.Footer = &FooterBlock{Height: 8, ReservePageArea: true}
+	doc.PageTemplate.PageNumbers = PageNumberOptions{Enabled: true, TotalPageAlias: "{total}"}
 	doc.Body = []Block{
 		HeadingBlock{Level: 1, Segments: []TextSegment{{Text: "Structured Report"}}},
 		MetadataGridBlock{Fields: []MetadataField{{Label: "ID", Value: "SR-001"}, {Label: "Status", Value: "Final"}}},

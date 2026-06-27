@@ -191,5 +191,8 @@ func (info *ImageInfo) Height() float64 {
 // available automatically for JPEG, GIF, and WebP images, so callers can set it
 // here when it matters. It defaults to 72 DPI.
 func (info *ImageInfo) SetDpi(dpi float64) {
+	if info == nil || !finiteNumbers(dpi) || dpi <= 0 {
+		return
+	}
 	info.dpi = dpi
 }

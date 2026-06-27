@@ -26,3 +26,4 @@ coverage.html
 .DS_Store
 PDF_HTML_RENDERING_GAPS.md
 .claude/
+.gocache/

@@ -67,6 +67,23 @@ func containsAnyBytes(data []byte, needles [][]byte) bool {
 	return false
 }
 
+func (f *Document) pageObjectNumber(page int) int {
+	if page > 0 && page < len(f.pageObjectNumbers) {
+		return f.pageObjectNumbers[page]
+	}
+	return 0
+}
+
+func (f *Document) pageHeightPt(page int) float64 {
+	if pageSize, ok := f.pageSizes[page]; ok {
+		return pageSize.Ht
+	}
+	if f.defOrientation == "P" {
+		return f.defPageSize.Ht * f.k
+	}
+	return f.defPageSize.Wd * f.k
+}
+
 func (f *Document) putpages() {
 	var wPt, hPt float64
 	var pageSize Size
@@ -89,6 +106,7 @@ func (f *Document) putpages() {
 		pagesObjectNumbers[n] = nextObj
 		nextObj += 2 + len(f.pageLinks[n])
 	}
+	f.pageObjectNumbers = pagesObjectNumbers
 	f.tagged.pageObjNums = ensureIntSliceLen(f.tagged.pageObjNums, nb+1)
 	for n := 1; n <= nb; n++ {
 		f.newobj()

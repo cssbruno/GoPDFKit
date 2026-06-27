@@ -5,21 +5,35 @@ package document
 
 import (
 	"encoding/gob"
+	"fmt"
 	"sort"
 )
 
 // CreateTemplate defines a new template using the current page size.
 func (f *Document) CreateTemplate(fn func(*Tpl)) Template {
+	if f.err != nil {
+		return nil
+	}
 	return createTemplate(Point{0, 0}, f.curPageSize, f.defOrientation, f.unitStr, f.fontDirStr, fn, f)
 }
 
 // CreateTemplateCustom starts a template, using the given bounds.
 func (f *Document) CreateTemplateCustom(corner Point, size Size, fn func(*Tpl)) Template {
+	if f.err != nil {
+		return nil
+	}
+	if err := validateTemplateGeometry(corner, size); err != nil {
+		f.SetError(err)
+		return nil
+	}
 	return createTemplate(corner, size, f.defOrientation, f.unitStr, f.fontDirStr, fn, f)
 }
 
 // CreateTpl creates a template not attached to any document.
 func CreateTpl(corner Point, size Size, orientationStr, unitStr, fontDirStr string, fn func(*Tpl)) Template {
+	if err := validateTemplateGeometry(corner, size); err != nil {
+		return nil
+	}
 	return createTemplate(corner, size, orientationStr, unitStr, fontDirStr, fn, nil)
 }
 
@@ -37,8 +51,15 @@ func (f *Document) UseTemplate(t Template) {
 // UseTemplateScaled adds a template to the current page or another template,
 // using the given page coordinates.
 func (f *Document) UseTemplateScaled(t Template, corner Point, size Size) {
+	if f.err != nil {
+		return
+	}
 	if t == nil {
 		f.SetErrorf("template is nil")
+		return
+	}
+	if err := validateTemplateGeometry(corner, size); err != nil {
+		f.SetError(err)
 		return
 	}
 
@@ -67,6 +88,13 @@ func (f *Document) UseTemplateScaled(t Template, corner Point, size Size) {
 
 	content := []byte(sprintf("q %.4f 0 0 %.4f %.4f %.4f cm\n/TPL%s Do Q", scaleX, scaleY, tx, ty, t.ID()))
 	f.outbytes(f.wrapTaggedContent(content, taggedContentOptions{Artifact: true}))
+}
+
+func validateTemplateGeometry(corner Point, size Size) error {
+	if !finiteNumbers(corner.X, corner.Y, size.Wd, size.Ht) || size.Wd <= 0 || size.Ht <= 0 {
+		return fmt.Errorf("invalid template geometry")
+	}
+	return nil
 }
 
 func (f *Document) registerTemplate(t Template) {

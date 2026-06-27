@@ -5,7 +5,8 @@ package document
 
 import (
 	"bytes"
-	"fmt"
+	"crypto/sha256"
+	"encoding/hex"
 	"strconv"
 	"strings"
 )
@@ -34,14 +35,18 @@ func (f *Document) WriteDocument(doc *LayoutDocument) {
 	if doc.Metadata.Author != "" {
 		f.SetAuthor(doc.Metadata.Author, true)
 	}
+	template := doc.PageTemplate
+	f.applyPageTemplateMargins(template)
+	if len(doc.Attachments) > 0 {
+		f.SetAttachments(documentAttachments(doc.Attachments))
+	}
 	if f.page == 0 {
 		f.AddPage()
 	}
-	chrome := doc.PageChrome()
-	if alias := chrome.pageTotalAlias(); alias != "" {
+	if alias := template.PageTotalAlias(); alias != "" {
 		f.AliasNbPages(alias)
 	}
-	renderer := documentRenderer{pdf: f, chrome: chrome}
+	renderer := documentRenderer{pdf: f, template: template, renderedFooters: make(map[int]bool)}
 	renderer.renderHeader()
 	renderer.renderBlocks(doc.Body)
 	if doc.Signature != nil {
@@ -56,8 +61,10 @@ func (f *Document) WriteDocument(doc *LayoutDocument) {
 }
 
 type documentRenderer struct {
-	pdf    *Document
-	chrome PageChrome
+	pdf             *Document
+	template        PageTemplate
+	renderedFooters map[int]bool
+	renderingShell  bool
 }
 
 func (r *documentRenderer) contentWidth() float64 {
@@ -65,19 +72,19 @@ func (r *documentRenderer) contentWidth() float64 {
 }
 
 func (r *documentRenderer) availableHeight() float64 {
-	reservedFooter := r.chrome.FooterReservedHeightForPage(r.pdf.page)
+	reservedFooter := r.template.FooterReservedHeightForPage(r.pdf.page)
 	return r.pdf.h - r.pdf.bMargin - reservedFooter - r.pdf.GetY()
 }
 
 func (r *documentRenderer) renderHeader() {
-	header := r.chrome.Header
-	if r.pdf.page == 1 && r.chrome.FirstPageHeader != nil {
-		header = r.chrome.FirstPageHeader
-	}
+	header := r.template.HeaderForPage(r.pdf.page)
 	if header == nil {
 		return
 	}
 	startY := r.pdf.GetY()
+	wasRenderingShell := r.renderingShell
+	r.renderingShell = true
+	defer func() { r.renderingShell = wasRenderingShell }()
 	r.renderBlocks(header.Blocks)
 	if header.Height > 0 && r.pdf.GetY() < startY+header.Height {
 		r.pdf.SetY(startY + header.Height)
@@ -85,10 +92,14 @@ func (r *documentRenderer) renderHeader() {
 }
 
 func (r *documentRenderer) renderFooter() {
-	footer := r.chrome.FooterForPage(r.pdf.page)
-	if footer == nil && r.chrome.PageNumberText(r.pdf.page) == "" {
+	if r.pdf.page <= 0 || r.renderedFooters[r.pdf.page] {
 		return
 	}
+	footer := r.template.FooterForPage(r.pdf.page)
+	if footer == nil && r.template.PageNumberText(r.pdf.page) == "" {
+		return
+	}
+	r.renderedFooters[r.pdf.page] = true
 	_, _, _, bottom := r.pdf.GetMargins()
 	y := r.pdf.h - bottom
 	if footer != nil && footer.Height > 0 {
@@ -98,10 +109,13 @@ func (r *documentRenderer) renderFooter() {
 		y = r.pdf.tMargin
 	}
 	r.pdf.SetY(y)
+	wasRenderingShell := r.renderingShell
+	r.renderingShell = true
+	defer func() { r.renderingShell = wasRenderingShell }()
 	if footer != nil {
 		r.renderBlocks(footer.Blocks)
 	}
-	if text := r.chrome.PageNumberText(r.pdf.page); text != "" {
+	if text := r.template.PageNumberText(r.pdf.page); text != "" {
 		r.applyTextStyle(TextStyle{FontFamily: "Helvetica", FontSize: 9})
 		r.pdf.CellFormat(r.contentWidth(), 5, text, "", 1, "R", false, 0, "")
 	}
@@ -121,16 +135,14 @@ func (r *documentRenderer) renderBlock(block Block) {
 		return
 	}
 	if pageBreak, ok := block.(PageBreakBlock); ok {
-		if pageBreak.Before || pageBreak.After {
-			r.pdf.AddPage()
-			r.renderHeader()
+		if !r.renderingShell && (pageBreak.Before || pageBreak.After) {
+			r.addPageWithTemplate()
 		}
 		return
 	}
 	measure := MeasureBlock(NewMeasureContext(r.pdf, r.contentWidth()), block)
-	if measure.BreakBefore || measure.ShouldMoveToNextPage(r.availableHeight()) {
-		r.pdf.AddPage()
-		r.renderHeader()
+	if !r.renderingShell && (measure.BreakBefore || measure.ShouldMoveToNextPage(r.availableHeight())) {
+		r.addPageWithTemplate()
 	}
 	switch b := block.(type) {
 	case ParagraphBlock:
@@ -168,10 +180,18 @@ func (r *documentRenderer) renderBlock(block Block) {
 		}
 		r.renderBox(b.Box, func() { r.renderBlocks(b.Blocks) })
 	}
-	if measure.BreakAfter {
-		r.pdf.AddPage()
-		r.renderHeader()
+	if !r.renderingShell && measure.BreakAfter {
+		r.addPageWithTemplate()
 	}
+}
+
+func (r *documentRenderer) addPageWithTemplate() {
+	r.renderFooter()
+	if r.pdf.err != nil {
+		return
+	}
+	r.pdf.AddPage()
+	r.renderHeader()
 }
 
 func (r *documentRenderer) renderParagraph(block ParagraphBlock) {
@@ -189,11 +209,10 @@ func (r *documentRenderer) renderHeading(block HeadingBlock) {
 	r.renderBox(block.Box, func() {
 		style := mergedTextStyle(NewMeasureContext(r.pdf, r.contentWidth()).DefaultStyle, block.Style)
 		style.Bold = true
-		if style.FontSize <= 0 {
-			style.FontSize = documentHeadingFontSize(12, block.Level)
-		}
-		if style.LineHeight <= 0 {
-			style.LineHeight = style.FontSize * 1.25
+		if block.Style.FontSize <= 0 {
+			defaultStyle := NewMeasureContext(r.pdf, r.contentWidth()).DefaultStyle
+			style.FontSize = documentHeadingFontSize(defaultStyle.FontSize, block.Level)
+			style.LineHeight = firstPositive(block.Style.LineHeight, defaultStyle.LineHeight*style.FontSize/defaultStyle.FontSize)
 		}
 		r.applyTextStyle(style)
 		r.pdf.SetNextTextRole(documentHeadingRole(block.Level))
@@ -280,13 +299,12 @@ func (r *documentRenderer) renderTableRow(row TableRow, widths []float64, header
 	r.pdf.BeginStructure("TR")
 	defer r.pdf.EndStructure()
 	x, y := r.pdf.GetXY()
-	rowHeight := MeasureBlock(NewMeasureContext(r.pdf, r.contentWidth()), TableBlock{Body: []TableRow{row}}).Height
+	rowHeight := r.measureRenderedTableRow(row, widths)
 	if rowHeight <= 0 {
 		rowHeight = 6
 	}
 	if rowHeight > r.availableHeight() && r.pdf.GetY() > r.pdf.tMargin {
-		r.pdf.AddPage()
-		r.renderHeader()
+		r.addPageWithTemplate()
 		x, y = r.pdf.GetXY()
 	}
 	col := 0
@@ -308,6 +326,47 @@ func (r *documentRenderer) renderTableRow(row TableRow, widths []float64, header
 		col += span
 	}
 	r.pdf.SetXY(r.pdf.lMargin, y+rowHeight)
+}
+
+func (r *documentRenderer) measureRenderedTableRow(row TableRow, widths []float64) float64 {
+	maxHeight := 0.0
+	col := 0
+	for _, cell := range row.Cells {
+		if col >= len(widths) {
+			break
+		}
+		span := cell.ColSpan
+		if span <= 0 {
+			span = 1
+		}
+		wd := sumFloat64(widths[col:minInt(col+span, len(widths))])
+		cellHeight := r.measureRenderedTableCell(cell, wd)
+		if cellHeight > maxHeight {
+			maxHeight = cellHeight
+		}
+		col += span
+	}
+	return maxHeight
+}
+
+func (r *documentRenderer) measureRenderedTableCell(cell TableCell, width float64) float64 {
+	contentWidth := width - 2
+	if contentWidth < 0 {
+		contentWidth = 0
+	}
+	ctx := NewMeasureContext(r.pdf, contentWidth)
+	if len(cell.Blocks) == 0 {
+		style := mergedTextStyle(ctx.DefaultStyle, cell.Style)
+		return maxPositive(4, resolvedLineHeight(style))
+	}
+	total := 0.0
+	for _, block := range cell.Blocks {
+		total += MeasureBlock(ctx, block).Height
+	}
+	if total <= 0 {
+		total = resolvedLineHeight(mergedTextStyle(ctx.DefaultStyle, cell.Style))
+	}
+	return total + 2
 }
 
 func (r *documentRenderer) renderTableCell(cell TableCell, x, y, wd, ht float64, header bool, tableAttrs taggedTableAttributes) {
@@ -363,13 +422,14 @@ func (r *documentRenderer) renderImage(block ImageBlock) {
 		case "R":
 			x = r.pdf.w - r.pdf.rMargin - wd
 		}
+		name, options, info := r.registerImageBlock(block)
 		switch {
-		case len(block.Data) > 0 && block.Format != "":
-			name := fmt.Sprintf("document-image-%p", &block)
-			r.pdf.RegisterImageOptionsReader(name, ImageOptions{ImageType: block.Format, ReadDpi: block.DPI > 0}, bytes.NewReader(block.Data))
-			r.pdf.ImageOptions(name, x, r.pdf.GetY(), wd, ht, false, ImageOptions{ImageType: block.Format, AltText: block.Alt, Artifact: block.Alt == ""}, 0, "")
-		case block.Source != "":
-			r.pdf.ImageOptions(block.Source, x, r.pdf.GetY(), wd, ht, false, ImageOptions{ImageType: block.Format, AltText: block.Alt, Artifact: block.Alt == ""}, 0, "")
+		case name != "":
+			if block.Fit == ImageFitContain || block.Fit == ImageFitCover {
+				r.renderFittedImage(name, options, info, x, r.pdf.GetY(), wd, ht, block.Fit)
+			} else {
+				r.pdf.ImageOptions(name, x, r.pdf.GetY(), wd, ht, false, options, 0, "")
+			}
 		case block.Alt != "":
 			r.pdf.BeginArtifact()
 			r.pdf.Rect(x, r.pdf.GetY(), wd, ht, "D")
@@ -381,6 +441,73 @@ func (r *documentRenderer) renderImage(block ImageBlock) {
 		if len(block.Caption) > 0 {
 			r.renderParagraph(ParagraphBlock{Segments: block.Caption, Style: TextStyle{FontSize: 9, Italic: true, Align: "C"}})
 		}
+	})
+}
+
+func (r *documentRenderer) registerImageBlock(block ImageBlock) (string, ImageOptions, *ImageInfo) {
+	options := ImageOptions{ImageType: block.Format, ReadDpi: block.DPI > 0}
+	switch {
+	case len(block.Data) > 0 && block.Format != "":
+		name := documentImageName(block)
+		info := r.pdf.RegisterImageOptionsReader(name, options, bytes.NewReader(block.Data))
+		if block.DPI > 0 && info != nil {
+			info.SetDpi(block.DPI)
+		}
+		return name, options, info
+	case block.Source != "":
+		info := r.pdf.RegisterImageOptions(block.Source, options)
+		if block.DPI > 0 && info != nil {
+			info.SetDpi(block.DPI)
+		}
+		return block.Source, options, info
+	default:
+		return "", options, nil
+	}
+}
+
+func documentImageName(block ImageBlock) string {
+	hash := sha256.New()
+	hash.Write([]byte(strings.ToLower(block.Format)))
+	hash.Write([]byte{0})
+	hash.Write(block.Data)
+	return "document-image-" + hex.EncodeToString(hash.Sum(nil))
+}
+
+func (r *documentRenderer) renderFittedImage(name string, options ImageOptions, info *ImageInfo, x, y, targetW, targetH float64, fit ImageFitMode) {
+	if info == nil || info.Width() <= 0 || info.Height() <= 0 || targetW <= 0 || targetH <= 0 {
+		r.pdf.ImageOptions(name, x, y, targetW, targetH, false, options, 0, "")
+		return
+	}
+	imageW, imageH := info.Width(), info.Height()
+	scaleX := targetW / imageW
+	scaleY := targetH / imageH
+	scale := scaleX
+	if fit == ImageFitContain {
+		if scaleY < scale {
+			scale = scaleY
+		}
+		drawW := imageW * scale
+		drawH := imageH * scale
+		r.pdf.ImageOptions(name, x+(targetW-drawW)/2, y+(targetH-drawH)/2, drawW, drawH, false, options, 0, "")
+		return
+	}
+	if scaleY > scale {
+		scale = scaleY
+	}
+	drawW := imageW * scale
+	drawH := imageH * scale
+	r.pdf.ImageOptionsExtended(name, ExtendedImageOptions{
+		X:       x,
+		Y:       y,
+		W:       drawW,
+		H:       drawH,
+		Options: options,
+		Crop: &ImageCrop{
+			X: (drawW - targetW) / 2,
+			Y: (drawH - targetH) / 2,
+			W: targetW,
+			H: targetH,
+		},
 	})
 }
 
@@ -579,6 +706,52 @@ func documentHeadingBox(box BoxStyle) BoxStyle {
 		box.Margin.Bottom = documentHeadingBotSpace
 	}
 	return box
+}
+
+func (f *Document) applyPageTemplateMargins(template PageTemplate) {
+	margins := template.Margins
+	if margins.Top <= 0 && margins.Right <= 0 && margins.Bottom <= 0 && margins.Left <= 0 {
+		return
+	}
+	left, top, right, bottom := f.GetMargins()
+	if margins.Left > 0 {
+		left = margins.Left
+	}
+	if margins.Top > 0 {
+		top = margins.Top
+	}
+	if margins.Right > 0 {
+		right = margins.Right
+	}
+	if margins.Bottom > 0 {
+		bottom = margins.Bottom
+	}
+	f.SetMargins(left, top, right)
+	autoPageBreak, _ := f.GetAutoPageBreak()
+	f.SetAutoPageBreak(autoPageBreak, bottom)
+	if f.page > 0 {
+		if f.x < left {
+			f.x = left
+		}
+		if f.y < top {
+			f.y = top
+		}
+	}
+}
+
+func documentAttachments(blocks []AttachmentBlock) []Attachment {
+	attachments := make([]Attachment, 0, len(blocks))
+	for _, block := range blocks {
+		if block.Name == "" && len(block.Data) == 0 {
+			continue
+		}
+		attachments = append(attachments, Attachment{
+			Content:     block.Data,
+			Filename:    block.Name,
+			Description: block.Description,
+		})
+	}
+	return attachments
 }
 
 func tableColumnCount(table TableBlock, rows []TableRow) int {

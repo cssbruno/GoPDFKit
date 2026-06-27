@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
-// Package importpdf provides helpers for importing pages from existing PDFs.
+// Package importpdf parses pages from existing PDFs into renderer-independent
+// page references.
+//
+// The document package can render these parsed pages into a generated PDF while
+// preserving its existing ImportPage and UseImportedPage convenience methods.
 package importpdf

@@ -81,7 +81,7 @@ func htmlBlockHasBoxStyle(el HTMLSegmentType, cssRules []htmlCSSRule, ancestors 
 	if htmlHasBoxEdgeDeclaration(decl, "padding") || htmlHasBoxEdgeDeclaration(decl, "margin") || htmlHasBreakDeclaration(decl) || htmlHasBorderDeclaration(decl) {
 		return true
 	}
-	style := htmlBlockBox(el, cssRules, nil, 0, ancestors...)
+	style := htmlBlockBoxFromDeclarations(el, decl, nil, 0)
 	return style.border.enabled || style.background.Set || style.radius.hasAny() || style.shadow.enabled || style.padding.hasAny() || style.margin.hasAny() || style.breakBefore || style.breakAfter || style.breakInsideAvoid
 }
 
@@ -90,7 +90,7 @@ func (html *HTML) blockHasBoxStyle(el HTMLSegmentType, cssRules []htmlCSSRule, a
 	if htmlHasBoxEdgeDeclaration(decl, "padding") || htmlHasBoxEdgeDeclaration(decl, "margin") || htmlHasBreakDeclaration(decl) || htmlHasBorderDeclaration(decl) {
 		return true
 	}
-	style := html.blockBox(el, cssRules, nil, 0, ancestors...)
+	style := htmlBlockBoxFromDeclarations(el, decl, nil, 0)
 	return style.border.enabled || style.background.Set || style.radius.hasAny() || style.shadow.enabled || style.padding.hasAny() || style.margin.hasAny() || style.breakBefore || style.breakAfter || style.breakInsideAvoid
 }
 
@@ -124,11 +124,12 @@ func (html *HTML) writeCompiledBlockBox(compiled *CompiledHTML, tokens []HTMLSeg
 	applyHTMLCSSRules(&style, tokens[start], cssRules, inherited.fontSize, inherited.lineHeight, pdf, ancestors...)
 	html.applyAttrs(&style, tokens[start].Attr, inherited.fontSize, inherited.lineHeight, pdf)
 	html.applyTextStyle(style, fallback)
-	text := htmlPlainTextWithMode(blockTokens[1:len(blockTokens)-1], style.preserveWhitespace)
+	text, textCached := "", false
 	if compiled != nil {
-		if cachedText, ok := compiled.text(start, style.preserveWhitespace); ok {
-			text = cachedText
-		}
+		text, textCached = compiled.text(start, style.preserveWhitespace)
+	}
+	if !textCached {
+		text = htmlPlainTextWithMode(blockTokens[1:len(blockTokens)-1], style.preserveWhitespace)
 	}
 	boxWd := htmlMaxFloat(availableWd-box.margin.left-box.margin.right, 0)
 	contentWd := htmlMaxFloat(boxWd-box.padding.left-box.padding.right, 0)
@@ -538,7 +539,8 @@ func (html *HTML) compiledTableHeight(compiled *CompiledHTML, tokens []HTMLSegme
 	tableEl := HTMLSegmentType{Cat: 'O', Str: "table", Attr: table.attrs}
 	tableAncestors := appendHTMLAncestors(ancestors, tableEl)
 	colWidths := html.tableColumnWidths(layoutRows, colCount, tableWd, html.pdf)
-	rowHeights := html.tableRowHeights(layoutRows, colWidths, padding, lineHt, inherited, fallback, cssRules, tableAncestors)
+	colOffsets := htmlTableSpanPrefix(colWidths)
+	rowHeights := html.tableRowHeights(layoutRows, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors)
 	return html.tableCaptionHeight(table, tableWd, lineHt, inherited, fallback, cssRules, tableAncestors) + sumFloat64(rowHeights) + lineHt
 }
 

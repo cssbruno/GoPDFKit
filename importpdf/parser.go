@@ -1,21 +1,104 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
-package document
+package importpdf
 
 import (
 	"bytes"
+	"compress/zlib"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"sort"
 	"strconv"
 	"strings"
 )
 
-type pdfObjRef struct {
+type ObjRef struct {
 	num int
 	gen int
+}
+
+// Size reports a PDF page box width and height in points.
+type Size struct {
+	Wd float64
+	Ht float64
+}
+
+// Object is an indirect object referenced by an imported page.
+type Object struct {
+	Ref  ObjRef
+	Body []byte
+}
+
+// PageRef is a parsed PDF page ready to be embedded by a renderer.
+type PageRef struct {
+	widthPt   float64
+	heightPt  float64
+	resources []byte
+	content   []byte
+	objects   map[ObjRef][]byte
+}
+
+// WidthPoints returns the imported page width in PDF points.
+func (p *PageRef) WidthPoints() float64 {
+	if p == nil {
+		return 0
+	}
+	return p.widthPt
+}
+
+// HeightPoints returns the imported page height in PDF points.
+func (p *PageRef) HeightPoints() float64 {
+	if p == nil {
+		return 0
+	}
+	return p.heightPt
+}
+
+// Resources returns a copy of the imported page resource dictionary bytes.
+func (p *PageRef) Resources() []byte {
+	if p == nil {
+		return nil
+	}
+	return append([]byte(nil), p.resources...)
+}
+
+// Content returns a copy of the imported page content stream bytes.
+func (p *PageRef) Content() []byte {
+	if p == nil {
+		return nil
+	}
+	return append([]byte(nil), p.content...)
+}
+
+// Objects returns the indirect objects referenced by the imported page, sorted
+// by object number and generation.
+func (p *PageRef) Objects() []Object {
+	if p == nil {
+		return nil
+	}
+	refs := sortedObjRefs(p.objects)
+	objects := make([]Object, 0, len(refs))
+	for _, ref := range refs {
+		objects = append(objects, Object{Ref: ref, Body: append([]byte(nil), p.objects[ref]...)})
+	}
+	return objects
+}
+
+func sortedObjRefs(objects map[ObjRef][]byte) []ObjRef {
+	refs := make([]ObjRef, 0, len(objects))
+	for ref := range objects {
+		refs = append(refs, ref)
+	}
+	sort.Slice(refs, func(i, j int) bool {
+		if refs[i].num == refs[j].num {
+			return refs[i].gen < refs[j].gen
+		}
+		return refs[i].num < refs[j].num
+	})
+	return refs
 }
 
 type pdfValueKind int
@@ -37,38 +120,46 @@ type pdfValue struct {
 	name   string
 	array  []pdfValue
 	dict   pdfDict
-	ref    pdfObjRef
+	ref    ObjRef
 }
 
 type pdfDict map[string]pdfValue
 
-type pdfImportDocument struct {
+type Source struct {
 	data    []byte
-	offsets map[pdfObjRef]int
-	cache   map[pdfObjRef][]byte
+	offsets map[ObjRef]int
+	cache   map[ObjRef][]byte
 	trailer pdfDict
-	root    pdfObjRef
-	pages   []pdfImportPage
+	root    ObjRef
+	pages   []sourcePage
 }
 
-type pdfImportPage struct {
-	ref       pdfObjRef
+// PageCount returns the number of importable pages in the source.
+func (doc *Source) PageCount() int {
+	if doc == nil {
+		return 0
+	}
+	return len(doc.pages)
+}
+
+type sourcePage struct {
+	ref       ObjRef
 	resources pdfValue
 	boxes     map[string]pdfValue
 	contents  pdfValue
 }
 
 const (
-	maxPDFImportArrayItems         = 10000
-	maxPDFImportDecodedStreamBytes = 32 * 1024 * 1024
-	maxPDFImportDictEntries        = 10000
-	maxPDFImportPages              = 10000
-	maxPDFImportPageContentBytes   = 32 * 1024 * 1024
-	maxPDFImportPageTreeDepth      = 512
-	maxPDFImportReferencedObjects  = 10000
-	maxPDFImportXrefEntries        = 100000
-	maxPDFImportXrefChainLength    = 128
-	maxPDFImportValueNesting       = 128
+	MaxArrayItems         = 10000
+	MaxDecodedStreamBytes = 32 * 1024 * 1024
+	MaxDictEntries        = 10000
+	MaxPages              = 10000
+	MaxPageContentBytes   = 32 * 1024 * 1024
+	MaxPageTreeDepth      = 512
+	MaxReferencedObjects  = 10000
+	MaxXrefEntries        = 100000
+	MaxXrefChainLength    = 128
+	MaxValueNesting       = 128
 )
 
 type pdfBox struct {
@@ -76,11 +167,11 @@ type pdfBox struct {
 	urx, ury float64
 }
 
-func parsePDFImportDocument(data []byte) (*pdfImportDocument, error) {
-	doc := &pdfImportDocument{
+func parseSource(data []byte) (*Source, error) {
+	doc := &Source{
 		data:    data,
-		offsets: make(map[pdfObjRef]int),
-		cache:   make(map[pdfObjRef][]byte),
+		offsets: make(map[ObjRef]int),
+		cache:   make(map[ObjRef][]byte),
 	}
 	start, err := findPDFStartXref(data)
 	if err != nil {
@@ -91,7 +182,7 @@ func parsePDFImportDocument(data []byte) (*pdfImportDocument, error) {
 		if seen[start] {
 			return nil, errors.New("PDF import found cyclic xref chain")
 		}
-		if len(seen) >= maxPDFImportXrefChainLength {
+		if len(seen) >= MaxXrefChainLength {
 			return nil, errors.New("PDF import xref chain exceeds maximum size")
 		}
 		seen[start] = true
@@ -132,7 +223,7 @@ func findPDFStartXref(data []byte) (int, error) {
 	return n, nil
 }
 
-func (doc *pdfImportDocument) parseXrefAt(offset int) (pdfDict, int, error) {
+func (doc *Source) parseXrefAt(offset int) (pdfDict, int, error) {
 	p := skipPDFSpace(doc.data, offset)
 	if !hasPDFWord(doc.data, p, "xref") {
 		return nil, 0, errors.New("PDF xref streams are not supported by the built-in importer")
@@ -169,7 +260,7 @@ func (doc *pdfImportDocument) parseXrefAt(offset int) (pdfDict, int, error) {
 		if !ok || count < 0 {
 			return nil, 0, errors.New("invalid PDF xref subsection length")
 		}
-		if count > maxPDFImportXrefEntries || len(doc.offsets)+count > maxPDFImportXrefEntries {
+		if count > MaxXrefEntries || len(doc.offsets)+count > MaxXrefEntries {
 			return nil, 0, errors.New("PDF xref entry count exceeds maximum size")
 		}
 		p = next
@@ -191,7 +282,7 @@ func (doc *pdfImportDocument) parseXrefAt(offset int) (pdfDict, int, error) {
 			status := doc.data[p]
 			p = skipToNextPDFLine(doc.data, p)
 			if status == 'n' {
-				ref := pdfObjRef{num: startObj + i, gen: gen}
+				ref := ObjRef{num: startObj + i, gen: gen}
 				if _, exists := doc.offsets[ref]; !exists {
 					doc.offsets[ref] = entryOffset
 				}
@@ -200,7 +291,7 @@ func (doc *pdfImportDocument) parseXrefAt(offset int) (pdfDict, int, error) {
 	}
 }
 
-func (doc *pdfImportDocument) loadPages() error {
+func (doc *Source) loadPages() error {
 	rootBody, err := doc.objectBody(doc.root)
 	if err != nil {
 		return err
@@ -213,7 +304,7 @@ func (doc *pdfImportDocument) loadPages() error {
 	if !ok {
 		return errors.New("PDF catalog does not contain a page tree")
 	}
-	return doc.walkPageTree(pagesRef, pdfPageInherited{}, 0, make(map[pdfObjRef]bool))
+	return doc.walkPageTree(pagesRef, pdfPageInherited{}, 0, make(map[ObjRef]bool))
 }
 
 type pdfPageInherited struct {
@@ -221,8 +312,8 @@ type pdfPageInherited struct {
 	boxes     map[string]pdfValue
 }
 
-func (doc *pdfImportDocument) walkPageTree(ref pdfObjRef, inherited pdfPageInherited, depth int, visiting map[pdfObjRef]bool) error {
-	if depth > maxPDFImportPageTreeDepth {
+func (doc *Source) walkPageTree(ref ObjRef, inherited pdfPageInherited, depth int, visiting map[ObjRef]bool) error {
+	if depth > MaxPageTreeDepth {
 		return errors.New("PDF page tree exceeds maximum depth")
 	}
 	if visiting[ref] {
@@ -269,14 +360,14 @@ func (doc *pdfImportDocument) walkPageTree(ref pdfObjRef, inherited pdfPageInher
 	}
 	contents, hasContents := dict["Contents"]
 	if typeName == "Page" || (typeName == "" && hasContents) {
-		if len(doc.pages) >= maxPDFImportPages {
+		if len(doc.pages) >= MaxPages {
 			return errors.New("PDF page count exceeds maximum size")
 		}
 		pageBoxes := make(map[string]pdfValue, len(nextInherited.boxes))
 		for k, v := range nextInherited.boxes {
 			pageBoxes[k] = v
 		}
-		doc.pages = append(doc.pages, pdfImportPage{
+		doc.pages = append(doc.pages, sourcePage{
 			ref:       ref,
 			resources: nextInherited.resources,
 			boxes:     pageBoxes,
@@ -300,7 +391,7 @@ func (doc *pdfImportDocument) walkPageTree(ref pdfObjRef, inherited pdfPageInher
 	return nil
 }
 
-func (doc *pdfImportDocument) importPage(pageNo int, boxName string) (*importedPDFPage, error) {
+func (doc *Source) Page(pageNo int, boxName string) (*PageRef, error) {
 	if pageNo < 1 || pageNo > len(doc.pages) {
 		return nil, fmt.Errorf("PDF page number %d is out of range", pageNo)
 	}
@@ -318,11 +409,11 @@ func (doc *pdfImportDocument) importPage(pageNo int, boxName string) (*importedP
 		return nil, err
 	}
 	wrapped := wrapImportedPageContent(content, box)
-	objects := make(map[pdfObjRef][]byte)
-	if err := doc.collectReferencedObjects(resources, objects, make(map[pdfObjRef]bool)); err != nil {
+	objects := make(map[ObjRef][]byte)
+	if err := doc.collectReferencedObjects(resources, objects, make(map[ObjRef]bool)); err != nil {
 		return nil, err
 	}
-	return &importedPDFPage{
+	return &PageRef{
 		widthPt:   box.urx - box.llx,
 		heightPt:  box.ury - box.lly,
 		resources: append([]byte(nil), resources...),
@@ -331,7 +422,7 @@ func (doc *pdfImportDocument) importPage(pageNo int, boxName string) (*importedP
 	}, nil
 }
 
-func (doc *pdfImportDocument) pageContent(page pdfImportPage) ([]byte, error) {
+func (doc *Source) pageContent(page sourcePage) ([]byte, error) {
 	if page.contents.kind == pdfValueNull || len(page.contents.raw) == 0 {
 		return nil, nil
 	}
@@ -360,7 +451,7 @@ func (doc *pdfImportDocument) pageContent(page pdfImportPage) ([]byte, error) {
 		if out.Len() > 0 {
 			out.WriteByte('\n')
 		}
-		if out.Len()+len(decoded) > maxPDFImportPageContentBytes {
+		if out.Len()+len(decoded) > MaxPageContentBytes {
 			return nil, errors.New("PDF page content exceeds maximum size")
 		}
 		out.Write(decoded)
@@ -382,7 +473,7 @@ func wrapImportedPageContent(content []byte, box pdfBox) []byte {
 	return out.Bytes()
 }
 
-func (doc *pdfImportDocument) collectReferencedObjects(data []byte, objects map[pdfObjRef][]byte, visiting map[pdfObjRef]bool) error {
+func (doc *Source) collectReferencedObjects(data []byte, objects map[ObjRef][]byte, visiting map[ObjRef]bool) error {
 	for _, ref := range refsInPDFValueBytes(data) {
 		if _, ok := objects[ref]; ok {
 			continue
@@ -390,7 +481,7 @@ func (doc *pdfImportDocument) collectReferencedObjects(data []byte, objects map[
 		if visiting[ref] {
 			continue
 		}
-		if len(objects) >= maxPDFImportReferencedObjects {
+		if len(objects) >= MaxReferencedObjects {
 			return errors.New("PDF referenced object count exceeds maximum size")
 		}
 		visiting[ref] = true
@@ -407,7 +498,7 @@ func (doc *pdfImportDocument) collectReferencedObjects(data []byte, objects map[
 	return nil
 }
 
-func (doc *pdfImportDocument) objectBody(ref pdfObjRef) ([]byte, error) {
+func (doc *Source) objectBody(ref ObjRef) ([]byte, error) {
 	if body, ok := doc.cache[ref]; ok {
 		return body, nil
 	}
@@ -447,7 +538,7 @@ func parsePDFObjectDict(body []byte) (pdfDict, error) {
 	return value.dict, nil
 }
 
-func (doc *pdfImportDocument) parseStream(body []byte) (pdfDict, []byte, error) {
+func (doc *Source) parseStream(body []byte) (pdfDict, []byte, error) {
 	if body == nil {
 		body = []byte{}
 	}
@@ -499,15 +590,33 @@ func (doc *pdfImportDocument) parseStream(body []byte) (pdfDict, []byte, error) 
 func decodePDFStream(dict pdfDict, stream []byte) ([]byte, error) {
 	filters := pdfStreamFilters(dict["Filter"])
 	if len(filters) == 0 {
-		if len(stream) > maxPDFImportDecodedStreamBytes {
+		if len(stream) > MaxDecodedStreamBytes {
 			return nil, errors.New("PDF stream exceeds maximum size")
 		}
 		return append([]byte(nil), stream...), nil
 	}
 	if len(filters) == 1 && (filters[0] == "FlateDecode" || filters[0] == "Fl") {
-		return sliceUncompress(stream, maxPDFImportDecodedStreamBytes)
+		return uncompressStream(stream, MaxDecodedStreamBytes)
 	}
 	return nil, fmt.Errorf("filters %v are not supported", filters)
+}
+
+func uncompressStream(data []byte, limit int) ([]byte, error) {
+	reader, err := zlib.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = reader.Close() }()
+
+	var out bytes.Buffer
+	_, err = out.ReadFrom(io.LimitReader(reader, int64(limit)+1))
+	if err == nil && out.Len() > limit {
+		err = errors.New("uncompressed data exceeds expected size")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
 }
 
 func pdfStreamFilters(value pdfValue) []string {
@@ -527,7 +636,7 @@ func pdfStreamFilters(value pdfValue) []string {
 	}
 }
 
-func (page pdfImportPage) selectedBox(name string) (pdfBox, error) {
+func (page sourcePage) selectedBox(name string) (pdfBox, error) {
 	boxName := normalizePDFPageBoxName(name)
 	value, ok := page.boxes[boxName]
 	if !ok && boxName != "MediaBox" {
@@ -539,7 +648,7 @@ func (page pdfImportPage) selectedBox(name string) (pdfBox, error) {
 	return pdfValueBox(value)
 }
 
-func (doc *pdfImportDocument) pageSizes() map[int]map[string]Size {
+func (doc *Source) PageSizes() map[int]map[string]Size {
 	result := make(map[int]map[string]Size, len(doc.pages))
 	for i, page := range doc.pages {
 		pageResult := make(map[string]Size)
@@ -588,9 +697,9 @@ func pdfPageBoxNames() []string {
 	return []string{"MediaBox", "CropBox", "BleedBox", "TrimBox", "ArtBox"}
 }
 
-func pdfValueAsRef(value pdfValue) (pdfObjRef, bool) {
+func pdfValueAsRef(value pdfValue) (ObjRef, bool) {
 	if value.kind != pdfValueRef {
-		return pdfObjRef{}, false
+		return ObjRef{}, false
 	}
 	return value.ref, true
 }
@@ -606,7 +715,7 @@ func newPDFValueParser(data []byte) *pdfValueParser {
 }
 
 func (p *pdfValueParser) parseValue() (pdfValue, error) {
-	if p.depth > maxPDFImportValueNesting {
+	if p.depth > MaxValueNesting {
 		return pdfValue{}, errors.New("PDF value nesting exceeds maximum size")
 	}
 	p.pos = skipPDFSpace(p.data, p.pos)
@@ -660,7 +769,7 @@ func (p *pdfValueParser) parseDict() (pdfValue, error) {
 			p.pos += 2
 			return pdfValue{kind: pdfValueDict, dict: dict}, nil
 		}
-		if len(dict) >= maxPDFImportDictEntries {
+		if len(dict) >= MaxDictEntries {
 			return pdfValue{}, errors.New("PDF dictionary exceeds maximum size")
 		}
 		key, err := p.parseName()
@@ -689,7 +798,7 @@ func (p *pdfValueParser) parseArray() (pdfValue, error) {
 			p.pos++
 			return pdfValue{kind: pdfValueArray, array: array}, nil
 		}
-		if len(array) >= maxPDFImportArrayItems {
+		if len(array) >= MaxArrayItems {
 			return pdfValue{}, errors.New("PDF array exceeds maximum size")
 		}
 		p.depth++
@@ -728,7 +837,7 @@ func (p *pdfValueParser) parseNumberOrRef() (pdfValue, error) {
 			afterSecond = skipPDFSpace(p.data, afterSecond)
 			if afterSecond < len(p.data) && p.data[afterSecond] == 'R' && isPDFBoundary(p.data, afterSecond+1) {
 				p.pos = afterSecond + 1
-				return pdfValue{kind: pdfValueRef, ref: pdfObjRef{num: int(first), gen: int(second)}}, nil
+				return pdfValue{kind: pdfValueRef, ref: ObjRef{num: int(first), gen: int(second)}}, nil
 			}
 		}
 		p.pos = save
@@ -784,24 +893,24 @@ func (p *pdfValueParser) parseKeyword() (pdfValue, error) {
 }
 
 type foundPDFRef struct {
-	ref        pdfObjRef
+	ref        ObjRef
 	start, end int
 }
 
-func refsInPDFValueBytes(data []byte) []pdfObjRef {
+func refsInPDFValueBytes(data []byte) []ObjRef {
 	parser := newPDFValueParser(data)
 	value, err := parser.parseValue()
 	if err != nil {
 		found := findPDFIndirectRefs(data)
-		refs := make([]pdfObjRef, 0, len(found))
+		refs := make([]ObjRef, 0, len(found))
 		for _, ref := range found {
 			refs = append(refs, ref.ref)
 		}
 		return refs
 	}
-	refs := make(map[pdfObjRef]bool)
+	refs := make(map[ObjRef]bool)
 	collectPDFValueRefs(value, refs)
-	out := make([]pdfObjRef, 0, len(refs))
+	out := make([]ObjRef, 0, len(refs))
 	for ref := range refs {
 		out = append(out, ref)
 	}
@@ -814,7 +923,45 @@ func refsInPDFValueBytes(data []byte) []pdfObjRef {
 	return out
 }
 
-func collectPDFValueRefs(value pdfValue, refs map[pdfObjRef]bool) {
+// RewriteIndirectRefs rewrites indirect object references found outside stream
+// bodies according to refMap.
+func RewriteIndirectRefs(data []byte, refMap map[ObjRef]int) []byte {
+	if data == nil {
+		return []byte{}
+	}
+	streamPos := bytes.Index(data, []byte("stream"))
+	if streamPos < 0 {
+		return rewriteIndirectRefsInSection(data, refMap)
+	}
+	out := rewriteIndirectRefsInSection(data[:streamPos], refMap)
+	out = append(out, data[streamPos:]...)
+	return out
+}
+
+func rewriteIndirectRefsInSection(data []byte, refMap map[ObjRef]int) []byte {
+	if data == nil {
+		return []byte{}
+	}
+	refs := findPDFIndirectRefs(data)
+	if len(refs) == 0 {
+		return append([]byte(nil), data...)
+	}
+	var out bytes.Buffer
+	last := 0
+	for _, found := range refs {
+		newObj, ok := refMap[found.ref]
+		if !ok {
+			continue
+		}
+		out.Write(data[last:found.start])
+		fmt.Fprintf(&out, "%d 0 R", newObj)
+		last = found.end
+	}
+	out.Write(data[last:])
+	return out.Bytes()
+}
+
+func collectPDFValueRefs(value pdfValue, refs map[ObjRef]bool) {
 	switch value.kind {
 	case pdfValueRef:
 		refs[value.ref] = true
@@ -868,7 +1015,7 @@ func findPDFIndirectRefs(data []byte) []foundPDFRef {
 		afterSecond = skipPDFSpace(data, afterSecond)
 		if afterSecond < len(data) && data[afterSecond] == 'R' && isPDFBoundary(data, afterSecond+1) {
 			refs = append(refs, foundPDFRef{
-				ref:   pdfObjRef{num: first, gen: second},
+				ref:   ObjRef{num: first, gen: second},
 				start: firstStart,
 				end:   afterSecond + 1,
 			})

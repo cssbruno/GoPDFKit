@@ -14,7 +14,10 @@ import (
 // art and artbox box types are case insensitive. See SetPageBox() for a method
 // that specifies the coordinates and extent of the page box individually.
 func (f *Document) SetPageBoxRec(t string, pb PageBox) {
-	if !finiteNumbers(pb.X, pb.Y, pb.Wd, pb.Ht) {
+	if f.err != nil {
+		return
+	}
+	if !finiteNumbers(pb.X, pb.Y, pb.Wd, pb.Ht) || pb.Wd <= 0 || pb.Ht <= 0 {
 		f.err = errors.New("invalid page box coordinates")
 		return
 	}

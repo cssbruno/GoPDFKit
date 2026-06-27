@@ -64,6 +64,7 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 		}
 	}
 	sep := -1
+	sepInclude := false
 	i := 0
 	j := 0
 	l := 0
@@ -106,15 +107,22 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 			}
 			continue
 		}
-		if c == ' ' || isChinese(c) {
-			sep = i
-			ls = l
-			ns++
-		}
+		var charWidth int
 		if f.isCurrentUTF8 {
-			l += f.currentFontRuneWidth(c)
+			charWidth = f.currentFontRuneWidth(c)
 		} else {
-			l += cw[int(c)]
+			charWidth = cw[int(c)]
+		}
+		l += charWidth
+		if c == ' ' {
+			sep = i
+			sepInclude = false
+			ls = l - charWidth
+			ns++
+		} else if f.isCurrentUTF8 && isChinese(c) {
+			sep = i
+			sepInclude = true
+			ls = l
 		}
 		if l > wmax {
 			if sep == -1 {
@@ -131,6 +139,10 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 					f.CellFormat(w, h, s[j:i], b, 2, alignStr, fill, 0, "")
 				}
 			} else {
+				lineEnd := sep
+				if sepInclude {
+					lineEnd = sep + 1
+				}
 				if alignStr == "J" {
 					if ns > 1 {
 						f.ws = float64((wmax-ls)/1000) * f.fontSize / float64(ns-1)
@@ -140,13 +152,14 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 					f.outf("%.3f Tw", f.ws*f.k)
 				}
 				if f.isCurrentUTF8 {
-					f.CellFormat(w, h, string(srune[j:sep]), b, 2, alignStr, fill, 0, "")
+					f.CellFormat(w, h, string(srune[j:lineEnd]), b, 2, alignStr, fill, 0, "")
 				} else {
-					f.CellFormat(w, h, s[j:sep], b, 2, alignStr, fill, 0, "")
+					f.CellFormat(w, h, s[j:lineEnd], b, 2, alignStr, fill, 0, "")
 				}
 				i = sep + 1
 			}
 			sep = -1
+			sepInclude = false
 			j = i
 			l = 0
 			ns = 0

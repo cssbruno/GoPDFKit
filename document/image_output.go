@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+
+	"github.com/cssbruno/gopdfkit/importpdf"
 )
 
 type imagePlacement struct {
@@ -136,24 +138,24 @@ func (f *Document) putImportedPages() {
 	sort.Ints(ids)
 	for _, id := range ids {
 		page := f.importedPages[id]
-		if page == nil {
+		if page == nil || page.page == nil {
 			continue
 		}
-		refs := sortedPDFObjRefs(page.objects)
-		refMap := make(map[pdfObjRef]int, len(refs))
+		objects := page.page.Objects()
+		refMap := make(map[importpdf.ObjRef]int, len(objects))
 		nextID := f.n + 1
-		for _, ref := range refs {
-			refMap[ref] = nextID
+		for _, object := range objects {
+			refMap[object.Ref] = nextID
 			nextID++
 		}
-		for _, ref := range refs {
-			body := rewritePDFIndirectRefs(page.objects[ref], refMap)
+		for _, object := range objects {
+			body := importpdf.RewriteIndirectRefs(object.Body, refMap)
 			f.newobj()
 			f.outbuf(bytes.NewReader(body))
 			f.out("endobj")
 		}
-		resources := rewritePDFIndirectRefs(page.resources, refMap)
-		content := page.content
+		resources := importpdf.RewriteIndirectRefs(page.page.Resources(), refMap)
+		content := page.page.Content()
 		filter := ""
 		if f.compress {
 			content = f.compressBytes(content)
@@ -165,7 +167,7 @@ func (f *Document) putImportedPages() {
 		f.newobj()
 		page.objectID = f.n
 		f.outf("<</Type /XObject\n/Subtype /Form\n/FormType 1\n/BBox [0 0 %.2f %.2f]\n/Matrix [1 0 0 1 0 0]\n/Resources %s\n%s/Length %d>>",
-			page.widthPt, page.heightPt, string(resources), filter, len(content))
+			page.page.WidthPoints(), page.page.HeightPoints(), string(resources), filter, len(content))
 		f.putstream(content)
 		f.out("endobj")
 	}

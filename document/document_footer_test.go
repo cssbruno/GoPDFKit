@@ -80,7 +80,7 @@ func TestWriteDocumentRendersExtractedHTMLFooterBlock(t *testing.T) {
 	pdf.SetCompression(false)
 	doc := NewLayoutDocument(DocumentKindGeneric)
 	doc.Body = []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Document body"}}}}
-	doc.Footer = footer
+	doc.PageTemplate.Footer = footer
 
 	pdf.WriteDocument(doc)
 	var out bytes.Buffer

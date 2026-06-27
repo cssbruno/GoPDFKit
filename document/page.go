@@ -217,6 +217,15 @@ func (f *Document) addPageFormatRotation(orientationStr string, size Size, rotat
 		f.err = fmt.Errorf("incorrect rotation value: %d", rotation)
 		return
 	}
+	orientationStr, err := f.normalizePageOrientation(orientationStr)
+	if err != nil {
+		f.err = err
+		return
+	}
+	if err := validatePageSize(size); err != nil {
+		f.err = err
+		return
+	}
 	if f.page != len(f.pages)-1 {
 		f.page = len(f.pages) - 1
 	}
@@ -431,6 +440,27 @@ func (f *Document) getpagesizestr(sizeStr string) (size Size) {
 	return
 }
 
+func (f *Document) normalizePageOrientation(orientationStr string) (string, error) {
+	if strings.TrimSpace(orientationStr) == "" {
+		return f.defOrientation, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(orientationStr)) {
+	case "p", "portrait":
+		return "P", nil
+	case "l", "landscape":
+		return "L", nil
+	default:
+		return "", fmt.Errorf("incorrect orientation: %s", orientationStr)
+	}
+}
+
+func validatePageSize(size Size) error {
+	if !finiteNumbers(size.Wd, size.Ht) || size.Wd <= 0 || size.Ht <= 0 {
+		return fmt.Errorf("invalid page size: %.2f x %.2f", size.Wd, size.Ht)
+	}
+	return nil
+}
+
 // GetPageSizeStr returns the Size for the given sizeStr (that is A4, A3, etc..)
 func (f *Document) GetPageSizeStr(sizeStr string) (size Size) {
 	return f.getpagesizestr(sizeStr)
@@ -438,6 +468,15 @@ func (f *Document) GetPageSizeStr(sizeStr string) (size Size) {
 
 func (f *Document) beginpage(orientationStr string, size Size, rotation int) {
 	if f.err != nil {
+		return
+	}
+	orientationStr, err := f.normalizePageOrientation(orientationStr)
+	if err != nil {
+		f.err = err
+		return
+	}
+	if err := validatePageSize(size); err != nil {
+		f.err = err
 		return
 	}
 	f.page++
@@ -451,11 +490,6 @@ func (f *Document) beginpage(orientationStr string, size Size, rotation int) {
 	f.x = f.lMargin
 	f.y = f.tMargin
 	f.fontFamily = ""
-	if orientationStr == "" {
-		orientationStr = f.defOrientation
-	} else {
-		orientationStr = strings.ToUpper(orientationStr[0:1])
-	}
 	if orientationStr != f.curOrientation || size.Wd != f.curPageSize.Wd || size.Ht != f.curPageSize.Ht {
 		if orientationStr == "P" {
 			f.w = size.Wd

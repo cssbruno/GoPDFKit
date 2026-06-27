@@ -128,7 +128,10 @@ func escapePDFName(name string) string {
 // support document attachments. See the SetAttachment example for a
 // demonstration of this method.
 func (f *Document) SetAttachments(as []Attachment) {
-	f.attachments = as
+	f.attachments = make([]Attachment, len(as))
+	for i := range as {
+		f.attachments[i] = cloneAttachment(as[i])
+	}
 }
 
 // putAttachments embeds the current attachments and stores their object numbers
@@ -167,7 +170,15 @@ type annotationAttach struct {
 // annotated attachments. See the AddAttachmentAnnotation example for a
 // demonstration of this method.
 func (f *Document) AddAttachmentAnnotation(a *Attachment, x, y, w, h float64) {
+	if f.err != nil {
+		return
+	}
 	if a == nil {
+		f.SetErrorf("attachment annotation requires an attachment")
+		return
+	}
+	if f.page <= 0 {
+		f.SetErrorf("attachment annotation requires an active page")
 		return
 	}
 	if !finiteNumbers(x, y, w, h) {
@@ -178,6 +189,12 @@ func (f *Document) AddAttachmentAnnotation(a *Attachment, x, y, w, h float64) {
 		Attachment: a,
 		x:          x * f.k, y: f.hPt - y*f.k, w: w * f.k, h: h * f.k,
 	})
+}
+
+func cloneAttachment(a Attachment) Attachment {
+	a.Content = append([]byte(nil), a.Content...)
+	a.objectNumber = 0
+	return a
 }
 
 // putAnnotationsAttachments embeds attachments used by annotations and stores

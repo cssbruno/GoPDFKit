@@ -117,6 +117,10 @@ func (f *Document) RegisterImageOptionsReader(imgName string, options ImageOptio
 	if f.err != nil {
 		return
 	}
+	if strings.TrimSpace(imgName) == "" {
+		f.err = errors.New("image name should not be blank")
+		return
+	}
 	info, ok := f.images[imgName]
 	if ok {
 		if info == nil {
@@ -187,18 +191,35 @@ func (f *Document) RegisterImageOptions(fileStr string, options ImageOptions) (i
 
 // ImportObjects imports external template objects into the current document.
 func (f *Document) ImportObjects(objs map[string][]byte) {
-	maps.Copy(f.importedObjs, objs)
+	for name, data := range objs {
+		f.importedObjs[name] = append([]byte(nil), data...)
+	}
 }
 
 // ImportObjPos imports external template object hash positions.
 func (f *Document) ImportObjPos(objPos map[string]map[int]string) {
-	maps.Copy(f.importedObjPos, objPos)
+	for name, positions := range objPos {
+		copied := make(map[int]string, len(positions))
+		maps.Copy(copied, positions)
+		f.importedObjPos[name] = copied
+	}
 }
 
 // UseImportedTemplate draws an imported PDF template onto the current page.
 func (f *Document) UseImportedTemplate(tplName string, scaleX float64, scaleY float64, tX float64, tY float64) {
+	if f.err != nil {
+		return
+	}
+	if f.page <= 0 {
+		f.SetErrorf("cannot use an imported template without first adding a page")
+		return
+	}
 	if !validPDFResourceName(tplName) {
 		f.SetErrorf("invalid imported template name: %s", tplName)
+		return
+	}
+	if !finiteNumbers(scaleX, scaleY, tX, tY) || scaleX == 0 || scaleY == 0 {
+		f.SetErrorf("invalid imported template placement")
 		return
 	}
 	content := []byte(sprintf("q 0 J 1 w 0 j 0 G 0 g q %.4F 0 0 %.4F %.4F %.4F cm %s Do Q Q", scaleX*f.k, scaleY*f.k, tX*f.k, (tY+f.h)*f.k, tplName))

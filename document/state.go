@@ -10,21 +10,24 @@ import (
 
 // Document represents a single PDF document under construction.
 type Document struct {
-	isCurrentUTF8    bool                       // whether the current font uses UTF-8 mode
-	isRTL            bool                       // whether right-to-left mode is enabled
-	page             int                        // current page number
-	n                int                        // current object number
-	offsets          []int                      // array of object offsets
-	templates        map[string]Template        // templates used in this document
-	templateObjects  map[string]int             // template object IDs within this document
-	importedObjs     map[string][]byte          // imported template objects
-	importedObjPos   map[string]map[int]string  // imported template object hash positions
-	importedTplObjs  map[string]string          // imported template names and IDs
-	importedTplIDs   map[string]int             // imported template hash to object ID
-	importedPages    map[int]*importedPDFPage   // native imported PDF pages
-	importedPageSeq  int                        // next native imported PDF page ID
-	buffer           fmtBuffer                  // buffer holding in-memory PDF
-	pages            []*bytes.Buffer            // slice[page] of page content; 1-based
+	isCurrentUTF8   bool                      // whether the current font uses UTF-8 mode
+	isRTL           bool                      // whether right-to-left mode is enabled
+	page            int                       // current page number
+	n               int                       // current object number
+	offsets         []int                     // array of object offsets
+	templates       map[string]Template       // templates used in this document
+	templateObjects map[string]int            // template object IDs within this document
+	importedObjs    map[string][]byte         // imported template objects
+	importedObjPos  map[string]map[int]string // imported template object hash positions
+	importedTplObjs map[string]string         // imported template names and IDs
+	importedTplIDs  map[string]int            // imported template hash to object ID
+	importedPages   map[int]*importedPDFPage  // native imported PDF pages
+	importedPageSeq int                       // next native imported PDF page ID
+	buffer          fmtBuffer                 // buffer holding in-memory PDF
+	pages           []*bytes.Buffer           // slice[page] of page content; 1-based
+
+	pageObjectNumbers []int // PDF page object numbers by page; 1-based, populated at output
+
 	state            int                        // current document state
 	compress         bool                       // compression flag
 	compressLevel    int                        // zlib level for compressed streams

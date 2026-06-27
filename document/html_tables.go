@@ -79,7 +79,10 @@ type htmlTableMeasuredCell struct {
 	textHt    float64
 }
 
-const htmlMaxTableColumns = 1024
+const (
+	htmlMaxTableColumns         = 1024
+	htmlTableMinWidthCacheLimit = 256
+)
 
 func (html *HTML) writeTable(tokens []HTMLSegmentType, start int, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) int {
 	table, end := parseHTMLTable(tokens, start)
@@ -122,6 +125,7 @@ func (html *HTML) writeParsedTable(table htmlTableType, end int, lineHt float64,
 		return end
 	}
 	colWidths := html.tableColumnWidths(layoutRows, colCount, tableWd, pdf)
+	colOffsets := htmlTableSpanPrefix(colWidths)
 	textR, textG, textB := pdf.GetTextColor()
 	fillR, fillG, fillB := pdf.GetFillColor()
 	drawR, drawG, drawB := pdf.GetDrawColor()
@@ -143,7 +147,7 @@ func (html *HTML) writeParsedTable(table htmlTableType, end int, lineHt float64,
 	tableBreakInsideAvoid := htmlBreakAvoidsInside(tableDecl["break-inside"]) || htmlBreakAvoidsInside(tableDecl["page-break-inside"])
 	tableBorderCollapse := html.tableBorderCollapse(tableDecl, table.attrs)
 	tableAncestors := appendHTMLAncestors(ancestors, tableEl)
-	measuredRows, rowHeights := html.measureTableRows(layoutRows, colWidths, padding, lineHt, inherited, fallback, cssRules, tableAncestors, tableBorder, table.attrs)
+	measuredRows, rowHeights := html.measureTableRows(layoutRows, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors, tableBorder, table.attrs)
 	headerRows := htmlTableHeaderMeasuredRows(measuredRows)
 	captionHt := html.tableCaptionHeight(table, tableWd, lineHt, inherited, fallback, cssRules, tableAncestors)
 	totalTableHt := captionHt + sumFloat64(rowHeights)
@@ -178,8 +182,8 @@ func (html *HTML) writeParsedTable(table htmlTableType, end int, lineHt float64,
 				RowSpan: placement.rowspan,
 				ColSpan: placement.colspan,
 			})
-			x := startX + htmlTableSpanWidth(colWidths, 0, placement.col)
-			wd := htmlTableSpanWidth(colWidths, placement.col, placement.colspan)
+			x := startX + htmlTablePrefixSpanWidth(colOffsets, 0, placement.col)
+			wd := htmlTablePrefixSpanWidth(colOffsets, placement.col, placement.colspan)
 			cellHt := rowHt
 			if placement.rowspan > 1 {
 				cellHt = htmlTableSpanHeight(rowHeights, placement.row, placement.rowspan)
@@ -734,6 +738,7 @@ func htmlTableColumnWidthsWithStyleValue(rows []htmlTableLayoutRow, count int, t
 	widths := make([]float64, count)
 	specified := make([]bool, count)
 	minWidths := make([]float64, count)
+	minWidthCache := make(map[string]float64)
 	for _, row := range rows {
 		for _, cell := range row.cells {
 			if cell.col >= count {
@@ -744,7 +749,7 @@ func htmlTableColumnWidthsWithStyleValue(rows []htmlTableLayoutRow, count int, t
 				continue
 			}
 			cellDef := row.row.cells[cell.cellIndex]
-			minWd := htmlTableCellMinWidth(cellDef, pdf)
+			minWd := htmlTableCellMinWidthCached(cellDef, pdf, minWidthCache)
 			htmlApplyTableSpanMinimum(minWidths, cell.col, span, minWd)
 			widthHint := cellDef.widthHint
 			if widthHint == "" {
@@ -831,6 +836,24 @@ func htmlTableCellMinWidth(cell htmlTableCell, pdf *Document) float64 {
 	return htmlMaxWordWidth(pdf, cell.text)
 }
 
+func htmlTableCellMinWidthCached(cell htmlTableCell, pdf *Document, cache map[string]float64) float64 {
+	if pdf == nil {
+		return 0
+	}
+	if cache == nil {
+		return htmlTableCellMinWidth(cell, pdf)
+	}
+	key := cell.text
+	if wd, ok := cache[key]; ok {
+		return wd
+	}
+	wd := htmlMaxWordWidth(pdf, key)
+	if len(cache) < htmlTableMinWidthCacheLimit {
+		cache[key] = wd
+	}
+	return wd
+}
+
 func htmlTableCellText(cell htmlTableCell, preserveWhitespace bool) string {
 	if preserveWhitespace {
 		return cell.textPreserved
@@ -839,6 +862,40 @@ func htmlTableCellText(cell htmlTableCell, preserveWhitespace bool) string {
 }
 
 func htmlMaxWordWidth(pdf *Document, text string) float64 {
+	for i := 0; i < len(text); i++ {
+		if text[i] >= utf8.RuneSelf {
+			return htmlMaxWordWidthUnicode(pdf, text)
+		}
+	}
+	return htmlMaxWordWidthASCII(pdf, text)
+}
+
+func htmlMaxWordWidthASCII(pdf *Document, text string) float64 {
+	maxWd := 0.0
+	start := -1
+	for i := 0; i < len(text); i++ {
+		if htmlIsASCIISpace(text[i]) {
+			if start >= 0 {
+				if wd := pdf.GetStringWidth(text[start:i]); wd > maxWd {
+					maxWd = wd
+				}
+			}
+			start = -1
+			continue
+		}
+		if start < 0 {
+			start = i
+		}
+	}
+	if start >= 0 {
+		if wd := pdf.GetStringWidth(text[start:]); wd > maxWd {
+			maxWd = wd
+		}
+	}
+	return maxWd
+}
+
+func htmlMaxWordWidthUnicode(pdf *Document, text string) float64 {
 	maxWd := 0.0
 	start := -1
 	for i, r := range text {
@@ -861,6 +918,10 @@ func htmlMaxWordWidth(pdf *Document, text string) float64 {
 		}
 	}
 	return maxWd
+}
+
+func htmlIsASCIISpace(ch byte) bool {
+	return ch == ' ' || (ch >= '\t' && ch <= '\r')
 }
 
 func htmlApplyTableSpanMinimum(widths []float64, start, span int, target float64) {
@@ -906,7 +967,7 @@ func htmlApplyTableSpanWidth(widths []float64, specified []bool, start, span int
 	}
 }
 
-func (html *HTML) measureTableRows(rows []htmlTableLayoutRow, widths []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, tableAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, tableAttrs map[string]string) ([]htmlTableMeasuredRow, []float64) {
+func (html *HTML) measureTableRows(rows []htmlTableLayoutRow, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, tableAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, tableAttrs map[string]string) ([]htmlTableMeasuredRow, []float64) {
 	measuredRows := make([]htmlTableMeasuredRow, len(rows))
 	heights := make([]float64, len(rows))
 	for i := range heights {
@@ -919,7 +980,7 @@ func (html *HTML) measureTableRows(rows []htmlTableLayoutRow, widths []float64, 
 		rowAncestors := appendHTMLAncestors(tableAncestors, rowEl)
 		rowFill := html.cellBackground(row.row.attrs)
 		for _, placement := range row.cells {
-			measuredCell := html.measureTableCell(row, placement, widths, padding, lineHt, inherited, fallback, cssRules, rowAncestors, tableBorder, rowFill, tableFill)
+			measuredCell := html.measureTableCell(row, placement, colOffsets, padding, lineHt, inherited, fallback, cssRules, rowAncestors, tableBorder, rowFill, tableFill)
 			measuredRow.cells = append(measuredRow.cells, measuredCell)
 			required := measuredCell.textHt + measuredCell.padding.top + measuredCell.padding.bottom
 			span := placement.rowspan
@@ -948,7 +1009,7 @@ func (html *HTML) measureTableRows(rows []htmlTableLayoutRow, widths []float64, 
 	return measuredRows, heights
 }
 
-func (html *HTML) measureTableCell(row htmlTableLayoutRow, placement htmlTableCellPlacement, widths []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, rowAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, rowFill, tableFill CSSColorType) htmlTableMeasuredCell {
+func (html *HTML) measureTableCell(row htmlTableLayoutRow, placement htmlTableCellPlacement, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, rowAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, rowFill, tableFill CSSColorType) htmlTableMeasuredCell {
 	cell := row.row.cells[placement.cellIndex]
 	style := inherited
 	if cell.header {
@@ -960,7 +1021,7 @@ func (html *HTML) measureTableCell(row htmlTableLayoutRow, placement htmlTableCe
 	applyHTMLCSSRules(&style, HTMLSegmentType{Cat: 'O', Str: cell.tag, Attr: cell.attrs}, cssRules, inherited.fontSize, inherited.lineHeight, html.pdf, rowAncestors...)
 	html.applyAttrs(&style, cell.attrs, inherited.fontSize, inherited.lineHeight, html.pdf)
 	html.applyTextStyle(style, fallback)
-	wd := htmlTableSpanWidth(widths, placement.col, placement.colspan)
+	wd := htmlTablePrefixSpanWidth(colOffsets, placement.col, placement.colspan)
 	cellPadding := html.cellPadding(cell.attrs, html.pdf, padding, wd)
 	contentWd := htmlMaxFloat(wd-cellPadding.left-cellPadding.right, 0)
 	text := htmlTableCellText(cell, style.preserveWhitespace)
@@ -977,14 +1038,14 @@ func (html *HTML) measureTableCell(row htmlTableLayoutRow, placement htmlTableCe
 	}
 }
 
-func (html *HTML) tableRowHeights(rows []htmlTableLayoutRow, widths []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, tableAncestors []HTMLSegmentType) []float64 {
+func (html *HTML) tableRowHeights(rows []htmlTableLayoutRow, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, tableAncestors []HTMLSegmentType) []float64 {
 	heights := make([]float64, len(rows))
 	for i := range heights {
 		heights[i] = lineHt + 2*padding
 	}
 	for rowIndex, row := range rows {
 		for _, cell := range row.cells {
-			required := html.tableCellHeight(row, cell, widths, padding, lineHt, inherited, fallback, cssRules, tableAncestors)
+			required := html.tableCellHeight(row, cell, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors)
 			span := cell.rowspan
 			if span < 1 {
 				span = 1
@@ -1054,7 +1115,7 @@ func (html *HTML) renderTableCaption(table htmlTableType, x, tableWd, lineHt flo
 	html.pdf.Ln(htmlEffectiveLineHeight(style, lineHt) * 0.5)
 }
 
-func (html *HTML) tableCellHeight(row htmlTableLayoutRow, placement htmlTableCellPlacement, widths []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, tableAncestors []HTMLSegmentType) float64 {
+func (html *HTML) tableCellHeight(row htmlTableLayoutRow, placement htmlTableCellPlacement, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, tableAncestors []HTMLSegmentType) float64 {
 	cell := row.row.cells[placement.cellIndex]
 	style := inherited
 	if cell.header {
@@ -1065,7 +1126,7 @@ func (html *HTML) tableCellHeight(row htmlTableLayoutRow, placement htmlTableCel
 	applyHTMLCSSRules(&style, HTMLSegmentType{Cat: 'O', Str: cell.tag, Attr: cell.attrs}, cssRules, inherited.fontSize, inherited.lineHeight, html.pdf, rowAncestors...)
 	html.applyAttrs(&style, cell.attrs, inherited.fontSize, inherited.lineHeight, html.pdf)
 	html.applyTextStyle(style, fallback)
-	cellWd := htmlTableSpanWidth(widths, placement.col, placement.colspan)
+	cellWd := htmlTablePrefixSpanWidth(colOffsets, placement.col, placement.colspan)
 	cellPadding := html.cellPadding(cell.attrs, html.pdf, padding, cellWd)
 	textWd := htmlMaxFloat(cellWd-cellPadding.left-cellPadding.right, 0)
 	return html.tableCellTextHeight(htmlTableCellText(cell, style.preserveWhitespace), textWd, style, lineHt) + cellPadding.top + cellPadding.bottom
@@ -1336,6 +1397,25 @@ func htmlTableSpanWidth(widths []float64, start, span int) float64 {
 		wd += widths[j]
 	}
 	return wd
+}
+
+func htmlTableSpanPrefix(widths []float64) []float64 {
+	offsets := make([]float64, len(widths)+1)
+	for i, wd := range widths {
+		offsets[i+1] = offsets[i] + wd
+	}
+	return offsets
+}
+
+func htmlTablePrefixSpanWidth(offsets []float64, start, span int) float64 {
+	if span <= 0 || start < 0 || start >= len(offsets)-1 {
+		return 0
+	}
+	end := start + span
+	if end > len(offsets)-1 {
+		end = len(offsets) - 1
+	}
+	return offsets[end] - offsets[start]
 }
 
 func htmlTableSpanHeight(heights []float64, start, span int) float64 {

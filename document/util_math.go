@@ -6,6 +6,7 @@ package document
 import (
 	"fmt"
 	"math"
+	"unicode"
 )
 
 func round(f float64) int {
@@ -59,9 +60,7 @@ func remove(arr []int, key int) []int {
 }
 
 func isChinese(rune2 rune) bool {
-	// Chinese Unicode range: 4e00-9fa5.
-	if rune2 >= rune(0x4e00) && rune2 <= rune(0x9fa5) {
-		return true
-	}
-	return false
+	return unicode.In(rune2, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul) ||
+		(rune2 >= 0x3000 && rune2 <= 0x303F) ||
+		(rune2 >= 0xFF00 && rune2 <= 0xFFEF)
 }

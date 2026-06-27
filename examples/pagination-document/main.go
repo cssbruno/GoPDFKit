@@ -13,12 +13,11 @@ import (
 
 func main() {
 	doc := document.NewGenericDocument("Document Pagination")
-	doc.Footer = &document.FooterBlock{
+	doc.PageTemplate.Footer = &document.FooterBlock{
 		Height:          8,
-		ShowPageNumber:  true,
-		TotalPageAlias:  "{total}",
 		ReservePageArea: true,
 	}
+	doc.PageTemplate.PageNumbers = document.PageNumberOptions{Enabled: true, TotalPageAlias: "{total}"}
 	doc.Body = append(doc.Body,
 		paragraph("The document model paginates long content, reserves footer space, repeats table headers, and accepts explicit page breaks."),
 		document.PageBreakBlock{After: true},

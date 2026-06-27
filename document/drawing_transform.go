@@ -24,6 +24,9 @@ type TransformMatrix struct {
 // image output and finally a call to TransformEnd(). All transformation
 // contexts must be properly ended prior to outputting the document.
 func (f *Document) TransformBegin() {
+	if f.err != nil {
+		return
+	}
 	f.transformNest++
 	f.out("q")
 }
@@ -60,6 +63,9 @@ func (f *Document) TransformScaleXY(s, x, y float64) {
 //
 // The TransformBegin() example demonstrates this method.
 func (f *Document) TransformScale(scaleWd, scaleHt, x, y float64) {
+	if f.err != nil {
+		return
+	}
 	if scaleWd == 0 || scaleHt == 0 {
 		f.err = errors.New("scale factor cannot be zero")
 		return
@@ -175,6 +181,9 @@ func (f *Document) TransformSkewY(angleY, x, y float64) {
 //
 // The TransformBegin() example demonstrates this method.
 func (f *Document) TransformSkew(angleX, angleY, x, y float64) {
+	if f.err != nil {
+		return
+	}
 	if angleX <= -90 || angleX >= 90 || angleY <= -90 || angleY >= 90 {
 		f.err = errors.New("skew values must be between -90° and 90°")
 		return
@@ -195,10 +204,13 @@ func (f *Document) TransformSkew(angleX, angleY, x, y float64) {
 // according to the specified matrix. It is typically easier to use the various
 // methods such as TransformRotate() and TransformMirrorVertical() instead.
 func (f *Document) Transform(tm TransformMatrix) {
+	if f.err != nil {
+		return
+	}
 	if f.transformNest > 0 {
 		f.outf("%.5f %.5f %.5f %.5f %.5f %.5f cm",
 			tm.A, tm.B, tm.C, tm.D, tm.E, tm.F)
-	} else if f.err == nil {
+	} else {
 		f.err = errors.New("transformation context is not active")
 	}
 }
@@ -207,6 +219,9 @@ func (f *Document) Transform(tm TransformMatrix) {
 //
 // The TransformBegin() example demonstrates this method.
 func (f *Document) TransformEnd() {
+	if f.err != nil {
+		return
+	}
 	if f.transformNest > 0 {
 		f.transformNest--
 		f.out("Q")
