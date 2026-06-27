@@ -162,6 +162,97 @@ func BenchmarkHTMLTableSpanWidthWideRows(b *testing.B) {
 	})
 }
 
+func BenchmarkHTMLTableColumnWidthsRepeatedText(b *testing.B) {
+	const (
+		rows = 400
+		cols = 8
+	)
+	values := []string{
+		"ready",
+		"pending approval",
+		"blocked by upstream dependency",
+		"generated benchmark row",
+		"operational status",
+		"category label",
+	}
+	tableRows := make([]htmlTableRow, rows)
+	for row := range tableRows {
+		cells := make([]htmlTableCell, cols)
+		for col := range cells {
+			text := values[(row+col)%len(values)]
+			cells[col] = htmlTableCell{
+				attrs: map[string]string{},
+				text:  text,
+				tag:   "td",
+			}
+		}
+		tableRows[row] = htmlTableRow{cells: cells}
+	}
+	layoutRows := htmlTableLayoutRows(tableRows)
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetFont("Helvetica", "", 9)
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		widths := htmlTableColumnWidths(layoutRows, cols, 180, pdf)
+		if len(widths) != cols {
+			b.Fatalf("column width count = %d, want %d", len(widths), cols)
+		}
+	}
+}
+
+func BenchmarkHTMLBlockHasBoxStyleSelectorHeavy(b *testing.B) {
+	var css strings.Builder
+	for i := 0; i < 64; i++ {
+		fmt.Fprintf(&css, `.report .group%d > p.item%d { color: #%02x%02x%02x; }`, i%8, i, 20+i%100, 80+i%80, 140+i%60)
+	}
+	css.WriteString(`.report .group3 > p.item27 { background-color: #eeeeee; }`)
+	rules := parseHTMLCSSRules(css.String())
+	ancestors := []HTMLSegmentType{
+		{Cat: 'O', Str: "section", Attr: map[string]string{"class": "report"}},
+		{Cat: 'O', Str: "div", Attr: map[string]string{"class": "group3"}},
+	}
+	el := HTMLSegmentType{Cat: 'O', Str: "p", Attr: map[string]string{"class": "item27"}}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if !htmlBlockHasBoxStyle(el, rules, ancestors...) {
+			b.Fatal("expected block box style")
+		}
+	}
+}
+
+func BenchmarkGenerationHTMLBlockBoxesCompiled(b *testing.B) {
+	var body strings.Builder
+	body.WriteString(`<style>.box{background-color:#eeeeee;padding:3px;margin:0 0 2px 0}.box strong{font-weight:bold}</style>`)
+	for i := 0; i < 120; i++ {
+		fmt.Fprintf(&body, `<div class="box"><strong>Block %03d</strong> repeated compiled block text for report rendering.</div>`, i)
+	}
+	compiled, err := CompileHTML(body.String())
+	if err != nil {
+		b.Fatalf("CompileHTML() error = %v", err)
+	}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		pdf := New("P", "mm", "A4", "")
+		pdf.SetCompression(false)
+		pdf.AddPage()
+		pdf.SetFont("Helvetica", "", 9)
+		_, lineHeight := pdf.GetFontSize()
+		html := pdf.HTMLNew()
+		html.WriteCompiled(lineHeight, compiled)
+
+		var output bytes.Buffer
+		if err := pdf.Output(&output); err != nil {
+			b.Fatalf("Output() error = %v", err)
+		}
+		if output.Len() == 0 {
+			b.Fatal("generated empty PDF")
+		}
+	}
+}
+
 func benchmarkAlphaPNG(tb testing.TB, width, height int) []byte {
 	tb.Helper()
 
