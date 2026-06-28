@@ -185,9 +185,7 @@ func (f *Document) applyExternalImageMask(info *ImageInfo, maskPath string, opti
 	if f.err != nil {
 		return
 	}
-	if f.pdfVersion < "1.4" {
-		f.pdfVersion = "1.4"
-	}
+	f.setMinimumPDFVersion("1.4")
 }
 
 func decodeMaskImage(path string, options ImageOptions) (image.Image, error) {

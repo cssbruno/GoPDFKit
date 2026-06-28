@@ -40,6 +40,26 @@ func TestNewDocumentReturnsConstructorError(t *testing.T) {
 	}
 }
 
+func TestNewDocumentReturnsCachePolicyError(t *testing.T) {
+	pdf, err := NewDocument(WithResourceCachePolicy(ResourceCachePolicy(99)))
+	if err == nil {
+		t.Fatal("expected constructor error for invalid cache policy")
+	}
+	if pdf != nil {
+		t.Fatalf("pdf = %#v, want nil on constructor error", pdf)
+	}
+}
+
+func TestNewDocumentWithDefaultsReturnsCachePolicyError(t *testing.T) {
+	pdf, err := NewDocumentWithDefaults(Options{CachePolicy: ResourceCachePolicy(99)}, Defaults{Compression: true})
+	if err == nil {
+		t.Fatal("expected constructor error for invalid cache policy")
+	}
+	if pdf != nil {
+		t.Fatalf("pdf = %#v, want nil on constructor error", pdf)
+	}
+}
+
 func TestNewDocumentFunctionalOptions(t *testing.T) {
 	pdf, err := NewDocument(
 		WithOrientation(OrientationLandscape),

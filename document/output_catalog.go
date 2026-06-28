@@ -274,9 +274,7 @@ func (f *Document) putcatalog() {
 	case "TwoColumnRight":
 		f.out("/PageLayout /TwoColumnRight")
 	case "TwoPageLeft", "TwoPageRight":
-		if f.pdfVersion < "1.5" {
-			f.pdfVersion = "1.5"
-		}
+		f.setMinimumPDFVersion("1.5")
 		f.out("/PageLayout /" + f.layoutMode)
 	}
 	if len(f.outlines) > 0 {
@@ -297,8 +295,8 @@ func (f *Document) putcatalog() {
 }
 
 func (f *Document) putheader() {
-	if len(f.blendMap) > 0 && f.pdfVersion < "1.4" {
-		f.pdfVersion = "1.4"
+	if len(f.blendMap) > 0 {
+		f.setMinimumPDFVersion("1.4")
 	}
 	f.outf("%%PDF-%s", f.pdfVersion)
 	if f.compliance.PDFA != PDFAModeNone {

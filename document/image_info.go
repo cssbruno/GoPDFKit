@@ -17,3 +17,31 @@ func (f *Document) GetImageInfo(imageStr string) (info *ImageInfo) {
 func (f *Document) newImageInfo() *ImageInfo {
 	return &ImageInfo{scale: f.k, dpi: 72}
 }
+
+type imageParser struct {
+	k             float64
+	compressLevel int
+	pdfVersion    string
+	err           error
+}
+
+func newImageParser(scale float64, compressLevel int, pdfVersion string) *imageParser {
+	return &imageParser{k: scale, compressLevel: compressLevel, pdfVersion: pdfVersion}
+}
+
+func (p *imageParser) newImageInfo() *ImageInfo {
+	return &ImageInfo{scale: p.k, dpi: 72}
+}
+
+func (p *imageParser) compressBytes(data []byte) []byte {
+	level := p.compressLevel
+	if !validCompressionLevel(level) {
+		level = defaultCompressionLevel()
+	}
+	out, err := sliceCompressLevel(data, level)
+	if err != nil {
+		p.err = err
+		return nil
+	}
+	return out
+}

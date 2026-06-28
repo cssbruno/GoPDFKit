@@ -6,6 +6,9 @@ package document
 import (
 	"bytes"
 	"encoding/base64"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -145,12 +148,72 @@ func TestRegisterImageOptionsUsesSharedFileCacheByDefault(t *testing.T) {
 	}
 }
 
+func TestRegisterImageOptionsCanDisableSharedFileCache(t *testing.T) {
+	previousCache := sharedImageFileCache
+	sharedImageFileCache = newImageCache(maxSharedImageFileCacheBytes)
+	defer func() { sharedImageFileCache = previousCache }()
+
+	imagePath := filepath.Join(t.TempDir(), "pixel.PNG")
+	if err := os.WriteFile(imagePath, decodeTinyPNG(t), 0o600); err != nil {
+		t.Fatalf("write image fixture: %v", err)
+	}
+
+	pdf := NewWithOptions(Options{CachePolicy: ResourceCacheDisabled})
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	if _, err := pdf.RegisterImageOptionsError(imagePath, ImageOptions{}); err != nil {
+		t.Fatalf("RegisterImageOptionsError() error = %v", err)
+	}
+	pdf.ImageOptions(imagePath, 10, 10, 5, 5, false, ImageOptions{}, 0, "")
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+
+	sharedImageFileCache.mu.RLock()
+	fileImages := len(sharedImageFileCache.fileImages)
+	sharedImageFileCache.mu.RUnlock()
+	if fileImages != 0 {
+		t.Fatalf("shared file images = %d, want 0", fileImages)
+	}
+}
+
+func TestImageFromCacheWithAlphaPromotesPDFVersion(t *testing.T) {
+	cache := NewImageCache()
+	if _, err := cache.RegisterImageOptionsReader("alpha", ImageOptions{ImageType: "png"}, bytes.NewReader(encodeAlphaPNG(t))); err != nil {
+		t.Fatalf("RegisterImageOptionsReader(cache) error = %v", err)
+	}
+
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	pdf.ImageFromCache("alpha", cache, 10, 10, 5, 5, false, ImageOptions{}, 0, "")
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if !bytes.HasPrefix(out.Bytes(), []byte("%PDF-1.4")) {
+		t.Fatalf("PDF header = %q, want PDF 1.4 for alpha image", out.Bytes()[:8])
+	}
+}
+
 func TestImageFromCacheMissingEntrySetsDocumentError(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	pdf.ImageFromCache("missing", NewImageCache(), 0, 0, 1, 1, false, ImageOptions{}, 0, "")
 	if err := pdf.Error(); err == nil {
 		t.Fatal("ImageFromCache missing entry error = nil")
 	}
+}
+
+func encodeAlphaPNG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+	img.SetNRGBA(0, 0, color.NRGBA{R: 0xff, A: 0x80})
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("encode PNG fixture: %v", err)
+	}
+	return buf.Bytes()
 }
 
 func decodeTinyPNG(t *testing.T) []byte {

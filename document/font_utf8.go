@@ -4,6 +4,7 @@
 package document
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -13,7 +14,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"unsafe"
 )
 
 // Composite glyph flags.
@@ -80,6 +80,9 @@ type utf8FontFile struct {
 	// read-only instead of re-parsing the cmap/loca/table directory for every
 	// document. It is shared across documents and must never be mutated.
 	static *utf8StaticTables
+	// sourceID is a stable hash of the immutable font bytes. It keeps subset
+	// cache keys independent from heap addresses.
+	sourceID [sha256.Size]byte
 }
 
 // utf8StaticTables holds the immutable, font-only parse results shared across
@@ -92,13 +95,14 @@ type utf8StaticTables struct {
 	oldMetrics           int // hhea numberOfHMetrics
 	numSymbols           int // maxp numGlyphs
 	locaFormat           int // head indexToLocFormat
+	sourceID             [sha256.Size]byte
 }
 
 type utf8SubsetCacheKey struct {
-	fontPtr uintptr
-	hash    uint64
-	hash2   uint64
-	count   int
+	fontID [sha256.Size]byte
+	hash   uint64
+	hash2  uint64
+	count  int
 }
 
 type utf8SubsetCacheValue struct {
@@ -780,6 +784,7 @@ func (utf *utf8FontFile) generateCMAPTable(cidSymbolPairCollection map[int]int, 
 func buildUTF8StaticTables(data []byte) (*utf8StaticTables, error) {
 	reader := fileReader{array: data}
 	utf := newUTF8Font(&reader)
+	utf.sourceID = sha256.Sum256(data)
 	return utf.parseStaticTables()
 }
 
@@ -827,6 +832,7 @@ func (utf *utf8FontFile) parseStaticTables() (*utf8StaticTables, error) {
 		oldMetrics:           oldMetrics,
 		numSymbols:           numSymbols,
 		locaFormat:           locaFormat,
+		sourceID:             utf.sourceID,
 	}, nil
 }
 
@@ -1047,11 +1053,12 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 }
 
 func (utf *utf8FontFile) subsetCacheKey(usedRunes map[int]int) utf8SubsetCacheKey {
-	fontPtr := uintptr(unsafe.Pointer(utf))
+	fontID := utf.sourceID
 	if utf.static != nil {
-		fontPtr = uintptr(unsafe.Pointer(utf.static))
-	} else if utf.fileReader != nil && len(utf.fileReader.array) > 0 {
-		fontPtr = uintptr(unsafe.Pointer(&utf.fileReader.array[0]))
+		fontID = utf.static.sourceID
+	} else if fontID == ([sha256.Size]byte{}) && utf.fileReader != nil {
+		fontID = sha256.Sum256(utf.fileReader.array)
+		utf.sourceID = fontID
 	}
 	var hash uint64
 	var hash2 uint64
@@ -1060,7 +1067,7 @@ func (utf *utf8FontFile) subsetCacheKey(usedRunes map[int]int) utf8SubsetCacheKe
 		hash += mixed
 		hash2 ^= bits.RotateLeft64(mixed, int(mixed&63))
 	}
-	return utf8SubsetCacheKey{fontPtr: fontPtr, hash: hash, hash2: hash2, count: len(usedRunes)}
+	return utf8SubsetCacheKey{fontID: fontID, hash: hash, hash2: hash2, count: len(usedRunes)}
 }
 
 func mixUTF8SubsetRune(value uint64) uint64 {

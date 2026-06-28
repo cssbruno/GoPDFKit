@@ -24,7 +24,9 @@ const (
 type LayoutDocument = layout.LayoutDocument
 
 // NewLayoutDocument creates a document model with a generic kind when kind is empty.
-var NewLayoutDocument = layout.NewLayoutDocument
+func NewLayoutDocument(kind DocumentKind) *LayoutDocument {
+	return layout.NewLayoutDocument(kind)
+}
 
 type DocumentMetadata = layout.DocumentMetadata
 type DocumentParty = layout.DocumentParty

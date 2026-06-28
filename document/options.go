@@ -56,6 +56,22 @@ func WithBestCompression() Option {
 	return WithOptimize(true)
 }
 
+// WithResourceCachePolicy sets the cache policy for file-backed images and
+// UTF-8 fonts loaded by path.
+func WithResourceCachePolicy(policy ResourceCachePolicy) Option {
+	return func(options *Options) {
+		options.CachePolicy = policy
+	}
+}
+
+// WithImageCache uses cache for file-backed image registration. A nil cache
+// leaves the cache policy unchanged.
+func WithImageCache(cache *ImageCache) Option {
+	return func(options *Options) {
+		options.ImageCache = cache
+	}
+}
+
 // WithLegacyConstructorArgs applies the string arguments accepted by New. It is
 // mainly useful while migrating old code to typed construction options.
 func WithLegacyConstructorArgs(orientationStr, unitStr, sizeStr, fontDirStr string) Option {
@@ -84,6 +100,9 @@ type normalizedOptions struct {
 	fontDirStr     string
 	size           Size
 	optimize       bool
+	cachePolicy    ResourceCachePolicy
+	imageCache     *ImageCache
+	imageCacheSet  bool
 }
 
 func (options Options) normalized() normalizedOptions {
@@ -94,6 +113,9 @@ func (options Options) normalized() normalizedOptions {
 		fontDirStr:     options.FontDir,
 		size:           options.Size,
 		optimize:       options.Optimize,
+		cachePolicy:    options.CachePolicy,
+		imageCache:     options.ImageCache,
+		imageCacheSet:  options.ImageCache != nil,
 	}
 	if cfg.orientationStr == "" {
 		cfg.orientationStr = options.OrientationStr

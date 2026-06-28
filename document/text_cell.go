@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math"
 	"strings"
+	"unicode"
 )
 
 // SetAcceptPageBreakFunc allows the application to control where page breaks
@@ -181,47 +182,78 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 			s = append(s, ' ')
 		}
 		utf8Justify := (f.ws != 0 || alignStr == "J") && f.isCurrentUTF8
-		if utf8Justify && len(strings.Fields(txtStr)) > 1 {
+		renderedJustified := false
+		if utf8Justify {
+			justifyText := txtStr
 			if f.isRTL {
-				txtStr = reverseText(txtStr)
+				justifyText = reverseText(justifyText)
 			}
-			wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
-			space := appendEscapedUTF16BE(nil, " ", false, f.currentFont.usedRunes)
-			strSize := f.GetStringSymbolWidth(txtStr)
-			s = append(s, "BT 0 Tw "...)
-			s = appendPDFNumberSpace(s, (f.x+dx)*k, 2)
-			s = appendPDFNumberSpace(s, (f.h-(f.y+.5*h+.3*f.fontSize))*k, 2)
-			s = append(s, "Td ["...)
-			t := strings.Split(txtStr, " ")
-			shift := float64((wmax - strSize)) / float64(len(t)-1)
-			numt := len(t)
-			encodedWords := make(map[string][]byte, numt)
-			appendEncodedWord := func(dst []byte, word string) []byte {
-				if word == "" {
+			t, justify := utf8JustificationWords(justifyText)
+			if justify {
+				txtStr = justifyText
+				wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
+				space := appendEscapedUTF16BE(nil, " ", false, f.currentFont.usedRunes)
+				strSize := f.GetStringSymbolWidth(txtStr)
+				s = append(s, "BT 0 Tw "...)
+				s = appendPDFNumberSpace(s, (f.x+dx)*k, 2)
+				s = appendPDFNumberSpace(s, (f.h-(f.y+.5*h+.3*f.fontSize))*k, 2)
+				s = append(s, "Td ["...)
+				shift := float64((wmax - strSize)) / float64(len(t)-1)
+				numt := len(t)
+				var smallEncodedWords [4]struct {
+					word    string
+					encoded []byte
+				}
+				smallEncodedWordCount := 0
+				var encodedWords map[string][]byte
+				appendEncodedWord := func(dst []byte, word string) []byte {
+					if word == "" {
+						return dst
+					}
+					if encodedWords != nil {
+						if encoded, ok := encodedWords[word]; ok {
+							return append(dst, encoded...)
+						}
+					} else {
+						for i := 0; i < smallEncodedWordCount; i++ {
+							if smallEncodedWords[i].word == word {
+								encodedWords = make(map[string][]byte, smallEncodedWordCount)
+								for j := 0; j < smallEncodedWordCount; j++ {
+									encodedWords[smallEncodedWords[j].word] = smallEncodedWords[j].encoded
+								}
+								return append(dst, smallEncodedWords[i].encoded...)
+							}
+						}
+					}
+					start := len(dst)
+					dst = appendEscapedUTF16BE(dst, word, false, f.currentFont.usedRunes)
+					encoded := dst[start:len(dst):len(dst)]
+					if encodedWords != nil {
+						encodedWords[word] = encoded
+					} else if smallEncodedWordCount < len(smallEncodedWords) {
+						smallEncodedWords[smallEncodedWordCount].word = word
+						smallEncodedWords[smallEncodedWordCount].encoded = encoded
+						smallEncodedWordCount++
+					}
 					return dst
 				}
-				if encoded, ok := encodedWords[word]; ok {
-					return append(dst, encoded...)
-				}
-				start := len(dst)
-				dst = appendEscapedUTF16BE(dst, word, false, f.currentFont.usedRunes)
-				encodedWords[word] = dst[start:len(dst):len(dst)]
-				return dst
-			}
-			for i := range numt {
-				tx := t[i]
-				s = append(s, '(')
-				s = appendEncodedWord(s, tx)
-				s = append(s, ") "...)
-				if (i + 1) < numt {
-					s = appendPDFNumber(s, -shift, 3)
+				for i := range numt {
+					tx := t[i]
 					s = append(s, '(')
-					s = append(s, space...)
+					s = appendEncodedWord(s, tx)
 					s = append(s, ") "...)
+					if (i + 1) < numt {
+						s = appendPDFNumber(s, -shift, 3)
+						s = append(s, '(')
+						s = append(s, space...)
+						s = append(s, ") "...)
+					}
 				}
+				s = append(s, "] TJ ET"...)
+				renderedJustified = true
 			}
-			s = append(s, "] TJ ET"...)
-		} else {
+		}
+		if !renderedJustified {
 			reverseUTF8 := f.isCurrentUTF8 && f.isRTL
 			bt := (f.x + dx) * k
 			td := (f.h - (f.y + dy + .5*h + .3*f.fontSize)) * k
@@ -240,13 +272,22 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 			}
 			s = append(s, ")Tj ET"...)
 		}
+		var decorationBlankCount int
+		decorationBlankCountSet := false
+		decorationWidth := func() float64 {
+			if !decorationBlankCountSet {
+				decorationBlankCount = blankCount(txtStr)
+				decorationBlankCountSet = true
+			}
+			return getTextWidth() + f.ws*float64(decorationBlankCount)
+		}
 		if f.underline {
 			s = append(s, ' ')
-			s = f.appendUnderlineRectWidth(s, f.x+dx, f.y+dy+.5*h+.3*f.fontSize, getTextWidth()+f.ws*float64(blankCount(txtStr)))
+			s = f.appendUnderlineRectWidth(s, f.x+dx, f.y+dy+.5*h+.3*f.fontSize, decorationWidth())
 		}
 		if f.strikeout {
 			s = append(s, ' ')
-			s = f.appendStrikeoutRectWidth(s, f.x+dx, f.y+dy+.5*h+.3*f.fontSize, getTextWidth()+f.ws*float64(blankCount(txtStr)))
+			s = f.appendStrikeoutRectWidth(s, f.x+dx, f.y+dy+.5*h+.3*f.fontSize, decorationWidth())
 		}
 		if f.colorFlag {
 			s = append(s, " Q"...)
@@ -297,6 +338,29 @@ func (f *Document) estimateCellFormatBufferCapacity(txtStr, borderStr string, fi
 		return 0
 	}
 	return capacity + 16
+}
+
+func utf8JustificationWords(text string) ([]string, bool) {
+	words := make([]string, 0, 4)
+	fieldCount := 0
+	inField := false
+	start := 0
+	for i, r := range text {
+		if r == ' ' {
+			words = append(words, text[start:i])
+			start = i + 1
+		}
+		if unicode.IsSpace(r) {
+			inField = false
+			continue
+		}
+		if !inField {
+			fieldCount++
+			inField = true
+		}
+	}
+	words = append(words, text[start:])
+	return words, fieldCount > 1 && len(words) > 1
 }
 
 func (f *Document) cellSimple(w, h float64, txtStr string) {

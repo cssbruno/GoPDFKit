@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"strconv"
 	"strings"
-	"unsafe"
 )
 
 const (
@@ -62,44 +61,29 @@ func (f *Document) WriteDocument(doc *LayoutDocument) {
 }
 
 type documentRenderer struct {
-	pdf               *Document
-	template          PageTemplate
-	renderedFooters   map[int]bool
-	renderingShell    bool
-	contentWidthVal   float64
-	contentWidthW     float64
-	contentWidthL     float64
-	contentWidthR     float64
-	contentWidthOK    bool
-	scopedWidth       float64
-	scopedWidthOK     bool
-	measureCtx        MeasureContext
-	measureCtxWidth   float64
-	measureCtxFont    string
-	measureCtxPt      float64
-	measureCtxUnit    float64
-	measureCtxOK      bool
-	imageNameCache    map[documentImageCacheKey]string
-	plainTextCache    map[documentTextSegmentsCacheKey]string
-	tableRowCache     map[documentTableRowCacheKey]documentTableRowMeasurement
-	blockMeasureCache map[documentBlockMeasureCacheKey][]BlockMeasurement
+	pdf             *Document
+	template        PageTemplate
+	renderedFooters map[int]bool
+	renderingShell  bool
+	contentWidthVal float64
+	contentWidthW   float64
+	contentWidthL   float64
+	contentWidthR   float64
+	contentWidthOK  bool
+	scopedWidth     float64
+	scopedWidthOK   bool
+	measureCtx      MeasureContext
+	measureCtxWidth float64
+	measureCtxFont  string
+	measureCtxPt    float64
+	measureCtxUnit  float64
+	measureCtxOK    bool
+	imageNameCache  map[documentImageCacheKey]string
 }
 
 type documentImageCacheKey struct {
 	format string
-	ptr    uintptr
-	len    int
-}
-
-type documentTextSegmentsCacheKey struct {
-	ptr uintptr
-	len int
-}
-
-type documentTableRowCacheKey struct {
-	rowPtr    uintptr
-	widthsPtr uintptr
-	widthsLen int
+	hash   [sha256.Size]byte
 }
 
 type documentTableRowMeasurement struct {
@@ -111,15 +95,6 @@ type documentTableCellMeasurement struct {
 	width         float64
 	height        float64
 	blockMeasures []BlockMeasurement
-}
-
-type documentBlockMeasureCacheKey struct {
-	ptr   uintptr
-	len   int
-	width float64
-	font  string
-	pt    float64
-	unit  float64
 }
 
 func (r *documentRenderer) contentWidth() float64 {
@@ -172,19 +147,7 @@ func (r *documentRenderer) textSegmentsPlainText(segments []TextSegment) string 
 	if len(segments) == 0 {
 		return ""
 	}
-	key := documentTextSegmentsCacheKey{
-		ptr: uintptr(unsafe.Pointer(&segments[0])),
-		len: len(segments),
-	}
-	if text, ok := r.plainTextCache[key]; ok {
-		return text
-	}
-	text := textSegmentsPlainText(segments)
-	if r.plainTextCache == nil {
-		r.plainTextCache = make(map[documentTextSegmentsCacheKey]string)
-	}
-	r.plainTextCache[key] = text
-	return text
+	return textSegmentsPlainText(segments)
 }
 
 func (r *documentRenderer) availableHeight() float64 {
@@ -260,35 +223,12 @@ func (r *documentRenderer) renderBlocksWithMeasurements(blocks []Block, measurem
 }
 
 func (r *documentRenderer) renderRepeatedBlocks(blocks []Block) {
-	measurements, ok := r.cachedBlockMeasurements(blocks)
-	if !ok {
+	if len(blocks) == 0 {
 		r.renderBlocks(blocks)
 		return
 	}
-	r.renderBlocksWithMeasurements(blocks, measurements)
-}
-
-func (r *documentRenderer) cachedBlockMeasurements(blocks []Block) ([]BlockMeasurement, bool) {
-	if len(blocks) == 0 {
-		return nil, true
-	}
-	key := documentBlockMeasureCacheKey{
-		ptr:   uintptr(unsafe.Pointer(&blocks[0])),
-		len:   len(blocks),
-		width: r.contentWidth(),
-		font:  r.pdf.fontFamily,
-		pt:    r.pdf.fontSizePt,
-		unit:  r.pdf.fontSize,
-	}
-	if measurements, ok := r.blockMeasureCache[key]; ok {
-		return measurements, true
-	}
 	measurements := MeasureBlocks(r.measureContext(), blocks)
-	if r.blockMeasureCache == nil {
-		r.blockMeasureCache = make(map[documentBlockMeasureCacheKey][]BlockMeasurement)
-	}
-	r.blockMeasureCache[key] = measurements
-	return measurements, true
+	r.renderBlocksWithMeasurements(blocks, measurements)
 }
 
 func (r *documentRenderer) renderBlock(block Block) {
@@ -530,27 +470,7 @@ func (r *documentRenderer) measureRenderedTableRowWithOffsets(row TableRow, widt
 }
 
 func (r *documentRenderer) measureRenderedTableRowCached(row *TableRow, widths, widthOffsets []float64) documentTableRowMeasurement {
-	key := documentTableRowCacheKey{
-		rowPtr:    uintptr(unsafe.Pointer(row)),
-		widthsPtr: documentFloatSlicePointer(widths),
-		widthsLen: len(widths),
-	}
-	if cached, ok := r.tableRowCache[key]; ok {
-		return cached
-	}
-	measurement := r.measureRenderedTableRowDetailed(*row, widths, widthOffsets)
-	if r.tableRowCache == nil {
-		r.tableRowCache = make(map[documentTableRowCacheKey]documentTableRowMeasurement)
-	}
-	r.tableRowCache[key] = measurement
-	return measurement
-}
-
-func documentFloatSlicePointer(values []float64) uintptr {
-	if len(values) == 0 {
-		return 0
-	}
-	return uintptr(unsafe.Pointer(&values[0]))
+	return r.measureRenderedTableRowDetailed(*row, widths, widthOffsets)
 }
 
 func (r *documentRenderer) measureRenderedTableRowDetailed(row TableRow, widths, widthOffsets []float64) documentTableRowMeasurement {
@@ -698,8 +618,7 @@ func (r *documentRenderer) documentImageName(block ImageBlock) string {
 	data := block.ImageData()
 	key := documentImageCacheKey{
 		format: strings.ToLower(block.Format),
-		ptr:    uintptr(unsafe.Pointer(&data[0])),
-		len:    len(data),
+		hash:   sha256.Sum256(data),
 	}
 	if name, ok := r.imageNameCache[key]; ok {
 		return name

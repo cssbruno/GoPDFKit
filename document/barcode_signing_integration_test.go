@@ -14,6 +14,8 @@ import (
 	"errors"
 	"io"
 	"math/big"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -84,6 +86,31 @@ func TestOutputSignedDetectsShortWrite(t *testing.T) {
 	})
 	if !errors.Is(err, io.ErrShortWrite) {
 		t.Fatalf("OutputSigned(short writer) error = %v, want ErrShortWrite", err)
+	}
+}
+
+func TestOutputSignedFileDoesNotTruncateDestinationOnSigningError(t *testing.T) {
+	fileStr := filepath.Join(t.TempDir(), "signed.pdf")
+	original := []byte("previous signed output")
+	if err := os.WriteFile(fileStr, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	pdf := New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(40, 10, "signing failure")
+
+	err := pdf.OutputSignedFile(fileStr, sign.Options{})
+	if !errors.Is(err, sign.ErrMissingSigner) {
+		t.Fatalf("OutputSignedFile() error = %v, want ErrMissingSigner", err)
+	}
+	got, err := os.ReadFile(fileStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, original) {
+		t.Fatalf("OutputSignedFile() changed destination on failure: got %q, want %q", got, original)
 	}
 }
 

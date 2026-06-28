@@ -63,6 +63,10 @@ func (f *Document) outputFileAndClose(fileStr string, syncOutput bool) error {
 	if f.err != nil {
 		return f.err
 	}
+	return writeFileAtomically(fileStr, syncOutput, f.Output)
+}
+
+func writeFileAtomically(fileStr string, syncOutput bool, write func(io.Writer) error) error {
 	dir := filepath.Dir(fileStr)
 	base := filepath.Base(fileStr)
 	mode := outputFileMode(fileStr)
@@ -78,7 +82,7 @@ func (f *Document) outputFileAndClose(fileStr string, syncOutput bool) error {
 		}
 	}()
 
-	if err := f.Output(pdfFile); err != nil {
+	if err := write(pdfFile); err != nil {
 		_ = pdfFile.Close()
 		return err
 	}

@@ -30,34 +30,36 @@ type Document struct {
 
 	pageObjectNumbers []int // PDF page object numbers by page; 1-based, populated at output
 
-	state                int                            // current document state
-	compress             bool                           // compression flag
-	compressLevel        int                            // zlib level for compressed streams
-	k                    float64                        // scale factor (number of points in user unit)
-	defOrientation       string                         // default orientation
-	curOrientation       string                         // current orientation
-	stdPageSizes         map[string]Size                // standard page sizes
-	defPageSize          Size                           // default page size
-	defPageBoxes         map[string]PageBox             // default page boxes
-	curPageSize          Size                           // current page size
-	curRotation          int                            // current page rotation
-	pageSizes            map[int]Size                   // used for pages with non default sizes or orientations
-	pageRotations        map[int]int                    // used for pages with non-zero /Rotate values
-	pageBoxes            map[int]map[string]PageBox     // used to define the crop, trim, bleed and art boxes
-	unitStr              string                         // unit of measure for all rendered objects except fonts
-	wPt, hPt             float64                        // dimensions of current page in points
-	w, h                 float64                        // dimensions of current page in user unit
-	lMargin              float64                        // left margin
-	tMargin              float64                        // top margin
-	rMargin              float64                        // right margin
-	bMargin              float64                        // page break margin
-	cMargin              float64                        // cell margin
-	x, y                 float64                        // current position in user unit
-	lasth                float64                        // height of last printed cell
-	lineWidth            float64                        // line width in user unit
-	fontpath             string                         // path containing font resources
-	fontLoader           FontLoader                     // used to load font files from arbitrary locations
-	utf8FontPathCache    map[string]utf8FontPathInfo    // cached UTF-8 font path resolution
+	state                int                         // current document state
+	compress             bool                        // compression flag
+	compressLevel        int                         // zlib level for compressed streams
+	k                    float64                     // scale factor (number of points in user unit)
+	defOrientation       string                      // default orientation
+	curOrientation       string                      // current orientation
+	stdPageSizes         map[string]Size             // standard page sizes
+	defPageSize          Size                        // default page size
+	defPageBoxes         map[string]PageBox          // default page boxes
+	curPageSize          Size                        // current page size
+	curRotation          int                         // current page rotation
+	pageSizes            map[int]Size                // used for pages with non default sizes or orientations
+	pageRotations        map[int]int                 // used for pages with non-zero /Rotate values
+	pageBoxes            map[int]map[string]PageBox  // used to define the crop, trim, bleed and art boxes
+	unitStr              string                      // unit of measure for all rendered objects except fonts
+	wPt, hPt             float64                     // dimensions of current page in points
+	w, h                 float64                     // dimensions of current page in user unit
+	lMargin              float64                     // left margin
+	tMargin              float64                     // top margin
+	rMargin              float64                     // right margin
+	bMargin              float64                     // page break margin
+	cMargin              float64                     // cell margin
+	x, y                 float64                     // current position in user unit
+	lasth                float64                     // height of last printed cell
+	lineWidth            float64                     // line width in user unit
+	fontpath             string                      // path containing font resources
+	fontLoader           FontLoader                  // used to load font files from arbitrary locations
+	utf8FontPathCache    map[string]utf8FontPathInfo // cached UTF-8 font path resolution
+	utf8FontFileCache    map[sharedUTF8FontFileCacheKey]cachedUTF8Font
+	resourceCachePolicy  ResourceCachePolicy            // file-backed resource cache behavior
 	coreFonts            map[string]bool                // set of core font names
 	fonts                map[string]fontDefinition      // map of used fonts
 	fontFiles            map[string]fontFile            // map of font files
@@ -73,6 +75,7 @@ type Document struct {
 	stringWidthKeys      []string                       // insertion order for stringWidthCache eviction
 	ws                   float64                        // word spacing
 	images               map[string]*ImageInfo          // map of used images
+	imageCache           *ImageCache                    // file-backed image cache for this document
 	aliasMap             map[string]string              // map of alias->replacement
 	aliasPairs           []aliasReplacementBytes        // compiled alias replacements
 	aliasPairsDirty      bool                           // whether aliasPairs needs rebuilding

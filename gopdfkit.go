@@ -17,6 +17,12 @@ type Option = document.Option
 // Defaults customizes per-document generation defaults.
 type Defaults = document.Defaults
 
+// ResourceCachePolicy controls file-backed resource caching.
+type ResourceCachePolicy = document.ResourceCachePolicy
+
+// ImageCache stores parsed image data for reuse across documents.
+type ImageCache = document.ImageCache
+
 // Orientation identifies a document or page orientation.
 type Orientation = document.Orientation
 
@@ -48,18 +54,69 @@ const (
 	PageSizeLetter  = document.PageSizeLetter
 	PageSizeLegal   = document.PageSizeLegal
 	PageSizeTabloid = document.PageSizeTabloid
+
+	ResourceCacheShared   = document.ResourceCacheShared
+	ResourceCacheDocument = document.ResourceCacheDocument
+	ResourceCacheDisabled = document.ResourceCacheDisabled
 )
 
-var (
-	WithOrientation           = document.WithOrientation
-	WithUnit                  = document.WithUnit
-	WithPageSize              = document.WithPageSize
-	WithCustomPageSize        = document.WithCustomPageSize
-	WithFontDir               = document.WithFontDir
-	WithOptimize              = document.WithOptimize
-	WithBestCompression       = document.WithBestCompression
-	WithLegacyConstructorArgs = document.WithLegacyConstructorArgs
-)
+// WithOrientation sets the default page orientation.
+func WithOrientation(orientation Orientation) Option {
+	return document.WithOrientation(orientation)
+}
+
+// WithUnit sets the unit of measure used for document geometry.
+func WithUnit(unit Unit) Option {
+	return document.WithUnit(unit)
+}
+
+// WithPageSize sets the named default page size.
+func WithPageSize(pageSize PageSizeName) Option {
+	return document.WithPageSize(pageSize)
+}
+
+// WithCustomPageSize sets an explicit default page size in the configured unit.
+func WithCustomPageSize(size Size) Option {
+	return document.WithCustomPageSize(size)
+}
+
+// WithFontDir sets the directory used for font resources.
+func WithFontDir(fontDir string) Option {
+	return document.WithFontDir(fontDir)
+}
+
+// WithOptimize switches generated page and template streams to best zlib
+// compression.
+func WithOptimize(optimize bool) Option {
+	return document.WithOptimize(optimize)
+}
+
+// WithBestCompression switches generated page and template streams to best zlib
+// compression.
+func WithBestCompression() Option {
+	return document.WithBestCompression()
+}
+
+// WithResourceCachePolicy sets the cache policy for file-backed images and
+// UTF-8 fonts loaded by path.
+func WithResourceCachePolicy(policy ResourceCachePolicy) Option {
+	return document.WithResourceCachePolicy(policy)
+}
+
+// WithImageCache uses cache for file-backed image registration.
+func WithImageCache(cache *ImageCache) Option {
+	return document.WithImageCache(cache)
+}
+
+// WithLegacyConstructorArgs applies the string arguments accepted by New.
+func WithLegacyConstructorArgs(orientationStr, unitStr, sizeStr, fontDirStr string) Option {
+	return document.WithLegacyConstructorArgs(orientationStr, unitStr, sizeStr, fontDirStr)
+}
+
+// NewImageCache creates an empty reusable image cache.
+func NewImageCache() *ImageCache {
+	return document.NewImageCache()
+}
 
 // New returns a new PDF document using the document package defaults.
 func New() *Document {
@@ -97,4 +154,10 @@ func DefaultSettings() Defaults {
 // NewWithDefaults returns a new PDF document using explicit per-document defaults.
 func NewWithDefaults(options Options, defaults Defaults) *Document {
 	return document.NewWithDefaults(options, defaults)
+}
+
+// NewDocumentWithDefaults returns a new PDF document using explicit
+// per-document defaults and normal Go error handling.
+func NewDocumentWithDefaults(options Options, defaults Defaults) (*Document, error) {
+	return document.NewDocumentWithDefaults(options, defaults)
 }

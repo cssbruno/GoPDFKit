@@ -64,9 +64,7 @@ func (f *Document) OpenLayerPane() {
 
 func (f *Document) layerEndDoc() {
 	if len(f.layer.list) > 0 {
-		if f.pdfVersion < "1.5" {
-			f.pdfVersion = "1.5"
-		}
+		f.setMinimumPDFVersion("1.5")
 	}
 }
 

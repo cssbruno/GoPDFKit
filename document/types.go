@@ -143,17 +143,34 @@ type Defaults struct {
 	ModificationDate time.Time // Fixed ModDate; zero uses generation time.
 }
 
+// ResourceCachePolicy controls file-backed resource caching for images and
+// UTF-8 fonts loaded by path.
+type ResourceCachePolicy int
+
+const (
+	// ResourceCacheShared uses bounded package-level caches. This preserves the
+	// historical default behavior.
+	ResourceCacheShared ResourceCachePolicy = iota
+	// ResourceCacheDocument keeps file-backed resource cache entries on the
+	// document instance only.
+	ResourceCacheDocument
+	// ResourceCacheDisabled parses file-backed resources without cache reuse.
+	ResourceCacheDisabled
+)
+
 // Options is used with NewWithOptions and NewDocumentWithOptions to customize a
 // Document instance. Prefer Orientation, Unit, PageSize, and FontDir for new
 // code. The *Str fields are kept for compatibility with the legacy New
 // constructor and are used only when the typed field is empty.
 type Options struct {
-	Orientation Orientation  // Default page orientation.
-	Unit        Unit         // Document unit of measure.
-	PageSize    PageSizeName // Named page size.
-	Size        Size         // Explicit page size override.
-	FontDir     string       // Font resource directory.
-	Optimize    bool         // Use best-compression generation defaults.
+	Orientation Orientation         // Default page orientation.
+	Unit        Unit                // Document unit of measure.
+	PageSize    PageSizeName        // Named page size.
+	Size        Size                // Explicit page size override.
+	FontDir     string              // Font resource directory.
+	Optimize    bool                // Use best-compression generation defaults.
+	CachePolicy ResourceCachePolicy // File-backed image and UTF-8 font cache policy.
+	ImageCache  *ImageCache         // Optional explicit image cache.
 
 	OrientationStr string // Deprecated: use Orientation.
 	UnitStr        string // Deprecated: use Unit.

@@ -18,9 +18,10 @@ type FontCache struct {
 }
 
 type cachedUTF8Font struct {
-	def    fontDefinition
-	data   []byte
-	static *utf8StaticTables
+	def      fontDefinition
+	data     []byte
+	static   *utf8StaticTables
+	sourceID [32]byte
 }
 
 type sharedUTF8FontFileCacheKey struct {
@@ -161,25 +162,32 @@ func newCachedUTF8Font(fontKey, fontPath string, data []byte) (cachedUTF8Font, e
 	if err != nil {
 		return cachedUTF8Font{}, err
 	}
-	return cachedUTF8Font{def: def, data: stored, static: static}, nil
+	return cachedUTF8Font{def: def, data: stored, static: static, sourceID: static.sourceID}, nil
 }
 
 // AddUTF8FontFromCache imports a cached UTF-8 TrueType font into this document.
 func (f *Document) AddUTF8FontFromCache(family, style string, cache *FontCache) {
+	_ = f.AddUTF8FontFromCacheError(family, style, cache)
+}
+
+// AddUTF8FontFromCacheError imports a cached UTF-8 TrueType font into this
+// document and returns failures directly.
+func (f *Document) AddUTF8FontFromCacheError(family, style string, cache *FontCache) error {
 	if f.err != nil {
-		return
+		return f.err
 	}
 	family = fontFamilyEscape(family)
 	fontKey := getFontKey(family, style)
 	if _, ok := f.fonts[fontKey]; ok {
-		return
+		return nil
 	}
 	cached, ok := cache.font(family, style)
 	if !ok {
 		f.SetErrorf("cached UTF-8 font not found: %s %s", family, style)
-		return
+		return f.err
 	}
 	f.addCachedUTF8Font(fontKey, family, style, cached)
+	return f.err
 }
 
 func (f *Document) addCachedUTF8Font(fontKey, family, style string, cached cachedUTF8Font) {
@@ -212,6 +220,7 @@ func (c cachedUTF8Font) newUTF8Font() *utf8FontFile {
 	reader := fileReader{array: c.data}
 	utf := newUTF8Font(&reader)
 	utf.static = c.static
+	utf.sourceID = c.sourceID
 	utf.Ascent = c.def.Desc.Ascent
 	utf.Descent = c.def.Desc.Descent
 	utf.CapHeight = c.def.Desc.CapHeight

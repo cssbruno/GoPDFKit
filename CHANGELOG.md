@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.8.0 - 2026-06-28
+
+Minor release for cache, output, and error-handling hardening.
+
+### Added
+
+- Added explicit resource cache policies for shared, per-document, and disabled
+  file-backed image and UTF-8 font caching.
+- Added direct error-returning constructors and registration methods for
+  per-document defaults, image registration, and font registration.
+
+### Changed
+
+- Replaced public mutable function aliases with wrapper functions.
+- Replaced pointer-based font subset and document rendering cache keys with
+  stable content-based keys or simpler local measurement paths.
+- Routed signed file output through the same atomic temp-file output path as
+  normal PDF file output.
+- Split image parsing away from temporary `Document` construction and preserved
+  PDF version promotion for alpha images, including cached images.
+- Kept explicit per-document defaults independent from package-wide defaults.
+
 ## v0.7.0 - 2026-06-28
 
 Minor release for the second-pass generation performance work.

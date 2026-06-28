@@ -70,13 +70,12 @@ func (c *ImageCache) RegisterImageOptionsReader(name string, options ImageOption
 	}
 	options.ImageType = normalizeImageType(options.ImageType)
 
-	pdf := New("P", "mm", "A4", "")
-	info := pdf.RegisterImageOptionsReader(name, options, r)
-	if pdf.Err() {
-		return nil, pdf.Error()
+	info, _, err := parseImageOptionsReader(options, r, 1, defaultCompressionLevel(), "")
+	if err != nil {
+		return nil, err
 	}
-	if info == nil {
-		return nil, errors.New("image parser returned no image info")
+	if info.i, err = generateImageID(info); err != nil {
+		return nil, err
 	}
 
 	c.mu.Lock()
@@ -263,6 +262,9 @@ func (f *Document) registerCachedImageInfo(name string, info *ImageInfo) *ImageI
 	info.scale = f.k
 	if info.dpi == 0 {
 		info.dpi = 72
+	}
+	if len(info.smask) > 0 {
+		f.requirePDFVersion("1.4")
 	}
 	if recomputeID {
 		if info.i, f.err = generateImageID(info); f.err != nil {

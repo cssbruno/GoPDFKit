@@ -93,7 +93,7 @@ func (f *Document) SetNoCompression() {
 func (f *Document) compressBytes(data []byte) []byte {
 	level := f.compressLevel
 	if !validCompressionLevel(level) {
-		level = zlib.BestSpeed
+		level = defaultCompressionLevel()
 	}
 	out, err := sliceCompressLevel(data, level)
 	if err != nil {
@@ -101,6 +101,10 @@ func (f *Document) compressBytes(data []byte) []byte {
 		return nil
 	}
 	return out
+}
+
+func defaultCompressionLevel() int {
+	return zlib.BestSpeed
 }
 
 const tinyStreamCompressionThreshold = 32

@@ -104,6 +104,13 @@ type htmlTableCellStyleCacheValue struct {
 	padding htmlBoxEdges
 }
 
+type htmlTableCellStyleCache struct {
+	lastKey   htmlTableCellStyleCacheKey
+	lastValue htmlTableCellStyleCacheValue
+	hasLast   bool
+	values    map[htmlTableCellStyleCacheKey]htmlTableCellStyleCacheValue
+}
+
 const (
 	htmlMaxTableColumns          = 1024
 	htmlTableMinWidthCacheLimit  = 256
@@ -209,13 +216,13 @@ func (html *HTML) writeParsedTable(compiled *CompiledHTML, table htmlTableType, 
 		html.renderTableCaption(compiled, table, startX, tableWd, lineHt, inherited, fallback, cssRules, tableAncestors)
 	}
 	tableFill := html.cellBackground(table.attrs)
-	renderCellStyleCache := make(map[htmlTableCellStyleCacheKey]htmlTableCellStyleCacheValue)
+	var renderCellStyleCache htmlTableCellStyleCache
 	renderRow := func(rowIndex int, layoutRow htmlTableLayoutRow, rowHt float64, forceTopBorder bool) float64 {
 		var measuredRow htmlTableMeasuredRow
 		if measuredRows != nil {
 			measuredRow = measuredRows[rowIndex]
 		} else {
-			measuredRow = html.measureTableRow(compiled, rowIndex, layoutRow, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors, tableBorder, tableFill, renderCellStyleCache)
+			measuredRow = html.measureTableRow(compiled, rowIndex, layoutRow, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors, tableBorder, tableFill, &renderCellStyleCache)
 		}
 		pdf.BeginStructure(taggedRoleTR)
 		defer pdf.EndStructure()
@@ -313,7 +320,9 @@ func (html *HTML) renderTableCellContent(cell htmlTableCell, measuredCell htmlTa
 func (html *HTML) renderMeasuredTableCellText(measuredCell htmlTableMeasuredCell, cellRole string, lineHt float64) {
 	lines := measuredCell.lines
 	if len(lines) == 0 {
-		lines = []string{measuredCell.text}
+		html.pdf.SetNextTextRole(cellRole)
+		html.pdf.CellFormat(measuredCell.contentWd, htmlEffectiveLineHeight(measuredCell.style, lineHt), measuredCell.text, "", 2, measuredCell.align, false, 0, "")
+		return
 	}
 	effectiveLineHt := htmlEffectiveLineHeight(measuredCell.style, lineHt)
 	for i, line := range lines {
@@ -1069,9 +1078,9 @@ func (html *HTML) measureTableRows(compiled *CompiledHTML, rows []htmlTableLayou
 		heights[i] = lineHt + 2*padding
 	}
 	tableFill := html.cellBackground(tableAttrs)
-	cellStyleCache := make(map[htmlTableCellStyleCacheKey]htmlTableCellStyleCacheValue)
+	var cellStyleCache htmlTableCellStyleCache
 	for rowIndex, row := range rows {
-		measuredRow := html.measureTableRow(compiled, rowIndex, row, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors, tableBorder, tableFill, cellStyleCache)
+		measuredRow := html.measureTableRow(compiled, rowIndex, row, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors, tableBorder, tableFill, &cellStyleCache)
 		for _, measuredCell := range measuredRow.cells {
 			required := measuredCell.textHt + measuredCell.padding.top + measuredCell.padding.bottom
 			span := measuredCell.placement.rowspan
@@ -1100,7 +1109,7 @@ func (html *HTML) measureTableRows(compiled *CompiledHTML, rows []htmlTableLayou
 	return measuredRows, heights
 }
 
-func (html *HTML) measureTableRow(compiled *CompiledHTML, rowIndex int, row htmlTableLayoutRow, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, tableAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, tableFill CSSColorType, cellStyleCache map[htmlTableCellStyleCacheKey]htmlTableCellStyleCacheValue) htmlTableMeasuredRow {
+func (html *HTML) measureTableRow(compiled *CompiledHTML, rowIndex int, row htmlTableLayoutRow, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, tableAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, tableFill CSSColorType, cellStyleCache *htmlTableCellStyleCache) htmlTableMeasuredRow {
 	measuredRow := htmlTableMeasuredRow{index: rowIndex, row: row, cells: make([]htmlTableMeasuredCell, 0, len(row.cells))}
 	rowEl := HTMLSegmentType{Cat: 'O', Str: "tr", Attr: row.row.attrs}
 	rowAncestors := appendHTMLAncestors(tableAncestors, rowEl)
@@ -1117,13 +1126,13 @@ func (html *HTML) measureTableRowHeights(compiled *CompiledHTML, rows []htmlTabl
 		heights[i] = lineHt + 2*padding
 	}
 	tableFill := html.cellBackground(tableAttrs)
-	cellStyleCache := make(map[htmlTableCellStyleCacheKey]htmlTableCellStyleCacheValue)
+	var cellStyleCache htmlTableCellStyleCache
 	for rowIndex, row := range rows {
 		rowEl := HTMLSegmentType{Cat: 'O', Str: "tr", Attr: row.row.attrs}
 		rowAncestors := appendHTMLAncestors(tableAncestors, rowEl)
 		rowFill := html.cellBackground(row.row.attrs)
 		for _, placement := range row.cells {
-			required := html.measureTableCellRequiredHeight(compiled, row, placement, colOffsets, padding, lineHt, inherited, fallback, cssRules, rowAncestors, tableBorder, rowFill, tableFill, cellStyleCache)
+			required := html.measureTableCellRequiredHeight(compiled, row, placement, colOffsets, padding, lineHt, inherited, fallback, cssRules, rowAncestors, tableBorder, rowFill, tableFill, &cellStyleCache)
 			span := placement.rowspan
 			if span < 1 {
 				span = 1
@@ -1149,7 +1158,7 @@ func (html *HTML) measureTableRowHeights(compiled *CompiledHTML, rows []htmlTabl
 	return heights
 }
 
-func (html *HTML) measureTableCellRequiredHeight(compiled *CompiledHTML, row htmlTableLayoutRow, placement htmlTableCellPlacement, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, rowAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, rowFill, tableFill CSSColorType, cellStyleCache map[htmlTableCellStyleCacheKey]htmlTableCellStyleCacheValue) float64 {
+func (html *HTML) measureTableCellRequiredHeight(compiled *CompiledHTML, row htmlTableLayoutRow, placement htmlTableCellPlacement, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, rowAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, rowFill, tableFill CSSColorType, cellStyleCache *htmlTableCellStyleCache) float64 {
 	cell := row.row.cells[placement.cellIndex]
 	style := inherited
 	if cell.header {
@@ -1168,7 +1177,7 @@ func (html *HTML) measureTableCellRequiredHeight(compiled *CompiledHTML, row htm
 	return html.tableCellTextHeight(text, contentWd, style, lineHt) + cellStyle.padding.top + cellStyle.padding.bottom
 }
 
-func (html *HTML) measureTableCell(compiled *CompiledHTML, row htmlTableLayoutRow, placement htmlTableCellPlacement, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, rowAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, rowFill, tableFill CSSColorType, cellStyleCache map[htmlTableCellStyleCacheKey]htmlTableCellStyleCacheValue) htmlTableMeasuredCell {
+func (html *HTML) measureTableCell(compiled *CompiledHTML, row htmlTableLayoutRow, placement htmlTableCellPlacement, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, rowAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, rowFill, tableFill CSSColorType, cellStyleCache *htmlTableCellStyleCache) htmlTableMeasuredCell {
 	cell := row.row.cells[placement.cellIndex]
 	style := inherited
 	if cell.header {
@@ -1184,7 +1193,12 @@ func (html *HTML) measureTableCell(compiled *CompiledHTML, row htmlTableLayoutRo
 	cellStyle := html.cachedTableCellStyle(cell.attrs, row.row.attrs, style.align, padding, wd, tableBorder, rowFill, tableFill, cellStyleCache)
 	contentWd := htmlMaxFloat(wd-cellStyle.padding.left-cellStyle.padding.right, 0)
 	text := htmlTableCellText(cell, style.preserveWhitespace)
-	lines := htmlSplitLines(html.pdf, text, contentWd)
+	lineCount := htmlSplitLineCount(html.pdf, text, contentWd)
+	var lines []string
+	if lineCount > 1 {
+		lines = htmlSplitLines(html.pdf, text, contentWd)
+		lineCount = len(lines)
+	}
 	return htmlTableMeasuredCell{
 		placement: placement,
 		style:     style,
@@ -1195,7 +1209,7 @@ func (html *HTML) measureTableCell(compiled *CompiledHTML, row htmlTableLayoutRo
 		contentWd: contentWd,
 		text:      text,
 		lines:     lines,
-		textHt:    html.tableCellLinesHeight(lines, style, lineHt),
+		textHt:    html.tableCellLineCountHeight(lineCount, style, lineHt),
 	}
 }
 
@@ -1249,6 +1263,13 @@ func (html *HTML) tableCellTextHeight(text string, wd float64, style htmlTextSty
 func (html *HTML) tableCellLinesHeight(lines []string, style htmlTextStyle, lineHt float64) float64 {
 	lineCount := len(lines)
 	if lineCount == 0 {
+		lineCount = 1
+	}
+	return float64(lineCount) * htmlEffectiveLineHeight(style, lineHt)
+}
+
+func (html *HTML) tableCellLineCountHeight(lineCount int, style htmlTextStyle, lineHt float64) float64 {
+	if lineCount < 1 {
 		lineCount = 1
 	}
 	return float64(lineCount) * htmlEffectiveLineHeight(style, lineHt)
@@ -1677,7 +1698,7 @@ func (html *HTML) cellAlign(attrs map[string]string, fallback string) string {
 	return "L"
 }
 
-func (html *HTML) cachedTableCellStyle(cellAttrs, rowAttrs map[string]string, alignFallback string, paddingFallback, relative float64, tableBorder htmlBorderStyle, rowFill, tableFill CSSColorType, cache map[htmlTableCellStyleCacheKey]htmlTableCellStyleCacheValue) htmlTableCellStyleCacheValue {
+func (html *HTML) cachedTableCellStyle(cellAttrs, rowAttrs map[string]string, alignFallback string, paddingFallback, relative float64, tableBorder htmlBorderStyle, rowFill, tableFill CSSColorType, cache *htmlTableCellStyleCache) htmlTableCellStyleCacheValue {
 	key := htmlTableCellStyleCacheKey{
 		cellStyle:       cellAttrs["style"],
 		cellAlign:       cellAttrs["align"],
@@ -1695,8 +1716,12 @@ func (html *HTML) cachedTableCellStyle(cellAttrs, rowAttrs map[string]string, al
 		tableFill:       tableFill,
 	}
 	if cache != nil {
-		if cached, ok := cache[key]; ok {
-			return cached
+		if cache.values != nil {
+			if cached, ok := cache.values[key]; ok {
+				return cached
+			}
+		} else if cache.hasLast && cache.lastKey == key {
+			return cache.lastValue
 		}
 	}
 	value := htmlTableCellStyleCacheValue{
@@ -1705,8 +1730,20 @@ func (html *HTML) cachedTableCellStyle(cellAttrs, rowAttrs map[string]string, al
 		border:  html.tableCellBorder(tableBorder, cellAttrs, rowAttrs, html.pdf, relative),
 		padding: html.cellPadding(cellAttrs, html.pdf, paddingFallback, relative),
 	}
-	if cache != nil && len(cache) < htmlTableCellStyleCacheLimit {
-		cache[key] = value
+	if cache != nil {
+		if !cache.hasLast {
+			cache.lastKey = key
+			cache.lastValue = value
+			cache.hasLast = true
+			return value
+		}
+		if cache.values == nil {
+			cache.values = make(map[htmlTableCellStyleCacheKey]htmlTableCellStyleCacheValue, 2)
+			cache.values[cache.lastKey] = cache.lastValue
+		}
+		if len(cache.values) < htmlTableCellStyleCacheLimit {
+			cache.values[key] = value
+		}
 	}
 	return value
 }

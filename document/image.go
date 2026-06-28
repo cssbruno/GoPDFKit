@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -114,49 +115,39 @@ type ImageOptions struct {
 //
 // See ImageOptions() for restrictions on the image and the options parameters.
 func (f *Document) RegisterImageOptionsReader(imgName string, options ImageOptions, r io.Reader) (info *ImageInfo) {
+	info, err := f.RegisterImageOptionsReaderError(imgName, options, r)
+	if err != nil {
+		f.err = err
+	}
+	return info
+}
+
+// RegisterImageOptionsReaderError registers an image from r and returns
+// parsing failures directly.
+func (f *Document) RegisterImageOptionsReaderError(imgName string, options ImageOptions, r io.Reader) (*ImageInfo, error) {
 	if f.err != nil {
-		return
+		return nil, f.err
 	}
 	if strings.TrimSpace(imgName) == "" {
-		f.err = errors.New("image name should not be blank")
-		return
+		return nil, errors.New("image name should not be blank")
 	}
 	info, ok := f.images[imgName]
 	if ok {
 		if info == nil {
-			f.err = fmt.Errorf("registered image is invalid: %s", imgName)
+			return nil, fmt.Errorf("registered image is invalid: %s", imgName)
 		}
-		return
+		return info, nil
 	}
-	if options.ImageType == "" {
-		f.err = errors.New("image type should be specified if reading from custom reader")
-		return
+	info, minVersion, err := parseImageOptionsReader(options, r, f.k, f.compressLevel, f.pdfVersion)
+	if err != nil {
+		return nil, err
 	}
-	imageType := normalizeImageType(options.ImageType)
-	switch imageType {
-	case "jpg":
-		info = f.parsejpg(r)
-	case "png":
-		info = f.parsepng(r, options.ReadDpi)
-	case "gif":
-		info = f.parsegif(r)
-	case "webp":
-		info = f.parsewebp(r)
-	default:
-		f.err = fmt.Errorf("unsupported image type: %s", imageType)
-	}
-	if f.err != nil {
-		return
-	}
-	if info == nil {
-		f.err = errors.New("image parser returned no image info")
-		return
-	}
-	if info.i, f.err = generateImageID(info); f.err != nil {
-		return
+	f.requirePDFVersion(minVersion)
+	if info.i, err = generateImageID(info); err != nil {
+		return nil, err
 	}
 	f.images[imgName] = info
-	return
+	return info, nil
 }
 
 // RegisterImageOptions registers an image, adding it to the PDF file but not
@@ -167,16 +158,94 @@ func (f *Document) RegisterImageOptionsReader(imgName string, options ImageOptio
 // the image before placing it. See ImageOptions() for restrictions on the image
 // and options parameters.
 func (f *Document) RegisterImageOptions(fileStr string, options ImageOptions) (info *ImageInfo) {
-	info, ok := f.images[fileStr]
-	if ok {
-		return
-	}
-	info, err := sharedImageFileCache.RegisterImageOptions(fileStr, fileStr, options)
+	info, err := f.RegisterImageOptionsError(fileStr, options)
 	if err != nil {
 		f.err = err
-		return nil
 	}
-	return f.registerCachedImageInfo(fileStr, info)
+	return info
+}
+
+// RegisterImageOptionsError registers an image from fileStr and returns
+// failures directly.
+func (f *Document) RegisterImageOptionsError(fileStr string, options ImageOptions) (*ImageInfo, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	info, ok := f.images[fileStr]
+	if ok {
+		return info, nil
+	}
+	if f.imageCache == nil {
+		file, err := openImageFile(fileStr)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = file.Close() }()
+		if options.ImageType == "" {
+			imageType, ok := inferImageTypeFromPath(fileStr)
+			if !ok {
+				return nil, fmt.Errorf("image file has no extension and no type was specified: %s", fileStr)
+			}
+			options.ImageType = imageType
+		}
+		info, minVersion, err := parseImageOptionsReader(options, file, f.k, f.compressLevel, f.pdfVersion)
+		if err != nil {
+			return nil, err
+		}
+		f.requirePDFVersion(minVersion)
+		if info.i, err = generateImageID(info); err != nil {
+			return nil, err
+		}
+		f.images[fileStr] = info
+		return info, nil
+	}
+	info, err := f.imageCache.RegisterImageOptions(fileStr, fileStr, options)
+	if err != nil {
+		return nil, err
+	}
+	registered := f.registerCachedImageInfo(fileStr, info)
+	if f.err != nil {
+		return nil, f.err
+	}
+	if len(registered.smask) > 0 {
+		f.requirePDFVersion("1.4")
+	}
+	return registered, nil
+}
+
+func parseImageOptionsReader(options ImageOptions, r io.Reader, scale float64, compressLevel int, pdfVersion string) (*ImageInfo, string, error) {
+	if r == nil {
+		return nil, "", errors.New("image reader is nil")
+	}
+	if options.ImageType == "" {
+		return nil, "", errors.New("image type should be specified if reading from custom reader")
+	}
+	parser := newImageParser(scale, compressLevel, pdfVersion)
+	imageType := normalizeImageType(options.ImageType)
+	var info *ImageInfo
+	switch imageType {
+	case "jpg":
+		info = parser.parsejpg(r)
+	case "png":
+		info = parser.parsepng(r, options.ReadDpi)
+	case "gif":
+		info = parser.parsegif(r)
+	case "webp":
+		info = parser.parsewebp(r)
+	default:
+		return nil, "", fmt.Errorf("unsupported image type: %s", imageType)
+	}
+	if parser.err != nil {
+		return nil, "", parser.err
+	}
+	if info == nil {
+		return nil, "", errors.New("image parser returned no image info")
+	}
+	return info, parser.pdfVersion, nil
+}
+
+func openImageFile(fileStr string) (*os.File, error) {
+	return os.Open(fileStr)
 }
 
 func normalizeImageType(imageType string) string {
