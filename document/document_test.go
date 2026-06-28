@@ -2361,18 +2361,21 @@ func ExampleDocument_CellFormat_codepage() {
 	// Successfully generated assets/generated/pdf/Document_CellFormat_codepage.pdf
 }
 
-// ExampleDocument_SetProtection demonstrates password protection for documents.
-func ExampleDocument_SetProtection() {
+// ExampleDocument_SetLegacyProtection demonstrates legacy PDF standard-security
+// password and permission settings.
+func ExampleDocument_SetLegacyProtection() {
 	pdf := document.New("P", "mm", "A4", "")
-	pdf.SetProtection(document.CnProtectPrint, "123", "abc")
+	if err := pdf.SetLegacyProtection(document.CnProtectPrint, "123", "abc"); err != nil {
+		panic(err)
+	}
 	pdf.AddPage()
 	pdf.SetFont("Arial", "", 12)
-	pdf.Write(10, "Password-protected.")
-	fileStr := example.Filename("Document_SetProtection")
+	pdf.Write(10, "Legacy PDF standard-security protection.")
+	fileStr := example.Filename("Document_SetLegacyProtection")
 	err := pdf.OutputFileAndClose(fileStr)
 	example.Summary(err, fileStr)
 	// Output:
-	// Successfully generated assets/generated/pdf/Document_SetProtection.pdf
+	// Successfully generated assets/generated/pdf/Document_SetLegacyProtection.pdf
 }
 
 // ExampleDocument_Polygon displays equilateral polygons in a demonstration of the Polygon

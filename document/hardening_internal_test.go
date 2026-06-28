@@ -386,15 +386,15 @@ func TestRawWriteArtifactStrErrorAllowsTaggedArtifacts(t *testing.T) {
 	}
 }
 
-func TestSetProtectionErrorLatchesRandomOwnerPasswordError(t *testing.T) {
+func TestSetLegacyProtectionLatchesRandomOwnerPasswordError(t *testing.T) {
 	want := errors.New("random failed")
 	original := crand.Reader
 	crand.Reader = errReader{err: want}
 	defer func() { crand.Reader = original }()
 
 	pdf := New("P", "mm", "A4", "")
-	if err := pdf.SetProtectionError(CnProtectPrint, "reader", ""); !errors.Is(err, want) {
-		t.Fatalf("SetProtectionError() error = %v, want %v", err, want)
+	if err := pdf.SetLegacyProtection(CnProtectPrint, "reader", ""); !errors.Is(err, want) {
+		t.Fatalf("SetLegacyProtection() error = %v, want %v", err, want)
 	}
 	if !errors.Is(pdf.Error(), want) {
 		t.Fatalf("document error = %v, want %v", pdf.Error(), want)

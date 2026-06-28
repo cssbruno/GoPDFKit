@@ -42,10 +42,17 @@ If no security policy is installed, compatibility behavior remains allowed. If
 
 ## Legacy Protection
 
-`SetLegacyProtection` should implement legacy PDF standard-security behavior for
-compatibility. It should return errors instead of panicking and must not be
-described as modern encryption. `SetProtection` can remain as a compatibility
-wrapper during `v0.x`.
+`SetLegacyProtection` implements the legacy RC4-based PDF standard-security
+handler for compatibility. It provides viewer passwords and advisory
+permissions such as print, copy, modify, and annotation/form access. It should
+return setup errors instead of panicking and must not be described as modern
+encryption, secure storage, or a DRM guarantee. PDF viewers may ignore advisory
+permissions.
+
+`SetProtection` remains as a compatibility wrapper during `v0.x`; new code
+should use `SetLegacyProtection` so the legacy security model is explicit. Use
+external encryption, signing, or storage controls when modern security is
+required.
 
 ## Raw Writes
 

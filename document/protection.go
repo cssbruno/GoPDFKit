@@ -103,7 +103,30 @@ func (p *protectType) setProtection(privFlag byte, userPassStr, ownerPassStr str
 	return nil
 }
 
-// SetProtection applies certain constraints on the finished PDF document.
+// SetProtection applies the legacy RC4-based PDF standard-security handler as
+// a compatibility wrapper.
+//
+// Deprecated: use SetLegacyProtection so new code names the compatibility and
+// advisory-security behavior explicitly. This is not modern document
+// encryption, secure storage, or a DRM guarantee.
+func (f *Document) SetProtection(actionFlag byte, userPassStr, ownerPassStr string) {
+	_ = f.SetLegacyProtection(actionFlag, userPassStr, ownerPassStr)
+}
+
+// SetProtectionError applies legacy PDF standard-security protection and
+// reports setup errors directly.
+//
+// Deprecated: use SetLegacyProtection.
+func (f *Document) SetProtectionError(actionFlag byte, userPassStr, ownerPassStr string) error {
+	return f.SetLegacyProtection(actionFlag, userPassStr, ownerPassStr)
+}
+
+// SetLegacyProtection implements the legacy RC4-based PDF standard-security
+// handler and reports setup errors directly.
+//
+// It is provided for compatibility with PDF readers and for advisory viewer
+// permissions. Use external encryption, signing, and storage controls when
+// modern security is required.
 //
 // actionFlag is a bit flag that controls various document operations.
 // CnProtectPrint allows the document to be printed. CnProtectModify allows a
@@ -121,19 +144,6 @@ func (p *protectType) setProtection(privFlag byte, userPassStr, ownerPassStr str
 // full access to the document regardless of the actionFlag value. An empty
 // string for this argument is replaced with a random value, effectively
 // preventing owner-level access without the generated password.
-func (f *Document) SetProtection(actionFlag byte, userPassStr, ownerPassStr string) {
-	_ = f.SetLegacyProtection(actionFlag, userPassStr, ownerPassStr)
-}
-
-// SetProtectionError applies advisory password protection and reports setup
-// errors directly.
-func (f *Document) SetProtectionError(actionFlag byte, userPassStr, ownerPassStr string) error {
-	return f.SetLegacyProtection(actionFlag, userPassStr, ownerPassStr)
-}
-
-// SetLegacyProtection applies advisory legacy PDF standard-security protection
-// and reports setup errors directly. This compatibility feature uses legacy
-// RC4-based encryption and should not be presented as modern document security.
 func (f *Document) SetLegacyProtection(actionFlag byte, userPassStr, ownerPassStr string) error {
 	if f.err != nil {
 		return f.err

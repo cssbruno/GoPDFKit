@@ -785,10 +785,12 @@ func main() {
 
 Runnable example: `go run ./examples/form-creation`
 
-## Password Protection And Attachments
+## Legacy Protection And Attachments
 
-Password protection applies to newly generated output. Attachments can be added
-as document-level files.
+Legacy PDF standard-security protection applies to newly generated output. It
+provides viewer passwords and advisory permissions for compatibility with PDF
+readers; use external encryption, signing, or storage controls when modern
+security is required. Attachments can be added as document-level files.
 
 ```go
 package main
@@ -800,7 +802,9 @@ import (
 
 func main() {
 	pdf := gopdfkit.New()
-	pdf.SetProtection(document.CnProtectPrint, "reader", "owner")
+	if err := pdf.SetLegacyProtection(document.CnProtectPrint, "reader", "owner"); err != nil {
+		panic(err)
+	}
 	pdf.SetAttachments([]document.Attachment{{
 		Content:     []byte("attached notes"),
 		Filename:    "notes.txt",
@@ -809,7 +813,7 @@ func main() {
 
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
-	pdf.MultiCell(0, 7, "This PDF is password-protected and has an attachment.", "", "L", false)
+	pdf.MultiCell(0, 7, "This PDF uses legacy PDF standard-security protection and has an attachment.", "", "L", false)
 
 	if err := pdf.OutputFileAndClose("protected.pdf"); err != nil {
 		panic(err)

@@ -547,7 +547,9 @@ func TestComplianceMetadataPDFARejectsEncryption(t *testing.T) {
 		t.Fatalf("SetOutputIntent() error = %v", err)
 	}
 	pdf.AddUTF8Font("DejaVu", "", example.FontFile("DejaVuSansCondensed.ttf"))
-	pdf.SetProtection(document.CnProtectPrint, "reader", "owner")
+	if err := pdf.SetLegacyProtection(document.CnProtectPrint, "reader", "owner"); err != nil {
+		t.Fatalf("SetLegacyProtection() error = %v", err)
+	}
 	pdf.AddPage()
 	pdf.SetFont("DejaVu", "", 12)
 	pdf.Cell(40, 10, "Encrypted")

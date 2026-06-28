@@ -112,7 +112,9 @@ func TestOutputDefaultTrailerOmitsFileID(t *testing.T) {
 
 func TestOutputEncryptedTrailerKeepsEmptyFileID(t *testing.T) {
 	pdf := document.New("P", "mm", "A4", "")
-	pdf.SetProtection(document.CnProtectPrint, "reader", "owner")
+	if err := pdf.SetLegacyProtection(document.CnProtectPrint, "reader", "owner"); err != nil {
+		t.Fatalf("SetLegacyProtection() error = %v", err)
+	}
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(20, 10, "hello")

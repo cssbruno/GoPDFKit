@@ -13,16 +13,18 @@ import (
 
 func main() {
 	pdf := gopdfkit.New()
-	pdf.SetTitle("Password Protected PDF", false)
+	pdf.SetTitle("Legacy Protected PDF", false)
 	pdf.SetCreator("examples/protect-pdf", false)
-	pdf.SetProtection(document.CnProtectPrint, "reader", "owner")
+	if err := pdf.SetLegacyProtection(document.CnProtectPrint, "reader", "owner"); err != nil {
+		log.Fatal(err)
+	}
 
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "B", 18)
-	pdf.Text(18, 24, "Protected PDF")
+	pdf.Text(18, 24, "Legacy Protected PDF")
 	pdf.SetFont("Helvetica", "", 11)
 	pdf.SetXY(18, 40)
-	pdf.MultiCell(174, 7, "This PDF requires the user password \"reader\" to open. The owner password is \"owner\" and print permission is enabled.", "", "L", false)
+	pdf.MultiCell(174, 7, "This PDF uses the legacy PDF standard-security handler. The user password is \"reader\". The owner password is \"owner\" and print permission is enabled.", "", "L", false)
 
 	if err := pdf.OutputFileAndClose(outpath.File("protected-password.pdf")); err != nil {
 		log.Fatal(err)

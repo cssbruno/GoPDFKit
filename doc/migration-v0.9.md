@@ -10,7 +10,7 @@ generation, and typed errors.
 | Old API | New API | Notes |
 | --- | --- | --- |
 | `SetProtection` | `SetLegacyProtection` | Make the MD5/RC4 protection path explicit and steer new code toward modern signing/compliance workflows. |
-| `SetProtectionError` | `SetLegacyProtectionError` | Preserve error-returning setup while naming the legacy behavior. |
+| `SetProtectionError` | `SetLegacyProtection` | Preserve error-returning setup while naming the legacy behavior. |
 | `RawWriteBuf` | `RawWriteBufError` | Prefer APIs that report reader failures directly. |
 | `RawWriteArtifactBuf` | `RawWriteArtifactBufError` | Prefer APIs that report reader failures directly. |
 | `OutputFileAndCloseWithOptions` | `OutputFileWithOptions` | Move from file-sync-only options to output-wide behavior. |

@@ -155,8 +155,9 @@ GoPDFKit currently supports:
 * Templates and imported PDF pages
 * Page workflows built from imported pages: merge, split, reorder, rotate,
   4-up layout, template overlay, and watermark overlay
-* Attachments, metadata, XMP metadata, JavaScript actions, password protection,
-  PDF signing, CMS signature verification, and lightweight PDF inspection
+* Attachments, metadata, XMP metadata, JavaScript actions, legacy PDF
+  standard-security protection, PDF signing, CMS signature verification, and
+  lightweight PDF inspection
 
 ## Current Limits
 

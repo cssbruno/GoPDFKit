@@ -19,7 +19,9 @@ func main() {
 	}
 
 	pdf := gopdfkit.New()
-	pdf.SetProtection(document.CnProtectPrint, "reader", "owner")
+	if err := pdf.SetLegacyProtection(document.CnProtectPrint, "reader", "owner"); err != nil {
+		log.Fatal(err)
+	}
 	pdf.SetAttachments([]document.Attachment{{
 		Content:     readme,
 		Filename:    "README.md",
@@ -28,7 +30,7 @@ func main() {
 
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
-	pdf.MultiCell(0, 7, "This PDF is password-protected and has README.md embedded as a document-level attachment.", "", "L", false)
+	pdf.MultiCell(0, 7, "This PDF uses legacy PDF standard-security protection and has README.md embedded as a document-level attachment.", "", "L", false)
 
 	if err := pdf.OutputFileAndClose(outpath.File("protection-attachments.pdf")); err != nil {
 		log.Fatal(err)

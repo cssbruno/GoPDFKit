@@ -1408,7 +1408,9 @@ func BenchmarkGenerationImportedPDFPagesConcurrent40(b *testing.B) {
 
 func BenchmarkGenerationProtection(b *testing.B) {
 	benchmarkGeneratedPDF(b, func(pdf *document.Document) {
-		pdf.SetProtection(document.CnProtectPrint, "reader", "owner")
+		if err := pdf.SetLegacyProtection(document.CnProtectPrint, "reader", "owner"); err != nil {
+			b.Fatal(err)
+		}
 		pdf.AddPage()
 		pdf.SetFont("Arial", "", 10)
 		for i := 0; i < 80; i++ {
@@ -1419,7 +1421,9 @@ func BenchmarkGenerationProtection(b *testing.B) {
 
 func BenchmarkGenerationProtectionConcurrent40(b *testing.B) {
 	benchmarkGeneratedPDFConcurrent40(b, func(pdf *document.Document) {
-		pdf.SetProtection(document.CnProtectPrint, "reader", "owner")
+		if err := pdf.SetLegacyProtection(document.CnProtectPrint, "reader", "owner"); err != nil {
+			b.Fatal(err)
+		}
 		pdf.AddPage()
 		pdf.SetFont("Arial", "", 10)
 		for i := 0; i < 80; i++ {
