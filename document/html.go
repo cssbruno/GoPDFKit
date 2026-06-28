@@ -4,6 +4,7 @@
 package document
 
 import (
+	"context"
 	"errors"
 	"math"
 	"strconv"
@@ -85,6 +86,14 @@ func (f *Document) HTMLNew() (html HTML) {
 	html.MaxElementDepth = htmlDefaultMaxElementDepth
 	html.MaxTableRows = htmlDefaultMaxTableRows
 	html.MaxGeneratedPages = htmlDefaultMaxGeneratedPages
+	if f != nil {
+		if f.limits.MaxHTMLBytes > 0 {
+			html.MaxHTMLBytes = f.limits.MaxHTMLBytes
+		}
+		if f.limits.MaxHTMLGeneratedPages > 0 {
+			html.MaxGeneratedPages = f.limits.MaxHTMLGeneratedPages
+		}
+	}
 	return
 }
 
@@ -97,16 +106,35 @@ func (f *Document) HTMLNew() (html HTML) {
 //
 // lineHt indicates the line height in the unit of measure specified in New.
 func (html *HTML) Write(lineHt float64, htmlStr string) {
+	_ = html.WriteContext(context.Background(), lineHt, htmlStr)
+}
+
+// WriteContext renders an HTML fragment and checks ctx before compile and
+// render. Deeper cancellation within long table/image rendering remains best
+// effort until those internals accept context directly.
+func (html *HTML) WriteContext(ctx context.Context, lineHt float64, htmlStr string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		html.pdf.SetError(err)
+		return err
+	}
 	if len(htmlStr) > html.maxHTMLBytes() {
-		html.pdf.SetErrorf("HTML input exceeds maximum size")
-		return
+		html.pdf.SetError(ErrHTMLLimitExceeded)
+		return html.pdf.Error()
 	}
 	compiled, err := compileHTMLWithDataImageLimit(htmlStr, false, html.maxDataImageBytes())
 	if err != nil {
 		html.pdf.SetError(err)
-		return
+		return err
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		html.pdf.SetError(err)
+		return err
 	}
 	html.WriteCompiled(lineHt, compiled)
+	return html.pdf.Error()
 }
 
 // WriteCompiled renders a precompiled HTML fragment. Use CompileHTML when the
@@ -836,6 +864,11 @@ func (html *HTML) htmlImageSource(src string) (string, ImageOptions, error) {
 		}
 		if !html.AllowLocalImages {
 			return "", options, errors.New("local HTML images are disabled")
+		}
+		if html.pdf != nil {
+			if err := html.pdf.requireSecurityFeature("local HTML images", html.pdf.securityPolicy.AllowLocalHTMLImages); err != nil {
+				return "", options, err
+			}
 		}
 		return src, options, nil
 	}

@@ -15,7 +15,7 @@ import (
 
 // parsepng extracts image information from PNG data.
 func (p *imageParser) parsepng(r io.Reader, readdpi bool) (info *ImageInfo) {
-	buf, err := bufferFromReaderLimit(r, maxImageSourceBytes)
+	buf, err := bufferFromReaderLimit(r, p.sourceLimit)
 	if err != nil {
 		p.err = err
 		return
@@ -154,7 +154,7 @@ func (p *imageParser) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *Ima
 		case "IDAT":
 			// Read an image data block.
 			data = append(data, chunkData...)
-			if len(data) > maxImageSourceBytes {
+			if len(data) > p.sourceLimit {
 				p.err = errors.New("PNG image data exceeds maximum size")
 				return
 			}
@@ -213,7 +213,7 @@ func (p *imageParser) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *Ima
 			return
 		}
 		expectedLen := rowLen * int64(h)
-		if expectedLen > maxImageDecodedBytes {
+		if expectedLen > int64(p.decodedLimit) {
 			p.err = errors.New("PNG alpha channel exceeds maximum decoded size")
 			return
 		}

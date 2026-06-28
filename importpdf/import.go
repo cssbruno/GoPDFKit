@@ -18,14 +18,32 @@ type PageImporter interface {
 	ImportPage(sourceFile string, pageNo int, box string) int
 }
 
+// PageImporterError is implemented by document types that can import a page
+// from a file and report errors directly.
+type PageImporterError interface {
+	ImportPageError(sourceFile string, pageNo int, box string) (int, error)
+}
+
 // StreamPageImporter is implemented by document types that can import a page from a stream.
 type StreamPageImporter interface {
 	ImportPageStream(source io.Reader, pageNo int, box string) int
 }
 
+// StreamPageImporterError is implemented by document types that can import a
+// page from a stream and report errors directly.
+type StreamPageImporterError interface {
+	ImportPageStreamError(source io.Reader, pageNo int, box string) (int, error)
+}
+
 // PageUser is implemented by document types that can draw an imported page.
 type PageUser interface {
 	UseImportedPage(pageID int, x, y, w, h float64)
+}
+
+// PageUserError is implemented by document types that can draw an imported
+// page and report errors directly.
+type PageUserError interface {
+	UseImportedPageError(pageID int, x, y, w, h float64) error
 }
 
 // Open parses a PDF source. source may be a file path string, []byte, or io.Reader.
@@ -129,12 +147,29 @@ func Page(pdf PageImporter, sourceFile string, pageNo int, box string) int {
 	return pdf.ImportPage(sourceFile, pageNo, box)
 }
 
+// PageError imports a page from sourceFile into pdf and returns its page ID or
+// an error.
+func PageError(pdf PageImporterError, sourceFile string, pageNo int, box string) (int, error) {
+	return pdf.ImportPageError(sourceFile, pageNo, box)
+}
+
 // PageStream imports a page from source into pdf and returns its page ID.
 func PageStream(pdf StreamPageImporter, source io.Reader, pageNo int, box string) int {
 	return pdf.ImportPageStream(source, pageNo, box)
 }
 
+// PageStreamError imports a page from source into pdf and returns its page ID
+// or an error.
+func PageStreamError(pdf StreamPageImporterError, source io.Reader, pageNo int, box string) (int, error) {
+	return pdf.ImportPageStreamError(source, pageNo, box)
+}
+
 // UsePage draws an imported page on pdf.
 func UsePage(pdf PageUser, pageID int, x, y, w, h float64) {
 	pdf.UseImportedPage(pageID, x, y, w, h)
+}
+
+// UsePageError draws an imported page on pdf and reports errors directly.
+func UsePageError(pdf PageUserError, pageID int, x, y, w, h float64) error {
+	return pdf.UseImportedPageError(pageID, x, y, w, h)
 }

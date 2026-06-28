@@ -104,11 +104,10 @@ func doNothing(s string) string {
 }
 
 func repClosure(m map[rune]byte) func(string) string {
-	var buf bytes.Buffer
 	return func(str string) string {
+		var buf bytes.Buffer
 		var ch byte
 		var ok bool
-		buf.Reset()
 		for _, r := range str {
 			if r < 0x80 {
 				ch = byte(r)

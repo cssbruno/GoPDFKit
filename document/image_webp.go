@@ -18,7 +18,7 @@ import (
 // parsewebp extracts image information from a WebP image by converting it to
 // PNG first.
 func (p *imageParser) parsewebp(r io.Reader) (info *ImageInfo) {
-	data, err := bufferFromReaderLimit(r, maxImageSourceBytes)
+	data, err := bufferFromReaderLimit(r, p.sourceLimit)
 	if err != nil {
 		p.err = err
 		return

@@ -78,6 +78,7 @@ func documentNewWithDefaults(orientationStr, unitStr, sizeStr, fontDirStr string
 	f.attachmentStreams = make(map[attachmentStreamKey]int)
 	f.attachmentFiles = make(map[attachmentFileKey]int)
 	f.attachmentCompressed = make(map[attachmentStreamKey][]byte)
+	f.maxAttachmentBytes = MaxAttachmentBytes
 	f.pageAttachments = make([][]annotationAttach, 0, 8)
 	f.pageAttachments = append(f.pageAttachments, []annotationAttach{}) //
 	f.aliasMap = make(map[string]string)
@@ -178,8 +179,8 @@ func documentNewWithDefaults(orientationStr, unitStr, sizeStr, fontDirStr string
 	f.acceptPageBreak = func() bool {
 		return f.autoPageBreak
 	}
-	// Default compression level
-	f.compressLevel = zlib.BestSpeed
+	// Default compression policy.
+	_ = f.SetCompressionPolicy(CompressionPolicy{})
 	f.spotColorMap = make(map[string]spotColorType)
 	f.blendList = make([]blendModeType, 0, 8)
 	f.blendList = append(f.blendList, blendModeType{}) // blendList[0] is unused (1-based)
@@ -203,6 +204,12 @@ func newWithOptions(options Options) (f *Document) {
 	if f.err == nil {
 		f.applyResourceCacheOptions(cfg)
 	}
+	if f.err == nil {
+		f.applyExecutionOptions(cfg)
+	}
+	if f.err == nil {
+		f.applyOperationalOptions(cfg)
+	}
 	if f.err == nil && cfg.optimize {
 		f.SetCompressionLevel(zlib.BestCompression)
 	}
@@ -214,16 +221,61 @@ func (f *Document) applyResourceCacheOptions(cfg normalizedOptions) {
 	switch cfg.cachePolicy {
 	case ResourceCacheShared:
 		f.imageCache = sharedImageFileCache
+		f.fontCache = nil
 	case ResourceCacheDocument:
 		f.imageCache = NewImageCache()
+		f.fontCache = NewFontCache()
 	case ResourceCacheDisabled:
 		f.imageCache = nil
+		f.fontCache = nil
 	default:
 		f.SetErrorf("unknown resource cache policy: %d", cfg.cachePolicy)
 		return
 	}
 	if cfg.imageCacheSet {
 		f.imageCache = cfg.imageCache
+	}
+	if cfg.fontCacheSet {
+		f.fontCache = cfg.fontCache
+	}
+}
+
+func (f *Document) applyExecutionOptions(cfg normalizedOptions) {
+	if cfg.compressionPolicySet {
+		_ = f.SetCompressionPolicy(cfg.compressionPolicy)
+		if f.err != nil {
+			return
+		}
+	}
+	if cfg.pageCompressionWorkersSet {
+		f.SetPageCompressionWorkers(cfg.pageCompressionWorkers)
+	}
+	if cfg.attachmentCompressionWorkersSet {
+		f.SetAttachmentCompressionWorkers(cfg.attachmentCompressionWorkers)
+	}
+}
+
+func (f *Document) applyOperationalOptions(cfg normalizedOptions) {
+	if cfg.limitsSet {
+		_ = f.applyLimits(cfg.limits)
+		if f.err != nil {
+			return
+		}
+	}
+	if cfg.securityPolicySet {
+		_ = f.applySecurityPolicy(cfg.securityPolicy)
+		if f.err != nil {
+			return
+		}
+	}
+	if cfg.hooksSet {
+		f.hooks = cfg.hooks
+	}
+	if cfg.outputPolicySet {
+		f.outputPolicy = cfg.outputPolicy
+	}
+	if cfg.deterministicOutput {
+		f.applyDeterministicOutput()
 	}
 }
 
@@ -271,6 +323,14 @@ func NewWithDefaults(options Options, defaults Defaults) (f *Document) {
 		return f
 	}
 	f.applyResourceCacheOptions(cfg)
+	if f.err != nil {
+		return f
+	}
+	f.applyExecutionOptions(cfg)
+	if f.err != nil {
+		return f
+	}
+	f.applyOperationalOptions(cfg)
 	if f.err != nil {
 		return f
 	}

@@ -243,12 +243,21 @@ func (f *Document) RegisterImageFromCache(name string, cache *ImageCache) *Image
 		return nil
 	}
 	if info, ok := f.images[name]; ok {
+		if f.hooks.OnResourceCacheHit != nil {
+			f.hooks.OnResourceCacheHit("image", name)
+		}
 		return info
 	}
 	info, ok := cache.Get(name)
 	if !ok {
+		if f.hooks.OnResourceCacheMiss != nil {
+			f.hooks.OnResourceCacheMiss("image", name)
+		}
 		f.err = fmt.Errorf("image cache entry not found: %s", name)
 		return nil
+	}
+	if f.hooks.OnResourceCacheHit != nil {
+		f.hooks.OnResourceCacheHit("image", name)
 	}
 	return f.registerCachedImageInfo(name, info)
 }
@@ -258,7 +267,6 @@ func (f *Document) registerCachedImageInfo(name string, info *ImageInfo) *ImageI
 		f.err = errors.New("image cache entry is invalid")
 		return nil
 	}
-	recomputeID := info.i == "" || info.scale != f.k
 	info.scale = f.k
 	if info.dpi == 0 {
 		info.dpi = 72
@@ -266,10 +274,14 @@ func (f *Document) registerCachedImageInfo(name string, info *ImageInfo) *ImageI
 	if len(info.smask) > 0 {
 		f.requirePDFVersion("1.4")
 	}
-	if recomputeID {
+	if info.i == "" {
 		if info.i, f.err = generateImageID(info); f.err != nil {
 			return nil
 		}
+	}
+	if err := f.validateImageInfoLimits(info); err != nil {
+		f.err = err
+		return nil
 	}
 	f.images[name] = info
 	return info

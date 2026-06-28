@@ -22,6 +22,21 @@ type ObjRef struct {
 	gen int
 }
 
+// ObjectNumber returns the referenced PDF indirect object number.
+func (r ObjRef) ObjectNumber() int {
+	return r.num
+}
+
+// Generation returns the referenced PDF indirect object generation number.
+func (r ObjRef) Generation() int {
+	return r.gen
+}
+
+// String formats the reference as "object generation".
+func (r ObjRef) String() string {
+	return fmt.Sprintf("%d %d", r.num, r.gen)
+}
+
 // Size reports a PDF page box width and height in points.
 type Size struct {
 	Wd float64
@@ -75,13 +90,36 @@ func (p *PageRef) Resources() []byte {
 	return append([]byte(nil), p.resources...)
 }
 
-// Content returns a copy of the imported page content stream bytes.
+// Content returns a copy of the imported page content stream bytes. Use
+// ContentErr to check whether lazy content loading failed.
 func (p *PageRef) Content() []byte {
 	if p == nil {
 		return nil
 	}
 	p.ensureContent()
 	return append([]byte(nil), p.content...)
+}
+
+// ContentErr reports the lazy content-loading error, if any.
+func (p *PageRef) ContentErr() error {
+	if p == nil {
+		return nil
+	}
+	p.ensureContent()
+	return p.contentErr
+}
+
+// ContentWithError returns a copy of the imported page content stream bytes and
+// reports lazy content-loading errors directly.
+func (p *PageRef) ContentWithError() ([]byte, error) {
+	if p == nil {
+		return nil, nil
+	}
+	p.ensureContent()
+	if p.contentErr != nil {
+		return nil, p.contentErr
+	}
+	return append([]byte(nil), p.content...), nil
 }
 
 func (p *PageRef) ensureContent() {
@@ -149,8 +187,34 @@ func (p *PageRef) ObjectRefs() []ObjRef {
 }
 
 // ForEachObject calls fn for each imported object in sorted reference order.
-// The body slice is owned by PageRef and must not be retained or modified.
+// The body slice passed to fn is a copy. Use ForEachObjectBorrowed only for
+// performance-sensitive internal code that can honor borrowed-slice semantics.
 func (p *PageRef) ForEachObject(fn func(ObjRef, []byte) error) error {
+	return p.ForEachObjectCopy(fn)
+}
+
+// ForEachObjectCopy calls fn for each imported object in sorted reference
+// order. The body slice passed to fn is a copy.
+func (p *PageRef) ForEachObjectCopy(fn func(ObjRef, []byte) error) error {
+	if p == nil || fn == nil {
+		return nil
+	}
+	refs := p.objectRefs
+	if refs == nil {
+		refs = sortedObjRefs(p.objects)
+	}
+	for _, ref := range refs {
+		if err := fn(ref, append([]byte(nil), p.objects[ref]...)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ForEachObjectBorrowed calls fn for each imported object in sorted reference
+// order. The body slice is owned by PageRef and must not be retained or
+// modified.
+func (p *PageRef) ForEachObjectBorrowed(fn func(ObjRef, []byte) error) error {
 	if p == nil || fn == nil {
 		return nil
 	}

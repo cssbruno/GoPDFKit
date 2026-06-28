@@ -17,11 +17,56 @@ type Option = document.Option
 // Defaults customizes per-document generation defaults.
 type Defaults = document.Defaults
 
+// CompressionPolicy controls generated stream compression and background work.
+type CompressionPolicy = document.CompressionPolicy
+
 // ResourceCachePolicy controls file-backed resource caching.
 type ResourceCachePolicy = document.ResourceCachePolicy
 
+// Limits bounds resource and document sizes for production deployments.
+type Limits = document.Limits
+
+// OutputOptions controls behavior applied during PDF output.
+type OutputOptions = document.OutputOptions
+
+// OutputFileOptions is kept for source compatibility.
+type OutputFileOptions = document.OutputFileOptions
+
+// OutputPolicy controls output-specific production defaults.
+type OutputPolicy = document.OutputPolicy
+
+// SecurityPolicy gates features that server callers often disable.
+type SecurityPolicy = document.SecurityPolicy
+
+// Hooks receives optional production diagnostics.
+type Hooks = document.Hooks
+
+// ProductionPolicy groups operational controls for server and batch use.
+type ProductionPolicy = document.ProductionPolicy
+
 // ImageCache stores parsed image data for reuse across documents.
 type ImageCache = document.ImageCache
+
+// FontCache stores parsed UTF-8 font data for reuse across documents.
+type FontCache = document.FontCache
+
+// Attachment defines content to include in a PDF.
+type Attachment = document.Attachment
+
+// AttachmentOptions controls file-backed attachment validation.
+type AttachmentOptions = document.AttachmentOptions
+
+// ValidationSeverity classifies an external validator issue.
+type ValidationSeverity = document.ValidationSeverity
+
+// ValidationIssue stores one finding from an external validator.
+type ValidationIssue = document.ValidationIssue
+
+// ValidationReport stores external validation findings.
+type ValidationReport = document.ValidationReport
+
+// Validator integrates external PDF/A, PDF/UA, or Arlington validation tools.
+type Validator = document.Validator
 
 // Orientation identifies a document or page orientation.
 type Orientation = document.Orientation
@@ -58,6 +103,19 @@ const (
 	ResourceCacheShared   = document.ResourceCacheShared
 	ResourceCacheDocument = document.ResourceCacheDocument
 	ResourceCacheDisabled = document.ResourceCacheDisabled
+
+	MaxAttachmentBytes = document.MaxAttachmentBytes
+)
+
+var (
+	ErrInvalidPageSize      = document.ErrInvalidPageSize
+	ErrAttachmentTooLarge   = document.ErrAttachmentTooLarge
+	ErrUnsupportedImageType = document.ErrUnsupportedImageType
+	ErrUnsupportedPDFImport = document.ErrUnsupportedPDFImport
+	ErrHTMLLimitExceeded    = document.ErrHTMLLimitExceeded
+	ErrPageLimitExceeded    = document.ErrPageLimitExceeded
+	ErrOutputCanceled       = document.ErrOutputCanceled
+	ErrSecurityPolicyDenied = document.ErrSecurityPolicyDenied
 )
 
 // WithOrientation sets the default page orientation.
@@ -97,6 +155,52 @@ func WithBestCompression() Option {
 	return document.WithBestCompression()
 }
 
+// WithCompressionPolicy sets explicit stream-compression behavior.
+func WithCompressionPolicy(policy CompressionPolicy) Option {
+	return document.WithCompressionPolicy(policy)
+}
+
+// WithProductionPolicy applies an operational policy.
+func WithProductionPolicy(policy ProductionPolicy) Option {
+	return document.WithProductionPolicy(policy)
+}
+
+// WithLimits sets resource and document limits.
+func WithLimits(limits Limits) Option {
+	return document.WithLimits(limits)
+}
+
+// WithSecurityPolicy sets explicit feature gates.
+func WithSecurityPolicy(policy SecurityPolicy) Option {
+	return document.WithSecurityPolicy(policy)
+}
+
+// WithHooks installs optional production diagnostics callbacks.
+func WithHooks(hooks Hooks) Option {
+	return document.WithHooks(hooks)
+}
+
+// WithDeterministicOutput enables deterministic output defaults.
+func WithDeterministicOutput() Option {
+	return document.WithDeterministicOutput()
+}
+
+// WithNoCompression disables Flate compression for generated streams.
+func WithNoCompression() Option {
+	return document.WithNoCompression()
+}
+
+// WithPageCompressionWorkers sets background page compression concurrency.
+func WithPageCompressionWorkers(workers int) Option {
+	return document.WithPageCompressionWorkers(workers)
+}
+
+// WithAttachmentCompressionWorkers sets background attachment compression
+// concurrency.
+func WithAttachmentCompressionWorkers(workers int) Option {
+	return document.WithAttachmentCompressionWorkers(workers)
+}
+
 // WithResourceCachePolicy sets the cache policy for file-backed images and
 // UTF-8 fonts loaded by path.
 func WithResourceCachePolicy(policy ResourceCachePolicy) Option {
@@ -108,6 +212,16 @@ func WithImageCache(cache *ImageCache) Option {
 	return document.WithImageCache(cache)
 }
 
+// WithFontCache uses cache for UTF-8 font registration.
+func WithFontCache(cache *FontCache) Option {
+	return document.WithFontCache(cache)
+}
+
+// WithUTF8FontCache is an alias for WithFontCache.
+func WithUTF8FontCache(cache *FontCache) Option {
+	return document.WithUTF8FontCache(cache)
+}
+
 // WithLegacyConstructorArgs applies the string arguments accepted by New.
 func WithLegacyConstructorArgs(orientationStr, unitStr, sizeStr, fontDirStr string) Option {
 	return document.WithLegacyConstructorArgs(orientationStr, unitStr, sizeStr, fontDirStr)
@@ -116,6 +230,58 @@ func WithLegacyConstructorArgs(orientationStr, unitStr, sizeStr, fontDirStr stri
 // NewImageCache creates an empty reusable image cache.
 func NewImageCache() *ImageCache {
 	return document.NewImageCache()
+}
+
+// NewFontCache creates an empty reusable UTF-8 font cache.
+func NewFontCache() *FontCache {
+	return document.NewFontCache()
+}
+
+// ServerSafeLimits returns conservative resource limits.
+func ServerSafeLimits() Limits {
+	return document.ServerSafeLimits()
+}
+
+// BatchLimits returns larger limits for trusted offline generation.
+func BatchLimits() Limits {
+	return document.BatchLimits()
+}
+
+// ServerSafePolicy returns a production profile for request-scoped generation.
+func ServerSafePolicy() ProductionPolicy {
+	return document.ServerSafePolicy()
+}
+
+// BatchPolicy returns a profile for trusted offline generation.
+func BatchPolicy() ProductionPolicy {
+	return document.BatchPolicy()
+}
+
+// DeterministicPolicy returns a server-safe deterministic profile.
+func DeterministicPolicy() ProductionPolicy {
+	return document.DeterministicPolicy()
+}
+
+// DeterministicDefaults returns fixed generation defaults for byte-stable output.
+func DeterministicDefaults() Defaults {
+	return document.DeterministicDefaults()
+}
+
+// TemplateSerializationVersion returns the current serialized-template format
+// version.
+func TemplateSerializationVersion() string {
+	return document.TemplateSerializationVersion()
+}
+
+// AttachmentFromFile returns a file-backed attachment descriptor.
+func AttachmentFromFile(fileStr string) Attachment {
+	return document.AttachmentFromFile(fileStr)
+}
+
+// AttachmentFromFileWithOptions returns a file-backed attachment descriptor and
+// optionally validates it immediately.
+func AttachmentFromFileWithOptions(fileStr string, options AttachmentOptions) (Attachment, error) {
+	return document.AttachmentFromFileWithOptions(fileStr, options)
 }
 
 // New returns a new PDF document using the document package defaults.

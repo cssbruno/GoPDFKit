@@ -21,6 +21,43 @@ func TestGenerateImageIDRejectsNilInfo(t *testing.T) {
 	}
 }
 
+func TestGenerateImageIDUsesSHA256(t *testing.T) {
+	info := &ImageInfo{data: []byte("image"), w: 1, h: 1, cs: "DeviceRGB", bpc: 8, f: "DCTDecode", dpi: 72}
+	resourceID, err := generateImageResourceID(info)
+	if err != nil {
+		t.Fatalf("generateImageResourceID() error = %v", err)
+	}
+	id, err := generateImageID(info)
+	if err != nil {
+		t.Fatalf("generateImageID() error = %v", err)
+	}
+	if len(id) != 64 {
+		t.Fatalf("image ID length = %d, want SHA-256 hex length", len(id))
+	}
+	if got := base64.StdEncoding.EncodeToString(resourceID[:]); got == "" {
+		t.Fatal("typed image resource ID is empty")
+	}
+}
+
+func TestGenerateImageIDIgnoresRuntimeState(t *testing.T) {
+	base := &ImageInfo{data: []byte("image"), w: 1, h: 1, cs: "DeviceRGB", bpc: 8, f: "DCTDecode", dpi: 72, n: 1, scale: 1}
+	other := base.clone()
+	other.n = 99
+	other.scale = 72
+
+	baseID, err := generateImageID(base)
+	if err != nil {
+		t.Fatalf("generateImageID(base) error = %v", err)
+	}
+	otherID, err := generateImageID(other)
+	if err != nil {
+		t.Fatalf("generateImageID(other) error = %v", err)
+	}
+	if baseID != otherID {
+		t.Fatalf("image IDs differ for runtime-only fields: %s != %s", baseID, otherID)
+	}
+}
+
 func TestImageTypeFromMimeSupportsWebP(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	if got := pdf.ImageTypeFromMime("image/webp"); got != "webp" {

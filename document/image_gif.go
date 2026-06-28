@@ -14,7 +14,7 @@ import (
 
 // parsegif extracts image information from GIF data via PNG conversion.
 func (p *imageParser) parsegif(r io.Reader) (info *ImageInfo) {
-	data, err := bufferFromReaderLimit(r, maxImageSourceBytes)
+	data, err := bufferFromReaderLimit(r, p.sourceLimit)
 	if err != nil {
 		p.err = err
 		return

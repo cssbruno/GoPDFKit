@@ -4,6 +4,7 @@
 package document
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"sort"
@@ -63,6 +64,12 @@ func (f *Document) SetModificationDate(tm time.Time) {
 
 // SetJavascript adds Adobe JavaScript to the document.
 func (f *Document) SetJavascript(script string) {
+	if f.err != nil {
+		return
+	}
+	if err := f.requireSecurityFeature("JavaScript actions", f.securityPolicy.AllowJavaScript); err != nil {
+		return
+	}
 	f.javascript = &script
 }
 
@@ -460,11 +467,23 @@ func appendPDFNamedObjectRef(buf []byte, prefix string, objNum int) []byte {
 }
 
 func (f *Document) enddoc() {
+	f.enddocContext(context.Background())
+}
+
+func (f *Document) enddocContext(ctx context.Context) {
 	if f.err != nil {
+		return
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		f.SetError(err)
 		return
 	}
 	f.validateComplianceMetadata()
 	if f.err != nil {
+		return
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		f.SetError(err)
 		return
 	}
 	f.ensureComplianceMetadata()
@@ -479,9 +498,13 @@ func (f *Document) enddoc() {
 	f.prepareAttachmentCompression()
 	f.putAttachments()
 	f.putAnnotationsAttachments()
-	f.putpages()
+	f.putpagesContext(ctx)
 	f.putresources()
 	if f.err != nil {
+		return
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		f.SetError(err)
 		return
 	}
 	f.putbookmarks()

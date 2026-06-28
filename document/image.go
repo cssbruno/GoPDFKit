@@ -136,9 +136,15 @@ func (f *Document) RegisterImageOptionsReaderError(imgName string, options Image
 		if info == nil {
 			return nil, fmt.Errorf("registered image is invalid: %s", imgName)
 		}
+		if f.hooks.OnResourceCacheHit != nil {
+			f.hooks.OnResourceCacheHit("image", imgName)
+		}
 		return info, nil
 	}
-	info, minVersion, err := parseImageOptionsReader(options, r, f.k, f.compressLevel, f.pdfVersion)
+	if f.hooks.OnResourceCacheMiss != nil {
+		f.hooks.OnResourceCacheMiss("image", imgName)
+	}
+	info, minVersion, err := parseImageOptionsReaderWithLimits(options, r, f.k, f.compressLevel, f.pdfVersion, f.imageSourceLimit(), f.imageDecodedLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +179,19 @@ func (f *Document) RegisterImageOptionsError(fileStr string, options ImageOption
 	}
 	info, ok := f.images[fileStr]
 	if ok {
+		if err := f.validateImageInfoLimits(info); err != nil {
+			return nil, err
+		}
+		if f.hooks.OnResourceCacheHit != nil {
+			f.hooks.OnResourceCacheHit("image", fileStr)
+		}
 		return info, nil
+	}
+	if f.hooks.OnResourceCacheMiss != nil {
+		f.hooks.OnResourceCacheMiss("image", fileStr)
+	}
+	if err := f.checkImageFileSourceLimit(fileStr); err != nil {
+		return nil, err
 	}
 	if f.imageCache == nil {
 		file, err := openImageFile(fileStr)
@@ -188,7 +206,7 @@ func (f *Document) RegisterImageOptionsError(fileStr string, options ImageOption
 			}
 			options.ImageType = imageType
 		}
-		info, minVersion, err := parseImageOptionsReader(options, file, f.k, f.compressLevel, f.pdfVersion)
+		info, minVersion, err := parseImageOptionsReaderWithLimits(options, file, f.k, f.compressLevel, f.pdfVersion, f.imageSourceLimit(), f.imageDecodedLimit())
 		if err != nil {
 			return nil, err
 		}
@@ -210,17 +228,71 @@ func (f *Document) RegisterImageOptionsError(fileStr string, options ImageOption
 	if len(registered.smask) > 0 {
 		f.requirePDFVersion("1.4")
 	}
+	if err := f.validateImageInfoLimits(registered); err != nil {
+		return nil, err
+	}
 	return registered, nil
 }
 
+func (f *Document) checkImageFileSourceLimit(fileStr string) error {
+	if f.limits.MaxImageSourceBytes <= 0 {
+		return nil
+	}
+	if info, err := os.Stat(fileStr); err == nil && info.Mode().IsRegular() && info.Size() > f.limits.MaxImageSourceBytes {
+		err := fmt.Errorf("%w: source image exceeds maximum size", ErrUnsupportedImageType)
+		f.SetError(err)
+		return err
+	}
+	return nil
+}
+
+func (f *Document) validateImageInfoLimits(info *ImageInfo) error {
+	if info == nil || f.limits.MaxImageDecodedBytes <= 0 {
+		return nil
+	}
+	decoded := estimatedImageDecodedBytes(info)
+	if decoded > f.limits.MaxImageDecodedBytes {
+		err := fmt.Errorf("%w: decoded image exceeds maximum size", ErrUnsupportedImageType)
+		f.SetError(err)
+		return err
+	}
+	return nil
+}
+
+func estimatedImageDecodedBytes(info *ImageInfo) int64 {
+	if info == nil || info.w <= 0 || info.h <= 0 {
+		return 0
+	}
+	components := int64(3)
+	switch info.cs {
+	case "DeviceGray", "Indexed":
+		components = 1
+	case "DeviceCMYK":
+		components = 4
+	}
+	bpc := int64(info.bpc)
+	if bpc <= 0 {
+		bpc = 8
+	}
+	pixels := int64(info.w) * int64(info.h)
+	if pixels <= 0 {
+		return 0
+	}
+	return (pixels*components*bpc + 7) / 8
+}
+
 func parseImageOptionsReader(options ImageOptions, r io.Reader, scale float64, compressLevel int, pdfVersion string) (*ImageInfo, string, error) {
+	return parseImageOptionsReaderWithLimits(options, r, scale, compressLevel, pdfVersion, maxImageSourceBytes, maxImageDecodedBytes)
+}
+
+func parseImageOptionsReaderWithLimits(options ImageOptions, r io.Reader, scale float64, compressLevel int, pdfVersion string, sourceLimit, decodedLimit int) (*ImageInfo, string, error) {
 	if r == nil {
 		return nil, "", errors.New("image reader is nil")
 	}
 	if options.ImageType == "" {
 		return nil, "", errors.New("image type should be specified if reading from custom reader")
 	}
-	parser := newImageParser(scale, compressLevel, pdfVersion)
+	parser := newImageParserWithLimits(scale, compressLevel, pdfVersion, sourceLimit, decodedLimit)
 	imageType := normalizeImageType(options.ImageType)
 	var info *ImageInfo
 	switch imageType {

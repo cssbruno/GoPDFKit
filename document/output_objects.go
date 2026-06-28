@@ -9,6 +9,9 @@ func (f *Document) newobj() {
 		f.offsets = append(f.offsets, 0)
 	}
 	f.offsets[f.n] = f.buffer.Len()
+	if f.hooks.OnOutputObject != nil {
+		f.hooks.OnOutputObject(f.n, "object")
+	}
 	f.outPDFObjHeader(f.n)
 }
 

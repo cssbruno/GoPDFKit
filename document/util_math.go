@@ -45,11 +45,15 @@ func strIf(cnd bool, aStr, bStr string) string {
 	return bStr
 }
 func remove(arr []int, key int) []int {
-	n := 0
+	n := -1
 	for i, mKey := range arr {
 		if mKey == key {
 			n = i
+			break
 		}
+	}
+	if n < 0 {
+		return arr
 	}
 	if n == 0 {
 		return arr[1:]

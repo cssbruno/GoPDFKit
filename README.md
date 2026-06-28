@@ -447,6 +447,15 @@ attachments.
 Some test examples generate or refresh PDFs under `assets/generated/pdf`. The
 `document` test package also clears generated PDFs before its example tests run.
 
+Forward-looking release planning lives in `doc/`. The pre-`v1.0.0` production
+policy plan is tracked in [`release-plan-v0.9.0.md`][release-plan-v0.9.0], with
+API migration notes in [`migration-v0.9.md`][migration-v0.9]. Draft production,
+security, and deterministic-output contracts are tracked in
+[`production.md`][production], [`security.md`][security], and
+[`deterministic-output.md`][deterministic-output]. Release gates are tracked in
+[`v0.9-readiness-checklist.md`][v0.9-readiness-checklist] and
+[`benchmark-budgets-v0.9.md`][benchmark-budgets-v0.9].
+
 ## Background
 
 GoPDFKit is derived from the original [FPDF][fpdf-site] PHP library and keeps
@@ -475,11 +484,18 @@ Dave Barnes, Brigham Thompson, Joe Westcott, and Benoit KUGLER.
 [badge-ci]: https://github.com/cssbruno/gopdfkit/actions/workflows/ci.yml/badge.svg
 [badge-doc]: https://img.shields.io/badge/godoc-GoPDFKit-blue.svg
 [badge-mit]: https://img.shields.io/badge/license-MIT-blue.svg
+[benchmark-budgets-v0.9]: doc/benchmark-budgets-v0.9.md
 [ci]: https://github.com/cssbruno/gopdfkit/actions/workflows/ci.yml
 [compliance-validation]: doc/compliance-validation.md
+[deterministic-output]: doc/deterministic-output.md
 [examples]: examples
 [fpdf-site]: http://www.fpdf.org/
 [generation-examples]: doc/generation-examples.md
 [godoc]: https://pkg.go.dev/github.com/cssbruno/gopdfkit
 [license]: https://raw.githubusercontent.com/cssbruno/gopdfkit/master/LICENSE
+[migration-v0.9]: doc/migration-v0.9.md
 [pdf-html-subset]: doc/pdf-html-subset.md
+[production]: doc/production.md
+[release-plan-v0.9.0]: doc/release-plan-v0.9.0.md
+[security]: doc/security.md
+[v0.9-readiness-checklist]: doc/v0.9-readiness-checklist.md

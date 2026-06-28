@@ -5,6 +5,7 @@ package document
 
 import (
 	"bytes"
+	"context"
 	"io"
 
 	"github.com/cssbruno/gopdfkit/sign"
@@ -12,12 +13,29 @@ import (
 
 // OutputSigned writes the current document as a signed PDF.
 func (f *Document) OutputSigned(w io.Writer, options sign.Options) error {
+	return f.OutputSignedContext(context.Background(), w, options)
+}
+
+// OutputSignedContext writes the current document as a signed PDF and checks
+// ctx before generation/signing and before the final writer call.
+func (f *Document) OutputSignedContext(ctx context.Context, w io.Writer, options sign.Options) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if isNilWriter(w) {
 		f.SetError(ErrNilWriter)
 		return f.err
 	}
-	signed, err := f.outputSignedBytes(options)
+	if err := outputCanceledError(ctx); err != nil {
+		f.SetError(err)
+		return err
+	}
+	signed, err := f.outputSignedBytesContext(ctx, options)
 	if err != nil {
+		return err
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		f.SetError(err)
 		return err
 	}
 	n, err := w.Write(signed)
@@ -39,7 +57,7 @@ func (f *Document) OutputSignedFile(fileStr string, options sign.Options) error 
 		f.SetError(sign.ErrMissingOutput)
 		return sign.ErrMissingOutput
 	}
-	return writeFileAtomically(fileStr, true, func(w io.Writer) error {
+	return writeFileAtomically(fileStr, !f.outputPolicy.DisableSync, func(w io.Writer) error {
 		return f.OutputSigned(w, options)
 	})
 }
@@ -52,14 +70,31 @@ func (f *Document) OutputSignedFileWithOptions(fileStr string, signOptions sign.
 		f.SetError(sign.ErrMissingOutput)
 		return sign.ErrMissingOutput
 	}
-	return writeFileAtomically(fileStr, !fileOptions.DisableSync, func(w io.Writer) error {
-		return f.OutputSigned(w, signOptions)
+	return writeFileAtomically(fileStr, f.syncOutputForOptions(fileOptions), func(w io.Writer) error {
+		return f.OutputSignedWithOptions(w, signOptions, fileOptions)
 	})
 }
 
+// OutputSignedWithOptions writes the current document as a signed PDF using
+// output-wide options before signing.
+func (f *Document) OutputSignedWithOptions(w io.Writer, signOptions sign.Options, outputOptions OutputOptions) error {
+	if err := f.applyOutputOptions(outputOptions); err != nil {
+		return err
+	}
+	return f.OutputSignedContext(context.Background(), w, signOptions)
+}
+
 func (f *Document) outputSignedBytes(options sign.Options) ([]byte, error) {
+	return f.outputSignedBytesContext(context.Background(), options)
+}
+
+func (f *Document) outputSignedBytesContext(ctx context.Context, options sign.Options) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := f.Output(&buf); err != nil {
+	if err := f.OutputContext(ctx, &buf); err != nil {
+		return nil, err
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		f.SetError(err)
 		return nil, err
 	}
 	signed, err := sign.AppendBytes(buf.Bytes(), options)

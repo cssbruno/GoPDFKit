@@ -30,9 +30,14 @@ type Document struct {
 
 	pageObjectNumbers []int // PDF page object numbers by page; 1-based, populated at output
 
-	state                int                         // current document state
-	compress             bool                        // compression flag
-	compressLevel        int                         // zlib level for compressed streams
+	state         int  // current document state
+	compress      bool // compression flag
+	compressLevel int  // zlib level for compressed streams
+
+	pageCompressionWorkers         int // async page compression workers; 0 disables
+	attachmentCompressionWorkers   int // async attachment compression workers; 0 disables
+	compressionTinyStreamThreshold int // streams below this byte size are left uncompressed
+
 	k                    float64                     // scale factor (number of points in user unit)
 	defOrientation       string                      // default orientation
 	curOrientation       string                      // current orientation
@@ -59,6 +64,7 @@ type Document struct {
 	fontLoader           FontLoader                  // used to load font files from arbitrary locations
 	utf8FontPathCache    map[string]utf8FontPathInfo // cached UTF-8 font path resolution
 	utf8FontFileCache    map[sharedUTF8FontFileCacheKey]cachedUTF8Font
+	fontCache            *FontCache                     // explicit reusable UTF-8 font cache
 	resourceCachePolicy  ResourceCachePolicy            // file-backed resource cache behavior
 	coreFonts            map[string]bool                // set of core font names
 	fonts                map[string]fontDefinition      // map of used fonts
@@ -86,6 +92,13 @@ type Document struct {
 	pageLinks            [][]pageLink                   // pageLinks[page][link], both 1-based
 	links                []internalLink                 // array of internal links
 	attachments          []Attachment                   // slice of content to embed globally
+	maxAttachmentBytes   int64                          // largest attachment content accepted for embedding
+	limits               Limits                         // optional production resource limits
+	limitsSet            bool                           // whether limits were explicitly configured
+	securityPolicy       SecurityPolicy                 // optional security feature gates
+	securityPolicySet    bool                           // whether securityPolicy is enforced
+	outputPolicy         OutputPolicy                   // optional output defaults
+	hooks                Hooks                          // optional production diagnostics callbacks
 	attachmentStreams    map[attachmentStreamKey]int    // embedded attachment stream objects by content
 	attachmentFiles      map[attachmentFileKey]int      // filespec objects by normalized attachment identity
 	attachmentCompressed map[attachmentStreamKey][]byte // precompressed attachment streams

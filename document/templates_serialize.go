@@ -76,6 +76,13 @@ const (
 	maxTemplateSerializedBytes = 16 * 1024 * 1024
 )
 
+// TemplateSerializationVersion returns the current serialized-template format
+// version. The v0.9.x series preserves this format within the minor series; the
+// long-term compatibility promise is reserved for v1.0.
+func TemplateSerializationVersion() string {
+	return templateSerializationVersion
+}
+
 // ID returns the global template identifier.
 func (t *DocumentTpl) ID() string {
 	if t.id == "" {
@@ -351,7 +358,10 @@ func (t *DocumentTpl) ownImages() map[string]*ImageInfo {
 	return images
 }
 
-const templateBinaryMagic = "GPKTPL1\x00"
+const (
+	templateSerializationVersion = "GPKTPL1"
+	templateBinaryMagic          = templateSerializationVersion + "\x00"
+)
 
 // GobEncode encodes the receiving template into a byte buffer. Use GobDecode
 // to decode the byte buffer back to a template.

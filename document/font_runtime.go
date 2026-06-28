@@ -118,6 +118,11 @@ func (f *Document) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 		if ok {
 			return
 		}
+		if cached, ok := f.fontCache.font(familyStr, styleStr); ok {
+			f.addCachedUTF8Font(fontKey, familyStr, styleStr, cached)
+			f.fontFiles[fontKey] = fontFile{length1: int64(len(cached.data)), fontType: "UTF8"}
+			return
+		}
 		fontPath, originalSize, modTime, err := f.resolveUTF8FontPath(fileStr)
 		if err != nil {
 			f.SetError(err)
@@ -132,6 +137,7 @@ func (f *Document) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 			f.SetError(err)
 			return
 		}
+		f.fontCache.put(fontKey, cached)
 		f.addCachedUTF8Font(fontKey, familyStr, styleStr, cached)
 		f.fontFiles[fontKey] = fontFile{length1: originalSize, fontType: "UTF8"}
 		f.fontFiles[fontPath] = fontFile{fontType: "UTF8"}

@@ -5,7 +5,7 @@ package document
 
 import (
 	"bytes"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/gob"
 	"encoding/hex"
@@ -33,8 +33,10 @@ type ImageInfo struct {
 	trns  []int   // Transparency mask
 	scale float64 // Document scale factor
 	dpi   float64 // dots per inch found from the image file (PNG only)
-	i     string  // SHA-1 checksum of the above values
+	i     string  // SHA-256 checksum of intrinsic image values
 }
+
+type imageResourceID [32]byte
 
 func (info *ImageInfo) clone() *ImageInfo {
 	if info == nil {
@@ -59,13 +61,21 @@ func (info *ImageInfo) cloneMetadata() *ImageInfo {
 }
 
 func generateImageID(info *ImageInfo) (string, error) {
-	if info == nil {
-		return "", errors.New("image info is nil")
+	id, err := generateImageResourceID(info)
+	if err != nil {
+		return "", err
 	}
-	h := sha1.New()
+	return hex.EncodeToString(id[:]), nil
+}
+
+func generateImageResourceID(info *ImageInfo) (imageResourceID, error) {
+	var id imageResourceID
+	if info == nil {
+		return id, errors.New("image info is nil")
+	}
+	h := sha256.New()
 	hashImageBytes(h, 'd', info.data)
 	hashImageBytes(h, 'm', info.smask)
-	hashImageInt(h, 'n', info.n)
 	hashImageFloat(h, 'w', info.w)
 	hashImageFloat(h, 'h', info.h)
 	hashImageString(h, 'c', info.cs)
@@ -77,9 +87,9 @@ func generateImageID(info *ImageInfo) (string, error) {
 	for _, value := range info.trns {
 		hashImageInt(h, 'v', value)
 	}
-	hashImageFloat(h, 's', info.scale)
 	hashImageFloat(h, 'i', info.dpi)
-	return hex.EncodeToString(h.Sum(nil)), nil
+	copy(id[:], h.Sum(nil))
+	return id, nil
 }
 
 func hashImageBytes(h hash.Hash, tag byte, value []byte) {

@@ -5,6 +5,8 @@ package document
 
 import (
 	"bytes"
+	crand "crypto/rand"
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
@@ -203,6 +205,67 @@ func TestAttachmentFromFileLoadsDuringOutput(t *testing.T) {
 	}
 }
 
+func TestAttachmentFromFileRejectsOversizeFile(t *testing.T) {
+	fileStr := filepath.Join(t.TempDir(), "payload.bin")
+	file, err := os.Create(fileStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(MaxAttachmentBytes + 1); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetAttachments([]Attachment{AttachmentFromFile(fileStr)})
+	pdf.AddPage()
+
+	var out bytes.Buffer
+	err = pdf.Output(&out)
+	if err == nil || !strings.Contains(err.Error(), "attachment data exceeds maximum size") {
+		t.Fatalf("Output() error = %v, want attachment size limit", err)
+	}
+}
+
+func TestAttachmentFromFileWithOptionsEagerValidation(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.bin")
+	if _, err := AttachmentFromFileWithOptions(missing, AttachmentOptions{Eager: true}); err == nil {
+		t.Fatal("AttachmentFromFileWithOptions missing file error = nil")
+	}
+
+	fileStr := filepath.Join(t.TempDir(), "payload.bin")
+	if err := os.WriteFile(fileStr, []byte("payload"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AttachmentFromFileWithOptions(fileStr, AttachmentOptions{Eager: true, MaxBytes: 3}); err == nil || !strings.Contains(err.Error(), "attachment data exceeds maximum size") {
+		t.Fatalf("AttachmentFromFileWithOptions oversize error = %v, want size limit", err)
+	}
+	if attachment, err := AttachmentFromFileWithOptions(fileStr, AttachmentOptions{Eager: true, MaxBytes: 16}); err != nil || attachment.maxBytes != 16 {
+		t.Fatalf("AttachmentFromFileWithOptions valid = %#v, %v; want maxBytes 16", attachment, err)
+	}
+}
+
+func TestSetMaxAttachmentBytesAppliesDocumentLimit(t *testing.T) {
+	fileStr := filepath.Join(t.TempDir(), "payload.bin")
+	if err := os.WriteFile(fileStr, []byte("payload"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetMaxAttachmentBytes(3)
+	pdf.SetAttachments([]Attachment{AttachmentFromFile(fileStr)})
+	pdf.AddPage()
+
+	var out bytes.Buffer
+	err := pdf.Output(&out)
+	if err == nil || !strings.Contains(err.Error(), "attachment data exceeds maximum size") {
+		t.Fatalf("Output() error = %v, want attachment size limit", err)
+	}
+}
+
 func TestAttachmentOutputDedupesEquivalentFiles(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	pdf.SetCompression(false)
@@ -221,6 +284,20 @@ func TestAttachmentOutputDedupesEquivalentFiles(t *testing.T) {
 	}
 	if got := bytes.Count(out.Bytes(), []byte("/Type /Filespec")); got != 1 {
 		t.Fatalf("filespec count = %d, want 1", got)
+	}
+}
+
+func TestEmbeddedFileNamesUseAttachmentSpelling(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetAttachments([]Attachment{{Content: []byte("payload"), Filename: "payload.txt"}})
+	pdf.attachments[0].objectNumber = 42
+
+	names := pdf.getEmbeddedFiles()
+	if !strings.Contains(names, "(Attachment1)") {
+		t.Fatalf("embedded file names = %q, want Attachment spelling", names)
+	}
+	if strings.Contains(names, "Attachement") {
+		t.Fatalf("embedded file names retain legacy typo: %q", names)
 	}
 }
 
@@ -270,6 +347,68 @@ func TestCatalogOmitsNamesWhenUnused(t *testing.T) {
 	}
 }
 
+func TestRawWriteBufLatchesReaderErrors(t *testing.T) {
+	want := errors.New("reader failed")
+	pdf := New("P", "mm", "A4", "")
+	if err := pdf.RawWriteBufError(errReader{err: want}); !errors.Is(err, want) {
+		t.Fatalf("RawWriteBufError() error = %v, want %v", err, want)
+	}
+	if !errors.Is(pdf.Error(), want) {
+		t.Fatalf("document error = %v, want %v", pdf.Error(), want)
+	}
+}
+
+func TestRawWriteArtifactBufLatchesReaderErrors(t *testing.T) {
+	want := errors.New("artifact reader failed")
+	pdf := New("P", "mm", "A4", "")
+	if err := pdf.RawWriteArtifactBufError(errReader{err: want}); !errors.Is(err, want) {
+		t.Fatalf("RawWriteArtifactBufError() error = %v, want %v", err, want)
+	}
+	if !errors.Is(pdf.Error(), want) {
+		t.Fatalf("document error = %v, want %v", pdf.Error(), want)
+	}
+}
+
+func TestRawWriteStrErrorReturnsTaggedRestriction(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetComplianceMetadata(ComplianceMetadata{PDFUA2: true, Title: "Raw"})
+	err := pdf.RawWriteStrError("0 0 m")
+	if err == nil || !strings.Contains(err.Error(), "tagged PDF raw writes") {
+		t.Fatalf("RawWriteStrError() error = %v, want tagged raw write rejection", err)
+	}
+}
+
+func TestRawWriteArtifactStrErrorAllowsTaggedArtifacts(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetComplianceMetadata(ComplianceMetadata{PDFUA2: true, Title: "Artifact"})
+	if err := pdf.RawWriteArtifactStrError("0 0 m"); err != nil {
+		t.Fatalf("RawWriteArtifactStrError() error = %v", err)
+	}
+}
+
+func TestSetProtectionErrorLatchesRandomOwnerPasswordError(t *testing.T) {
+	want := errors.New("random failed")
+	original := crand.Reader
+	crand.Reader = errReader{err: want}
+	defer func() { crand.Reader = original }()
+
+	pdf := New("P", "mm", "A4", "")
+	if err := pdf.SetProtectionError(CnProtectPrint, "reader", ""); !errors.Is(err, want) {
+		t.Fatalf("SetProtectionError() error = %v, want %v", err, want)
+	}
+	if !errors.Is(pdf.Error(), want) {
+		t.Fatalf("document error = %v, want %v", pdf.Error(), want)
+	}
+}
+
+type errReader struct {
+	err error
+}
+
+func (r errReader) Read([]byte) (int, error) {
+	return 0, r.err
+}
+
 func TestGetImageInfoReturnsClone(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	info := pdf.newImageInfo()
@@ -281,6 +420,26 @@ func TestGetImageInfoReturnsClone(t *testing.T) {
 	got.SetDpi(144)
 	if pdf.images["img"].dpi != 72 {
 		t.Fatalf("registered image dpi = %.2f, want 72", pdf.images["img"].dpi)
+	}
+}
+
+func TestLinkRequiresActivePage(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.LinkString(1, 1, 10, 10, "https://example.com")
+	if pdf.Error() == nil || !strings.Contains(pdf.Error().Error(), "active page") {
+		t.Fatalf("LinkString error = %v, want active page error", pdf.Error())
+	}
+}
+
+func TestSetPageRejectsInvalidPageNumber(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetPage(2)
+	if pdf.Error() == nil || !strings.Contains(pdf.Error().Error(), "invalid page number") {
+		t.Fatalf("SetPage error = %v, want invalid page number", pdf.Error())
+	}
+	if got := pdf.PageNo(); got != 1 {
+		t.Fatalf("PageNo() = %d, want current page preserved", got)
 	}
 }
 
@@ -309,6 +468,20 @@ func TestHTMLFragmentLinksAreRejected(t *testing.T) {
 	html.Write(5, `<a href="#section">section</a>`)
 	if pdf.Error() == nil || !strings.Contains(pdf.Error().Error(), "fragment links") {
 		t.Fatalf("HTML fragment link error = %v", pdf.Error())
+	}
+}
+
+func TestHTMLImageTypeFromMimeSupportsWebP(t *testing.T) {
+	if got := htmlImageTypeFromMime("image/webp"); got != "webp" {
+		t.Fatalf("htmlImageTypeFromMime(image/webp) = %q, want webp", got)
+	}
+}
+
+func TestRemoveReturnsUnchangedWhenKeyMissing(t *testing.T) {
+	in := []int{1, 2, 3}
+	got := remove(in, 4)
+	if len(got) != len(in) || got[0] != 1 || got[1] != 2 || got[2] != 3 {
+		t.Fatalf("remove missing key = %#v, want %#v", got, in)
 	}
 }
 

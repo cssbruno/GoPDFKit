@@ -6,7 +6,7 @@ package document
 import (
 	"bytes"
 	"compress/zlib"
-	"runtime"
+	"context"
 	"sort"
 	"strings"
 	"sync"
@@ -220,9 +220,17 @@ func (f *Document) pageHeightPt(page int) float64 {
 }
 
 func (f *Document) putpages() {
+	f.putpagesContext(context.Background())
+}
+
+func (f *Document) putpagesContext(ctx context.Context) {
 	var wPt, hPt float64
 	var pageSize Size
 	var ok bool
+	if err := outputCanceledError(ctx); err != nil {
+		f.SetError(err)
+		return
+	}
 	nb := f.page
 	if len(f.aliasNbPagesStr) > 0 {
 		f.RegisterAlias(f.aliasNbPagesStr, sprintf("%d", nb))
@@ -249,8 +257,12 @@ func (f *Document) putpages() {
 	}
 	f.pageObjectNumbers = pagesObjectNumbers
 	f.tagged.pageObjNums = ensureIntSliceLen(f.tagged.pageObjNums, nb+1)
-	pageStreams := f.startPageStreamCompressor(nb)
+	pageStreams := f.startPageStreamCompressorContext(ctx, nb)
 	for n := 1; n <= nb; n++ {
+		if err := outputCanceledError(ctx); err != nil {
+			f.SetError(err)
+			return
+		}
 		f.newobj()
 		f.tagged.pageObjNums[n] = f.n
 		f.out("<</Type /Page")
@@ -295,7 +307,10 @@ func (f *Document) putpages() {
 		f.outf("/Contents %d 0 R>>", f.n+1)
 		f.out("endobj")
 		f.newobj()
-		data, compressed := f.pageStreamBytes(n, pageStreams)
+		data, compressed := f.pageStreamBytesContext(ctx, n, pageStreams)
+		if f.err != nil {
+			return
+		}
 		if compressed {
 			f.outf("<</Filter /FlateDecode /Length %d>>", len(data))
 			f.putstream(data)
@@ -326,8 +341,16 @@ func (f *Document) putpages() {
 }
 
 func (f *Document) pageStreamBytes(page int, pageStreams *pageStreamCompressor) ([]byte, bool) {
+	return f.pageStreamBytesContext(context.Background(), page, pageStreams)
+}
+
+func (f *Document) pageStreamBytesContext(ctx context.Context, page int, pageStreams *pageStreamCompressor) ([]byte, bool) {
+	if err := outputCanceledError(ctx); err != nil {
+		f.SetError(err)
+		return nil, false
+	}
 	if pageStreams != nil {
-		if stream, ok := pageStreams.page(page); ok {
+		if stream, ok := pageStreams.pageContext(ctx, page); ok {
 			if stream.err != nil {
 				f.SetError(stream.err)
 				return nil, false
@@ -342,11 +365,24 @@ func (f *Document) pageStreamBytes(page int, pageStreams *pageStreamCompressor) 
 	if f.err != nil {
 		return nil, false
 	}
+	if compressed && f.hooks.OnPageCompressed != nil {
+		f.hooks.OnPageCompressed(page, f.pages[page].Len(), len(data))
+	}
 	return data, compressed
 }
 
 func (f *Document) startPageStreamCompressor(nb int) *pageStreamCompressor {
+	return f.startPageStreamCompressorContext(context.Background(), nb)
+}
+
+func (f *Document) startPageStreamCompressorContext(ctx context.Context, nb int) *pageStreamCompressor {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if !f.compress || nb < 4 {
+		return nil
+	}
+	if f.pageCompressionWorkers == 0 {
 		return nil
 	}
 	level := f.compressLevel
@@ -355,8 +391,12 @@ func (f *Document) startPageStreamCompressor(nb int) *pageStreamCompressor {
 	}
 	scheduled := make([]bool, nb+1)
 	scheduledCount := 0
+	threshold := f.compressionTinyStreamThreshold
+	if threshold <= 0 {
+		threshold = defaultTinyStreamCompressionThreshold
+	}
 	for page := 1; page <= nb; page++ {
-		if f.pages[page].Len() >= tinyStreamCompressionThreshold {
+		if f.pages[page].Len() >= threshold {
 			scheduled[page] = true
 			scheduledCount++
 		}
@@ -364,7 +404,7 @@ func (f *Document) startPageStreamCompressor(nb int) *pageStreamCompressor {
 	if scheduledCount == 0 {
 		return nil
 	}
-	workers := runtime.GOMAXPROCS(0)
+	workers := f.pageCompressionWorkers
 	if workers < 1 {
 		workers = 1
 	}
@@ -372,23 +412,35 @@ func (f *Document) startPageStreamCompressor(nb int) *pageStreamCompressor {
 	go func() {
 		sem := make(chan struct{}, workers)
 		var wg sync.WaitGroup
+	schedule:
 		for page := 1; page <= nb; page++ {
 			if !scheduled[page] {
 				continue
 			}
 			data := f.pages[page].Bytes()
-			sem <- struct{}{}
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				break schedule
+			}
 			wg.Add(1)
 			go func(page int, data []byte) {
 				defer wg.Done()
 				defer func() { <-sem }()
 				compressed, err := sliceCompressLevel(data, level)
-				results <- pageStreamData{
+				if err == nil && f.hooks.OnPageCompressed != nil {
+					f.hooks.OnPageCompressed(page, len(data), len(compressed))
+				}
+				result := pageStreamData{
 					page:       page,
 					data:       compressed,
 					compressed: err == nil,
 					ready:      true,
 					err:        err,
+				}
+				select {
+				case results <- result:
+				case <-ctx.Done():
 				}
 			}(page, data)
 		}
@@ -403,20 +455,34 @@ func (f *Document) startPageStreamCompressor(nb int) *pageStreamCompressor {
 }
 
 func (c *pageStreamCompressor) page(page int) (pageStreamData, bool) {
+	return c.pageContext(context.Background(), page)
+}
+
+func (c *pageStreamCompressor) pageContext(ctx context.Context, page int) (pageStreamData, bool) {
 	if c == nil || page >= len(c.scheduled) || !c.scheduled[page] {
 		return pageStreamData{}, false
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		return pageStreamData{page: page, ready: true, err: err}, true
 	}
 	if stream, ok := c.pending[page]; ok {
 		delete(c.pending, page)
 		return stream, true
 	}
-	for stream := range c.results {
-		if stream.page == page {
-			return stream, true
+	for {
+		select {
+		case stream, ok := <-c.results:
+			if !ok {
+				return pageStreamData{}, false
+			}
+			if stream.page == page {
+				return stream, true
+			}
+			c.pending[stream.page] = stream
+		case <-ctx.Done():
+			return pageStreamData{page: page, ready: true, err: outputCanceledError(ctx)}, true
 		}
-		c.pending[stream.page] = stream
 	}
-	return pageStreamData{}, false
 }
 
 func (f *Document) putLinkAnnotation(pl pageLink, pagesObjectNumbers []int, pageHeights []float64) {

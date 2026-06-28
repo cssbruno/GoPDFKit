@@ -148,18 +148,33 @@ func (f *Document) registerTemplateImages(t Template) {
 	}
 }
 
-// Template is an object that can be written to, then reused any number of times
-// within a document.
-type Template interface {
+// TemplateView exposes the renderable content and resources of a template.
+type TemplateView interface {
 	ID() string
 	Size() (Point, Size)
 	Bytes() []byte
 	Images() map[string]*ImageInfo
 	Templates() []Template
+}
+
+// PagedTemplate exposes page selection for multi-page templates.
+type PagedTemplate interface {
 	NumPages() int
 	FromPage(int) (Template, error)
 	FromPages() []Template
+}
+
+// SerializableTemplate exposes template persistence for cache/storage use.
+type SerializableTemplate interface {
 	Serialize() ([]byte, error)
+}
+
+// Template is an object that can be written to, then reused any number of times
+// within a document.
+type Template interface {
+	TemplateView
+	PagedTemplate
+	SerializableTemplate
 	gob.GobDecoder
 	gob.GobEncoder
 }

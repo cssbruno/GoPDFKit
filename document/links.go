@@ -37,6 +37,10 @@ func (f *Document) SetLink(link int, y float64, page int) {
 
 // newLink adds a new clickable link on the current page.
 func (f *Document) newLink(x, y, w, h float64, link int, linkStr string) {
+	if f.page <= 0 {
+		f.SetErrorf("link requires an active page")
+		return
+	}
 	if link != 0 && !f.validLinkID(link) {
 		f.SetErrorf("invalid link id: %d", link)
 		return

@@ -173,6 +173,10 @@ func (f *Document) putImportedPages() {
 			filter = "/Filter /" + encodedFilter + "\n"
 		} else {
 			content = page.page.Content()
+			if err := page.page.ContentErr(); err != nil {
+				f.SetError(err)
+				return
+			}
 			if compressedContent, compressed := f.compressStreamBytes(content); compressed {
 				content = compressedContent
 				filter = "/Filter /FlateDecode\n"

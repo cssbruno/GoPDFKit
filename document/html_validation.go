@@ -87,7 +87,7 @@ func (html *HTML) addPageFormat() bool {
 	pageCount := html.generatedPageCount()
 	maxPages := html.maxGeneratedPages()
 	if pageCount > maxPages {
-		html.pdf.SetErrorf("HTML rendering exceeded maximum generated pages: %d > %d", pageCount, maxPages)
+		html.pdf.SetError(fmt.Errorf("%w: HTML rendering exceeded maximum generated pages: %d > %d", ErrHTMLLimitExceeded, pageCount, maxPages))
 		return false
 	}
 	return html.pdf.err == nil

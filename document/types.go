@@ -143,6 +143,16 @@ type Defaults struct {
 	ModificationDate time.Time // Fixed ModDate; zero uses generation time.
 }
 
+// CompressionPolicy controls generated stream compression and background
+// compression work. The zero value means package defaults.
+type CompressionPolicy struct {
+	Enabled                  bool // Whether generated streams should be compressed.
+	Level                    int  // zlib compression level; 0 uses the default level.
+	PageWorkers              int  // Background page compression workers; 0 disables background page compression.
+	AttachmentWorkers        int  // Background attachment compression workers; 0 disables background attachment compression.
+	TinyStreamThresholdBytes int  // Streams smaller than this are left uncompressed; 0 uses the default threshold.
+}
+
 // ResourceCachePolicy controls file-backed resource caching for images and
 // UTF-8 fonts loaded by path.
 type ResourceCachePolicy int
@@ -163,14 +173,23 @@ const (
 // code. The *Str fields are kept for compatibility with the legacy New
 // constructor and are used only when the typed field is empty.
 type Options struct {
-	Orientation Orientation         // Default page orientation.
-	Unit        Unit                // Document unit of measure.
-	PageSize    PageSizeName        // Named page size.
-	Size        Size                // Explicit page size override.
-	FontDir     string              // Font resource directory.
-	Optimize    bool                // Use best-compression generation defaults.
-	CachePolicy ResourceCachePolicy // File-backed image and UTF-8 font cache policy.
-	ImageCache  *ImageCache         // Optional explicit image cache.
+	Orientation                  Orientation         // Default page orientation.
+	Unit                         Unit                // Document unit of measure.
+	PageSize                     PageSizeName        // Named page size.
+	Size                         Size                // Explicit page size override.
+	FontDir                      string              // Font resource directory.
+	Optimize                     bool                // Use best-compression generation defaults.
+	CompressionPolicy            *CompressionPolicy  // Optional explicit compression policy.
+	PageCompressionWorkers       *int                // Optional background page compression workers; 0 disables.
+	AttachmentCompressionWorkers *int                // Optional background attachment compression workers; 0 disables.
+	CachePolicy                  ResourceCachePolicy // File-backed image and UTF-8 font cache policy.
+	ImageCache                   *ImageCache         // Optional explicit image cache.
+	FontCache                    *FontCache          // Optional explicit UTF-8 font cache.
+	Limits                       *Limits             // Optional resource and document limits.
+	SecurityPolicy               *SecurityPolicy     // Optional security feature gates.
+	OutputPolicy                 *OutputPolicy       // Optional output-time defaults.
+	Hooks                        *Hooks              // Optional observability hooks.
+	DeterministicOutput          bool                // Use fixed metadata dates and sorted catalogs.
 
 	OrientationStr string // Deprecated: use Orientation.
 	UnitStr        string // Deprecated: use Unit.

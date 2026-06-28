@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.9.0 - 2026-06-28
+
+Production-stability release for the pre-v1.0 API contract.
+
+### Added
+
+- Added `ProductionPolicy`, `Limits`, `SecurityPolicy`, `OutputPolicy`, and
+  `Hooks` for server and batch production profiles.
+- Added `ServerSafePolicy`, `BatchPolicy`, `DeterministicPolicy`,
+  `ServerSafeLimits`, `BatchLimits`, and deterministic defaults.
+- Added output-wide options and context-aware output entry points for normal and
+  signed PDF output.
+- Added security gates for JavaScript actions, local HTML images, file-backed
+  attachments, raw writes, and legacy RC4 protection.
+- Added sentinel errors for production error handling and initial fuzz targets
+  for HTML, SVG, template deserialization, image parsing, imported PDFs, and
+  CMS/DER parsing.
+- Added `TemplateSerializationVersion` and external validation integration
+  contracts for compliance workflows.
+
+### Changed
+
+- Made image resource identity SHA-256-based and intrinsic to image content
+  rather than output object numbers or document unit scale.
+- Enforced production limits for attachments, image source bytes, estimated
+  decoded image bytes, HTML input/generated pages, page count, imported PDF
+  source bytes, and imported page referenced objects.
+- Exposed output and production policy helpers through the root `gopdfkit`
+  facade.
+- Documented v0.9 production usage, security posture, deterministic output,
+  migration guidance, readiness gates, and benchmark budgets.
+
+### Fixed
+
+- Made legacy protection setup panic-free by returning/latching random-source
+  errors.
+- Fixed embedded attachment name spelling from `Attachement` to `Attachment`.
+
 ## v0.8.0 - 2026-06-28
 
 Minor release for cache, output, and error-handling hardening.

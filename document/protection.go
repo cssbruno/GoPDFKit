@@ -7,6 +7,7 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/rc4"
+	"io"
 )
 
 // Advisory bit flag constants that control document activities.
@@ -66,7 +67,7 @@ func (p *protectType) uValueGen() (v []byte) {
 	return
 }
 
-func (p *protectType) setProtection(privFlag byte, userPassStr, ownerPassStr string) {
+func (p *protectType) setProtection(privFlag byte, userPassStr, ownerPassStr string) error {
 	privFlag = 192 | (privFlag & (CnProtectCopy | CnProtectModify | CnProtectPrint | CnProtectAnnotForms))
 	p.padding = []byte{
 		0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41,
@@ -78,8 +79,8 @@ func (p *protectType) setProtection(privFlag byte, userPassStr, ownerPassStr str
 	var ownerPass []byte
 	if ownerPassStr == "" {
 		ownerPass = make([]byte, 16)
-		if _, err := rand.Read(ownerPass); err != nil {
-			panic(err)
+		if _, err := io.ReadFull(rand.Reader, ownerPass); err != nil {
+			return err
 		}
 	} else {
 		ownerPass = []byte(ownerPassStr)
@@ -99,6 +100,7 @@ func (p *protectType) setProtection(privFlag byte, userPassStr, ownerPassStr str
 	p.encryptionKey = sum[0:5]
 	p.uValue = p.uValueGen()
 	p.pValue = -(int(privFlag^255) + 1)
+	return nil
 }
 
 // SetProtection applies certain constraints on the finished PDF document.
@@ -120,8 +122,28 @@ func (p *protectType) setProtection(privFlag byte, userPassStr, ownerPassStr str
 // string for this argument is replaced with a random value, effectively
 // preventing owner-level access without the generated password.
 func (f *Document) SetProtection(actionFlag byte, userPassStr, ownerPassStr string) {
+	_ = f.SetLegacyProtection(actionFlag, userPassStr, ownerPassStr)
+}
+
+// SetProtectionError applies advisory password protection and reports setup
+// errors directly.
+func (f *Document) SetProtectionError(actionFlag byte, userPassStr, ownerPassStr string) error {
+	return f.SetLegacyProtection(actionFlag, userPassStr, ownerPassStr)
+}
+
+// SetLegacyProtection applies advisory legacy PDF standard-security protection
+// and reports setup errors directly. This compatibility feature uses legacy
+// RC4-based encryption and should not be presented as modern document security.
+func (f *Document) SetLegacyProtection(actionFlag byte, userPassStr, ownerPassStr string) error {
 	if f.err != nil {
-		return
+		return f.err
 	}
-	f.protect.setProtection(actionFlag, userPassStr, ownerPassStr)
+	if err := f.requireSecurityFeature("legacy RC4 protection", f.securityPolicy.AllowLegacyRC4Protection); err != nil {
+		return err
+	}
+	if err := f.protect.setProtection(actionFlag, userPassStr, ownerPassStr); err != nil {
+		f.SetError(err)
+		return err
+	}
+	return nil
 }

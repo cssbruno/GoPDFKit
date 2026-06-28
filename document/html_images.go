@@ -37,6 +37,8 @@ func htmlImageTypeFromMime(mimeType string) string {
 		return "jpg"
 	case "image/gif":
 		return "gif"
+	case "image/webp":
+		return "webp"
 	default:
 		return ""
 	}

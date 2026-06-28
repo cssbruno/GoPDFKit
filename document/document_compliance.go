@@ -75,6 +75,22 @@ type ComplianceValidationReport struct {
 	Issues []ComplianceValidationIssue
 }
 
+// ValidationSeverity is a shorter alias for ComplianceValidationSeverity.
+type ValidationSeverity = ComplianceValidationSeverity
+
+// ValidationIssue is a shorter alias for ComplianceValidationIssue.
+type ValidationIssue = ComplianceValidationIssue
+
+// ValidationReport is a shorter alias for ComplianceValidationReport.
+type ValidationReport = ComplianceValidationReport
+
+// Validator is the integration point for external PDF/A, PDF/UA, or Arlington
+// validation tools. GoPDFKit records compliance metadata; callers should use an
+// external validator when standards conformance must be enforced.
+type Validator interface {
+	ValidatePDF(data []byte) (ValidationReport, error)
+}
+
 // Add appends one external validation issue to the report.
 func (report *ComplianceValidationReport) Add(issue ComplianceValidationIssue) {
 	if strings.TrimSpace(string(issue.Severity)) == "" {

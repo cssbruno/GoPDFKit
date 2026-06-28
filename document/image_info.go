@@ -22,11 +22,23 @@ type imageParser struct {
 	k             float64
 	compressLevel int
 	pdfVersion    string
+	sourceLimit   int
+	decodedLimit  int
 	err           error
 }
 
 func newImageParser(scale float64, compressLevel int, pdfVersion string) *imageParser {
-	return &imageParser{k: scale, compressLevel: compressLevel, pdfVersion: pdfVersion}
+	return newImageParserWithLimits(scale, compressLevel, pdfVersion, maxImageSourceBytes, maxImageDecodedBytes)
+}
+
+func newImageParserWithLimits(scale float64, compressLevel int, pdfVersion string, sourceLimit, decodedLimit int) *imageParser {
+	if sourceLimit == 0 {
+		sourceLimit = maxImageSourceBytes
+	}
+	if decodedLimit == 0 {
+		decodedLimit = maxImageDecodedBytes
+	}
+	return &imageParser{k: scale, compressLevel: compressLevel, pdfVersion: pdfVersion, sourceLimit: sourceLimit, decodedLimit: decodedLimit}
 }
 
 func (p *imageParser) newImageInfo() *ImageInfo {

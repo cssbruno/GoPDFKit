@@ -5,8 +5,10 @@ package document
 
 import (
 	"compress/zlib"
+	"context"
 	"errors"
 	"fmt"
+	"runtime"
 )
 
 // SetDisplayMode sets advisory display directives for the document viewer.
@@ -85,6 +87,104 @@ func (f *Document) SetCompressionLevel(level int) {
 	f.compress = level != zlib.NoCompression
 }
 
+func defaultCompressionPolicy() CompressionPolicy {
+	pageWorkers := runtime.GOMAXPROCS(0)
+	if pageWorkers > 4 {
+		pageWorkers = 4
+	}
+	if pageWorkers < 1 {
+		pageWorkers = 1
+	}
+	return CompressionPolicy{
+		Enabled:                  true,
+		Level:                    zlib.BestSpeed,
+		PageWorkers:              pageWorkers,
+		AttachmentWorkers:        defaultAttachmentCompressionWorkers,
+		TinyStreamThresholdBytes: defaultTinyStreamCompressionThreshold,
+	}
+}
+
+func normalizeCompressionPolicy(policy CompressionPolicy) (CompressionPolicy, error) {
+	defaults := defaultCompressionPolicy()
+	if policy == (CompressionPolicy{}) {
+		return defaults, nil
+	}
+	if policy.Level == 0 && policy.Enabled {
+		policy.Level = defaults.Level
+	}
+	if policy.Enabled && !validCompressionLevel(policy.Level) {
+		return CompressionPolicy{}, fmt.Errorf("invalid compression level: %d", policy.Level)
+	}
+	if !policy.Enabled {
+		policy.Level = zlib.NoCompression
+	} else if policy.Level == zlib.NoCompression {
+		policy.Enabled = false
+	}
+	if policy.PageWorkers < 0 {
+		return CompressionPolicy{}, fmt.Errorf("invalid page compression workers: %d", policy.PageWorkers)
+	}
+	if policy.AttachmentWorkers < 0 {
+		return CompressionPolicy{}, fmt.Errorf("invalid attachment compression workers: %d", policy.AttachmentWorkers)
+	}
+	if policy.TinyStreamThresholdBytes < 0 {
+		return CompressionPolicy{}, fmt.Errorf("invalid tiny stream threshold: %d", policy.TinyStreamThresholdBytes)
+	}
+	if policy.TinyStreamThresholdBytes == 0 {
+		policy.TinyStreamThresholdBytes = defaults.TinyStreamThresholdBytes
+	}
+	return policy, nil
+}
+
+// SetCompressionPolicy sets generated stream compression and background
+// compression worker limits.
+func (f *Document) SetCompressionPolicy(policy CompressionPolicy) error {
+	policy, err := normalizeCompressionPolicy(policy)
+	if err != nil {
+		f.SetError(err)
+		return err
+	}
+	f.compress = policy.Enabled
+	f.compressLevel = policy.Level
+	f.pageCompressionWorkers = policy.PageWorkers
+	f.attachmentCompressionWorkers = policy.AttachmentWorkers
+	f.compressionTinyStreamThreshold = policy.TinyStreamThresholdBytes
+	return nil
+}
+
+// CompressionPolicy returns the document's current compression settings.
+func (f *Document) CompressionPolicy() CompressionPolicy {
+	return CompressionPolicy{
+		Enabled:                  f.compress,
+		Level:                    f.compressLevel,
+		PageWorkers:              f.pageCompressionWorkers,
+		AttachmentWorkers:        f.attachmentCompressionWorkers,
+		TinyStreamThresholdBytes: f.compressionTinyStreamThreshold,
+	}
+}
+
+// SetPageCompressionWorkers sets how many goroutines may compress page streams
+// during output. Passing 0 disables background page compression; pages are then
+// compressed synchronously as they are written.
+func (f *Document) SetPageCompressionWorkers(workers int) {
+	if workers < 0 {
+		f.SetErrorf("invalid page compression workers: %d", workers)
+		return
+	}
+	f.pageCompressionWorkers = workers
+}
+
+// SetAttachmentCompressionWorkers sets how many goroutines may compress
+// embedded attachments during output. Passing 0 disables background attachment
+// compression; attachments are then compressed synchronously as they are
+// embedded.
+func (f *Document) SetAttachmentCompressionWorkers(workers int) {
+	if workers < 0 {
+		f.SetErrorf("invalid attachment compression workers: %d", workers)
+		return
+	}
+	f.attachmentCompressionWorkers = workers
+}
+
 // SetNoCompression disables Flate compression for page and template streams.
 func (f *Document) SetNoCompression() {
 	f.SetCompressionLevel(zlib.NoCompression)
@@ -107,10 +207,14 @@ func defaultCompressionLevel() int {
 	return zlib.BestSpeed
 }
 
-const tinyStreamCompressionThreshold = 32
+const defaultTinyStreamCompressionThreshold = 32
 
 func (f *Document) compressStreamBytes(data []byte) ([]byte, bool) {
-	if !f.compress || len(data) < tinyStreamCompressionThreshold {
+	threshold := f.compressionTinyStreamThreshold
+	if threshold <= 0 {
+		threshold = defaultTinyStreamCompressionThreshold
+	}
+	if !f.compress || len(data) < threshold {
 		return data, false
 	}
 	return f.compressBytes(data), f.err == nil
@@ -150,6 +254,17 @@ func (f *Document) open() {
 // automatically. If the document contains no page, AddPage is called to
 // prevent the generation of an invalid document.
 func (f *Document) Close() {
+	f.closeContext(context.Background())
+}
+
+func (f *Document) closeContext(ctx context.Context) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		f.SetError(err)
+		return
+	}
 	if f.err == nil {
 		if f.clipNest > 0 {
 			f.err = errors.New("clip procedure must be explicitly ended")
@@ -177,5 +292,5 @@ func (f *Document) Close() {
 	}
 	f.inFooter = false
 	f.endpage()
-	f.enddoc()
+	f.enddocContext(ctx)
 }

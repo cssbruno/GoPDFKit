@@ -8,6 +8,7 @@ import (
 	"compress/zlib"
 	"crypto/md5"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"mime"
 	"os"
@@ -18,6 +19,16 @@ import (
 )
 
 const defaultAttachmentCompressionWorkers = 4
+
+// MaxAttachmentBytes is the default largest attachment content accepted for
+// embedding.
+const MaxAttachmentBytes = 64 * 1024 * 1024
+
+// AttachmentOptions controls file-backed attachment validation.
+type AttachmentOptions struct {
+	MaxBytes int64 // Maximum file size; 0 uses MaxAttachmentBytes.
+	Eager    bool  // Validate file existence and size before returning.
+}
 
 // Attachment defines content to include in the PDF in one of the following ways:
 //   - associated with the document as a whole; see SetAttachments()
@@ -50,6 +61,7 @@ type Attachment struct {
 	mimeType       string // Normalized lazily or when cloned.
 	afRelationship string // Normalized lazily or when cloned.
 	checksum       string // PDF MD5 checksum, computed once per attachment content.
+	maxBytes       int64  // Per-attachment maximum content size; 0 uses document/default limit.
 }
 
 type attachmentStreamKey struct {
@@ -105,7 +117,13 @@ func (f *Document) prepareAttachmentCompression() {
 	if len(tasks) == 0 {
 		return
 	}
-	workers := defaultAttachmentCompressionWorkers
+	workers := f.attachmentCompressionWorkers
+	if workers < 0 {
+		workers = defaultAttachmentCompressionWorkers
+	}
+	if workers == 0 {
+		return
+	}
 	if workers > len(tasks) {
 		workers = len(tasks)
 	}
@@ -327,10 +345,23 @@ func normalizeAttachment(a *Attachment) {
 }
 
 func (f *Document) loadAttachmentContent(a *Attachment) bool {
-	if a == nil || len(a.Content) > 0 || strings.TrimSpace(a.FilePath) == "" {
+	if a == nil {
 		return true
 	}
-	data, err := os.ReadFile(a.FilePath)
+	if strings.TrimSpace(a.FilePath) != "" {
+		if err := f.requireSecurityFeature("file-backed attachments", f.securityPolicy.AllowFileAttachments); err != nil {
+			return false
+		}
+	}
+	limit := f.attachmentMaxBytes(*a)
+	if limit >= 0 && int64(len(a.Content)) > limit {
+		f.SetError(fmt.Errorf("%w: attachment data exceeds maximum size", ErrAttachmentTooLarge))
+		return false
+	}
+	if len(a.Content) > 0 || strings.TrimSpace(a.FilePath) == "" {
+		return true
+	}
+	data, err := readAttachmentFileLimit(a.FilePath, limit)
 	if err != nil {
 		f.SetError(err)
 		return false
@@ -339,10 +370,55 @@ func (f *Document) loadAttachmentContent(a *Attachment) bool {
 	if strings.TrimSpace(a.Filename) == "" {
 		a.Filename = filepath.Base(a.FilePath)
 	}
+	if f.hooks.OnAttachmentLoaded != nil {
+		f.hooks.OnAttachmentLoaded(a.Filename, int64(len(data)))
+	}
 	if a.checksum == "" {
 		a.checksum = attachmentChecksum(data)
 	}
 	return true
+}
+
+func (f *Document) attachmentMaxBytes(a Attachment) int64 {
+	if a.maxBytes > 0 {
+		return a.maxBytes
+	}
+	if f.maxAttachmentBytes > 0 {
+		return f.maxAttachmentBytes
+	}
+	return MaxAttachmentBytes
+}
+
+// SetMaxAttachmentBytes sets the maximum content size accepted for attachments
+// embedded by this document. Passing zero restores the package default.
+func (f *Document) SetMaxAttachmentBytes(maxBytes int64) {
+	if maxBytes < 0 {
+		f.SetErrorf("invalid max attachment bytes: %d", maxBytes)
+		return
+	}
+	if maxBytes == 0 {
+		maxBytes = MaxAttachmentBytes
+	}
+	f.maxAttachmentBytes = maxBytes
+}
+
+func readAttachmentFileLimit(filename string, limit int64) ([]byte, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	if limit >= 0 {
+		if info, statErr := file.Stat(); statErr == nil && info.Mode().IsRegular() && info.Size() > limit {
+			return nil, fmt.Errorf("%w: attachment data exceeds maximum size", ErrAttachmentTooLarge)
+		}
+		data, err := io.ReadAll(io.LimitReader(file, limit+1))
+		if err == nil && int64(len(data)) > limit {
+			err = fmt.Errorf("%w: attachment data exceeds maximum size", ErrAttachmentTooLarge)
+		}
+		return data, err
+	}
+	return io.ReadAll(file)
 }
 
 var pdfNameReserved [256]bool
@@ -400,6 +476,35 @@ func AttachmentFromFile(fileStr string) Attachment {
 	return Attachment{FilePath: fileStr, Filename: filepath.Base(fileStr)}
 }
 
+// AttachmentFromFileWithOptions returns a file-backed attachment descriptor and
+// optionally validates the file immediately.
+func AttachmentFromFileWithOptions(fileStr string, options AttachmentOptions) (Attachment, error) {
+	attachment := AttachmentFromFile(fileStr)
+	if options.MaxBytes < 0 {
+		return attachment, fmt.Errorf("invalid max attachment bytes: %d", options.MaxBytes)
+	}
+	if options.MaxBytes > 0 {
+		attachment.maxBytes = options.MaxBytes
+	}
+	if options.Eager {
+		limit := options.MaxBytes
+		if limit == 0 {
+			limit = MaxAttachmentBytes
+		}
+		file, err := os.Open(fileStr)
+		if err != nil {
+			return attachment, err
+		}
+		defer func() { _ = file.Close() }()
+		if info, err := file.Stat(); err != nil {
+			return attachment, err
+		} else if info.Mode().IsRegular() && limit >= 0 && info.Size() > limit {
+			return attachment, fmt.Errorf("%w: attachment data exceeds maximum size", ErrAttachmentTooLarge)
+		}
+	}
+	return attachment, nil
+}
+
 // putAttachments embeds the current attachments and stores their object numbers
 // for later use by getEmbeddedFiles().
 func (f *Document) putAttachments() {
@@ -416,7 +521,7 @@ func (f Document) getEmbeddedFiles() string {
 		if i > 0 {
 			names.WriteByte('\n')
 		}
-		names.WriteString("(Attachement")
+		names.WriteString("(Attachment")
 		names.WriteString(strconv.Itoa(i + 1))
 		names.WriteString(") ")
 		names.WriteString(strconv.Itoa(as.objectNumber))

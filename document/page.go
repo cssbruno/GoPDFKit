@@ -81,9 +81,17 @@ func (f *Document) SetCellMargin(margin float64) {
 // SetPage sets the current page to that of a valid page in the PDF document.
 // pageNum is one-based. The SetPage() example demonstrates this method.
 func (f *Document) SetPage(pageNum int) {
-	if (pageNum > 0) && (pageNum < len(f.pages)) {
-		f.page = pageNum
+	_ = f.SetPageE(pageNum)
+}
+
+// SetPageE sets the current page and reports invalid page numbers directly.
+func (f *Document) SetPageE(pageNum int) error {
+	if pageNum <= 0 || pageNum >= len(f.pages) {
+		f.SetErrorf("invalid page number: %d", pageNum)
+		return f.err
 	}
+	f.page = pageNum
+	return nil
 }
 
 // PageCount returns the number of pages currently in the document. Since page
@@ -224,6 +232,9 @@ func (f *Document) addPageFormatRotation(orientationStr string, size Size, rotat
 	}
 	if err := validatePageSize(size); err != nil {
 		f.err = err
+		return
+	}
+	if err := f.checkPageLimitForAdd(); err != nil {
 		return
 	}
 	if f.page != len(f.pages)-1 {
@@ -456,7 +467,7 @@ func (f *Document) normalizePageOrientation(orientationStr string) (string, erro
 
 func validatePageSize(size Size) error {
 	if !finiteNumbers(size.Wd, size.Ht) || size.Wd <= 0 || size.Ht <= 0 {
-		return fmt.Errorf("invalid page size: %.2f x %.2f", size.Wd, size.Ht)
+		return fmt.Errorf("%w: %.2f x %.2f", ErrInvalidPageSize, size.Wd, size.Ht)
 	}
 	return nil
 }
@@ -477,6 +488,9 @@ func (f *Document) beginpage(orientationStr string, size Size, rotation int) {
 	}
 	if err := validatePageSize(size); err != nil {
 		f.err = err
+		return
+	}
+	if err := f.checkPageLimitForAdd(); err != nil {
 		return
 	}
 	f.page++

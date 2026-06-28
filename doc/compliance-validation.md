@@ -170,11 +170,13 @@ workflow has separate `Compliance Smoke` and `Compliance Strict` jobs; protected
 branches should require `Compliance Strict` before merging because that job runs
 the external validators and baseline comparison.
 
-Store external findings in `document.ComplianceValidationReport`:
+Store external findings in `document.ComplianceValidationReport`. `v0.9.0` also
+provides the shorter `document.ValidationReport`, `document.ValidationIssue`,
+and `document.Validator` names for production validation adapters:
 
 ```go
-var report document.ComplianceValidationReport
-report.Add(document.ComplianceValidationIssue{
+var report document.ValidationReport
+report.Add(document.ValidationIssue{
     Standard: "Arlington",
     Severity: document.ComplianceValidationError,
     Rule:     "Catalog::Pages",
@@ -183,6 +185,14 @@ report.Add(document.ComplianceValidationIssue{
 })
 if report.Failed() {
     return errors.New("compliance validation failed")
+}
+```
+
+A validator adapter can implement:
+
+```go
+type Validator interface {
+    ValidatePDF(data []byte) (document.ValidationReport, error)
 }
 ```
 

@@ -20,12 +20,12 @@ func (p *imageParser) parsejpg(r io.Reader) (info *ImageInfo) {
 		data bytes.Buffer
 		err  error
 	)
-	_, err = data.ReadFrom(io.LimitReader(r, maxImageSourceBytes+1))
+	_, err = data.ReadFrom(io.LimitReader(r, int64(p.sourceLimit)+1))
 	if err != nil {
 		p.err = err
 		return
 	}
-	if data.Len() > maxImageSourceBytes {
+	if data.Len() > p.sourceLimit {
 		p.err = errors.New("image data exceeds maximum size")
 		return
 	}
