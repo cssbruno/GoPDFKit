@@ -418,11 +418,12 @@ func (f *Document) putbookmarks() {
 				return
 			}
 			f.newobj()
-			title := o.text
+			buf := []byte("<</Title ")
 			if o.utf8 {
-				title = utf8toutf16(title)
+				buf = f.appendUTF16TextString(buf, o.text)
+			} else {
+				buf = f.appendTextString(buf, o.text)
 			}
-			buf := append([]byte("<</Title "), f.textstring(title)...)
 			buf = append(buf, '\n')
 			buf = appendPDFNamedObjectRef(buf, "/Parent ", n+o.parent)
 			if o.prev != -1 {
@@ -470,7 +471,11 @@ func (f *Document) enddoc() {
 	}
 	f.ensureComplianceMetadata()
 	f.buffer.Grow(f.estimateFinalBufferSize())
-	f.fileIDHash = sha256.New()
+	if f.needsFileIDHash() {
+		f.fileIDHash = sha256.New()
+	} else {
+		f.fileIDHash = nil
+	}
 	f.layerEndDoc()
 	f.putheader()
 	f.prepareAttachmentCompression()
@@ -512,6 +517,10 @@ func (f *Document) enddoc() {
 	f.outPDFIntLine(o)
 	f.out("%%EOF")
 	f.state = 3
+}
+
+func (f *Document) needsFileIDHash() bool {
+	return f.compliance.PDFA != PDFAModeNone || f.compliance.Arlington
 }
 
 func (f *Document) estimateFinalBufferSize() int {

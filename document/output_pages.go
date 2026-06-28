@@ -174,10 +174,17 @@ type aliasReplacementBytes struct {
 }
 
 type pageStreamData struct {
+	page       int
 	data       []byte
 	compressed bool
 	ready      bool
 	err        error
+}
+
+type pageStreamCompressor struct {
+	results   <-chan pageStreamData
+	scheduled []bool
+	pending   map[int]pageStreamData
 }
 
 func replaceAliasBytes(data []byte, pairs []aliasReplacementBytes) []byte {
@@ -242,7 +249,7 @@ func (f *Document) putpages() {
 	}
 	f.pageObjectNumbers = pagesObjectNumbers
 	f.tagged.pageObjNums = ensureIntSliceLen(f.tagged.pageObjNums, nb+1)
-	pageStreams := f.precompressPageStreams(nb)
+	pageStreams := f.startPageStreamCompressor(nb)
 	for n := 1; n <= nb; n++ {
 		f.newobj()
 		f.tagged.pageObjNums[n] = f.n
@@ -318,13 +325,18 @@ func (f *Document) putpages() {
 	f.out("endobj")
 }
 
-func (f *Document) pageStreamBytes(page int, pageStreams []pageStreamData) ([]byte, bool) {
-	if page < len(pageStreams) && pageStreams[page].ready {
-		if pageStreams[page].err != nil {
-			f.SetError(pageStreams[page].err)
+func (f *Document) pageStreamBytes(page int, pageStreams *pageStreamCompressor) ([]byte, bool) {
+	if pageStreams != nil {
+		if stream, ok := pageStreams.page(page); ok {
+			if stream.err != nil {
+				f.SetError(stream.err)
+				return nil, false
+			}
+			return stream.data, stream.compressed
+		}
+		if f.err != nil {
 			return nil, false
 		}
-		return pageStreams[page].data, pageStreams[page].compressed
 	}
 	data, compressed := f.compressStreamBytes(f.pages[page].Bytes())
 	if f.err != nil {
@@ -333,7 +345,7 @@ func (f *Document) pageStreamBytes(page int, pageStreams []pageStreamData) ([]by
 	return data, compressed
 }
 
-func (f *Document) precompressPageStreams(nb int) []pageStreamData {
+func (f *Document) startPageStreamCompressor(nb int) *pageStreamCompressor {
 	if !f.compress || nb < 4 {
 		return nil
 	}
@@ -341,32 +353,70 @@ func (f *Document) precompressPageStreams(nb int) []pageStreamData {
 	if !validCompressionLevel(level) {
 		level = zlib.BestSpeed
 	}
-	pageStreams := make([]pageStreamData, nb+1)
+	scheduled := make([]bool, nb+1)
+	scheduledCount := 0
+	for page := 1; page <= nb; page++ {
+		if f.pages[page].Len() >= tinyStreamCompressionThreshold {
+			scheduled[page] = true
+			scheduledCount++
+		}
+	}
+	if scheduledCount == 0 {
+		return nil
+	}
 	workers := runtime.GOMAXPROCS(0)
 	if workers < 1 {
 		workers = 1
 	}
-	sem := make(chan struct{}, workers)
-	var wg sync.WaitGroup
-	for page := 1; page <= nb; page++ {
-		data := f.pages[page].Bytes()
-		if len(data) < tinyStreamCompressionThreshold {
-			continue
+	results := make(chan pageStreamData)
+	go func() {
+		sem := make(chan struct{}, workers)
+		var wg sync.WaitGroup
+		for page := 1; page <= nb; page++ {
+			if !scheduled[page] {
+				continue
+			}
+			data := f.pages[page].Bytes()
+			sem <- struct{}{}
+			wg.Add(1)
+			go func(page int, data []byte) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				compressed, err := sliceCompressLevel(data, level)
+				results <- pageStreamData{
+					page:       page,
+					data:       compressed,
+					compressed: err == nil,
+					ready:      true,
+					err:        err,
+				}
+			}(page, data)
 		}
-		pageStreams[page].ready = true
-		sem <- struct{}{}
-		wg.Add(1)
-		go func(page int, data []byte) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			compressed, err := sliceCompressLevel(data, level)
-			pageStreams[page].data = compressed
-			pageStreams[page].compressed = err == nil
-			pageStreams[page].err = err
-		}(page, data)
+		wg.Wait()
+		close(results)
+	}()
+	return &pageStreamCompressor{
+		results:   results,
+		scheduled: scheduled,
+		pending:   make(map[int]pageStreamData),
 	}
-	wg.Wait()
-	return pageStreams
+}
+
+func (c *pageStreamCompressor) page(page int) (pageStreamData, bool) {
+	if c == nil || page >= len(c.scheduled) || !c.scheduled[page] {
+		return pageStreamData{}, false
+	}
+	if stream, ok := c.pending[page]; ok {
+		delete(c.pending, page)
+		return stream, true
+	}
+	for stream := range c.results {
+		if stream.page == page {
+			return stream, true
+		}
+		c.pending[stream.page] = stream
+	}
+	return pageStreamData{}, false
 }
 
 func (f *Document) putLinkAnnotation(pl pageLink, pagesObjectNumbers []int, pageHeights []float64) {

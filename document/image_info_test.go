@@ -101,6 +101,50 @@ func TestImageCacheReusesFileRegistrationByPathStatAndOptions(t *testing.T) {
 	}
 }
 
+func TestRegisterImageOptionsUsesSharedFileCacheByDefault(t *testing.T) {
+	previousCache := sharedImageFileCache
+	sharedImageFileCache = newImageCache(maxSharedImageFileCacheBytes)
+	defer func() { sharedImageFileCache = previousCache }()
+
+	imagePath := filepath.Join(t.TempDir(), "pixel.PNG")
+	if err := os.WriteFile(imagePath, decodeTinyPNG(t), 0o600); err != nil {
+		t.Fatalf("write image fixture: %v", err)
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("working directory: %v", err)
+	}
+	relPath, err := filepath.Rel(wd, imagePath)
+	if err != nil {
+		t.Fatalf("relative image path: %v", err)
+	}
+
+	for i, path := range []string{imagePath, relPath} {
+		pdf := New("P", "mm", "A4", "")
+		pdf.SetCompression(false)
+		pdf.AddPage()
+		pdf.ImageOptions(path, 10, 10, 5, 5, false, ImageOptions{}, 0, "")
+		var out bytes.Buffer
+		if err := pdf.Output(&out); err != nil {
+			t.Fatalf("Output(%d) error = %v", i, err)
+		}
+		if !strings.Contains(out.String(), "/Subtype /Image") {
+			t.Fatalf("generated PDF %d missing image object", i)
+		}
+	}
+
+	sharedImageFileCache.mu.RLock()
+	fileImages := len(sharedImageFileCache.fileImages)
+	fileTypes := len(sharedImageFileCache.fileTypes)
+	sharedImageFileCache.mu.RUnlock()
+	if fileImages != 1 {
+		t.Fatalf("shared file images = %d, want 1", fileImages)
+	}
+	if fileTypes != 1 {
+		t.Fatalf("shared file types = %d, want 1", fileTypes)
+	}
+}
+
 func TestImageFromCacheMissingEntrySetsDocumentError(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	pdf.ImageFromCache("missing", NewImageCache(), 0, 0, 1, 1, false, ImageOptions{}, 0, "")

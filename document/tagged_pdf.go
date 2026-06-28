@@ -375,7 +375,8 @@ func (f *Document) putTaggedElement(elem *taggedElement) {
 		f.outf("/Pg %d 0 R", f.tagged.pageObjNums[elem.Page])
 	}
 	if elem.Alt != "" {
-		f.outf("/Alt %s", f.textstring(utf8toutf16(elem.Alt)))
+		buf := f.appendUTF16TextString([]byte("/Alt "), elem.Alt)
+		f.outbytes(buf)
 	}
 	if attr := f.taggedTableAttributeString(elem); attr != "" {
 		f.outf("/A %s", attr)

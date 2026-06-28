@@ -54,9 +54,9 @@ func parseCSSPaint(value string) (CSSColorType, bool) {
 func parseHexColor(value string) (CSSColorType, bool) {
 	hex := strings.TrimPrefix(value, "#")
 	if len(hex) == 3 || len(hex) == 4 {
-		r, okR := parseHexByte(strings.Repeat(hex[0:1], 2))
-		g, okG := parseHexByte(strings.Repeat(hex[1:2], 2))
-		b, okB := parseHexByte(strings.Repeat(hex[2:3], 2))
+		r, okR := parseShortHexByte(hex[0])
+		g, okG := parseShortHexByte(hex[1])
+		b, okB := parseShortHexByte(hex[2])
 		return CSSColorType{R: r, G: g, B: b, Set: true}, okR && okG && okB
 	}
 	if len(hex) == 6 || len(hex) == 8 {
@@ -68,34 +68,64 @@ func parseHexColor(value string) (CSSColorType, bool) {
 	return CSSColorType{}, false
 }
 
+func parseShortHexByte(value byte) (int, bool) {
+	n, ok := parseHexNibble(value)
+	return n<<4 | n, ok
+}
+
+func parseHexNibble(value byte) (int, bool) {
+	switch {
+	case value >= '0' && value <= '9':
+		return int(value - '0'), true
+	case value >= 'a' && value <= 'f':
+		return int(value-'a') + 10, true
+	case value >= 'A' && value <= 'F':
+		return int(value-'A') + 10, true
+	default:
+		return 0, false
+	}
+}
+
 func parseHexByte(value string) (int, bool) {
 	n, err := strconv.ParseInt(value, 16, 16)
 	return int(n), err == nil
 }
 
 func parseRGBColor(value string) (CSSColorType, bool) {
-	parts := strings.Split(value, ",")
-	if len(parts) != 3 {
-		return CSSColorType{}, false
-	}
 	var rgb [3]int
-	for j, part := range parts {
-		part = strings.TrimSpace(part)
-		if strings.HasSuffix(part, "%") {
-			n, err := strconv.ParseFloat(strings.TrimSuffix(part, "%"), 64)
-			if err != nil {
-				return CSSColorType{}, false
-			}
-			rgb[j] = clampColor(int(n * 255 / 100))
-			continue
+	for j := 0; j < 3; j++ {
+		part := value
+		if comma := strings.IndexByte(value, ','); comma >= 0 {
+			part = value[:comma]
+			value = value[comma+1:]
+		} else if j < 2 {
+			return CSSColorType{}, false
+		} else {
+			value = ""
 		}
-		n, err := strconv.Atoi(part)
-		if err != nil {
+		n, ok := parseRGBComponent(part)
+		if !ok {
 			return CSSColorType{}, false
 		}
 		rgb[j] = clampColor(n)
 	}
+	if strings.TrimSpace(value) != "" {
+		return CSSColorType{}, false
+	}
 	return CSSColorType{R: rgb[0], G: rgb[1], B: rgb[2], Set: true}, true
+}
+
+func parseRGBComponent(part string) (int, bool) {
+	part = strings.TrimSpace(part)
+	if strings.HasSuffix(part, "%") {
+		n, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(part, "%")), 64)
+		if err != nil {
+			return 0, false
+		}
+		return int(n * 255 / 100), true
+	}
+	n, err := strconv.Atoi(part)
+	return n, err == nil
 }
 
 func clampColor(n int) int {

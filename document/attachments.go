@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"io"
 	"mime"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -23,6 +24,10 @@ import (
 type Attachment struct {
 	// Content contains the bytes embedded in the PDF.
 	Content []byte
+
+	// FilePath optionally names a file to load as Content during output. When
+	// Filename is empty, the base name of FilePath is used.
+	FilePath string
 
 	// Filename is the displayed name of the attachment.
 	Filename string
@@ -154,6 +159,9 @@ func (f *Document) attachmentCompressionTasks() []attachmentCompressionTask {
 		if a == nil || seen[a] {
 			return
 		}
+		if !f.loadAttachmentContent(a) {
+			return
+		}
 		a.mimeType = attachmentMIMEType(*a)
 		a.afRelationship = attachmentAFRelationship(*a)
 		if a.checksum != "" {
@@ -214,6 +222,9 @@ func (f *Document) embed(a *Attachment) {
 	if a.objectNumber != 0 { // Already embedded; object numbers start at 2.
 		return
 	}
+	if !f.loadAttachmentContent(a) {
+		return
+	}
 	normalizeAttachment(a)
 	streamKey := attachmentStreamKey{
 		size:     len(a.Content),
@@ -243,11 +254,17 @@ func (f *Document) embed(a *Attachment) {
 		f.attachmentStreams[streamKey] = streamID
 	}
 	f.newobj()
-	f.outf("<< /Type /Filespec /F () /UF %s /AFRelationship /%s /EF << /F %d 0 R >> /Desc %s\n>>",
-		f.textstring(utf8toutf16(a.Filename)),
-		a.afRelationship,
-		streamID,
-		f.textstring(utf8toutf16(a.Description)))
+	fileSpec := make([]byte, 0, len(a.Filename)*2+len(a.Description)*2+128)
+	fileSpec = append(fileSpec, "<< /Type /Filespec /F () /UF "...)
+	fileSpec = f.appendUTF16TextString(fileSpec, a.Filename)
+	fileSpec = append(fileSpec, " /AFRelationship /"...)
+	fileSpec = append(fileSpec, a.afRelationship...)
+	fileSpec = append(fileSpec, " /EF << /F "...)
+	fileSpec = appendPDFInt(fileSpec, streamID)
+	fileSpec = append(fileSpec, " 0 R >> /Desc "...)
+	fileSpec = f.appendUTF16TextString(fileSpec, a.Description)
+	fileSpec = append(fileSpec, "\n>>"...)
+	f.outbytes(fileSpec)
 	f.out("endobj")
 	a.objectNumber = f.n
 	f.attachmentFiles[fileKey] = a.objectNumber
@@ -269,6 +286,16 @@ func attachmentMIMEType(a Attachment) string {
 			return strings.TrimSpace(typ)
 		}
 	}
+	if a.Filename == "" && a.FilePath != "" {
+		if ext := filepath.Ext(a.FilePath); ext != "" {
+			if typ := mime.TypeByExtension(ext); typ != "" {
+				if base, _, ok := strings.Cut(typ, ";"); ok {
+					return strings.TrimSpace(base)
+				}
+				return strings.TrimSpace(typ)
+			}
+		}
+	}
 	return "application/octet-stream"
 }
 
@@ -288,11 +315,33 @@ func normalizeAttachment(a *Attachment) {
 	if a == nil {
 		return
 	}
+	if strings.TrimSpace(a.Filename) == "" && strings.TrimSpace(a.FilePath) != "" {
+		a.Filename = filepath.Base(a.FilePath)
+	}
 	a.mimeType = attachmentMIMEType(*a)
 	a.afRelationship = attachmentAFRelationship(*a)
-	if a.checksum == "" {
+	if a.checksum == "" && (len(a.Content) > 0 || strings.TrimSpace(a.FilePath) == "") {
 		a.checksum = attachmentChecksum(a.Content)
 	}
+}
+
+func (f *Document) loadAttachmentContent(a *Attachment) bool {
+	if a == nil || len(a.Content) > 0 || strings.TrimSpace(a.FilePath) == "" {
+		return true
+	}
+	data, err := os.ReadFile(a.FilePath)
+	if err != nil {
+		f.SetError(err)
+		return false
+	}
+	a.Content = data
+	if strings.TrimSpace(a.Filename) == "" {
+		a.Filename = filepath.Base(a.FilePath)
+	}
+	if a.checksum == "" {
+		a.checksum = attachmentChecksum(data)
+	}
+	return true
 }
 
 var pdfNameReserved [256]bool
@@ -340,6 +389,14 @@ func (f *Document) SetAttachmentsImmutable(as []Attachment) {
 	for i := range as {
 		f.attachments[i] = cloneAttachmentImmutable(as[i])
 	}
+}
+
+// AttachmentFromFile returns a file-backed attachment descriptor. The file is
+// read when the document is output. Callers may override Filename, MIMEType,
+// Description, or AFRelationship on the returned value before passing it to
+// SetAttachments or AddAttachmentAnnotation.
+func AttachmentFromFile(fileStr string) Attachment {
+	return Attachment{FilePath: fileStr, Filename: filepath.Base(fileStr)}
 }
 
 // putAttachments embeds the current attachments and stores their object numbers
@@ -439,9 +496,9 @@ func (f *Document) appendAttachmentAnnotationLinks(out []byte, page int) []byte 
 		out = appendPDFNumberSpace(out, x2, 2)
 		out = appendPDFNumber(out, y2, 2)
 		out = append(out, "] /Border [0 0 0]\n/Contents "...)
-		out = append(out, f.textstring(utf8toutf16(an.Description))...)
+		out = f.appendUTF16TextString(out, an.Description)
 		out = append(out, " /T "...)
-		out = append(out, f.textstring(utf8toutf16(an.Filename))...)
+		out = f.appendUTF16TextString(out, an.Filename)
 		out = append(out, " /AP << /N << /Type /XObject /Subtype /Form /BBox ["...)
 		out = appendPDFNumberSpace(out, x1, 2)
 		out = appendPDFNumberSpace(out, y1, 2)

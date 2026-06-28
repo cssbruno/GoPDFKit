@@ -257,11 +257,19 @@ type signatureDictionaryData struct {
 }
 
 func buildIncrement(ctx pdfContext, options preparedOptions, byteRangePlaceholder string, contentsPlaceholder []byte) (signingIncrement, error) {
-	rootDict, err := readObjectDict(ctx.Data, ctx.Root, ctx.ObjectOffsets[ctx.Root.Object])
+	rootOffset, err := ctx.Xref.objectOffset(ctx.Root.Object)
 	if err != nil {
 		return signingIncrement{}, fmt.Errorf("read root object: %w", err)
 	}
-	pageDict, err := readObjectDict(ctx.Data, ctx.Page, ctx.ObjectOffsets[ctx.Page.Object])
+	rootDict, err := readObjectDict(ctx.Data, ctx.Root, rootOffset)
+	if err != nil {
+		return signingIncrement{}, fmt.Errorf("read root object: %w", err)
+	}
+	pageOffset, err := ctx.Xref.objectOffset(ctx.Page.Object)
+	if err != nil {
+		return signingIncrement{}, fmt.Errorf("read page object: %w", err)
+	}
+	pageDict, err := readObjectDict(ctx.Data, ctx.Page, pageOffset)
 	if err != nil {
 		return signingIncrement{}, fmt.Errorf("read page object: %w", err)
 	}

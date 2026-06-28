@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
 )
 
@@ -17,10 +18,13 @@ import (
 // same document. ImageCache is for server-style workloads that create many
 // documents with the same logos or other repeated assets.
 type ImageCache struct {
-	mu         sync.RWMutex
-	images     map[string]*ImageInfo
-	fileImages map[imageFileCacheKey]*ImageInfo
-	fileTypes  map[string]string
+	mu                sync.RWMutex
+	images            map[string]*ImageInfo
+	fileImages        map[imageFileCacheKey]*ImageInfo
+	fileImageOrder    []imageFileCacheKey
+	fileImageBytes    int64
+	maxFileImageBytes int64
+	fileTypes         map[string]string
 }
 
 type imageFileCacheKey struct {
@@ -31,12 +35,21 @@ type imageFileCacheKey struct {
 	readDpi   bool
 }
 
+const maxSharedImageFileCacheBytes = 128 * 1024 * 1024
+
+var sharedImageFileCache = newImageCache(maxSharedImageFileCacheBytes)
+
 // NewImageCache creates an empty reusable image cache.
 func NewImageCache() *ImageCache {
+	return newImageCache(0)
+}
+
+func newImageCache(maxFileImageBytes int64) *ImageCache {
 	return &ImageCache{
-		images:     make(map[string]*ImageInfo),
-		fileImages: make(map[imageFileCacheKey]*ImageInfo),
-		fileTypes:  make(map[string]string),
+		images:            make(map[string]*ImageInfo),
+		fileImages:        make(map[imageFileCacheKey]*ImageInfo),
+		maxFileImageBytes: maxFileImageBytes,
+		fileTypes:         make(map[string]string),
 	}
 }
 
@@ -71,7 +84,7 @@ func (c *ImageCache) RegisterImageOptionsReader(name string, options ImageOption
 	if c.images == nil {
 		c.images = make(map[string]*ImageInfo)
 	}
-	c.images[name] = info.clone()
+	c.images[name] = info.cloneMetadata()
 	return c.images[name].cloneMetadata(), nil
 }
 
@@ -83,7 +96,11 @@ func (c *ImageCache) RegisterImageOptions(name, fileStr string, options ImageOpt
 	if name == "" {
 		name = fileStr
 	}
-	imageType, err := c.imageTypeForFile(fileStr, options.ImageType)
+	cachePath := imageCachePath(fileStr)
+	if c.maxFileImageBytes > 0 && name == fileStr {
+		name = cachePath
+	}
+	imageType, err := c.imageTypeForFile(cachePath, fileStr, options.ImageType)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +110,7 @@ func (c *ImageCache) RegisterImageOptions(name, fileStr string, options ImageOpt
 		return nil, err
 	}
 	key := imageFileCacheKey{
-		path:      fileStr,
+		path:      cachePath,
 		size:      stat.Size(),
 		modTime:   stat.ModTime().UnixNano(),
 		imageType: options.ImageType,
@@ -107,7 +124,7 @@ func (c *ImageCache) RegisterImageOptions(name, fileStr string, options ImageOpt
 		if c.images == nil {
 			c.images = make(map[string]*ImageInfo)
 		}
-		c.images[name] = cached.clone()
+		c.images[name] = cached.cloneMetadata()
 		info := c.images[name].cloneMetadata()
 		c.mu.Unlock()
 		return info, nil
@@ -126,19 +143,64 @@ func (c *ImageCache) RegisterImageOptions(name, fileStr string, options ImageOpt
 		c.fileImages = make(map[imageFileCacheKey]*ImageInfo)
 	}
 	if cached := c.images[name]; cached != nil {
-		c.fileImages[key] = cached.clone()
+		c.storeFileImageLocked(key, name, cached)
 	}
 	c.mu.Unlock()
 	return info, nil
 }
 
-func (c *ImageCache) imageTypeForFile(fileStr, imageType string) (string, error) {
+func (c *ImageCache) storeFileImageLocked(key imageFileCacheKey, name string, info *ImageInfo) {
+	if c.fileImages == nil {
+		c.fileImages = make(map[imageFileCacheKey]*ImageInfo)
+	}
+	if c.maxFileImageBytes <= 0 {
+		c.fileImages[key] = info.cloneMetadata()
+		return
+	}
+	entryBytes := imageInfoCacheBytes(info)
+	if entryBytes > c.maxFileImageBytes {
+		delete(c.images, name)
+		return
+	}
+	if old, ok := c.fileImages[key]; ok {
+		c.fileImageBytes -= imageInfoCacheBytes(old)
+	} else {
+		c.fileImageOrder = append(c.fileImageOrder, key)
+	}
+	c.fileImages[key] = info.cloneMetadata()
+	c.fileImageBytes += entryBytes
+	for c.fileImageBytes > c.maxFileImageBytes && len(c.fileImageOrder) > 0 {
+		evict := c.fileImageOrder[0]
+		c.fileImageOrder = c.fileImageOrder[1:]
+		if old, ok := c.fileImages[evict]; ok {
+			c.fileImageBytes -= imageInfoCacheBytes(old)
+			delete(c.fileImages, evict)
+			delete(c.images, evict.path)
+		}
+	}
+}
+
+func imageInfoCacheBytes(info *ImageInfo) int64 {
+	if info == nil {
+		return 0
+	}
+	return int64(len(info.data)+len(info.smask)+len(info.pal)+len(info.trns)*8) + 256
+}
+
+func imageCachePath(fileStr string) string {
+	if abs, err := filepath.Abs(fileStr); err == nil {
+		return abs
+	}
+	return fileStr
+}
+
+func (c *ImageCache) imageTypeForFile(cachePath, fileStr, imageType string) (string, error) {
 	if imageType != "" {
 		return normalizeImageType(imageType), nil
 	}
 	c.mu.RLock()
 	if c.fileTypes != nil {
-		if cached, ok := c.fileTypes[fileStr]; ok {
+		if cached, ok := c.fileTypes[cachePath]; ok {
 			c.mu.RUnlock()
 			return cached, nil
 		}
@@ -152,7 +214,7 @@ func (c *ImageCache) imageTypeForFile(fileStr, imageType string) (string, error)
 	if c.fileTypes == nil {
 		c.fileTypes = make(map[string]string)
 	}
-	c.fileTypes[fileStr] = inferred
+	c.fileTypes[cachePath] = inferred
 	c.mu.Unlock()
 	return inferred, nil
 }
@@ -187,6 +249,14 @@ func (f *Document) RegisterImageFromCache(name string, cache *ImageCache) *Image
 	info, ok := cache.Get(name)
 	if !ok {
 		f.err = fmt.Errorf("image cache entry not found: %s", name)
+		return nil
+	}
+	return f.registerCachedImageInfo(name, info)
+}
+
+func (f *Document) registerCachedImageInfo(name string, info *ImageInfo) *ImageInfo {
+	if info == nil {
+		f.err = errors.New("image cache entry is invalid")
 		return nil
 	}
 	recomputeID := info.i == "" || info.scale != f.k

@@ -153,15 +153,15 @@ func (f *Document) putImportedPages() {
 		if page == nil || page.page == nil {
 			continue
 		}
-		objects := page.page.Objects()
-		refMap := make(map[importpdf.ObjRef]int, len(objects))
+		refs := page.page.ObjectRefs()
+		refMap := make(map[importpdf.ObjRef]int, len(refs))
 		baseID := f.n + 1
 		nextID := baseID
-		for _, object := range objects {
-			refMap[object.Ref] = nextID
+		for _, ref := range refs {
+			refMap[ref] = nextID
 			nextID++
 		}
-		rewrittenObjects, resources := page.rewrittenImportData(baseID, objects, refMap)
+		rewrittenObjects, resources := page.rewrittenImportData(baseID, refs, refMap)
 		for _, body := range rewrittenObjects {
 			f.newobj()
 			f.outbuf(bytes.NewReader(body))

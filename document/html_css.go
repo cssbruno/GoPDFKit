@@ -4,7 +4,6 @@
 package document
 
 import (
-	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -224,70 +223,63 @@ func htmlElementDeclarationsWithStyleScan(el HTMLSegmentType, cssRules []htmlCSS
 }
 
 func htmlElementDeclarationsWithStyleMetaIndex(cssRules []htmlCSSRule, style map[string]string, meta htmlElementMetadata, ancestors []htmlElementMetadata, index *htmlCSSRuleIndex) map[string]string {
-	candidates := index.selectorsForElementMeta(meta)
-	if len(candidates) == 0 {
+	if index == nil || len(index.buckets) == 0 {
 		return style
 	}
-	var matched map[int]int
-	for _, candidate := range candidates {
+	ruleSpecificities := make([]int, len(cssRules))
+	matched := false
+	index.visitSelectorsForElementMeta(meta, func(candidate htmlCSSSelectorRef) {
 		if candidate.rule < 0 || candidate.rule >= len(cssRules) {
-			continue
+			return
 		}
 		rule := cssRules[candidate.rule]
 		if candidate.selector < 0 || candidate.selector >= len(rule.selectors) {
-			continue
+			return
 		}
 		selector := rule.selectors[candidate.selector]
 		if !htmlCSSSelectorMatchesMeta(selector, meta, ancestors) {
-			continue
+			return
 		}
-		if matched == nil {
-			matched = make(map[int]int, 4)
+		encodedSpecificity := selector.specificity + 1
+		if encodedSpecificity > ruleSpecificities[candidate.rule] {
+			ruleSpecificities[candidate.rule] = encodedSpecificity
 		}
-		if specificity, ok := matched[candidate.rule]; !ok || selector.specificity > specificity {
-			matched[candidate.rule] = selector.specificity
-		}
-	}
-	return htmlElementDeclarationsFromMatchedRules(cssRules, style, matched)
+		matched = true
+	})
+	return htmlElementDeclarationsFromRuleSpecificities(cssRules, style, ruleSpecificities, matched)
 }
 
 func htmlElementDeclarationsWithStyleIndex(el HTMLSegmentType, cssRules []htmlCSSRule, style map[string]string, ancestors []HTMLSegmentType, index *htmlCSSRuleIndex) map[string]string {
-	candidates := index.selectorsForElement(el)
-	if len(candidates) == 0 {
+	if index == nil || len(index.buckets) == 0 {
 		return style
 	}
-	var matched map[int]int
-	for _, candidate := range candidates {
+	ruleSpecificities := make([]int, len(cssRules))
+	matched := false
+	index.visitSelectorsForElement(el, func(candidate htmlCSSSelectorRef) {
 		if candidate.rule < 0 || candidate.rule >= len(cssRules) {
-			continue
+			return
 		}
 		rule := cssRules[candidate.rule]
 		if candidate.selector < 0 || candidate.selector >= len(rule.selectors) {
-			continue
+			return
 		}
 		selector := rule.selectors[candidate.selector]
 		if !htmlCSSSelectorMatches(selector, el, ancestors) {
-			continue
+			return
 		}
-		if matched == nil {
-			matched = make(map[int]int, 4)
+		encodedSpecificity := selector.specificity + 1
+		if encodedSpecificity > ruleSpecificities[candidate.rule] {
+			ruleSpecificities[candidate.rule] = encodedSpecificity
 		}
-		if specificity, ok := matched[candidate.rule]; !ok || selector.specificity > specificity {
-			matched[candidate.rule] = selector.specificity
-		}
-	}
-	return htmlElementDeclarationsFromMatchedRules(cssRules, style, matched)
+		matched = true
+	})
+	return htmlElementDeclarationsFromRuleSpecificities(cssRules, style, ruleSpecificities, matched)
 }
 
-func htmlElementDeclarationsFromMatchedRules(cssRules []htmlCSSRule, style map[string]string, matched map[int]int) map[string]string {
-	if len(matched) == 0 {
+func htmlElementDeclarationsFromRuleSpecificities(cssRules []htmlCSSRule, style map[string]string, ruleSpecificities []int, matched bool) map[string]string {
+	if !matched {
 		return style
 	}
-	ruleIndexes := make([]int, 0, len(matched))
-	for ruleIndex := range matched {
-		ruleIndexes = append(ruleIndexes, ruleIndex)
-	}
-	sort.Ints(ruleIndexes)
 
 	type appliedDeclaration struct {
 		value       string
@@ -295,9 +287,12 @@ func htmlElementDeclarationsFromMatchedRules(cssRules []htmlCSSRule, style map[s
 		order       int
 	}
 	applied := make(map[string]appliedDeclaration)
-	for _, ruleIndex := range ruleIndexes {
-		rule := cssRules[ruleIndex]
-		specificity := matched[ruleIndex]
+	for ruleIndex, rule := range cssRules {
+		encodedSpecificity := ruleSpecificities[ruleIndex]
+		if encodedSpecificity == 0 {
+			continue
+		}
+		specificity := encodedSpecificity - 1
 		for name, value := range rule.declarations {
 			current, ok := applied[name]
 			if !ok || specificity > current.specificity || specificity == current.specificity && ruleIndex >= current.order {
@@ -950,6 +945,27 @@ func (index *htmlCSSRuleIndex) selectorsForElement(el HTMLSegmentType) []htmlCSS
 	return refs
 }
 
+func (index *htmlCSSRuleIndex) visitSelectorsForElement(el HTMLSegmentType, visit func(htmlCSSSelectorRef)) {
+	if index == nil || len(index.buckets) == 0 {
+		return
+	}
+	visitBucket := func(key string) {
+		for _, ref := range index.buckets[key] {
+			visit(ref)
+		}
+	}
+	if id := strings.ToLower(strings.TrimSpace(el.Attr["id"])); id != "" {
+		visitBucket("id:" + id)
+	}
+	for _, className := range htmlClassNames(el.Attr["class"]) {
+		visitBucket("class:" + className)
+	}
+	if el.Str != "" {
+		visitBucket("tag:" + el.Str)
+	}
+	visitBucket("*")
+}
+
 func (index *htmlCSSRuleIndex) selectorsForElementMeta(meta htmlElementMetadata) []htmlCSSSelectorRef {
 	if index == nil || len(index.buckets) == 0 {
 		return nil
@@ -971,6 +987,27 @@ func (index *htmlCSSRuleIndex) selectorsForElementMeta(meta htmlElementMetadata)
 	}
 	appendBucket("*")
 	return refs
+}
+
+func (index *htmlCSSRuleIndex) visitSelectorsForElementMeta(meta htmlElementMetadata, visit func(htmlCSSSelectorRef)) {
+	if index == nil || len(index.buckets) == 0 {
+		return
+	}
+	visitBucket := func(key string) {
+		for _, ref := range index.buckets[key] {
+			visit(ref)
+		}
+	}
+	if meta.id != "" {
+		visitBucket("id:" + meta.id)
+	}
+	for _, className := range meta.classes {
+		visitBucket("class:" + className)
+	}
+	if meta.tag != "" {
+		visitBucket("tag:" + meta.tag)
+	}
+	visitBucket("*")
 }
 
 func stripHTMLCSSComments(css string) string {

@@ -15,9 +15,9 @@ import (
 func (f *Document) Text(x, y float64, txtStr string) {
 	tag := f.consumeNextTextTag(false)
 	utf8Text := f.isCurrentUTF8
+	reverseUTF8 := utf8Text && f.isRTL
 	if f.isCurrentUTF8 {
 		if f.isRTL {
-			txtStr = reverseText(txtStr)
 			x -= f.GetStringWidth(txtStr)
 		}
 	}
@@ -32,7 +32,11 @@ func (f *Document) Text(x, y float64, txtStr string) {
 	buf = appendPDFNumberSpace(buf, (f.h-y)*f.k, 2)
 	buf = append(buf, "Td ("...)
 	if utf8Text {
-		buf = appendEscapedUTF16BE(buf, txtStr, false, f.currentFont.usedRunes)
+		if reverseUTF8 {
+			buf = appendEscapedUTF16BEReverse(buf, txtStr, false, f.currentFont.usedRunes)
+		} else {
+			buf = appendEscapedUTF16BE(buf, txtStr, false, f.currentFont.usedRunes)
+		}
 	} else {
 		buf = appendEscapedPDFCellText(buf, txtStr)
 	}
@@ -326,13 +330,7 @@ func (f *Document) escape(s string) string {
 }
 
 func (f *Document) textstring(s string) string {
-	if f.protect.encrypted {
-		b := []byte( // textstring formats a text string
-			s)
-		f.protect.rc4(uint32(f.n), &b)
-		s = string(b)
-	}
-	return "(" + f.escape(s) + ")"
+	return string(f.appendTextString(make([]byte, 0, len(s)+2), s))
 }
 
 func (f *Document) appendTextString(buf []byte, s string) []byte {
@@ -352,6 +350,16 @@ func (f *Document) appendTextString(buf []byte, s string) []byte {
 			buf = append(buf, s[i])
 		}
 	}
+	buf = append(buf, ')')
+	return buf
+}
+
+func (f *Document) appendUTF16TextString(buf []byte, s string) []byte {
+	if f.protect.encrypted {
+		return f.appendTextString(buf, utf8toutf16(s))
+	}
+	buf = append(buf, '(')
+	buf = appendEscapedUTF16BE(buf, s, true, nil)
 	buf = append(buf, ')')
 	return buf
 }

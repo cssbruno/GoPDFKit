@@ -121,15 +121,19 @@ func (f *Document) addImportedPDFPage(page *importpdf.PageRef) int {
 	return f.importedPageSeq
 }
 
-func (page *importedPDFPage) rewrittenImportData(baseID int, objects []importpdf.Object, refMap map[importpdf.ObjRef]int) ([][]byte, []byte) {
-	if page.rewrittenImportDataMatches(baseID, objects) {
+func (page *importedPDFPage) rewrittenImportData(baseID int, refs []importpdf.ObjRef, refMap map[importpdf.ObjRef]int) ([][]byte, []byte) {
+	if page.rewrittenImportDataMatches(baseID, refs) {
 		return page.rewrittenObjects, page.rewrittenResources
 	}
-	rewrittenObjects := make([][]byte, len(objects))
-	rewrittenRefs := make([]importpdf.ObjRef, len(objects))
-	for i, object := range objects {
-		rewrittenObjects[i] = importpdf.RewriteIndirectRefs(object.Body, refMap)
-		rewrittenRefs[i] = object.Ref
+	rewrittenObjects := make([][]byte, 0, len(refs))
+	rewrittenRefs := make([]importpdf.ObjRef, 0, len(refs))
+	err := page.page.ForEachObject(func(ref importpdf.ObjRef, body []byte) error {
+		rewrittenObjects = append(rewrittenObjects, importpdf.RewriteIndirectRefs(body, refMap))
+		rewrittenRefs = append(rewrittenRefs, ref)
+		return nil
+	})
+	if err != nil {
+		return nil, nil
 	}
 	page.rewrittenBaseID = baseID
 	page.rewrittenRefs = rewrittenRefs
@@ -138,12 +142,12 @@ func (page *importedPDFPage) rewrittenImportData(baseID int, objects []importpdf
 	return page.rewrittenObjects, page.rewrittenResources
 }
 
-func (page *importedPDFPage) rewrittenImportDataMatches(baseID int, objects []importpdf.Object) bool {
-	if page.rewrittenBaseID != baseID || len(page.rewrittenObjects) != len(objects) || len(page.rewrittenRefs) != len(objects) || page.rewrittenResources == nil {
+func (page *importedPDFPage) rewrittenImportDataMatches(baseID int, refs []importpdf.ObjRef) bool {
+	if page.rewrittenBaseID != baseID || len(page.rewrittenObjects) != len(refs) || len(page.rewrittenRefs) != len(refs) || page.rewrittenResources == nil {
 		return false
 	}
-	for i, object := range objects {
-		if page.rewrittenRefs[i] != object.Ref {
+	for i, ref := range refs {
+		if page.rewrittenRefs[i] != ref {
 			return false
 		}
 	}

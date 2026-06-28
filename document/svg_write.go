@@ -14,6 +14,14 @@ const svgMaxPatternTiles = 4096
 // coordinates to the unit of measure specified in New(). The current position,
 // as set with SetXY(), is used as the image origin.
 func (f *Document) SVGWrite(sb *SVG, scale float64) {
+	f.svgWriteWithOptions(sb, scale, svgWriteOptions{})
+}
+
+type svgWriteOptions struct {
+	TextRole string
+}
+
+func (f *Document) svgWriteWithOptions(sb *SVG, scale float64, options svgWriteOptions) {
 	originX, originY := f.GetXY()
 	drawR, drawG, drawB := f.GetDrawColor()
 	fillR, fillG, fillB := f.GetFillColor()
@@ -51,7 +59,7 @@ func (f *Document) SVGWrite(sb *SVG, scale float64) {
 
 	if len(sb.Elements) > 0 {
 		for i := range sb.Elements {
-			f.svgWriteElement(originX, originY, scale, &sb.Elements[i])
+			f.svgWriteElement(originX, originY, scale, &sb.Elements[i], options)
 			if f.alpha != alpha || f.blendMode != blendMode {
 				f.SetAlpha(alpha, blendMode)
 			}
@@ -79,19 +87,19 @@ func (f *Document) SVGWrite(sb *SVG, scale float64) {
 		}
 	}
 	for i := range sb.Texts {
-		f.svgWriteText(originX, originY, scale, &sb.Texts[i])
+		f.svgWriteText(originX, originY, scale, &sb.Texts[i], options)
 		if f.alpha != alpha || f.blendMode != blendMode {
 			f.SetAlpha(alpha, blendMode)
 		}
 	}
 }
 
-func (f *Document) svgWriteElement(originX, originY, scale float64, element *SVGElement) {
+func (f *Document) svgWriteElement(originX, originY, scale float64, element *SVGElement, options svgWriteOptions) {
 	switch element.Kind {
 	case "path":
 		f.svgWritePath(originX, originY, scale, element.Path)
 	case "text":
-		f.svgWriteText(originX, originY, scale, &element.Text)
+		f.svgWriteText(originX, originY, scale, &element.Text, options)
 	case "image":
 		f.svgWriteImage(originX, originY, scale, element.Image)
 	}
@@ -453,7 +461,7 @@ func (f *Document) svgWritePatternFill(originX, originY, scale float64, path SVG
 				f.UseTemplateScaled(tileTemplate, Point{X: x, Y: y}, Size{Wd: tileWd * scale, Ht: tileHt * scale})
 			} else {
 				for i := range pattern.Elements {
-					f.svgWriteElement(x, y, scale, &pattern.Elements[i])
+					f.svgWriteElement(x, y, scale, &pattern.Elements[i], svgWriteOptions{})
 					if fillOpacity < 1 {
 						f.SetAlpha(fillOpacity, "Normal")
 					} else {
@@ -477,7 +485,7 @@ func (f *Document) svgPatternTileTemplate(pattern SVGPattern, tileWd, tileHt, sc
 	}
 	return f.CreateTemplateCustom(Point{}, size, func(tpl *Tpl) {
 		for i := range pattern.Elements {
-			tpl.svgWriteElement(0, 0, scale, &pattern.Elements[i])
+			tpl.svgWriteElement(0, 0, scale, &pattern.Elements[i], svgWriteOptions{})
 		}
 	})
 }
@@ -594,7 +602,7 @@ func (f *Document) svgApplyPathStyle(path SVGPath, scale float64) string {
 	}
 }
 
-func (f *Document) svgWriteText(originX, originY, scale float64, text *SVGText) {
+func (f *Document) svgWriteText(originX, originY, scale float64, text *SVGText, options svgWriteOptions) {
 	if text.Text == "" || text.Style.Hidden || text.Style.Fill.None {
 		return
 	}
@@ -623,8 +631,9 @@ func (f *Document) svgWriteText(originX, originY, scale float64, text *SVGText) 
 	case "end":
 		x -= f.svgTextWidth(text)
 	}
-	if text.Role != "" {
-		f.SetNextTextRole(text.Role)
+	role := firstNonEmpty(options.TextRole, text.Role)
+	if role != "" {
+		f.SetNextTextRole(role)
 	}
 	f.Text(x, y, text.Text)
 }

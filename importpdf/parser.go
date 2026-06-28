@@ -40,9 +40,15 @@ type PageRef struct {
 	heightPt             float64
 	resources            []byte
 	content              []byte
+	contentErr           error
+	contentOnce          sync.Once
+	source               *Source
+	sourcePage           sourcePage
+	box                  pdfBox
 	encodedContent       []byte
 	encodedContentFilter string
 	objects              map[ObjRef][]byte
+	objectRefs           []ObjRef
 }
 
 // WidthPoints returns the imported page width in PDF points.
@@ -74,7 +80,24 @@ func (p *PageRef) Content() []byte {
 	if p == nil {
 		return nil
 	}
+	p.ensureContent()
 	return append([]byte(nil), p.content...)
+}
+
+func (p *PageRef) ensureContent() {
+	if p == nil || len(p.content) > 0 || p.source == nil {
+		return
+	}
+	p.contentOnce.Do(func() {
+		p.source.mu.Lock()
+		defer p.source.mu.Unlock()
+		content, err := p.source.pageContent(p.sourcePage)
+		if err != nil {
+			p.contentErr = err
+			return
+		}
+		p.content = wrapImportedPageContent(content, p.box)
+	})
 }
 
 // EncodedContent returns a preserved encoded content stream and its PDF filter
@@ -92,12 +115,55 @@ func (p *PageRef) Objects() []Object {
 	if p == nil {
 		return nil
 	}
-	refs := sortedObjRefs(p.objects)
+	refs := p.objectRefs
+	if refs == nil {
+		refs = sortedObjRefs(p.objects)
+	}
 	objects := make([]Object, 0, len(refs))
 	for _, ref := range refs {
 		objects = append(objects, Object{Ref: ref, Body: append([]byte(nil), p.objects[ref]...)})
 	}
 	return objects
+}
+
+// ObjectCount returns the number of indirect objects referenced by the imported
+// page.
+func (p *PageRef) ObjectCount() int {
+	if p == nil {
+		return 0
+	}
+	return len(p.objects)
+}
+
+// ObjectRefs returns imported object references sorted by object number and
+// generation.
+func (p *PageRef) ObjectRefs() []ObjRef {
+	if p == nil {
+		return nil
+	}
+	refs := p.objectRefs
+	if refs == nil {
+		refs = sortedObjRefs(p.objects)
+	}
+	return append([]ObjRef(nil), refs...)
+}
+
+// ForEachObject calls fn for each imported object in sorted reference order.
+// The body slice is owned by PageRef and must not be retained or modified.
+func (p *PageRef) ForEachObject(fn func(ObjRef, []byte) error) error {
+	if p == nil || fn == nil {
+		return nil
+	}
+	refs := p.objectRefs
+	if refs == nil {
+		refs = sortedObjRefs(p.objects)
+	}
+	for _, ref := range refs {
+		if err := fn(ref, p.objects[ref]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func sortedObjRefs(objects map[ObjRef][]byte) []ObjRef {
@@ -566,24 +632,32 @@ func (doc *Source) Page(pageNo int, boxName string) (*PageRef, error) {
 	if len(bytes.TrimSpace(resources)) == 0 {
 		resources = []byte("<<>>")
 	}
-	content, err := doc.pageContent(page)
-	if err != nil {
-		return nil, err
+	encodedContent, encodedFilter, encoded := doc.encodedPageContent(page, box)
+	var wrapped []byte
+	if !encoded {
+		content, err := doc.pageContent(page)
+		if err != nil {
+			return nil, err
+		}
+		wrapped = wrapImportedPageContent(content, box)
 	}
-	wrapped := wrapImportedPageContent(content, box)
-	encodedContent, encodedFilter, _ := doc.encodedPageContent(page, box)
 	objects := make(map[ObjRef][]byte)
 	if err := doc.collectReferencedObjects(resources, objects, make(map[ObjRef]bool)); err != nil {
 		return nil, err
 	}
+	objectRefs := sortedObjRefs(objects)
 	return &PageRef{
 		widthPt:              box.urx - box.llx,
 		heightPt:             box.ury - box.lly,
 		resources:            append([]byte(nil), resources...),
 		content:              wrapped,
+		source:               doc,
+		sourcePage:           page,
+		box:                  box,
 		encodedContent:       encodedContent,
 		encodedContentFilter: encodedFilter,
 		objects:              objects,
+		objectRefs:           objectRefs,
 	}, nil
 }
 

@@ -134,8 +134,8 @@ func (html *HTML) writeCompiledBlockBox(compiled *CompiledHTML, tokens []HTMLSeg
 	boxWd := htmlMaxFloat(availableWd-box.margin.left-box.margin.right, 0)
 	contentWd := htmlMaxFloat(boxWd-box.padding.left-box.padding.right, 0)
 	styleLineHt := htmlEffectiveLineHeight(style, lineHt)
-	lineCount := htmlSplitLineCount(pdf, text, contentWd)
-	ht := float64(lineCount)*styleLineHt + box.padding.top + box.padding.bottom
+	lines := htmlSplitLines(pdf, text, contentWd)
+	ht := float64(len(lines))*styleLineHt + box.padding.top + box.padding.bottom
 	textR, textG, textB := pdf.GetTextColor()
 	fillR, fillG, fillB := pdf.GetFillColor()
 	drawR, drawG, drawB := pdf.GetDrawColor()
@@ -168,7 +168,7 @@ func (html *HTML) writeCompiledBlockBox(compiled *CompiledHTML, tokens []HTMLSeg
 	pdf.SetCellMargin(0)
 	pdf.SetXY(x+box.padding.left, y+box.padding.top)
 	html.applyTextStyle(style, fallback)
-	pdf.MultiCell(contentWd, styleLineHt, text, "", style.align, false)
+	htmlRenderSplitLines(pdf, contentWd, styleLineHt, lines, style.align)
 	pdf.SetXY(pdf.lMargin, y+ht+box.margin.bottom)
 	if box.breakAfter {
 		if !html.addPageFormat() {
@@ -176,6 +176,20 @@ func (html *HTML) writeCompiledBlockBox(compiled *CompiledHTML, tokens []HTMLSeg
 		}
 	}
 	return end
+}
+
+func htmlRenderSplitLines(pdf *Document, width, lineHeight float64, lines []string, align string) {
+	for i, line := range lines {
+		lineAlign := align
+		if i == len(lines)-1 && lineAlign == "J" {
+			if pdf.isRTL {
+				lineAlign = "R"
+			} else {
+				lineAlign = ""
+			}
+		}
+		pdf.CellFormat(width, lineHeight, line, "", 2, lineAlign, false, 0, "")
+	}
 }
 
 func htmlBlockBox(el HTMLSegmentType, cssRules []htmlCSSRule, pdf *Document, relative float64, ancestors ...HTMLSegmentType) htmlBlockBoxStyle {
@@ -299,14 +313,14 @@ func htmlPlainText(tokens []HTMLSegmentType) string {
 		switch token.Cat {
 		case 'T':
 			text := collapseHTMLWhitespace(token.Str)
-			if strings.TrimSpace(text) == "" {
+			trimmed := strings.TrimSpace(text)
+			if trimmed == "" {
 				needSpace = out.Len() > 0
 				continue
 			}
 			if needSpace && out.Len() > 0 && !lastWasNewline {
 				out.WriteByte(' ')
 			}
-			trimmed := strings.TrimSpace(text)
 			out.WriteString(trimmed)
 			lastWasNewline = false
 			needSpace = unicode.IsSpace(rune(text[len(text)-1]))
@@ -540,7 +554,7 @@ func (html *HTML) compiledTableHeight(compiled *CompiledHTML, tokens []HTMLSegme
 	tableAncestors := appendHTMLAncestors(ancestors, tableEl)
 	colWidths := html.tableColumnWidths(layoutRows, colCount, tableWd, html.pdf)
 	colOffsets := htmlTableSpanPrefix(colWidths)
-	_, rowHeights := html.measureTableRows(compiled, layoutRows, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors, htmlBorderStyle{}, table.attrs)
+	rowHeights := html.measureTableRowHeights(compiled, layoutRows, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors, htmlBorderStyle{}, table.attrs)
 	return html.tableCaptionHeight(compiled, table, tableWd, lineHt, inherited, fallback, cssRules, tableAncestors) + sumFloat64(rowHeights) + lineHt
 }
 

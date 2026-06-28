@@ -56,7 +56,7 @@ type HTML struct {
 	dataImageCache        map[string]htmlImageSource
 	styleDeclarationCache map[string]map[string]string
 	compiledStyleCache    map[string]map[string]string
-	inlineSVGCache        map[string]SVG
+	inlineSVGCache        map[string]*SVG
 }
 
 type htmlImageSource struct {

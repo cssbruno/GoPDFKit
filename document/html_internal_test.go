@@ -635,6 +635,42 @@ func TestHTMLTableSplitsLargeTablesAcrossPages(t *testing.T) {
 	}
 }
 
+func TestHTMLTableStreamingEligibility(t *testing.T) {
+	html := New("P", "mm", "A4", "").HTMLNew()
+	rows := make([]htmlTableLayoutRow, htmlTableStreamingRowLimit)
+	for i := range rows {
+		rows[i] = htmlTableLayoutRow{
+			row: htmlTableRow{cells: []htmlTableCell{{}}},
+			cells: []htmlTableCellPlacement{{
+				cellIndex: 0,
+				row:       i,
+				col:       0,
+				colspan:   1,
+				rowspan:   1,
+			}},
+		}
+	}
+	if !html.shouldStreamTableRows(rows, nil, 0, false) {
+		t.Fatal("simple large table was not eligible for streaming")
+	}
+	if html.shouldStreamTableRows(rows[:htmlTableStreamingRowLimit-1], nil, 0, false) {
+		t.Fatal("small table should not use streaming path")
+	}
+	if html.shouldStreamTableRows(rows, []int{0}, 0, false) {
+		t.Fatal("table with repeated headers should not use streaming path")
+	}
+	if html.shouldStreamTableRows(rows, nil, 1, false) {
+		t.Fatal("table with caption should not use streaming path")
+	}
+	if html.shouldStreamTableRows(rows, nil, 0, true) {
+		t.Fatal("break-inside avoid table should not use streaming path")
+	}
+	rows[0].cells[0].rowspan = 2
+	if html.shouldStreamTableRows(rows, nil, 0, false) {
+		t.Fatal("table with rowspans should not use streaming path")
+	}
+}
+
 func htmlTableNearPageEnd(tableAttrs string) *Document {
 	pdf := New("P", "mm", "A4", "")
 	pdf.AddPage()

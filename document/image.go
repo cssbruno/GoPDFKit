@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"os"
 	"path/filepath"
 	"strings"
 )
@@ -161,32 +160,23 @@ func (f *Document) RegisterImageOptionsReader(imgName string, options ImageOptio
 }
 
 // RegisterImageOptions registers an image, adding it to the PDF file but not
-// adding it to the page. Use ImageOptions() with the same filename to add the
-// image to the page. ImageOptions() calls this function, so this function is
-// only necessary if you need information about the image before placing it. See
-// ImageOptions() for restrictions on the image and options parameters.
+// adding it to the page. File-backed images are cached across documents by
+// path, stat metadata, image type, and DPI options. Use ImageOptions() with the
+// same filename to add the image to the page. ImageOptions() calls this
+// function, so this function is only necessary if you need information about
+// the image before placing it. See ImageOptions() for restrictions on the image
+// and options parameters.
 func (f *Document) RegisterImageOptions(fileStr string, options ImageOptions) (info *ImageInfo) {
 	info, ok := f.images[fileStr]
 	if ok {
 		return
 	}
-	file, err := os.Open(fileStr)
+	info, err := sharedImageFileCache.RegisterImageOptions(fileStr, fileStr, options)
 	if err != nil {
 		f.err = err
-		return
+		return nil
 	}
-	defer func() { _ = file.Close() }()
-	if options.ImageType == "" {
-		imageType, ok := inferImageTypeFromPath(fileStr)
-		if !ok {
-			f.err = fmt.Errorf("image file has no extension and no type was specified: %s", fileStr)
-			return
-		}
-		options.ImageType = imageType
-	} else {
-		options.ImageType = normalizeImageType(options.ImageType)
-	}
-	return f.RegisterImageOptionsReader(fileStr, options, file)
+	return f.registerCachedImageInfo(fileStr, info)
 }
 
 func normalizeImageType(imageType string) string {

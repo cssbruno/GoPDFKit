@@ -60,7 +60,7 @@ func (m documentTextMeasurer) TextLineCount(text string, style TextStyle, width 
 	}
 	state := applyPDFTextStyle(m.pdf, style)
 	defer restorePDFTextStyle(m.pdf, state)
-	return len(m.pdf.SplitText(text, width))
+	return m.pdf.SplitTextCount(text, width)
 }
 
 type pdfTextStyleState struct {

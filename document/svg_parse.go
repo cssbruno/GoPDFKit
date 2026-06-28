@@ -91,8 +91,8 @@ func svgScanFields(s string, commands bool) []string {
 
 func svgParseCacheGet(key svgParseCacheKey) (SVG, bool) {
 	svgParseCache.Lock()
-	defer svgParseCache.Unlock()
 	sig, ok := svgParseCache.data[key]
+	svgParseCache.Unlock()
 	if !ok {
 		return SVG{}, false
 	}
@@ -103,7 +103,6 @@ func svgParseCachePut(key svgParseCacheKey, sig SVG) {
 	svgParseCache.Lock()
 	defer svgParseCache.Unlock()
 	if _, ok := svgParseCache.data[key]; ok {
-		svgParseCache.data[key] = cloneSVG(sig)
 		return
 	}
 	if len(svgParseCache.keys) >= svgParseCacheLimit {

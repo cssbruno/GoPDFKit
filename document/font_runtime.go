@@ -103,7 +103,7 @@ func (f *Document) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 		if ok {
 			return
 		}
-		fontPath, originalSize, err := f.resolveUTF8FontPath(fileStr)
+		fontPath, originalSize, modTime, err := f.resolveUTF8FontPath(fileStr)
 		if err != nil {
 			f.SetError(err)
 			return
@@ -112,18 +112,12 @@ func (f *Document) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 			f.SetError(errors.New("font data exceeds maximum size"))
 			return
 		}
-		utf8Bytes, err := readFontResourceFile(fontPath, maxFontSourceBytes)
+		cached, err := cachedUTF8FontFromFile(fontKey, fontPath, originalSize, modTime)
 		if err != nil {
 			f.SetError(err)
 			return
 		}
-		def, err := utf8FontDefinitionOwned(fontKey, fontPath, utf8Bytes)
-		if err != nil {
-			f.SetError(err)
-			return
-		}
-		def.usedRunes = defaultUTF8UsedRunes(f.aliasNbPagesStr)
-		f.fonts[fontKey] = def
+		f.addCachedUTF8Font(fontKey, familyStr, styleStr, cached)
 		f.fontFiles[fontKey] = fontFile{length1: originalSize, fontType: "UTF8"}
 		f.fontFiles[fontPath] = fontFile{fontType: "UTF8"}
 	} else {
@@ -153,18 +147,19 @@ func (f *Document) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 }
 
 type utf8FontPathInfo struct {
-	path string
-	size int64
-	err  error
+	path    string
+	size    int64
+	modTime int64
+	err     error
 }
 
-func (f *Document) resolveUTF8FontPath(fileStr string) (string, int64, error) {
+func (f *Document) resolveUTF8FontPath(fileStr string) (string, int64, int64, error) {
 	key := f.fontpath + "\x00" + fileStr
 	if f.utf8FontPathCache == nil {
 		f.utf8FontPathCache = make(map[string]utf8FontPathInfo)
 	}
 	if cached, ok := f.utf8FontPathCache[key]; ok {
-		return cached.path, cached.size, cached.err
+		return cached.path, cached.size, cached.modTime, cached.err
 	}
 
 	path := joinFontPath(f.fontpath, fileStr)
@@ -184,9 +179,10 @@ func (f *Document) resolveUTF8FontPath(fileStr string) (string, int64, error) {
 	info := utf8FontPathInfo{path: path, err: err}
 	if stat != nil {
 		info.size = stat.Size()
+		info.modTime = stat.ModTime().UnixNano()
 	}
 	f.utf8FontPathCache[key] = info
-	return info.path, info.size, info.err
+	return info.path, info.size, info.modTime, info.err
 }
 
 func validFontResourceName(name string) bool {

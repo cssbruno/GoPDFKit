@@ -566,6 +566,23 @@ func TestSplitLinesWrapEdgeFixturePreservesParagraphBreaks(t *testing.T) {
 	}
 }
 
+func TestSplitLineCountMatchesSplitLines(t *testing.T) {
+	content, err := os.ReadFile(example.TextFile("wrap-edge-cases.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Arial", "", 10)
+
+	for _, width := range []float64{24, 48, 90} {
+		lines := pdf.SplitLines(content, width)
+		if count := pdf.SplitLineCount(content, width); count != len(lines) {
+			t.Fatalf("SplitLineCount(width %.0f) = %d, want %d", width, count, len(lines))
+		}
+	}
+}
+
 func TestSplitTextUnicodeFixturePreservesParagraphBreaks(t *testing.T) {
 	content, err := os.ReadFile(example.TextFile("unicode-rtl.txt"))
 	if err != nil {
@@ -594,6 +611,24 @@ func TestSplitTextUnicodeFixturePreservesParagraphBreaks(t *testing.T) {
 	}
 	if emptyLines == 0 {
 		t.Fatal("SplitText did not preserve paragraph breaks")
+	}
+}
+
+func TestSplitTextCountMatchesSplitText(t *testing.T) {
+	content, err := os.ReadFile(example.TextFile("unicode-edge-cases.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.AddUTF8Font("dejavu", "", example.FontFile("DejaVuSansCondensed.ttf"))
+	pdf.SetFont("dejavu", "", 12)
+
+	for _, width := range []float64{18, 48, 90} {
+		lines := pdf.SplitText(string(content), width)
+		if count := pdf.SplitTextCount(string(content), width); count != len(lines) {
+			t.Fatalf("SplitTextCount(width %.0f) = %d, want %d", width, count, len(lines))
+		}
 	}
 }
 
@@ -3542,6 +3577,29 @@ func ExampleDocument_SetAttachments() {
 	example.Summary(err, fileStr)
 	// Output:
 	// Successfully generated assets/generated/pdf/Document_EmbeddedFiles.pdf
+}
+
+func ExampleAttachmentFromFile() {
+	dir, err := os.MkdirTemp("", "gopdfkit-attachment-example")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer os.RemoveAll(dir)
+
+	fileStr := filepath.Join(dir, "payload.txt")
+	if err := os.WriteFile(fileStr, []byte("file-backed attachment"), 0600); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.SetAttachmentsImmutable([]document.Attachment{document.AttachmentFromFile(fileStr)})
+
+	var out bytes.Buffer
+	fmt.Println(pdf.Output(&out) == nil && out.Len() > 0)
+	// Output:
+	// true
 }
 
 func ExampleDocument_AddAttachmentAnnotation() {

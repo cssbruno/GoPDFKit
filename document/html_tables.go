@@ -108,6 +108,7 @@ const (
 	htmlMaxTableColumns          = 1024
 	htmlTableMinWidthCacheLimit  = 256
 	htmlTableCellStyleCacheLimit = 256
+	htmlTableStreamingRowLimit   = 2048
 )
 
 func (html *HTML) writeTable(tokens []HTMLSegmentType, start int, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) int {
@@ -180,9 +181,16 @@ func (html *HTML) writeParsedTable(compiled *CompiledHTML, table htmlTableType, 
 	tableBreakInsideAvoid := htmlBreakAvoidsInside(tableDecl["break-inside"]) || htmlBreakAvoidsInside(tableDecl["page-break-inside"])
 	tableBorderCollapse := html.tableBorderCollapse(tableDecl, table.attrs)
 	tableAncestors := appendHTMLAncestors(ancestors, tableEl)
-	measuredRows, rowHeights := html.measureTableRows(compiled, layoutRows, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors, tableBorder, table.attrs)
-	headerRows := htmlTableHeaderMeasuredRows(measuredRows)
+	headerRows := htmlTableHeaderRowIndexes(layoutRows)
 	captionHt := html.tableCaptionHeight(compiled, table, tableWd, lineHt, inherited, fallback, cssRules, tableAncestors)
+	var measuredRows []htmlTableMeasuredRow
+	var rowHeights []float64
+	streamRows := html.shouldStreamTableRows(layoutRows, headerRows, captionHt, tableBreakInsideAvoid)
+	if streamRows {
+		rowHeights = html.measureTableRowHeights(compiled, layoutRows, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors, tableBorder, table.attrs)
+	} else {
+		measuredRows, rowHeights = html.measureTableRows(compiled, layoutRows, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors, tableBorder, table.attrs)
+	}
 	totalTableHt := captionHt + sumFloat64(rowHeights)
 	if tableBreakBefore {
 		if !html.addPageFormat() {
@@ -200,7 +208,15 @@ func (html *HTML) writeParsedTable(compiled *CompiledHTML, table htmlTableType, 
 	if captionHt > 0 {
 		html.renderTableCaption(compiled, table, startX, tableWd, lineHt, inherited, fallback, cssRules, tableAncestors)
 	}
-	renderRow := func(measuredRow htmlTableMeasuredRow, rowHt float64, forceTopBorder bool) float64 {
+	tableFill := html.cellBackground(table.attrs)
+	renderCellStyleCache := make(map[htmlTableCellStyleCacheKey]htmlTableCellStyleCacheValue)
+	renderRow := func(rowIndex int, layoutRow htmlTableLayoutRow, rowHt float64, forceTopBorder bool) float64 {
+		var measuredRow htmlTableMeasuredRow
+		if measuredRows != nil {
+			measuredRow = measuredRows[rowIndex]
+		} else {
+			measuredRow = html.measureTableRow(compiled, rowIndex, layoutRow, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors, tableBorder, tableFill, renderCellStyleCache)
+		}
 		pdf.BeginStructure(taggedRoleTR)
 		defer pdf.EndStructure()
 		y := pdf.GetY()
@@ -241,12 +257,12 @@ func (html *HTML) writeParsedTable(compiled *CompiledHTML, table htmlTableType, 
 		return rowHt
 	}
 	renderRepeatedHeaders := func() bool {
-		for headerIndex, headerRow := range headerRows {
-			headerHt := rowHeights[headerRow.index]
+		for headerIndex, headerRowIndex := range headerRows {
+			headerHt := rowHeights[headerRowIndex]
 			if pdf.y+headerHt > pdf.pageBreakTrigger {
 				return false
 			}
-			renderRow(headerRow, headerHt, headerIndex == 0)
+			renderRow(headerRowIndex, layoutRows[headerRowIndex], headerHt, headerIndex == 0)
 		}
 		return len(headerRows) > 0
 	}
@@ -275,7 +291,7 @@ func (html *HTML) writeParsedTable(compiled *CompiledHTML, table htmlTableType, 
 				forceTopBorder = false
 			}
 		}
-		renderRow(measuredRows[rowIndex], rowHt, forceTopBorder)
+		renderRow(rowIndex, layoutRow, rowHt, forceTopBorder)
 	}
 	pdf.Ln(lineHt)
 	if tableBreakAfter {
@@ -616,6 +632,39 @@ func htmlTableHeaderMeasuredRows(rows []htmlTableMeasuredRow) []htmlTableMeasure
 		headers = append(headers, row)
 	}
 	return headers
+}
+
+func htmlTableHeaderRowIndexes(rows []htmlTableLayoutRow) []int {
+	var headers []int
+	for index, row := range rows {
+		if row.row.header {
+			headers = append(headers, index)
+		}
+	}
+	if len(headers) > 0 {
+		return headers
+	}
+	for index, row := range rows {
+		if !htmlTableRowHasOnlyHeaderCells(row.row) {
+			break
+		}
+		headers = append(headers, index)
+	}
+	return headers
+}
+
+func (html *HTML) shouldStreamTableRows(rows []htmlTableLayoutRow, headerRows []int, captionHt float64, breakInsideAvoid bool) bool {
+	if len(rows) < htmlTableStreamingRowLimit || len(headerRows) > 0 || captionHt > 0 || breakInsideAvoid {
+		return false
+	}
+	for _, row := range rows {
+		for _, placement := range row.cells {
+			if placement.rowspan > 1 || placement.colspan > 1 || htmlTableCellContainsStructuredContent(row.row.cells[placement.cellIndex].tokens) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func htmlCollectCellTokens(tokens []HTMLSegmentType, start int) ([]HTMLSegmentType, int) {
@@ -1022,15 +1071,10 @@ func (html *HTML) measureTableRows(compiled *CompiledHTML, rows []htmlTableLayou
 	tableFill := html.cellBackground(tableAttrs)
 	cellStyleCache := make(map[htmlTableCellStyleCacheKey]htmlTableCellStyleCacheValue)
 	for rowIndex, row := range rows {
-		measuredRow := htmlTableMeasuredRow{index: rowIndex, row: row, cells: make([]htmlTableMeasuredCell, 0, len(row.cells))}
-		rowEl := HTMLSegmentType{Cat: 'O', Str: "tr", Attr: row.row.attrs}
-		rowAncestors := appendHTMLAncestors(tableAncestors, rowEl)
-		rowFill := html.cellBackground(row.row.attrs)
-		for _, placement := range row.cells {
-			measuredCell := html.measureTableCell(compiled, row, placement, colOffsets, padding, lineHt, inherited, fallback, cssRules, rowAncestors, tableBorder, rowFill, tableFill, cellStyleCache)
-			measuredRow.cells = append(measuredRow.cells, measuredCell)
+		measuredRow := html.measureTableRow(compiled, rowIndex, row, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors, tableBorder, tableFill, cellStyleCache)
+		for _, measuredCell := range measuredRow.cells {
 			required := measuredCell.textHt + measuredCell.padding.top + measuredCell.padding.bottom
-			span := placement.rowspan
+			span := measuredCell.placement.rowspan
 			if span < 1 {
 				span = 1
 			}
@@ -1054,6 +1098,74 @@ func (html *HTML) measureTableRows(compiled *CompiledHTML, rows []htmlTableLayou
 		measuredRows[rowIndex] = measuredRow
 	}
 	return measuredRows, heights
+}
+
+func (html *HTML) measureTableRow(compiled *CompiledHTML, rowIndex int, row htmlTableLayoutRow, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, tableAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, tableFill CSSColorType, cellStyleCache map[htmlTableCellStyleCacheKey]htmlTableCellStyleCacheValue) htmlTableMeasuredRow {
+	measuredRow := htmlTableMeasuredRow{index: rowIndex, row: row, cells: make([]htmlTableMeasuredCell, 0, len(row.cells))}
+	rowEl := HTMLSegmentType{Cat: 'O', Str: "tr", Attr: row.row.attrs}
+	rowAncestors := appendHTMLAncestors(tableAncestors, rowEl)
+	rowFill := html.cellBackground(row.row.attrs)
+	for _, placement := range row.cells {
+		measuredRow.cells = append(measuredRow.cells, html.measureTableCell(compiled, row, placement, colOffsets, padding, lineHt, inherited, fallback, cssRules, rowAncestors, tableBorder, rowFill, tableFill, cellStyleCache))
+	}
+	return measuredRow
+}
+
+func (html *HTML) measureTableRowHeights(compiled *CompiledHTML, rows []htmlTableLayoutRow, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, tableAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, tableAttrs map[string]string) []float64 {
+	heights := make([]float64, len(rows))
+	for i := range heights {
+		heights[i] = lineHt + 2*padding
+	}
+	tableFill := html.cellBackground(tableAttrs)
+	cellStyleCache := make(map[htmlTableCellStyleCacheKey]htmlTableCellStyleCacheValue)
+	for rowIndex, row := range rows {
+		rowEl := HTMLSegmentType{Cat: 'O', Str: "tr", Attr: row.row.attrs}
+		rowAncestors := appendHTMLAncestors(tableAncestors, rowEl)
+		rowFill := html.cellBackground(row.row.attrs)
+		for _, placement := range row.cells {
+			required := html.measureTableCellRequiredHeight(compiled, row, placement, colOffsets, padding, lineHt, inherited, fallback, cssRules, rowAncestors, tableBorder, rowFill, tableFill, cellStyleCache)
+			span := placement.rowspan
+			if span < 1 {
+				span = 1
+			}
+			if rowIndex+span > len(heights) {
+				span = len(heights) - rowIndex
+			}
+			if span <= 1 {
+				if required > heights[rowIndex] {
+					heights[rowIndex] = required
+				}
+				continue
+			}
+			current := htmlTableSpanHeight(heights, rowIndex, span)
+			if required > current {
+				extra := (required - current) / float64(span)
+				for i := rowIndex; i < rowIndex+span; i++ {
+					heights[i] += extra
+				}
+			}
+		}
+	}
+	return heights
+}
+
+func (html *HTML) measureTableCellRequiredHeight(compiled *CompiledHTML, row htmlTableLayoutRow, placement htmlTableCellPlacement, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, rowAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, rowFill, tableFill CSSColorType, cellStyleCache map[htmlTableCellStyleCacheKey]htmlTableCellStyleCacheValue) float64 {
+	cell := row.row.cells[placement.cellIndex]
+	style := inherited
+	if cell.header {
+		style.bold = true
+		if style.align == "" || style.align == "L" {
+			style.align = "C"
+		}
+	}
+	cellEl := HTMLSegmentType{Cat: 'O', Str: cell.tag, Attr: cell.attrs}
+	html.applyCompiledElementStyle(compiled, cell.start, &style, cellEl, cssRules, inherited.fontSize, inherited.lineHeight, rowAncestors...)
+	html.applyTextStyle(style, fallback)
+	wd := htmlTablePrefixSpanWidth(colOffsets, placement.col, placement.colspan)
+	cellStyle := html.cachedTableCellStyle(cell.attrs, row.row.attrs, style.align, padding, wd, tableBorder, rowFill, tableFill, cellStyleCache)
+	contentWd := htmlMaxFloat(wd-cellStyle.padding.left-cellStyle.padding.right, 0)
+	text := htmlTableCellText(cell, style.preserveWhitespace)
+	return html.tableCellTextHeight(text, contentWd, style, lineHt) + cellStyle.padding.top + cellStyle.padding.bottom
 }
 
 func (html *HTML) measureTableCell(compiled *CompiledHTML, row htmlTableLayoutRow, placement htmlTableCellPlacement, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, rowAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, rowFill, tableFill CSSColorType, cellStyleCache map[htmlTableCellStyleCacheKey]htmlTableCellStyleCacheValue) htmlTableMeasuredCell {
@@ -1189,12 +1301,29 @@ func htmlSplitLineCount(pdf *Document, text string, wd float64) int {
 	if text == "" {
 		return 1
 	}
-	if pdf.isCurrentUTF8 || strings.Contains(text, "\r") {
-		return len(htmlSplitLines(pdf, text, wd))
+	if pdf.isCurrentUTF8 {
+		if count := htmlWrappedSplitTextLineCount(pdf, text, wd); count > 0 {
+			return count
+		}
+		return 1
+	}
+	if strings.Contains(text, "\r") {
+		if count := pdf.SplitLineCount([]byte(text), wd); count > 0 {
+			return len(htmlSplitLines(pdf, text, wd))
+		}
+		return 1
 	}
 	count := htmlSplitStringLineCount(pdf, text, wd)
 	if count == 0 {
 		return 1
+	}
+	return count
+}
+
+func htmlWrappedSplitTextLineCount(pdf *Document, text string, wd float64) int {
+	count := 0
+	for _, line := range pdf.SplitText(text, wd) {
+		count += htmlWrappedLineCount(pdf, line, wd)
 	}
 	return count
 }

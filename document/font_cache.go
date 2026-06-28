@@ -23,6 +23,24 @@ type cachedUTF8Font struct {
 	static *utf8StaticTables
 }
 
+type sharedUTF8FontFileCacheKey struct {
+	path    string
+	size    int64
+	modTime int64
+	fontKey string
+}
+
+var sharedUTF8FontFileCache = struct {
+	sync.Mutex
+	fonts map[sharedUTF8FontFileCacheKey]cachedUTF8Font
+	order []sharedUTF8FontFileCacheKey
+	bytes int64
+}{
+	fonts: make(map[sharedUTF8FontFileCacheKey]cachedUTF8Font),
+}
+
+const maxSharedUTF8FontFileCacheBytes = 128 * 1024 * 1024
+
 // NewFontCache returns an empty reusable UTF-8 font cache.
 func NewFontCache() *FontCache {
 	return &FontCache{fonts: make(map[string]cachedUTF8Font)}
@@ -60,13 +78,7 @@ func (c *FontCache) AddUTF8FontFromBytes(family, style string, data []byte) erro
 	}
 	// Parse the font-only tables once here so every document that embeds this
 	// cached font reuses them read-only instead of re-parsing per document.
-	stored := append([]byte(nil), data...)
-	def, err := utf8FontDefinitionOwned(key, "", stored)
-	if err != nil {
-		return err
-	}
-	def.utf8File = nil
-	static, err := buildUTF8StaticTables(stored)
+	cached, err := newCachedUTF8Font(key, "", data)
 	if err != nil {
 		return err
 	}
@@ -74,7 +86,7 @@ func (c *FontCache) AddUTF8FontFromBytes(family, style string, data []byte) erro
 	if c.fonts == nil {
 		c.fonts = make(map[string]cachedUTF8Font)
 	}
-	c.fonts[key] = cachedUTF8Font{def: def, data: stored, static: static}
+	c.fonts[key] = cached
 	c.mu.Unlock()
 	return nil
 }
@@ -88,6 +100,68 @@ func (c *FontCache) font(family, style string) (cachedUTF8Font, bool) {
 	font, ok := c.fonts[key]
 	c.mu.RUnlock()
 	return font, ok
+}
+
+func cachedUTF8FontFromFile(fontKey, fontPath string, size, modTime int64) (cachedUTF8Font, error) {
+	key := sharedUTF8FontFileCacheKey{path: fontPath, size: size, modTime: modTime, fontKey: fontKey}
+	if cached, ok := lookupSharedUTF8FontFile(key); ok {
+		return cached, nil
+	}
+	data, err := readFontResourceFile(fontPath, maxFontSourceBytes)
+	if err != nil {
+		return cachedUTF8Font{}, err
+	}
+	cached, err := newCachedUTF8Font(fontKey, fontPath, data)
+	if err != nil {
+		return cachedUTF8Font{}, err
+	}
+	storeSharedUTF8FontFile(key, cached)
+	return cached, nil
+}
+
+func lookupSharedUTF8FontFile(key sharedUTF8FontFileCacheKey) (cachedUTF8Font, bool) {
+	sharedUTF8FontFileCache.Lock()
+	cached, ok := sharedUTF8FontFileCache.fonts[key]
+	sharedUTF8FontFileCache.Unlock()
+	return cached, ok
+}
+
+func storeSharedUTF8FontFile(key sharedUTF8FontFileCacheKey, cached cachedUTF8Font) {
+	entryBytes := int64(len(cached.data))
+	if entryBytes > maxSharedUTF8FontFileCacheBytes {
+		return
+	}
+	sharedUTF8FontFileCache.Lock()
+	defer sharedUTF8FontFileCache.Unlock()
+	if old, ok := sharedUTF8FontFileCache.fonts[key]; ok {
+		sharedUTF8FontFileCache.bytes -= int64(len(old.data))
+	} else {
+		sharedUTF8FontFileCache.order = append(sharedUTF8FontFileCache.order, key)
+	}
+	sharedUTF8FontFileCache.fonts[key] = cached
+	sharedUTF8FontFileCache.bytes += entryBytes
+	for sharedUTF8FontFileCache.bytes > maxSharedUTF8FontFileCacheBytes && len(sharedUTF8FontFileCache.order) > 0 {
+		evict := sharedUTF8FontFileCache.order[0]
+		sharedUTF8FontFileCache.order = sharedUTF8FontFileCache.order[1:]
+		if old, ok := sharedUTF8FontFileCache.fonts[evict]; ok {
+			sharedUTF8FontFileCache.bytes -= int64(len(old.data))
+			delete(sharedUTF8FontFileCache.fonts, evict)
+		}
+	}
+}
+
+func newCachedUTF8Font(fontKey, fontPath string, data []byte) (cachedUTF8Font, error) {
+	stored := append([]byte(nil), data...)
+	def, err := utf8FontDefinitionOwned(fontKey, fontPath, stored)
+	if err != nil {
+		return cachedUTF8Font{}, err
+	}
+	def.utf8File = nil
+	static, err := buildUTF8StaticTables(stored)
+	if err != nil {
+		return cachedUTF8Font{}, err
+	}
+	return cachedUTF8Font{def: def, data: stored, static: static}, nil
 }
 
 // AddUTF8FontFromCache imports a cached UTF-8 TrueType font into this document.
@@ -105,8 +179,14 @@ func (f *Document) AddUTF8FontFromCache(family, style string, cache *FontCache) 
 		f.SetErrorf("cached UTF-8 font not found: %s %s", family, style)
 		return
 	}
+	f.addCachedUTF8Font(fontKey, family, style, cached)
+}
+
+func (f *Document) addCachedUTF8Font(fontKey, family, style string, cached cachedUTF8Font) {
 	def := cached.def
 	def.File = ""
+	def.Name = fontKey
+	def.i = ""
 	def.Cw = cached.def.Cw
 	def.usedRunes = defaultUTF8UsedRunes(f.aliasNbPagesStr)
 	def.utf8File = cached.newUTF8Font()

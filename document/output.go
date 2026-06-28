@@ -15,6 +15,13 @@ import (
 // ErrNilWriter reports that a PDF output method received a nil writer.
 var ErrNilWriter = errors.New("pdf output writer is nil")
 
+// OutputFileOptions controls durability behavior for file output.
+type OutputFileOptions struct {
+	// DisableSync skips fsyncing the temporary output file before rename. The
+	// zero value preserves OutputFileAndClose's durable default.
+	DisableSync bool
+}
+
 // OutputAndClose sends the PDF document to the writer specified by w. This
 // method will close both f and w, even if an error is detected and no document
 // is produced.
@@ -36,6 +43,23 @@ func (f *Document) OutputAndClose(w io.WriteCloser) error {
 //
 // Most examples demonstrate the use of this method.
 func (f *Document) OutputFileAndClose(fileStr string) error {
+	return f.outputFileAndClose(fileStr, true)
+}
+
+// OutputFileAndCloseNoSync creates or truncates fileStr without fsyncing the
+// temporary file before rename. It is intended for high-throughput batch
+// generation where the caller accepts weaker crash-durability guarantees.
+func (f *Document) OutputFileAndCloseNoSync(fileStr string) error {
+	return f.outputFileAndClose(fileStr, false)
+}
+
+// OutputFileAndCloseWithOptions creates or truncates fileStr using explicit
+// file output options. A zero-value OutputFileOptions keeps the durable default.
+func (f *Document) OutputFileAndCloseWithOptions(fileStr string, options OutputFileOptions) error {
+	return f.outputFileAndClose(fileStr, !options.DisableSync)
+}
+
+func (f *Document) outputFileAndClose(fileStr string, syncOutput bool) error {
 	if f.err != nil {
 		return f.err
 	}
@@ -58,9 +82,11 @@ func (f *Document) OutputFileAndClose(fileStr string) error {
 		_ = pdfFile.Close()
 		return err
 	}
-	if err := pdfFile.Sync(); err != nil {
-		_ = pdfFile.Close()
-		return err
+	if syncOutput {
+		if err := pdfFile.Sync(); err != nil {
+			_ = pdfFile.Close()
+			return err
+		}
 	}
 	if err := pdfFile.Chmod(mode); err != nil {
 		_ = pdfFile.Close()

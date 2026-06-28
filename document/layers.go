@@ -74,7 +74,10 @@ func (f *Document) layerPutLayers() {
 	for j, l := range f.layer.list {
 		f.newobj()
 		f.layer.list[j].objNum = f.n
-		f.outf("<</Type /OCG /Name %s>>", f.textstring(utf8toutf16(l.name)))
+		buf := []byte("<</Type /OCG /Name ")
+		buf = f.appendUTF16TextString(buf, l.name)
+		buf = append(buf, ">>"...)
+		f.outbytes(buf)
 		f.out("endobj")
 	}
 }

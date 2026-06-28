@@ -95,6 +95,91 @@ func TestOutputWriterFailureDoesNotPoisonDocument(t *testing.T) {
 	}
 }
 
+func TestOutputDefaultTrailerOmitsFileID(t *testing.T) {
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(20, 10, "hello")
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "/ID ") {
+		t.Fatal("default output trailer contains /ID")
+	}
+}
+
+func TestOutputEncryptedTrailerKeepsEmptyFileID(t *testing.T) {
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.SetProtection(document.CnProtectPrint, "reader", "owner")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(20, 10, "hello")
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "/ID [()()]") {
+		t.Fatal("encrypted output trailer did not contain empty /ID")
+	}
+}
+
+func TestOutputArlingtonTrailerKeepsHashFileID(t *testing.T) {
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.SetComplianceMetadata(document.ComplianceMetadata{Arlington: true})
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(20, 10, "hello")
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "/ID [<") {
+		t.Fatal("Arlington output trailer did not contain hash /ID")
+	}
+}
+
+func TestOutputFileAndCloseNoSyncWritesPDF(t *testing.T) {
+	fileStr := filepath.Join(t.TempDir(), "out.pdf")
+
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(20, 10, "hello")
+
+	if err := pdf.OutputFileAndCloseNoSync(fileStr); err != nil {
+		t.Fatalf("OutputFileAndCloseNoSync() error = %v", err)
+	}
+	got, err := os.ReadFile(fileStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(got, []byte("%PDF-")) {
+		t.Fatalf("OutputFileAndCloseNoSync() wrote non-PDF prefix %q", got[:min(len(got), 8)])
+	}
+}
+
+func TestOutputFileAndCloseWithOptionsZeroValueWritesPDF(t *testing.T) {
+	fileStr := filepath.Join(t.TempDir(), "out.pdf")
+
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(20, 10, "hello")
+
+	if err := pdf.OutputFileAndCloseWithOptions(fileStr, document.OutputFileOptions{}); err != nil {
+		t.Fatalf("OutputFileAndCloseWithOptions() error = %v", err)
+	}
+	if info, err := os.Stat(fileStr); err != nil {
+		t.Fatal(err)
+	} else if info.Size() == 0 {
+		t.Fatal("OutputFileAndCloseWithOptions() wrote empty file")
+	}
+}
+
 func TestOutputFileAndCloseDoesNotTruncateOnCloseValidationError(t *testing.T) {
 	fileStr := filepath.Join(t.TempDir(), "out.pdf")
 	original := []byte("previous valid output")

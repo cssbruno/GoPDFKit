@@ -6,6 +6,7 @@ package document
 import (
 	"math"
 	"strings"
+	"unicode/utf8"
 )
 
 // MultiCell prints text with automatic line breaks. The text is placed in
@@ -24,16 +25,17 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 		w = f.w - f.rMargin - f.x
 	}
 	wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
-	s := strings.ReplaceAll(txtStr, "\r", "")
-	srune := []rune{}
+	s := txtStr
+	if strings.Contains(s, "\r") {
+		s = strings.ReplaceAll(s, "\r", "")
+	}
 	var nb int
 	if f.isCurrentUTF8 {
-		srune = []rune(s)
-		nb = len(srune)
-		for nb > 0 && srune[nb-1] == '\n' {
+		nb = len(s)
+		for nb > 0 && s[nb-1] == '\n' {
 			nb--
 		}
-		srune = srune[0:nb]
+		s = s[:nb]
 	} else {
 		nb = len(s)
 		if nb > 0 && s[nb-1] == '\n' {
@@ -73,8 +75,14 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 	nl := 1
 	for i < nb {
 		var c rune
+		charSize := 1
+		next := i + 1
 		if f.isCurrentUTF8 {
-			c = srune[i]
+			c, charSize = utf8.DecodeRuneInString(s[i:])
+			if charSize <= 0 {
+				break
+			}
+			next = i + charSize
 		} else {
 			c = rune(s[i])
 		}
@@ -92,11 +100,11 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 						newAlignStr = "L"
 					}
 				}
-				f.CellFormat(w, h, string(srune[j:i]), b, 2, newAlignStr, fill, 0, "")
+				f.CellFormat(w, h, s[j:i], b, 2, newAlignStr, fill, 0, "")
 			} else {
 				f.CellFormat(w, h, s[j:i], b, 2, alignStr, fill, 0, "")
 			}
-			i++
+			i = next
 			sep = -1
 			j = i
 			l = 0
@@ -127,21 +135,22 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 		if l > wmax {
 			if sep == -1 {
 				if i == j {
-					i++
+					i = next
 				}
 				if f.ws > 0 {
 					f.ws = 0
 					f.out("0 Tw")
 				}
 				if f.isCurrentUTF8 {
-					f.CellFormat(w, h, string(srune[j:i]), b, 2, alignStr, fill, 0, "")
+					f.CellFormat(w, h, s[j:i], b, 2, alignStr, fill, 0, "")
 				} else {
 					f.CellFormat(w, h, s[j:i], b, 2, alignStr, fill, 0, "")
 				}
 			} else {
 				lineEnd := sep
 				if sepInclude {
-					lineEnd = sep + 1
+					_, sepSize := utf8.DecodeRuneInString(s[sep:])
+					lineEnd = sep + sepSize
 				}
 				if alignStr == "J" {
 					if ns > 1 {
@@ -152,11 +161,16 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 					f.outf("%.3f Tw", f.ws*f.k)
 				}
 				if f.isCurrentUTF8 {
-					f.CellFormat(w, h, string(srune[j:lineEnd]), b, 2, alignStr, fill, 0, "")
+					f.CellFormat(w, h, s[j:lineEnd], b, 2, alignStr, fill, 0, "")
 				} else {
 					f.CellFormat(w, h, s[j:lineEnd], b, 2, alignStr, fill, 0, "")
 				}
-				i = sep + 1
+				if f.isCurrentUTF8 {
+					_, sepSize := utf8.DecodeRuneInString(s[sep:])
+					i = sep + sepSize
+				} else {
+					i = sep + 1
+				}
 			}
 			sep = -1
 			sepInclude = false
@@ -168,7 +182,7 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 				b = b2
 			}
 		} else {
-			i++
+			i = next
 		}
 	}
 	if f.ws > 0 {
@@ -186,7 +200,7 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 				alignStr = ""
 			}
 		}
-		f.CellFormat(w, h, string(srune[j:i]), b, 2, alignStr, fill, 0, "")
+		f.CellFormat(w, h, s[j:i], b, 2, alignStr, fill, 0, "")
 	} else {
 		f.CellFormat(w, h, s[j:i], b, 2, alignStr, fill, 0, "")
 	}

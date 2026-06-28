@@ -4,12 +4,11 @@
 package document
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"math"
+	"math/bits"
 	"slices"
 	"sort"
 	"strings"
@@ -98,6 +97,7 @@ type utf8StaticTables struct {
 type utf8SubsetCacheKey struct {
 	fontPtr uintptr
 	hash    uint64
+	hash2   uint64
 	count   int
 }
 
@@ -255,8 +255,8 @@ func (utf *utf8FontFile) readUint32() int {
 	return (int(s[0]) * 16777216) + (int(s[1]) << 16) + (int(s[2]) << 8) + int(s[3]) // 16777216 = 1 << 24.
 }
 
-func (utf *utf8FontFile) calcInt32(x, y []int) []int {
-	answer := make([]int, 2)
+func (utf *utf8FontFile) calcInt32(x, y [2]int) [2]int {
+	answer := [2]int{}
 	if y[1] > x[1] {
 		x[1] += 1 << 16
 		x[0]++
@@ -270,16 +270,21 @@ func (utf *utf8FontFile) calcInt32(x, y []int) []int {
 	return answer
 }
 
-func (utf *utf8FontFile) generateChecksum(data []byte) []int {
-	if (len(data) % 4) != 0 {
-		for i := 0; (len(data) % 4) != 0; i++ {
-			data = append(data, 0)
-		}
-	}
-	answer := []int{0x0000, 0x0000}
-	for i := 0; i < len(data); i += 4 {
+func (utf *utf8FontFile) generateChecksum(data []byte) [2]int {
+	answer := [2]int{}
+	i := 0
+	for ; i+4 <= len(data); i += 4 {
 		answer[0] += (int(data[i]) << 8) + int(data[i+1])
 		answer[1] += (int(data[i+2]) << 8) + int(data[i+3])
+		answer[0] += answer[1] >> 16
+		answer[1] &= 0xFFFF
+		answer[0] &= 0xFFFF
+	}
+	var tail [4]byte
+	if i < len(data) {
+		copy(tail[:], data[i:])
+		answer[0] += (int(tail[0]) << 8) + int(tail[1])
+		answer[1] += (int(tail[2]) << 8) + int(tail[3])
 		answer[0] += answer[1] >> 16
 		answer[1] &= 0xFFFF
 		answer[0] &= 0xFFFF
@@ -723,7 +728,10 @@ func (utf *utf8FontFile) generateCMAPTable(cidSymbolPairCollection map[int]int, 
 	searchRange *= 2
 	rangeShift := segCount*2 - searchRange
 	length := 16 + (8 * segCount) + (numSymbols + 1)
-	cmap := []int{0, 1, 3, 1, 0, 12, 4, length, 0, segCount * 2, searchRange, entrySelector, rangeShift}
+	cmap := make([]byte, 0, (13+segCount*4+numSymbols+1)*2)
+	for _, value := range [...]int{0, 1, 3, 1, 0, 12, 4, length, 0, segCount * 2, searchRange, entrySelector, rangeShift} {
+		cmap = appendUint16BE(cmap, value)
+	}
 
 	for _, start := range cidArrayKeys {
 		values := cidArray[start]
@@ -731,39 +739,39 @@ func (utf *utf8FontFile) generateCMAPTable(cidSymbolPairCollection map[int]int, 
 			continue
 		}
 		endCode := start + len(values) - 1
-		cmap = append(cmap, endCode)
+		cmap = appendUint16BE(cmap, endCode)
 	}
-	cmap = append(cmap, 0xFFFF)
-	cmap = append(cmap, 0)
+	cmap = appendUint16BE(cmap, 0xFFFF)
+	cmap = appendUint16BE(cmap, 0)
 
-	cmap = append(cmap, cidArrayKeys...)
-	cmap = append(cmap, 0xFFFF)
+	for _, start := range cidArrayKeys {
+		cmap = appendUint16BE(cmap, start)
+	}
+	cmap = appendUint16BE(cmap, 0xFFFF)
 	for _, cidKey := range cidArrayKeys {
 		values := cidArray[cidKey]
 		if len(values) == 0 {
 			continue
 		}
 		idDelta := -(cidKey - values[0])
-		cmap = append(cmap, idDelta)
+		cmap = appendUint16BE(cmap, idDelta)
 	}
-	cmap = append(cmap, 1)
+	cmap = appendUint16BE(cmap, 1)
 	for range cidArray {
-		cmap = append(cmap, 0)
+		cmap = appendUint16BE(cmap, 0)
 	}
-	cmap = append(cmap, 0)
+	cmap = appendUint16BE(cmap, 0)
 	for _, start := range cidArrayKeys {
 		values := cidArray[start]
 		if len(values) == 0 {
 			continue
 		}
-		cmap = append(cmap, values...)
+		for _, value := range values {
+			cmap = appendUint16BE(cmap, value)
+		}
 	}
-	cmap = append(cmap, 0)
-	cmapstr := make([]byte, 0)
-	for _, cm := range cmap {
-		cmapstr = append(cmapstr, packUint16(cm)...)
-	}
-	return cmapstr
+	cmap = appendUint16BE(cmap, 0)
+	return cmap
 }
 
 // buildUTF8StaticTables parses the immutable, font-only tables from raw
@@ -873,7 +881,10 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 		utf.fileReader.err = errors.New("invalid post font table")
 		return nil
 	}
-	postTable = append(append([]byte{0x00, 0x03, 0x00, 0x00}, postTable[4:16]...), []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}...)
+	nextPostTable := make([]byte, 32)
+	copy(nextPostTable, []byte{0x00, 0x03, 0x00, 0x00})
+	copy(nextPostTable[4:16], postTable[4:16])
+	postTable = nextPostTable
 	utf.setOutTable("post", postTable)
 
 	delete(cidSymbolPairCollection, 0)
@@ -904,11 +915,10 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 	}
 
 	for _, originalSymbolIdx := range symbolCollectionKeys {
-		hm := utf.getMetricsFromTable(hmtxTable, oldMetrics, originalSymbolIdx)
+		hmtxData = utf.appendMetricsFromTable(hmtxData, hmtxTable, oldMetrics, originalSymbolIdx)
 		if utf.fileReader.err != nil {
 			return nil
 		}
-		hmtxData = append(hmtxData, hm...)
 
 		offsets = append(offsets, pos)
 		symbolPos, symbolLen, ok := utf.glyphBounds(originalSymbolIdx, symbolData)
@@ -984,20 +994,22 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 
 	utf.setOutTable("hmtx", hmtxData)
 
-	locaData := make([]byte, 0, len(offsets)*4)
 	LocaFormat := 0
 	if ((pos + 1) >> 1) > 0xFFFF {
 		LocaFormat = 1
+		locaData := make([]byte, 0, len(offsets)*4)
 		for _, offset := range offsets {
-			locaData = append(locaData, packUint32(offset)...)
+			locaData = appendUint32BE(locaData, offset)
 		}
+		utf.setOutTable("loca", locaData)
 	} else {
 		LocaFormat = 0
+		locaData := make([]byte, 0, len(offsets)*2)
 		for _, offset := range offsets {
-			locaData = append(locaData, packUint16(offset/2)...)
+			locaData = appendUint16BE(locaData, offset/2)
 		}
+		utf.setOutTable("loca", locaData)
 	}
-	utf.setOutTable("loca", locaData)
 
 	headData := utf.getTableData("head")
 	headData = utf.insertUint16(headData, 50, LocaFormat)
@@ -1041,14 +1053,21 @@ func (utf *utf8FontFile) subsetCacheKey(usedRunes map[int]int) utf8SubsetCacheKe
 	} else if utf.fileReader != nil && len(utf.fileReader.array) > 0 {
 		fontPtr = uintptr(unsafe.Pointer(&utf.fileReader.array[0]))
 	}
-	keys := keySortInt(usedRunes)
-	h := fnv.New64a()
-	var scratch [8]byte
-	for _, key := range keys {
-		binary.LittleEndian.PutUint64(scratch[:], uint64(key))
-		_, _ = h.Write(scratch[:])
+	var hash uint64
+	var hash2 uint64
+	for _, char := range usedRunes {
+		mixed := mixUTF8SubsetRune(uint64(char))
+		hash += mixed
+		hash2 ^= bits.RotateLeft64(mixed, int(mixed&63))
 	}
-	return utf8SubsetCacheKey{fontPtr: fontPtr, hash: h.Sum64(), count: len(keys)}
+	return utf8SubsetCacheKey{fontPtr: fontPtr, hash: hash, hash2: hash2, count: len(usedRunes)}
+}
+
+func mixUTF8SubsetRune(value uint64) uint64 {
+	value += 0x9e3779b97f4a7c15
+	value = (value ^ (value >> 30)) * 0xbf58476d1ce4e5b9
+	value = (value ^ (value >> 27)) * 0x94d049bb133111eb
+	return value ^ (value >> 31)
 }
 
 func lookupUTF8SubsetCache(key utf8SubsetCacheKey) (utf8SubsetCacheValue, bool) {
@@ -1146,12 +1165,11 @@ func (utf *utf8FontFile) parseHMTXTable(numberOfHMetrics, numSymbols int, symbol
 	var widths int
 	start := utf.SeekTable("hmtx")
 	arrayWidths := 0
-	var arr []int
 	utf.CharWidths = make([]int, 256*256)
 	charCount := 0
-	arr = unpackUint16Array(utf.getRange(start, numberOfHMetrics*4))
+	data := utf.getRange(start, numberOfHMetrics*4)
 	for symbol := range numberOfHMetrics {
-		arrayWidths = arr[(symbol*2)+1]
+		arrayWidths = unpackUint16(data[symbol*4 : symbol*4+2])
 		if _, OK := symbolToChar[symbol]; OK || symbol == 0 {
 			if arrayWidths >= (1 << 15) {
 				arrayWidths = 0
@@ -1195,42 +1213,40 @@ func (utf *utf8FontFile) parseHMTXTable(numberOfHMetrics, numSymbols int, symbol
 	utf.CharWidths[0] = charCount
 }
 
-func (utf *utf8FontFile) getMetricsFromTable(hmtx []byte, metricCount, gid int) []byte {
+func (utf *utf8FontFile) appendMetricsFromTable(dst, hmtx []byte, metricCount, gid int) []byte {
 	if gid < metricCount {
 		offset := gid * 4
 		if offset < 0 || offset+4 > len(hmtx) {
 			utf.fileReader.err = errors.New("invalid hmtx metric bounds")
-			return nil
+			return dst
 		}
-		return hmtx[offset : offset+4]
+		return append(dst, hmtx[offset:offset+4]...)
 	}
 	advanceOffset := (metricCount - 1) * 4
 	leftSideBearingOffset := (metricCount * 2) + (gid * 2)
 	if advanceOffset < 0 || advanceOffset+2 > len(hmtx) || leftSideBearingOffset < 0 || leftSideBearingOffset+2 > len(hmtx) {
 		utf.fileReader.err = errors.New("invalid hmtx metric bounds")
-		return nil
+		return dst
 	}
-	metrics := make([]byte, 0, 4)
-	metrics = append(metrics, hmtx[advanceOffset:advanceOffset+2]...)
-	metrics = append(metrics, hmtx[leftSideBearingOffset:leftSideBearingOffset+2]...)
-	return metrics
+	dst = append(dst, hmtx[advanceOffset:advanceOffset+2]...)
+	return append(dst, hmtx[leftSideBearingOffset:leftSideBearingOffset+2]...)
 }
 
 func (utf *utf8FontFile) parseLOCATable(format, numSymbols int) {
 	start := utf.SeekTable("loca")
-	utf.symbolPosition = make([]int, 0)
+	utf.symbolPosition = make([]int, 0, numSymbols+1)
 	switch format {
 	case 0:
 		data := utf.getRange(start, (numSymbols*2)+2)
-		arr := unpackUint16Array(data)
 		for n := 0; n <= numSymbols; n++ {
-			utf.symbolPosition = append(utf.symbolPosition, arr[n+1]*2)
+			offset := n * 2
+			utf.symbolPosition = append(utf.symbolPosition, unpackUint16(data[offset:offset+2])*2)
 		}
 	case 1:
 		data := utf.getRange(start, (numSymbols*4)+4)
-		arr := unpackUint32Array(data)
 		for n := 0; n <= numSymbols; n++ {
-			utf.symbolPosition = append(utf.symbolPosition, arr[n+1])
+			offset := n * 4
+			utf.symbolPosition = append(utf.symbolPosition, int(binary.BigEndian.Uint32(data[offset:offset+4])))
 		}
 	default:
 		fmt.Printf("Unknown loca table format %d\n", format)
@@ -1293,7 +1309,6 @@ func (utf *utf8FontFile) generateSCCSDictionaries(runeCmapPosition int, symbolCh
 }
 
 func (utf *utf8FontFile) assembleTables() []byte {
-	answer := make([]byte, 0)
 	tablesCount := len(utf.outTablesData)
 	findSize := 1
 	writer := 0
@@ -1304,63 +1319,51 @@ func (utf *utf8FontFile) assembleTables() []byte {
 	findSize *= 16
 	rOffset := tablesCount*16 - findSize
 
-	answer = append(answer, packHeader(0x00010000, tablesCount, findSize, writer, rOffset)...)
-
 	tables := utf.outTablesData
 	tablesNames := keySortStrings(tables)
 
 	offset := 12 + tablesCount*16
+	totalSize := offset
+	for _, name := range tablesNames {
+		totalSize += (len(tables[name]) + 3) &^ 3
+	}
+	answer := make([]byte, 0, totalSize)
+	answer = appendUint32BE(answer, 0x00010000)
+	answer = appendUint16BE(answer, tablesCount)
+	answer = appendUint16BE(answer, findSize)
+	answer = appendUint16BE(answer, writer)
+	answer = appendUint16BE(answer, rOffset)
 	begin := 0
 
 	for _, name := range tablesNames {
 		if name == "head" {
 			begin = offset
 		}
-		answer = append(answer, []byte(name)...)
+		answer = append(answer, name...)
 		checksum := utf.generateChecksum(tables[name])
-		answer = append(answer, pack2Uint16(checksum[0], checksum[1])...)
-		answer = append(answer, pack2Uint32(offset, len(tables[name]))...)
+		answer = appendUint16BE(answer, checksum[0])
+		answer = appendUint16BE(answer, checksum[1])
+		answer = appendUint32BE(answer, offset)
+		answer = appendUint32BE(answer, len(tables[name]))
 		paddedLength := (len(tables[name]) + 3) &^ 3
 		offset += paddedLength
 	}
 
+	var padding [3]byte
 	for _, key := range tablesNames {
-		data := append([]byte{}, tables[key]...)
-		data = append(data, []byte{0, 0, 0}...)
-		answer = append(answer, data[:(len(data)&^3)]...)
+		data := tables[key]
+		answer = append(answer, data...)
+		if pad := ((len(data) + 3) &^ 3) - len(data); pad > 0 {
+			answer = append(answer, padding[:pad]...)
+		}
 	}
 
 	checksum := utf.generateChecksum(answer)
-	checksum = utf.calcInt32([]int{0xB1B0, 0xAFBA}, checksum)
-	answer = utf.patchBytes(answer, (begin + 8), pack2Uint16(checksum[0], checksum[1]))
-	return answer
-}
-
-func unpackUint16Array(data []byte) []int {
-	answer := make([]int, 1, len(data)/2+1)
-	r := bytes.NewReader(data)
-	bs := make([]byte, 2)
-	var e error
-	var c int
-	c, e = r.Read(bs)
-	for e == nil && c > 0 {
-		answer = append(answer, int(binary.BigEndian.Uint16(bs)))
-		c, e = r.Read(bs)
-	}
-	return answer
-}
-
-func unpackUint32Array(data []byte) []int {
-	answer := make([]int, 1, len(data)/4+1)
-	r := bytes.NewReader(data)
-	bs := make([]byte, 4)
-	var e error
-	var c int
-	c, e = r.Read(bs)
-	for e == nil && c > 0 {
-		answer = append(answer, int(binary.BigEndian.Uint32(bs)))
-		c, e = r.Read(bs)
-	}
+	checksum = utf.calcInt32([2]int{0xB1B0, 0xAFBA}, checksum)
+	var checksumAdjustment [4]byte
+	binary.BigEndian.PutUint16(checksumAdjustment[0:2], uint16(checksum[0]))
+	binary.BigEndian.PutUint16(checksumAdjustment[2:4], uint16(checksum[1]))
+	answer = utf.patchBytes(answer, (begin + 8), checksumAdjustment[:])
 	return answer
 }
 
@@ -1368,53 +1371,12 @@ func unpackUint16(data []byte) int {
 	return int(binary.BigEndian.Uint16(data))
 }
 
-func packHeader(n uint32, n1, n2, n3, n4 int) []byte {
-	answer := make([]byte, 0)
-	bs4 := make([]byte, 4)
-	binary.BigEndian.PutUint32(bs4, n)
-	answer = append(answer, bs4...)
-	bs := make([]byte, 2)
-	binary.BigEndian.PutUint16(bs, uint16(n1))
-	answer = append(answer, bs...)
-	binary.BigEndian.PutUint16(bs, uint16(n2))
-	answer = append(answer, bs...)
-	binary.BigEndian.PutUint16(bs, uint16(n3))
-	answer = append(answer, bs...)
-	binary.BigEndian.PutUint16(bs, uint16(n4))
-	answer = append(answer, bs...)
-	return answer
+func appendUint16BE(dst []byte, n int) []byte {
+	return append(dst, byte(n>>8), byte(n))
 }
 
-func pack2Uint16(n1, n2 int) []byte {
-	answer := make([]byte, 0)
-	bs := make([]byte, 2)
-	binary.BigEndian.PutUint16(bs, uint16(n1))
-	answer = append(answer, bs...)
-	binary.BigEndian.PutUint16(bs, uint16(n2))
-	answer = append(answer, bs...)
-	return answer
-}
-
-func pack2Uint32(n1, n2 int) []byte {
-	answer := make([]byte, 0)
-	bs := make([]byte, 4)
-	binary.BigEndian.PutUint32(bs, uint32(n1))
-	answer = append(answer, bs...)
-	binary.BigEndian.PutUint32(bs, uint32(n2))
-	answer = append(answer, bs...)
-	return answer
-}
-
-func packUint32(n1 int) []byte {
-	bs := make([]byte, 4)
-	binary.BigEndian.PutUint32(bs, uint32(n1))
-	return bs
-}
-
-func packUint16(n1 int) []byte {
-	bs := make([]byte, 2)
-	binary.BigEndian.PutUint16(bs, uint16(n1))
-	return bs
+func appendUint32BE(dst []byte, n int) []byte {
+	return append(dst, byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
 }
 
 func keySortStrings(s map[string][]byte) []string {

@@ -6,6 +6,8 @@ package document
 import (
 	"bytes"
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -167,6 +169,37 @@ func TestSetAttachmentsImmutableSharesContent(t *testing.T) {
 	}
 	if got := pdf.attachments[0].afRelationship; got != "Source" {
 		t.Fatalf("normalized AFRelationship = %q, want Source", got)
+	}
+}
+
+func TestAttachmentFromFileLoadsDuringOutput(t *testing.T) {
+	fileStr := filepath.Join(t.TempDir(), "payload.txt")
+	if err := os.WriteFile(fileStr, []byte("file-backed payload"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.SetAttachments([]Attachment{AttachmentFromFile(fileStr)})
+	if len(pdf.attachments[0].Content) != 0 {
+		t.Fatal("file-backed attachment loaded before output")
+	}
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(20, 10, "hello")
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(pdf.attachments[0].Content); got != "file-backed payload" {
+		t.Fatalf("loaded attachment content = %q, want file payload", got)
+	}
+	if got := pdf.attachments[0].Filename; got != "payload.txt" {
+		t.Fatalf("attachment filename = %q, want payload.txt", got)
+	}
+	if !strings.Contains(out.String(), "/EmbeddedFiles") {
+		t.Fatal("generated PDF missing /EmbeddedFiles")
 	}
 }
 

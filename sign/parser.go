@@ -32,19 +32,25 @@ type pdfRef struct {
 }
 
 type pdfContext struct {
-	Data          []byte
-	PreviousXref  int
-	Size          int
-	Root          pdfRef
-	Page          pdfRef
-	ObjectOffsets map[int]int
-	Trailer       []byte
+	Data         []byte
+	PreviousXref int
+	Size         int
+	Root         pdfRef
+	Page         pdfRef
+	Xref         *pdfXrefResolver
+	Trailer      []byte
 }
 
 type xrefEntry struct {
 	Object     int
 	Generation int
 	Offset     int
+}
+
+type pdfXrefResolver struct {
+	input   []byte
+	tables  []int
+	offsets map[int]int
 }
 
 func analyzePDF(input []byte) (pdfContext, error) {
@@ -66,15 +72,65 @@ func analyzePDF(input []byte) (pdfContext, error) {
 	if err != nil {
 		return pdfContext{}, err
 	}
-	offsets, err := parseXrefTables(input, previousXref)
+	xref, err := newPDFXrefResolver(input, previousXref)
 	if err != nil {
 		return pdfContext{}, err
 	}
-	page, err := findFirstPage(input, offsets, root, 0)
+	page, err := findFirstPage(input, xref, root, 0)
 	if err != nil {
 		return pdfContext{}, err
 	}
-	return pdfContext{Data: input, PreviousXref: previousXref, Size: size, Root: root, Page: page, ObjectOffsets: offsets, Trailer: trailer}, nil
+	return pdfContext{Data: input, PreviousXref: previousXref, Size: size, Root: root, Page: page, Xref: xref, Trailer: trailer}, nil
+}
+
+func newPDFXrefResolver(input []byte, offset int) (*pdfXrefResolver, error) {
+	resolver := &pdfXrefResolver{input: input, offsets: make(map[int]int)}
+	seen := make(map[int]bool)
+	for {
+		if offset < 0 || offset >= len(input) {
+			return nil, errors.New("pdfsigning: xref offset outside PDF")
+		}
+		if seen[offset] {
+			return nil, errors.New("pdfsigning: cyclic xref /Prev chain")
+		}
+		seen[offset] = true
+		trailer, err := xrefTrailer(input, offset)
+		if err != nil {
+			return nil, err
+		}
+		if findPDFName(trailer, "/Encrypt") >= 0 {
+			return nil, errors.New("pdfsigning: encrypted PDFs are not supported")
+		}
+		resolver.tables = append(resolver.tables, offset)
+		prev, ok, err := parsePrevXref(trailer)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return resolver, nil
+		}
+		offset = prev
+	}
+}
+
+func (resolver *pdfXrefResolver) objectOffset(object int) (int, error) {
+	if resolver == nil {
+		return 0, errors.New("pdfsigning: xref resolver not initialized")
+	}
+	if offset, ok := resolver.offsets[object]; ok {
+		return offset, nil
+	}
+	for _, tableOffset := range resolver.tables {
+		offset, ok, err := parseXrefTableObjectOffset(resolver.input, tableOffset, object)
+		if err != nil {
+			return 0, err
+		}
+		if ok {
+			resolver.offsets[object] = offset
+			return offset, nil
+		}
+	}
+	return 0, fmt.Errorf("pdfsigning: object %d not found in xref", object)
 }
 
 func findStartXref(input []byte) (int, error) {
@@ -359,6 +415,64 @@ func parseXrefTable(input []byte, offset int) (map[int]int, error) {
 	return offsets, nil
 }
 
+func parseXrefTableObjectOffset(input []byte, offset, targetObject int) (int, bool, error) {
+	if !bytes.HasPrefix(input[offset:], []byte("xref")) {
+		return 0, false, errors.New("pdfsigning: only classic xref tables are supported")
+	}
+	pos := offset + len("xref")
+	for pos < len(input) {
+		line, next := nextPDFLine(input, pos)
+		pos = next
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		if bytes.Equal(line, []byte("trailer")) {
+			break
+		}
+		first, nextInt, ok := parseLeadingInt(line, 0)
+		if !ok {
+			return 0, false, errors.New("pdfsigning: invalid xref subsection")
+		}
+		count, _, ok := parseLeadingInt(line, skipPDFSpaces(line, nextInt))
+		if !ok {
+			return 0, false, errors.New("pdfsigning: invalid xref subsection")
+		}
+		if targetObject < first || targetObject >= first+count {
+			for n := 0; n < count; n++ {
+				if pos >= len(input) {
+					return 0, false, errors.New("pdfsigning: truncated xref subsection")
+				}
+				_, pos = nextPDFLine(input, pos)
+			}
+			continue
+		}
+		targetIndex := targetObject - first
+		for n := 0; n < count; n++ {
+			if pos >= len(input) {
+				return 0, false, errors.New("pdfsigning: truncated xref subsection")
+			}
+			entry, next := nextPDFLine(input, pos)
+			pos = next
+			if n != targetIndex {
+				continue
+			}
+			if len(entry) < 18 {
+				return 0, false, errors.New("pdfsigning: invalid xref entry")
+			}
+			if entry[17] != 'n' {
+				return 0, false, nil
+			}
+			objectOffset, ok := parseXrefEntryOffset(entry)
+			if !ok {
+				return 0, false, errors.New("pdfsigning: invalid xref entry offset")
+			}
+			return objectOffset, true, nil
+		}
+	}
+	return 0, false, nil
+}
+
 func parseXrefEntryOffset(entry []byte) (int, bool) {
 	if len(entry) >= 10 {
 		offset := 0
@@ -390,13 +504,13 @@ func nextPDFLine(input []byte, pos int) ([]byte, int) {
 	return line, pos
 }
 
-func findFirstPage(input []byte, offsets map[int]int, ref pdfRef, depth int) (pdfRef, error) {
+func findFirstPage(input []byte, xref *pdfXrefResolver, ref pdfRef, depth int) (pdfRef, error) {
 	if depth > 32 {
 		return pdfRef{}, errors.New("pdfsigning: page tree is too deep")
 	}
-	offset, ok := offsets[ref.Object]
-	if !ok {
-		return pdfRef{}, fmt.Errorf("pdfsigning: object %d not found in xref", ref.Object)
+	offset, err := xref.objectOffset(ref.Object)
+	if err != nil {
+		return pdfRef{}, err
 	}
 	dict, err := readObjectDict(input, ref, offset)
 	if err != nil {
@@ -406,10 +520,10 @@ func findFirstPage(input []byte, offsets map[int]int, ref pdfRef, depth int) (pd
 		return ref, nil
 	}
 	if pages, ok := findReference(dict, "/Pages"); ok {
-		return findFirstPage(input, offsets, pages, depth+1)
+		return findFirstPage(input, xref, pages, depth+1)
 	}
 	if kid, ok := findFirstKid(dict); ok {
-		return findFirstPage(input, offsets, kid, depth+1)
+		return findFirstPage(input, xref, kid, depth+1)
 	}
 	return pdfRef{}, errors.New("pdfsigning: first page not found")
 }

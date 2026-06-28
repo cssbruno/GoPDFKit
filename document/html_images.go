@@ -55,10 +55,10 @@ func (html *HTML) writeInlineSVG(tokens []HTMLSegmentType, start int, lineHt flo
 			html.pdf.SetError(err)
 			return end
 		}
-		svg = parsed
+		svg = &parsed
 		if html.renderCacheActive {
 			if html.inlineSVGCache == nil {
-				html.inlineSVGCache = make(map[string]SVG)
+				html.inlineSVGCache = make(map[string]*SVG)
 			}
 			html.inlineSVGCache[svgText] = svg
 		}
@@ -74,8 +74,8 @@ func (html *HTML) writeCompiledInlineSVG(compiled *CompiledHTML, tokens []HTMLSe
 	return html.writeSVGObject(svg, end, tokens[start].Attr, lineHt, st)
 }
 
-func (html *HTML) writeSVGObject(svg SVG, end int, attrs map[string]string, lineHt float64, st htmlTextStyle) int {
-	if svg.Wd <= 0 || svg.Ht <= 0 {
+func (html *HTML) writeSVGObject(svg *SVG, end int, attrs map[string]string, lineHt float64, st htmlTextStyle) int {
+	if svg == nil || svg.Wd <= 0 || svg.Ht <= 0 {
 		return end
 	}
 	pdf := html.pdf
@@ -110,13 +110,10 @@ func (html *HTML) writeSVGObject(svg SVG, end int, attrs map[string]string, line
 	if st.href != "" {
 		textRole = taggedRoleLink
 	}
-	if textRole != "" {
-		svg = svgWithTextRole(svg, textRole)
-	}
 	if linkStructure {
 		pdf.BeginStructure(taggedRoleLink)
 	}
-	pdf.SVGWrite(&svg, scale)
+	pdf.svgWriteWithOptions(svg, scale, svgWriteOptions{TextRole: normalizeTaggedRole(textRole)})
 	if st.href != "" {
 		pdf.LinkString(x, y, actualWd, actualHt, st.href)
 	}
@@ -127,29 +124,10 @@ func (html *HTML) writeSVGObject(svg SVG, end int, attrs map[string]string, line
 	return end
 }
 
-func svgWithTextRole(svg SVG, role string) SVG {
-	role = normalizeTaggedRole(role)
-	if role == "" {
-		return svg
+func svgHasVisibleText(svg *SVG) bool {
+	if svg == nil {
+		return false
 	}
-	if len(svg.Texts) > 0 {
-		svg.Texts = append([]SVGText(nil), svg.Texts...)
-		for i := range svg.Texts {
-			svg.Texts[i].Role = role
-		}
-	}
-	if len(svg.Elements) > 0 {
-		svg.Elements = append([]SVGElement(nil), svg.Elements...)
-		for i := range svg.Elements {
-			if svg.Elements[i].Kind == "text" {
-				svg.Elements[i].Text.Role = role
-			}
-		}
-	}
-	return svg
-}
-
-func svgHasVisibleText(svg SVG) bool {
 	for _, text := range svg.Texts {
 		if text.Text != "" && !text.Style.Hidden && !text.Style.Fill.None {
 			return true

@@ -222,11 +222,7 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 			}
 			s = append(s, "] TJ ET"...)
 		} else {
-			if f.isCurrentUTF8 {
-				if f.isRTL {
-					txtStr = reverseText(txtStr)
-				}
-			}
+			reverseUTF8 := f.isCurrentUTF8 && f.isRTL
 			bt := (f.x + dx) * k
 			td := (f.h - (f.y + dy + .5*h + .3*f.fontSize)) * k
 			s = append(s, "BT "...)
@@ -234,7 +230,11 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 			s = appendPDFNumberSpace(s, td, 2)
 			s = append(s, "Td ("...)
 			if f.isCurrentUTF8 {
-				s = appendEscapedUTF16BE(s, txtStr, false, f.currentFont.usedRunes)
+				if reverseUTF8 {
+					s = appendEscapedUTF16BEReverse(s, txtStr, false, f.currentFont.usedRunes)
+				} else {
+					s = appendEscapedUTF16BE(s, txtStr, false, f.currentFont.usedRunes)
+				}
 			} else {
 				s = appendEscapedPDFCellText(s, txtStr)
 			}
@@ -321,9 +321,7 @@ func (f *Document) cellSimple(w, h float64, txtStr string) {
 	}
 	if len(txtStr) > 0 {
 		drawText := txtStr
-		if f.isCurrentUTF8 && f.isRTL {
-			drawText = reverseText(drawText)
-		}
+		reverseUTF8 := f.isCurrentUTF8 && f.isRTL
 		capacity := 64 + len(drawText) + 16
 		if f.isCurrentUTF8 {
 			capacity += len(drawText) * 2
@@ -350,7 +348,11 @@ func (f *Document) cellSimple(w, h float64, txtStr string) {
 		s = appendPDFNumberSpace(s, (f.h-y)*k, 2)
 		s = append(s, "Td ("...)
 		if f.isCurrentUTF8 {
-			s = appendEscapedUTF16BE(s, drawText, false, f.currentFont.usedRunes)
+			if reverseUTF8 {
+				s = appendEscapedUTF16BEReverse(s, drawText, false, f.currentFont.usedRunes)
+			} else {
+				s = appendEscapedUTF16BE(s, drawText, false, f.currentFont.usedRunes)
+			}
 		} else {
 			s = appendEscapedPDFCellText(s, drawText)
 		}
@@ -383,14 +385,11 @@ func appendEscapedPDFCellText(buf []byte, text string) []byte {
 }
 
 func reverseText(text string) string {
-	oldText := []rune( // Reverse string to use in RTL languages.
-		text)
-	newText := make([]rune, len(oldText))
-	length := len(oldText) - 1
-	for i, r := range oldText {
-		newText[length-i] = r
+	runes := []rune(text)
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
 	}
-	return string(newText)
+	return string(runes)
 }
 
 // Cell is a simpler version of CellFormat with no fill, border, links or

@@ -40,7 +40,7 @@ type compiledHTMLTable struct {
 }
 
 type compiledInlineSVG struct {
-	svg SVG
+	svg *SVG
 	end int
 }
 
@@ -344,7 +344,7 @@ func (compiled *CompiledHTML) compileStyleDeclarations(attrs map[string]string) 
 }
 
 func (compiled *CompiledHTML) compileInlineSVGs() error {
-	var cache map[string]SVG
+	var cache map[string]*SVG
 	for i := 0; i < len(compiled.tokens); i++ {
 		token := compiled.tokens[i]
 		if token.Cat != 'O' || token.Str != "svg" {
@@ -364,9 +364,9 @@ func (compiled *CompiledHTML) compileInlineSVGs() error {
 			if err != nil {
 				return err
 			}
-			svg = parsed
+			svg = &parsed
 			if cache == nil {
-				cache = make(map[string]SVG)
+				cache = make(map[string]*SVG)
 			}
 			cache[svgText] = svg
 		}
@@ -599,9 +599,9 @@ func (compiled *CompiledHTML) table(start int) (htmlTableType, int, bool) {
 	return table.table, table.end, ok
 }
 
-func (compiled *CompiledHTML) inlineSVG(start int) (SVG, int, bool) {
+func (compiled *CompiledHTML) inlineSVG(start int) (*SVG, int, bool) {
 	if compiled == nil {
-		return SVG{}, start, false
+		return nil, start, false
 	}
 	svg, ok := compiled.inlineSVGs[start]
 	return svg.svg, svg.end, ok

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode/utf16"
+	"unicode/utf8"
 )
 
 func utf8toutf16(s string, withBOM ...bool) string {
@@ -40,6 +41,34 @@ func appendEscapedUTF16BE(dst []byte, s string, withBOM bool, usedRunes map[int]
 		dst = appendEscapedPDFLiteralByte(dst, 0xFF)
 	}
 	for _, r := range s {
+		if usedRunes != nil {
+			usedRunes[int(r)] = int(r)
+		}
+		if r <= 0xFFFF {
+			dst = appendEscapedPDFLiteralByte(dst, byte(r>>8))
+			dst = appendEscapedPDFLiteralByte(dst, byte(r))
+			continue
+		}
+		r1, r2 := utf16.EncodeRune(r)
+		dst = appendEscapedPDFLiteralByte(dst, byte(r1>>8))
+		dst = appendEscapedPDFLiteralByte(dst, byte(r1))
+		dst = appendEscapedPDFLiteralByte(dst, byte(r2>>8))
+		dst = appendEscapedPDFLiteralByte(dst, byte(r2))
+	}
+	return dst
+}
+
+func appendEscapedUTF16BEReverse(dst []byte, s string, withBOM bool, usedRunes map[int]int) []byte {
+	if withBOM {
+		dst = appendEscapedPDFLiteralByte(dst, 0xFE)
+		dst = appendEscapedPDFLiteralByte(dst, 0xFF)
+	}
+	for len(s) > 0 {
+		r, size := utf8.DecodeLastRuneInString(s)
+		if size <= 0 {
+			break
+		}
+		s = s[:len(s)-size]
 		if usedRunes != nil {
 			usedRunes[int(r)] = int(r)
 		}

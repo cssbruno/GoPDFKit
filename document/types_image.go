@@ -15,7 +15,6 @@ import (
 	"io"
 	"math"
 	"strconv"
-	"strings"
 )
 
 // ImageInfo stores parsed image data and PDF object metadata for a registered
@@ -174,21 +173,23 @@ func (info *ImageInfo) validForPDF() error {
 }
 
 func validImageDecodeParams(params string) bool {
-	fields := strings.Fields(params)
-	if len(fields) != 8 {
-		return false
-	}
-	names := []string{"/Predictor", "/Colors", "/BitsPerComponent", "/Columns"}
-	values := make([]int, len(names))
+	names := [...]string{"/Predictor", "/Colors", "/BitsPerComponent", "/Columns"}
+	var values [4]int
 	for i, name := range names {
-		if fields[i*2] != name {
+		var token string
+		token, params = nextImageDecodeParamToken(params)
+		if token != name {
 			return false
 		}
-		n, err := strconv.Atoi(fields[i*2+1])
+		token, params = nextImageDecodeParamToken(params)
+		n, err := strconv.Atoi(token)
 		if err != nil {
 			return false
 		}
 		values[i] = n
+	}
+	if token, _ := nextImageDecodeParamToken(params); token != "" {
+		return false
 	}
 	predictor, colors, bitsPerComponent, columns := values[0], values[1], values[2], values[3]
 	if predictor < 1 || predictor > 15 {
@@ -203,6 +204,26 @@ func validImageDecodeParams(params string) bool {
 		return false
 	}
 	return columns > 0
+}
+
+func nextImageDecodeParamToken(s string) (string, string) {
+	for len(s) > 0 {
+		switch s[0] {
+		case ' ', '\t', '\n', '\r', '\f':
+			s = s[1:]
+		default:
+			goto token
+		}
+	}
+	return "", ""
+token:
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case ' ', '\t', '\n', '\r', '\f':
+			return s[:i], s[i+1:]
+		}
+	}
+	return s, ""
 }
 
 // Extent returns the width and height of the image in the units of the Document
