@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.7.0 - 2026-06-28
+
+Minor release for the second-pass generation performance work.
+
+### Added
+
+- Added count-only wrapped text measurement APIs for UTF-8 and single-byte text.
+- Added file-backed attachment descriptors and configurable file-output sync
+  behavior.
+
+### Changed
+
+- Reduced allocation overhead across UTF-8 wrapping, text measurement,
+  PDF-literal escaping, RTL text output, HTML table and block layout, SVG text
+  roles, image caching, page compression, imported PDF output, signing xref
+  lookup, and UTF-8 font subsetting.
+- Cached reusable UTF-8 font file parse state across documents and reduced
+  transient allocations during subset generation.
+- Regenerated tracked PDF fixtures after the performance changes.
+
 ## v0.6.3 - 2026-06-27
 
 Patch release for Arlington baseline timing normalization.
