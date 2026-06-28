@@ -308,7 +308,7 @@ func parseXrefTable(input []byte, offset int) (map[int]int, error) {
 	if !bytes.HasPrefix(input[offset:], []byte("xref")) {
 		return nil, errors.New("pdfsigning: only classic xref tables are supported")
 	}
-	offsets := make(map[int]int)
+	var offsets map[int]int
 	pos := offset + len("xref")
 	for pos < len(input) {
 		line, next := nextPDFLine(input, pos)
@@ -328,18 +328,24 @@ func parseXrefTable(input []byte, offset int) (map[int]int, error) {
 		if !ok {
 			return nil, errors.New("pdfsigning: invalid xref subsection")
 		}
+		if offsets == nil {
+			if count > 0 {
+				offsets = make(map[int]int, count)
+			} else {
+				offsets = make(map[int]int)
+			}
+		}
 		for n := 0; n < count; n++ {
 			if pos >= len(input) {
 				return nil, errors.New("pdfsigning: truncated xref subsection")
 			}
 			entry, next := nextPDFLine(input, pos)
 			pos = next
-			entry = bytes.TrimRight(entry, "\r")
 			if len(entry) < 18 {
 				return nil, errors.New("pdfsigning: invalid xref entry")
 			}
 			if entry[17] == 'n' {
-				objectOffset, _, ok := parseLeadingInt(entry, 0)
+				objectOffset, ok := parseXrefEntryOffset(entry)
 				if !ok {
 					return nil, errors.New("pdfsigning: invalid xref entry offset")
 				}
@@ -347,7 +353,29 @@ func parseXrefTable(input []byte, offset int) (map[int]int, error) {
 			}
 		}
 	}
+	if offsets == nil {
+		offsets = make(map[int]int)
+	}
 	return offsets, nil
+}
+
+func parseXrefEntryOffset(entry []byte) (int, bool) {
+	if len(entry) >= 10 {
+		offset := 0
+		for _, c := range entry[:10] {
+			if c < '0' || c > '9' {
+				return parseLeadingXrefEntryOffset(entry)
+			}
+			offset = offset*10 + int(c-'0')
+		}
+		return offset, true
+	}
+	return parseLeadingXrefEntryOffset(entry)
+}
+
+func parseLeadingXrefEntryOffset(entry []byte) (int, bool) {
+	objectOffset, _, ok := parseLeadingInt(entry, 0)
+	return objectOffset, ok
 }
 
 func nextPDFLine(input []byte, pos int) ([]byte, int) {

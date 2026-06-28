@@ -25,6 +25,76 @@ func BenchmarkPerfUTF8ToUTF16(b *testing.B) {
 	}
 }
 
+var (
+	benchmarkTaggedKidsSink []byte
+	benchmarkSVGPathSink    []SVGSegment
+)
+
+func BenchmarkPerfTaggedElementKidsLarge(b *testing.B) {
+	pdf := &Document{}
+	pdf.tagged.pageObjNums = make([]int, 65)
+	for i := range pdf.tagged.pageObjNums {
+		pdf.tagged.pageObjNums[i] = 1000 + i
+	}
+	elem := &taggedElement{
+		Page:   1,
+		MCID:   0,
+		ObjRef: 9001,
+	}
+	for i := 1; i <= 256; i++ {
+		elem.Marked = append(elem.Marked, taggedMarkedContent{Page: i%64 + 1, MCID: i})
+		elem.Children = append(elem.Children, &taggedElement{ObjNum: 2000 + i})
+	}
+	kidCount := taggedElementKidCount(elem)
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		out := make([]byte, 0, 8+kidCount*32)
+		out = append(out, "/K ["...)
+		out = pdf.appendTaggedElementKids(out, elem, true)
+		out = append(out, ']')
+		benchmarkTaggedKidsSink = out
+	}
+}
+
+func BenchmarkPerfSVGPathParseHeavy(b *testing.B) {
+	path := benchmarkSVGHeavyPath(4000)
+
+	b.SetBytes(int64(len(path)))
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		segs, err := pathParse(path)
+		if err != nil {
+			b.Fatal(err)
+		}
+		benchmarkSVGPathSink = segs
+	}
+}
+
+func benchmarkSVGHeavyPath(segments int) string {
+	var out strings.Builder
+	out.Grow(segments * 28)
+	out.WriteString("M0 0")
+	for i := 0; i < segments; i++ {
+		switch i % 6 {
+		case 0:
+			fmt.Fprintf(&out, " l%d.%d-%d.%d", i%97+1, i%10, i%53+1, (i+3)%10)
+		case 1:
+			fmt.Fprintf(&out, " h%d v-%d", i%101+1, i%79+1)
+		case 2:
+			fmt.Fprintf(&out, " c1e-3-2e-3 3E+0-4E+0 %d-%d", i%89+1, i%67+1)
+		case 3:
+			fmt.Fprintf(&out, " s%d %d %d %d", i%47+1, i%43+1, i%41+1, i%37+1)
+		case 4:
+			fmt.Fprintf(&out, " q%d %d %d %d t%d-%d", i%31+1, i%29+1, i%23+1, i%19+1, i%17+1, i%13+1)
+		case 5:
+			fmt.Fprintf(&out, " a10 8 0 0 1 %d %d", i%11+1, i%7+1)
+		}
+	}
+	out.WriteByte('z')
+	return out.String()
+}
+
 func BenchmarkPerfReplaceAliasesManyPages(b *testing.B) {
 	const pages = 50
 	const aliases = 20

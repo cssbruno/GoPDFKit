@@ -382,19 +382,19 @@ func (f *Document) putTaggedElement(elem *taggedElement) {
 	} else if elem.Role == taggedRoleL {
 		f.out("/A << /O /List /ListNumbering /Disc >>")
 	}
-	kids := f.taggedElementKids(elem)
-	switch len(kids) {
+	kidCount := taggedElementKidCount(elem)
+	switch kidCount {
 	case 0:
 		f.out("/K []")
 	case 1:
-		f.outf("/K %s", kids[0])
+		out := make([]byte, 0, 64)
+		out = append(out, "/K "...)
+		out = f.appendTaggedElementKids(out, elem, false)
+		f.outbytes(out)
 	default:
-		out := make([]byte, 0, 8+len(kids)*16)
+		out := make([]byte, 0, 8+kidCount*32)
 		out = append(out, "/K ["...)
-		for _, kid := range kids {
-			out = append(out, kid...)
-			out = append(out, ' ')
-		}
+		out = f.appendTaggedElementKids(out, elem, true)
 		out = append(out, ']')
 		f.outbytes(out)
 	}
@@ -449,33 +449,54 @@ func normalizeTaggedTableAttributes(role string, attrs taggedTableAttributes) ta
 	return attrs
 }
 
-func (f *Document) taggedElementKids(elem *taggedElement) []string {
-	kids := make([]string, 0, 1+len(elem.Marked)+len(elem.Children)+1)
+func taggedElementKidCount(elem *taggedElement) int {
+	count := len(elem.Marked) + len(elem.Children)
 	if elem.MCID >= 0 {
-		kids = append(kids, f.taggedMCR(elem.Page, elem.MCID))
-	}
-	for _, marked := range elem.Marked {
-		kids = append(kids, f.taggedMCR(marked.Page, marked.MCID))
-	}
-	for _, child := range elem.Children {
-		kids = append(kids, string(appendPDFObjectRef(nil, child.ObjNum)))
+		count++
 	}
 	if elem.ObjRef > 0 {
-		objr := []byte("<< /Type /OBJR /Obj ")
-		objr = appendPDFObjectRef(objr, elem.ObjRef)
-		objr = append(objr, " >>"...)
-		kids = append(kids, string(objr))
+		count++
 	}
-	return kids
+	return count
 }
 
-func (f *Document) taggedMCR(page, mcid int) string {
-	out := []byte("<< /Type /MCR /Pg ")
+func (f *Document) appendTaggedElementKids(out []byte, elem *taggedElement, trailingSpaces bool) []byte {
+	if elem.MCID >= 0 {
+		out = f.appendTaggedMCR(out, elem.Page, elem.MCID)
+		if trailingSpaces {
+			out = append(out, ' ')
+		}
+	}
+	for _, marked := range elem.Marked {
+		out = f.appendTaggedMCR(out, marked.Page, marked.MCID)
+		if trailingSpaces {
+			out = append(out, ' ')
+		}
+	}
+	for _, child := range elem.Children {
+		out = appendPDFObjectRef(out, child.ObjNum)
+		if trailingSpaces {
+			out = append(out, ' ')
+		}
+	}
+	if elem.ObjRef > 0 {
+		out = append(out, "<< /Type /OBJR /Obj "...)
+		out = appendPDFObjectRef(out, elem.ObjRef)
+		out = append(out, " >>"...)
+		if trailingSpaces {
+			out = append(out, ' ')
+		}
+	}
+	return out
+}
+
+func (f *Document) appendTaggedMCR(out []byte, page, mcid int) []byte {
+	out = append(out, "<< /Type /MCR /Pg "...)
 	out = appendPDFObjectRef(out, f.tagged.pageObjNums[page])
 	out = append(out, " /MCID "...)
 	out = appendPDFInt(out, mcid)
 	out = append(out, " >>"...)
-	return string(out)
+	return out
 }
 
 func (f *Document) putTaggedDocumentElement() {

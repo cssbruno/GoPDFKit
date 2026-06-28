@@ -32,10 +32,6 @@ type svgParseCacheKey struct {
 	sum  [32]byte
 }
 
-func pathFields(pathStr string) []string {
-	return svgScanFields(pathStr, true)
-}
-
 func svgNumberFields(numStr string) []string {
 	return svgScanFields(numStr, false)
 }
@@ -191,10 +187,14 @@ func svgParseNumber(value, context string) (float64, error) {
 	return n, nil
 }
 
-type svgPathRawSegment struct {
-	cmd  byte
-	args [7]float64
-	n    int
+type svgPathNormalizer struct {
+	segs                 []SVGSegment
+	x, y                 float64
+	startX, startY       float64
+	cubicCtrlX           float64
+	cubicCtrlY           float64
+	quadCtrlX, quadCtrlY float64
+	prevCmd              byte
 }
 
 func svgPathCommandArgCount(cmd byte) (int, bool) {
@@ -238,98 +238,91 @@ func svgArcFlag(value float64, name string) (bool, error) {
 	}
 }
 
-func normalizePathSegments(raw []svgPathRawSegment) ([]SVGSegment, error) {
-	segs := make([]SVGSegment, 0, len(raw))
-	var x, y, startX, startY float64
-	var cubicCtrlX, cubicCtrlY, quadCtrlX, quadCtrlY float64
-	var prevCmd byte
-	point := func(args []float64, pos int, relative bool) (float64, float64) {
-		px, py := args[pos], args[pos+1]
+func (p *svgPathNormalizer) point(args []float64, pos int, relative bool) (float64, float64) {
+	x, y := args[pos], args[pos+1]
+	if relative {
+		x += p.x
+		y += p.y
+	}
+	return x, y
+}
+
+func (p *svgPathNormalizer) append(rawCmd byte, args []float64) error {
+	cmd := svgPathCommandUpper(rawCmd)
+	relative := svgPathCommandRelative(rawCmd)
+	switch cmd {
+	case 'M':
+		p.x, p.y = p.point(args, 0, relative)
+		p.startX, p.startY = p.x, p.y
+		p.segs = append(p.segs, svgSegment('M', p.x, p.y))
+	case 'L':
+		p.x, p.y = p.point(args, 0, relative)
+		p.segs = append(p.segs, svgSegment('L', p.x, p.y))
+	case 'H':
 		if relative {
-			px += x
-			py += y
+			p.x += args[0]
+		} else {
+			p.x = args[0]
 		}
-		return px, py
-	}
-	for _, rawSeg := range raw {
-		cmd := svgPathCommandUpper(rawSeg.cmd)
-		relative := svgPathCommandRelative(rawSeg.cmd)
-		args := rawSeg.args[:rawSeg.n]
-		switch cmd {
-		case 'M':
-			x, y = point(args, 0, relative)
-			startX, startY = x, y
-			segs = append(segs, svgSegment('M', x, y))
-		case 'L':
-			x, y = point(args, 0, relative)
-			segs = append(segs, svgSegment('L', x, y))
-		case 'H':
-			if relative {
-				x += args[0]
-			} else {
-				x = args[0]
-			}
-			segs = append(segs, svgSegment('H', x))
-		case 'V':
-			if relative {
-				y += args[0]
-			} else {
-				y = args[0]
-			}
-			segs = append(segs, svgSegment('V', y))
-		case 'C':
-			x0, y0 := point(args, 0, relative)
-			x1, y1 := point(args, 2, relative)
-			x, y = point(args, 4, relative)
-			cubicCtrlX, cubicCtrlY = x1, y1
-			segs = append(segs, svgSegment('C', x0, y0, x1, y1, x, y))
-		case 'S':
-			x0, y0 := x, y
-			if prevCmd == 'C' || prevCmd == 'S' {
-				x0 = 2*x - cubicCtrlX
-				y0 = 2*y - cubicCtrlY
-			}
-			x1, y1 := point(args, 0, relative)
-			x, y = point(args, 2, relative)
-			cubicCtrlX, cubicCtrlY = x1, y1
-			segs = append(segs, svgSegment('C', x0, y0, x1, y1, x, y))
-		case 'Q':
-			x0, y0 := point(args, 0, relative)
-			x, y = point(args, 2, relative)
-			quadCtrlX, quadCtrlY = x0, y0
-			segs = append(segs, svgSegment('Q', x0, y0, x, y))
-		case 'T':
-			x0, y0 := x, y
-			if prevCmd == 'Q' || prevCmd == 'T' {
-				x0 = 2*x - quadCtrlX
-				y0 = 2*y - quadCtrlY
-			}
-			x, y = point(args, 0, relative)
-			quadCtrlX, quadCtrlY = x0, y0
-			segs = append(segs, svgSegment('Q', x0, y0, x, y))
-		case 'A':
-			largeArc, err := svgArcFlag(args[3], "large-arc")
-			if err != nil {
-				return nil, err
-			}
-			sweep, err := svgArcFlag(args[4], "sweep")
-			if err != nil {
-				return nil, err
-			}
-			endX, endY := point(args, 5, relative)
-			arcSegs, err := svgArcSegments(x, y, args[0], args[1], args[2], largeArc, sweep, endX, endY)
-			if err != nil {
-				return nil, err
-			}
-			segs = append(segs, arcSegs...)
-			x, y = endX, endY
-		case 'Z':
-			segs = append(segs, svgSegment('Z'))
-			x, y = startX, startY
+		p.segs = append(p.segs, svgSegment('H', p.x))
+	case 'V':
+		if relative {
+			p.y += args[0]
+		} else {
+			p.y = args[0]
 		}
-		prevCmd = cmd
+		p.segs = append(p.segs, svgSegment('V', p.y))
+	case 'C':
+		x0, y0 := p.point(args, 0, relative)
+		x1, y1 := p.point(args, 2, relative)
+		p.x, p.y = p.point(args, 4, relative)
+		p.cubicCtrlX, p.cubicCtrlY = x1, y1
+		p.segs = append(p.segs, svgSegment('C', x0, y0, x1, y1, p.x, p.y))
+	case 'S':
+		x0, y0 := p.x, p.y
+		if p.prevCmd == 'C' || p.prevCmd == 'S' {
+			x0 = 2*p.x - p.cubicCtrlX
+			y0 = 2*p.y - p.cubicCtrlY
+		}
+		x1, y1 := p.point(args, 0, relative)
+		p.x, p.y = p.point(args, 2, relative)
+		p.cubicCtrlX, p.cubicCtrlY = x1, y1
+		p.segs = append(p.segs, svgSegment('C', x0, y0, x1, y1, p.x, p.y))
+	case 'Q':
+		x0, y0 := p.point(args, 0, relative)
+		p.x, p.y = p.point(args, 2, relative)
+		p.quadCtrlX, p.quadCtrlY = x0, y0
+		p.segs = append(p.segs, svgSegment('Q', x0, y0, p.x, p.y))
+	case 'T':
+		x0, y0 := p.x, p.y
+		if p.prevCmd == 'Q' || p.prevCmd == 'T' {
+			x0 = 2*p.x - p.quadCtrlX
+			y0 = 2*p.y - p.quadCtrlY
+		}
+		p.x, p.y = p.point(args, 0, relative)
+		p.quadCtrlX, p.quadCtrlY = x0, y0
+		p.segs = append(p.segs, svgSegment('Q', x0, y0, p.x, p.y))
+	case 'A':
+		largeArc, err := svgArcFlag(args[3], "large-arc")
+		if err != nil {
+			return err
+		}
+		sweep, err := svgArcFlag(args[4], "sweep")
+		if err != nil {
+			return err
+		}
+		endX, endY := p.point(args, 5, relative)
+		p.segs, err = appendSVGArcSegments(p.segs, p.x, p.y, args[0], args[1], args[2], largeArc, sweep, endX, endY)
+		if err != nil {
+			return err
+		}
+		p.x, p.y = endX, endY
+	case 'Z':
+		p.segs = append(p.segs, svgSegment('Z'))
+		p.x, p.y = p.startX, p.startY
 	}
-	return segs, nil
+	p.prevCmd = cmd
+	return nil
 }
 
 func svgVectorAngle(ux, uy, vx, vy float64) float64 {
@@ -361,15 +354,19 @@ func svgArcDerivative(rx, ry, cosPhi, sinPhi, theta float64) (float64, float64) 
 }
 
 func svgArcSegments(x1, y1, rx, ry, xAxisRotation float64, largeArc, sweep bool, x2, y2 float64) ([]SVGSegment, error) {
+	return appendSVGArcSegments(nil, x1, y1, rx, ry, xAxisRotation, largeArc, sweep, x2, y2)
+}
+
+func appendSVGArcSegments(segs []SVGSegment, x1, y1, rx, ry, xAxisRotation float64, largeArc, sweep bool, x2, y2 float64) ([]SVGSegment, error) {
 	if !svgFinite(rx) || !svgFinite(ry) || !svgFinite(xAxisRotation) || !svgFinite(x2) || !svgFinite(y2) {
 		return nil, errors.New("invalid SVG arc: non-finite value")
 	}
 	rx, ry = math.Abs(rx), math.Abs(ry)
 	if x1 == x2 && y1 == y2 {
-		return nil, nil
+		return segs, nil
 	}
 	if rx == 0 || ry == 0 {
-		return []SVGSegment{svgSegment('L', x2, y2)}, nil
+		return append(segs, svgSegment('L', x2, y2)), nil
 	}
 	phi := xAxisRotation * math.Pi / 180
 	cosPhi, sinPhi := math.Cos(phi), math.Sin(phi)
@@ -387,7 +384,7 @@ func svgArcSegments(x1, y1, rx, ry, xAxisRotation float64, largeArc, sweep bool,
 	}
 	denominator := rx2*y1p2 + ry2*x1p2
 	if denominator == 0 {
-		return []SVGSegment{svgSegment('L', x2, y2)}, nil
+		return append(segs, svgSegment('L', x2, y2)), nil
 	}
 	sign := 1.0
 	if largeArc == sweep {
@@ -416,7 +413,12 @@ func svgArcSegments(x1, y1, rx, ry, xAxisRotation float64, largeArc, sweep bool,
 		pieces = 1
 	}
 	step := delta / float64(pieces)
-	segs := make([]SVGSegment, 0, pieces)
+	startLen := len(segs)
+	if cap(segs)-len(segs) < pieces {
+		grown := make([]SVGSegment, len(segs), len(segs)+pieces)
+		copy(grown, segs)
+		segs = grown
+	}
 	for j := 0; j < pieces; j++ {
 		start := theta1 + float64(j)*step
 		end := start + step
@@ -429,47 +431,76 @@ func svgArcSegments(x1, y1, rx, ry, xAxisRotation float64, largeArc, sweep bool,
 	}
 	last := &segs[len(segs)-1]
 	last.Arg[4], last.Arg[5] = x2, y2
+	if len(segs) == startLen {
+		return segs, nil
+	}
 	return segs, nil
 }
 
 func pathParse(pathStr string) (segs []SVGSegment, err error) {
-	raw := []svgPathRawSegment{}
 	var args [7]float64
 	argLen := 0
 	var cmd byte
 	var argCount int
-	strList := pathFields(pathStr)
-	for j, str := range strList {
-		if str == "" {
+	normalizer := svgPathNormalizer{segs: make([]SVGSegment, 0, svgPathSegmentCapacity(pathStr))}
+	tokenIndex := 0
+	for i := 0; i < len(pathStr); {
+		for i < len(pathStr) && (isASCIISpace(pathStr[i]) || pathStr[i] == ',') {
+			i++
+		}
+		if i >= len(pathStr) {
+			break
+		}
+		start := i
+		var token string
+		c := pathStr[i]
+		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+			token = pathStr[i : i+1]
+			i++
+		} else if pathArgStart(c) {
+			i = svgScanNumberEnd(pathStr, i)
+			token = pathStr[start:i]
+		} else {
+			for i < len(pathStr) && !isASCIISpace(pathStr[i]) && pathStr[i] != ',' {
+				i++
+			}
+			token = pathStr[start:i]
+		}
+		if token == "" {
 			continue
 		}
-		if !pathArgStart(str[0]) {
+		if !pathArgStart(token[0]) {
 			if argLen > 0 {
 				return nil, fmt.Errorf("expecting additional (%d) numeric arguments", argCount-argLen)
 			}
-			cmd = str[0]
+			cmd = token[0]
 			var ok bool
 			argCount, ok = svgPathCommandArgCount(cmd)
 			if !ok {
-				return nil, fmt.Errorf("expecting SVG path command at position %d, got %s", j, str)
+				return nil, fmt.Errorf("expecting SVG path command at position %d, got %s", tokenIndex, token)
 			}
 			if argCount == 0 {
-				raw = append(raw, svgPathRawSegment{cmd: cmd})
+				if err := normalizer.append(cmd, nil); err != nil {
+					return nil, err
+				}
 				cmd = 0
 			}
+			tokenIndex++
 			continue
 		}
 		if cmd == 0 || argCount == 0 {
-			return nil, fmt.Errorf("expecting SVG path command at position %d, got %s", j, str)
+			return nil, fmt.Errorf("expecting SVG path command at position %d, got %s", tokenIndex, token)
 		}
-		n, err := svgParseNumber(str, "path")
+		n, err := svgParseNumber(token, "path")
 		if err != nil {
 			return nil, err
 		}
 		args[argLen] = n
 		argLen++
 		if argLen == argCount {
-			raw = append(raw, svgPathRawSegment{cmd: cmd, args: args, n: argCount})
+			if err := normalizer.append(cmd, args[:argCount]); err != nil {
+				return nil, err
+			}
 			argLen = 0
 			switch cmd {
 			case 'M':
@@ -480,11 +511,75 @@ func pathParse(pathStr string) (segs []SVGSegment, err error) {
 				argCount, _ = svgPathCommandArgCount(cmd)
 			}
 		}
+		tokenIndex++
 	}
 	if argLen > 0 {
 		return nil, fmt.Errorf("expecting additional (%d) numeric arguments", argCount-argLen)
 	}
-	return normalizePathSegments(raw)
+	return normalizer.segs, nil
+}
+
+func svgPathSegmentCapacity(pathStr string) int {
+	count := 0
+	for i := 0; i < len(pathStr); i++ {
+		c := pathStr[i]
+		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+			switch c {
+			case 'e', 'E':
+				if i > 0 && i+1 < len(pathStr) && pathArgStart(pathStr[i-1]) && (pathStr[i+1] == '-' || pathStr[i+1] == '+' || (pathStr[i+1] >= '0' && pathStr[i+1] <= '9')) {
+					continue
+				}
+			case 'A', 'a':
+				count += 2
+				continue
+			}
+			if _, ok := svgPathCommandArgCount(c); ok {
+				count++
+			}
+		}
+	}
+	if count < 8 {
+		return 8
+	}
+	return count
+}
+
+func svgScanNumberEnd(s string, i int) int {
+	start := i
+	if s[i] == '-' || s[i] == '+' {
+		i++
+	}
+	digits := 0
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
+		digits++
+	}
+	if i < len(s) && s[i] == '.' {
+		i++
+		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+			i++
+			digits++
+		}
+	}
+	if digits > 0 && i < len(s) && (s[i] == 'e' || s[i] == 'E') {
+		exp := i + 1
+		if exp < len(s) && (s[exp] == '-' || s[exp] == '+') {
+			exp++
+		}
+		expDigits := exp
+		for exp < len(s) && s[exp] >= '0' && s[exp] <= '9' {
+			exp++
+		}
+		if exp > expDigits {
+			i = exp
+		}
+	}
+	if i == start || (i == start+1 && (s[start] == '-' || s[start] == '+')) {
+		for i < len(s) && !isASCIISpace(s[i]) && s[i] != ',' {
+			i++
+		}
+	}
+	return i
 }
 
 type svgNode struct {
