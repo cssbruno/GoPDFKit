@@ -346,6 +346,8 @@ func (r *documentRenderer) renderBlockMeasured(block Block, measure BlockMeasure
 			r.renderHeading(HeadingBlock{Level: 3, Segments: []TextSegment{{Text: title}}})
 		}
 		r.renderBox(b.EffectiveBox(), func() { r.renderBlocks(b.Blocks) })
+	default:
+		r.pdf.SetErrorf("unsupported document block kind: %s", block.DocumentBlockKind())
 	}
 	if !r.renderingShell && measure.BreakAfter {
 		r.addPageWithTemplate()

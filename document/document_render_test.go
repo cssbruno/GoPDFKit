@@ -160,6 +160,21 @@ func TestWriteDocumentErrorsForUnavailableBoldItalicFace(t *testing.T) {
 	}
 }
 
+func TestWriteDocumentErrorsForUnsupportedBlock(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc.Body = []Block{unsupportedTestBlock{}}
+
+	pdf.WriteDocument(doc)
+	if err := pdf.Error(); err == nil || !strings.Contains(err.Error(), "unsupported document block kind: test-unsupported") {
+		t.Fatalf("Error() = %v, want unsupported block kind error", err)
+	}
+}
+
+type unsupportedTestBlock struct{}
+
+func (unsupportedTestBlock) DocumentBlockKind() BlockKind { return "test-unsupported" }
+
 func TestWriteDocumentRendersSignatureMetadata(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	pdf.SetCompression(false)

@@ -12,11 +12,12 @@ import (
 	"mime"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 )
+
+const defaultAttachmentCompressionWorkers = 4
 
 // Attachment defines content to include in the PDF in one of the following ways:
 //   - associated with the document as a whole; see SetAttachments()
@@ -104,7 +105,7 @@ func (f *Document) prepareAttachmentCompression() {
 	if len(tasks) == 0 {
 		return
 	}
-	workers := runtime.GOMAXPROCS(0)
+	workers := defaultAttachmentCompressionWorkers
 	if workers > len(tasks) {
 		workers = len(tasks)
 	}
@@ -434,12 +435,11 @@ type annotationAttach struct {
 // AddAttachmentAnnotation puts a link on the current page over the rectangle
 // defined by x, y, w, and h. This link points to the content defined in a,
 // which is embedded in the document. This method does not draw anything; call a
-// method such as Cell() or Rect() to indicate that a link is present. Requiring
-// a pointer to an Attachment avoids unnecessary copies in the resulting PDF:
-// attachments that point to the same data are included only once and shared
-// among all links. Be aware that not all PDF readers support
-// annotated attachments. See the AddAttachmentAnnotation example for a
-// demonstration of this method.
+// method such as Cell() or Rect() to indicate that a link is present. The
+// attachment descriptor is copied when it is added, so later caller mutations do
+// not affect the document. Equivalent attachments are deduplicated during
+// output. Be aware that not all PDF readers support annotated attachments. See
+// the AddAttachmentAnnotation example for a demonstration of this method.
 func (f *Document) AddAttachmentAnnotation(a *Attachment, x, y, w, h float64) {
 	if f.err != nil {
 		return
@@ -456,9 +456,9 @@ func (f *Document) AddAttachmentAnnotation(a *Attachment, x, y, w, h float64) {
 		f.SetErrorf("invalid attachment annotation rectangle")
 		return
 	}
-	normalizeAttachment(a)
+	attachment := cloneAttachment(*a)
 	f.pageAttachments[f.page] = append(f.pageAttachments[f.page], annotationAttach{
-		Attachment: a,
+		Attachment: &attachment,
 		x:          x * f.k, y: f.hPt - y*f.k, w: w * f.k, h: h * f.k,
 	})
 }

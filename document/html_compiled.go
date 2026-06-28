@@ -13,9 +13,8 @@ import (
 	"strings"
 )
 
-// CompiledHTML stores the reusable parse products for an HTML fragment.
-// It is safe to reuse across documents as long as callers do not mutate values
-// reachable through Tokens().
+// CompiledHTML stores the reusable parse products for an HTML fragment. It is
+// safe to reuse across documents.
 type CompiledHTML struct {
 	tokens            []HTMLSegmentType
 	cssRules          []htmlCSSRule
@@ -487,12 +486,12 @@ func (compiled *CompiledHTML) text(start int, preserveWhitespace bool) (string, 
 	return text.plain, true
 }
 
-// Tokens returns the token stream used by the compiled HTML fragment.
+// Tokens returns a copy of the token stream used by the compiled HTML fragment.
 func (compiled *CompiledHTML) Tokens() []HTMLSegmentType {
 	if compiled == nil {
 		return nil
 	}
-	return compiled.tokens
+	return cloneHTMLTokens(compiled.tokens)
 }
 
 // Stats returns diagnostics for the reusable parse products stored in the
@@ -657,4 +656,22 @@ func validateHTMLImageSource(src string) error {
 		}
 	}
 	return nil
+}
+
+func cloneHTMLTokens(tokens []HTMLSegmentType) []HTMLSegmentType {
+	if len(tokens) == 0 {
+		return nil
+	}
+	out := make([]HTMLSegmentType, len(tokens))
+	for i, token := range tokens {
+		out[i] = token
+		if len(token.Attr) == 0 {
+			continue
+		}
+		out[i].Attr = make(map[string]string, len(token.Attr))
+		for key, value := range token.Attr {
+			out[i].Attr[key] = value
+		}
+	}
+	return out
 }

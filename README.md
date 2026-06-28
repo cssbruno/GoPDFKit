@@ -304,7 +304,7 @@ Use `document.CompileHTML` with `HTML.WriteCompiled` when the same fragment is
 rendered repeatedly. The compiled plan reuses tokenization, CSS selector
 matching, table parsing, inline SVG parsing, data URI image decoding, and cached
 block text. A `CompiledHTML` value is safe to reuse across documents and
-goroutines as long as callers do not mutate values returned by `Tokens()`.
+goroutines.
 
 Compiled fragments expose lightweight diagnostics:
 

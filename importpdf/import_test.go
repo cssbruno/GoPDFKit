@@ -106,6 +106,58 @@ func TestSourceCacheOpenFileReusesParsedSource(t *testing.T) {
 	}
 }
 
+func TestSourceCacheCanonicalizesFilePath(t *testing.T) {
+	source := importSourcePDF(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "source.pdf")
+	if err := os.WriteFile(path, source, 0o600); err != nil {
+		t.Fatalf("write source PDF: %v", err)
+	}
+	t.Chdir(dir)
+
+	cache := importpdf.NewSourceCache()
+	first, err := cache.OpenFile("source.pdf")
+	if err != nil {
+		t.Fatalf("relative OpenFile(cache) error = %v", err)
+	}
+	second, err := cache.OpenFile(path)
+	if err != nil {
+		t.Fatalf("absolute OpenFile(cache) error = %v", err)
+	}
+	if first != second {
+		t.Fatal("SourceCache did not reuse equivalent relative and absolute paths")
+	}
+}
+
+func TestSourceCacheEvictsByByteBudget(t *testing.T) {
+	source := importSourcePDF(t)
+	dir := t.TempDir()
+	firstPath := filepath.Join(dir, "first.pdf")
+	secondPath := filepath.Join(dir, "second.pdf")
+	if err := os.WriteFile(firstPath, source, 0o600); err != nil {
+		t.Fatalf("write first PDF: %v", err)
+	}
+	if err := os.WriteFile(secondPath, source, 0o600); err != nil {
+		t.Fatalf("write second PDF: %v", err)
+	}
+
+	cache := importpdf.NewSourceCacheWithMaxBytes(int64(len(source)))
+	first, err := cache.OpenFile(firstPath)
+	if err != nil {
+		t.Fatalf("first OpenFile(cache) error = %v", err)
+	}
+	if _, err := cache.OpenFile(secondPath); err != nil {
+		t.Fatalf("second OpenFile(cache) error = %v", err)
+	}
+	reopened, err := cache.OpenFile(firstPath)
+	if err != nil {
+		t.Fatalf("reopen first OpenFile(cache) error = %v", err)
+	}
+	if reopened == first {
+		t.Fatal("SourceCache kept first source after byte-budget eviction")
+	}
+}
+
 type byteReaderAt []byte
 
 func (r byteReaderAt) ReadAt(p []byte, off int64) (int, error) {

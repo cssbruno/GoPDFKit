@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -143,9 +144,37 @@ func (f *Document) SetOutputIntent(iccProfile []byte, identifier string) error {
 }
 
 func (f *Document) setMinimumPDFVersion(version string) {
-	if f.pdfVersion < version {
+	if pdfVersionLess(f.pdfVersion, version) {
 		f.pdfVersion = version
 	}
+}
+
+func pdfVersionLess(current, minimum string) bool {
+	currentMajor, currentMinor, currentOK := parsePDFVersion(current)
+	minimumMajor, minimumMinor, minimumOK := parsePDFVersion(minimum)
+	if !currentOK || !minimumOK {
+		return current < minimum
+	}
+	if currentMajor != minimumMajor {
+		return currentMajor < minimumMajor
+	}
+	return currentMinor < minimumMinor
+}
+
+func parsePDFVersion(version string) (int, int, bool) {
+	majorStr, minorStr, ok := strings.Cut(strings.TrimSpace(version), ".")
+	if !ok {
+		return 0, 0, false
+	}
+	major, err := strconv.Atoi(majorStr)
+	if err != nil {
+		return 0, 0, false
+	}
+	minor, err := strconv.Atoi(minorStr)
+	if err != nil {
+		return 0, 0, false
+	}
+	return major, minor, true
 }
 
 func (f *Document) ensureComplianceMetadata() {

@@ -136,7 +136,7 @@ func (f *Document) registerTemplateImages(t Template) {
 		}
 	}
 
-	for name, image := range t.Images() {
+	for name, image := range templateImages(t) {
 		if image == nil {
 			f.SetErrorf("invalid template image %s: image info is nil", name)
 			return
@@ -144,7 +144,7 @@ func (f *Document) registerTemplateImages(t Template) {
 		if existingImages[image.i] {
 			continue
 		}
-		f.images[sprintf("t%s-%s", t.ID(), name)] = image
+		f.images[sprintf("t%s-%s", t.ID(), name)] = cloneTemplateImage(image)
 	}
 }
 
@@ -227,22 +227,22 @@ func (f *Document) putTemplates() {
 }
 
 func (f *Document) templateXObjectCatalog(t Template) {
-	images := t.Images()
-	templates := t.Templates()
+	images := templateImages(t)
+	templates := templateChildren(t)
 	if len(images) == 0 && len(templates) == 0 {
 		return
 	}
 
 	f.out("/XObject <<")
-	f.templateImageCatalog(images)
+	f.templateImageCatalog(t, images)
 	f.templateDependencyCatalog(templates)
 	f.out(">>")
 }
 
-func (f *Document) templateImageCatalog(images map[string]*ImageInfo) {
+func (f *Document) templateImageCatalog(t Template, images map[string]*ImageInfo) {
 	if !f.catalogSort {
-		for _, image := range images {
-			if image != nil {
+		for name, image := range images {
+			if image := f.templateOutputImage(t, name, image); image != nil {
 				f.outf("/I%s %d 0 R", image.i, image.n)
 			}
 		}
@@ -257,11 +257,25 @@ func (f *Document) templateImageCatalog(images map[string]*ImageInfo) {
 	}
 
 	for _, key := range keyList {
-		image := images[key]
-		if image != nil {
+		if image := f.templateOutputImage(t, key, images[key]); image != nil {
 			f.outf("/I%s %d 0 R", image.i, image.n)
 		}
 	}
+}
+
+func (f *Document) templateOutputImage(t Template, name string, image *ImageInfo) *ImageInfo {
+	if image == nil {
+		return nil
+	}
+	if stored := f.images[sprintf("t%s-%s", t.ID(), name)]; stored != nil {
+		return stored
+	}
+	for _, stored := range f.images {
+		if stored != nil && stored.i == image.i {
+			return stored
+		}
+	}
+	return image
 }
 
 func (f *Document) templateDependencyCatalog(templates []Template) {
@@ -333,7 +347,7 @@ func sortedTemplateDependencies(t Template, catalogSort bool) []Template {
 	if t == nil || invalidTemplate(t) {
 		return nil
 	}
-	dependencies := append([]Template(nil), t.Templates()...)
+	dependencies := append([]Template(nil), templateChildren(t)...)
 	if catalogSort {
 		sort.SliceStable(dependencies, func(i, j int) bool {
 			if invalidTemplate(dependencies[i]) {
@@ -346,4 +360,18 @@ func sortedTemplateDependencies(t Template, catalogSort bool) []Template {
 		})
 	}
 	return dependencies
+}
+
+func templateImages(t Template) map[string]*ImageInfo {
+	if tpl, ok := t.(*DocumentTpl); ok && tpl != nil {
+		return tpl.images
+	}
+	return t.Images()
+}
+
+func templateChildren(t Template) []Template {
+	if tpl, ok := t.(*DocumentTpl); ok && tpl != nil {
+		return tpl.templates
+	}
+	return t.Templates()
 }

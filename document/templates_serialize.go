@@ -5,10 +5,11 @@ package document
 
 import (
 	"bytes"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash"
 	"maps"
 	"math"
 	"sort"
@@ -42,7 +43,7 @@ func createTemplate(corner Point, size Size, orientationStr, unitStr, fontDirStr
 	for _, key := range templateKeyList(tpl.templates, true) {
 		templates = append(templates, tpl.templates[key])
 	}
-	images := tpl.images
+	images := cloneTemplateImages(tpl.images)
 
 	template := DocumentTpl{
 		corner:    corner,
@@ -78,7 +79,7 @@ const (
 // ID returns the global template identifier.
 func (t *DocumentTpl) ID() string {
 	if t.id == "" {
-		t.id = fmt.Sprintf("%x", sha1.Sum(t.Bytes()))
+		t.id = t.fingerprint()
 	}
 	return t.id
 }
@@ -93,7 +94,7 @@ func (t *DocumentTpl) Bytes() []byte {
 	if t.page <= 0 || t.page >= len(t.bytes) {
 		return nil
 	}
-	return t.bytes[t.page]
+	return append([]byte(nil), t.bytes[t.page]...)
 }
 
 // FromPage creates a new template from a specific page.
@@ -132,12 +133,12 @@ func (t *DocumentTpl) FromPages() []Template {
 
 // Images returns the images used in this template.
 func (t *DocumentTpl) Images() map[string]*ImageInfo {
-	return t.images
+	return cloneTemplateImages(t.images)
 }
 
 // Templates returns the templates used in this template.
 func (t *DocumentTpl) Templates() []Template {
-	return t.templates
+	return append([]Template(nil), t.templates...)
 }
 
 // NumPages returns the number of available pages within the template. Use
@@ -207,6 +208,99 @@ func (t *DocumentTpl) childImageKeys() map[string]bool {
 		}
 	}
 	return keys
+}
+
+func (t *DocumentTpl) fingerprint() string {
+	h := sha256.New()
+	hashTemplate(h, t, 0)
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+func hashTemplate(h hash.Hash, tpl Template, depth int) {
+	hashImageString(h, 'v', "GPKTPL2")
+	if invalidTemplate(tpl) {
+		hashImageString(h, 'e', "nil")
+		return
+	}
+	if depth > maxTemplateDepth {
+		hashImageString(h, 'e', "max-depth")
+		return
+	}
+	corner, size := tpl.Size()
+	hashImageFloat(h, 'x', corner.X)
+	hashImageFloat(h, 'y', corner.Y)
+	hashImageFloat(h, 'w', size.Wd)
+	hashImageFloat(h, 'h', size.Ht)
+	hashImageInt(h, 'p', tpl.NumPages())
+	hashImageBytes(h, 'b', tpl.Bytes())
+
+	images := tpl.Images()
+	imageKeys := make([]string, 0, len(images))
+	for key := range images {
+		imageKeys = append(imageKeys, key)
+	}
+	sort.Strings(imageKeys)
+	hashImageInt(h, 'i', len(imageKeys))
+	for _, key := range imageKeys {
+		hashImageString(h, 'k', key)
+		hashTemplateImage(h, images[key])
+	}
+
+	children := tpl.Templates()
+	hashImageInt(h, 'c', len(children))
+	for _, child := range children {
+		if invalidTemplate(child) {
+			hashImageString(h, 'e', "nil-child")
+			continue
+		}
+		hashImageString(h, 'd', child.ID())
+		hashTemplate(h, child, depth+1)
+	}
+}
+
+func hashTemplateImage(h hash.Hash, info *ImageInfo) {
+	if info == nil {
+		hashImageString(h, 'z', "nil")
+		return
+	}
+	hashImageBytes(h, 'd', info.data)
+	hashImageBytes(h, 'm', info.smask)
+	hashImageFloat(h, 'w', info.w)
+	hashImageFloat(h, 'h', info.h)
+	hashImageString(h, 'c', info.cs)
+	hashImageBytes(h, 'p', info.pal)
+	hashImageInt(h, 'b', info.bpc)
+	hashImageString(h, 'f', info.f)
+	hashImageString(h, 'q', info.dp)
+	hashImageInt(h, 't', len(info.trns))
+	for _, value := range info.trns {
+		hashImageInt(h, 'v', value)
+	}
+	hashImageFloat(h, 's', info.scale)
+	hashImageFloat(h, 'i', info.dpi)
+}
+
+func cloneTemplateImages(images map[string]*ImageInfo) map[string]*ImageInfo {
+	if len(images) == 0 {
+		return nil
+	}
+	clones := make(map[string]*ImageInfo, len(images))
+	for key, image := range images {
+		clones[key] = cloneTemplateImage(image)
+	}
+	return clones
+}
+
+func cloneTemplateImage(info *ImageInfo) *ImageInfo {
+	if info == nil {
+		return nil
+	}
+	clone := *info
+	clone.data = append([]byte(nil), info.data...)
+	clone.smask = append([]byte(nil), info.smask...)
+	clone.pal = append([]byte(nil), info.pal...)
+	clone.trns = append([]int(nil), info.trns...)
+	return &clone
 }
 
 // childrenTemplates returns the next layer of child templates without
