@@ -14,7 +14,7 @@ import (
 func TestWriteDocumentRendersSharedBlocks(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	pdf.SetCompression(false)
-	doc := NewLayoutDocument(DocumentKindReport)
+	doc := NewLayoutDocument()
 	doc.Title = "Shared renderer"
 	doc.Metadata.Subject = "Renderer test"
 	doc.PageTemplate.Header = &HeaderBlock{
@@ -69,7 +69,7 @@ func TestWriteDocumentEmitsTaggedRoles(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	pdf.SetCompression(false)
 	pdf.SetComplianceMetadata(ComplianceMetadata{PDFUA2: true, Title: "Tagged document"})
-	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc := NewLayoutDocument()
 	doc.Body = []Block{
 		HeadingBlock{Level: 2, Segments: []TextSegment{{Text: "Tagged heading"}}},
 		ParagraphBlock{Segments: []TextSegment{{Text: "Tagged paragraph"}}},
@@ -114,7 +114,7 @@ func TestWriteDocumentEmitsTaggedRoles(t *testing.T) {
 
 func TestWriteDocumentPageBreakBlockAddsPage(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
-	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc := NewLayoutDocument()
 	doc.Body = []Block{
 		ParagraphBlock{Segments: []TextSegment{{Text: "before break"}}},
 		PageBreakBlock{After: true},
@@ -129,7 +129,7 @@ func TestWriteDocumentPageBreakBlockAddsPage(t *testing.T) {
 
 func TestWriteDocumentErrorsForUnknownFont(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
-	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc := NewLayoutDocument()
 	doc.Body = []Block{
 		ParagraphBlock{
 			Segments: []TextSegment{{Text: "font error text"}},
@@ -145,8 +145,8 @@ func TestWriteDocumentErrorsForUnknownFont(t *testing.T) {
 
 func TestWriteDocumentErrorsForUnavailableBoldItalicFace(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
-	pdf.fonts["custom"] = fontDefinition{}
-	doc := NewLayoutDocument(DocumentKindGeneric)
+	pdf.ensureResourceStore().setFont("custom", fontDefinition{})
+	doc := NewLayoutDocument()
 	doc.Body = []Block{
 		ParagraphBlock{
 			Segments: []TextSegment{{Text: "font face error text"}},
@@ -162,7 +162,7 @@ func TestWriteDocumentErrorsForUnavailableBoldItalicFace(t *testing.T) {
 
 func TestWriteDocumentErrorsForUnsupportedBlock(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
-	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc := NewLayoutDocument()
 	doc.Body = []Block{unsupportedTestBlock{}}
 
 	pdf.WriteDocument(doc)
@@ -178,7 +178,7 @@ func (unsupportedTestBlock) DocumentBlockKind() BlockKind { return "test-unsuppo
 func TestWriteDocumentRendersSignatureMetadata(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	pdf.SetCompression(false)
-	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc := NewLayoutDocument()
 	doc.Signature = &SignatureBlock{Rows: []SignatureRowBlock{{
 		Columns: []SignatureColumn{{
 			Label: "Signed by",
@@ -205,7 +205,7 @@ func TestWriteDocumentRendersSignatureMetadata(t *testing.T) {
 
 func TestWriteDocumentErrorsForEmptyQRVerificationBlock(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
-	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc := NewLayoutDocument()
 	doc.Body = []Block{QRVerificationBlock{QR: QRBlock{Label: "Verify"}}}
 
 	pdf.WriteDocument(doc)
@@ -239,7 +239,7 @@ func TestCellFormatUTF8JustifiedSingleWordDoesNotWriteInvalidNumber(t *testing.T
 
 func TestWriteDocumentAppliesPageTemplateMargins(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
-	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc := NewLayoutDocument()
 	doc.PageTemplate.Margins = Spacing{Left: 18, Top: 16, Right: 14, Bottom: 22}
 	doc.Body = []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Body"}}}}
 
@@ -254,7 +254,7 @@ func TestWriteDocumentAppliesPageTemplateMargins(t *testing.T) {
 func TestWriteDocumentRendersTemplateFooterOnEveryRendererPage(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	pdf.SetCompression(false)
-	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc := NewLayoutDocument()
 	doc.PageTemplate.Footer = &FooterBlock{
 		Height:          8,
 		ReservePageArea: true,
@@ -279,7 +279,7 @@ func TestWriteDocumentRendersTemplateFooterOnEveryRendererPage(t *testing.T) {
 func TestWriteDocumentSelectsTemplateHeadersAndFootersPerPage(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	pdf.SetCompression(false)
-	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc := NewLayoutDocument()
 	doc.PageTemplate.Header = &HeaderBlock{
 		Height: 6,
 		Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Default header"}}}},
@@ -329,7 +329,7 @@ func TestWriteDocumentSelectsTemplateHeadersAndFootersPerPage(t *testing.T) {
 
 func TestWriteDocumentMapsLayoutAttachments(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
-	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc := NewLayoutDocument()
 	doc.Attachments = []AttachmentBlock{{
 		Name:        "evidence.txt",
 		Description: "Evidence",
@@ -349,7 +349,7 @@ func TestWriteDocumentMapsLayoutAttachments(t *testing.T) {
 func TestWriteDocumentInlineImagesUseContentHashAndFit(t *testing.T) {
 	pixel := decodeDocumentRenderTestPNG(t)
 	pdf := New("P", "mm", "A4", "")
-	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc := NewLayoutDocument()
 	doc.Body = []Block{
 		ImageBlock{Data: pixel, Format: "png", Width: 16, Height: 8, Fit: ImageFitContain},
 		ImageBlock{Data: pixel, Format: "png", Width: 16, Height: 8, Fit: ImageFitCover},
@@ -360,10 +360,11 @@ func TestWriteDocumentInlineImagesUseContentHashAndFit(t *testing.T) {
 	if err := pdf.Error(); err != nil {
 		t.Fatalf("WriteDocument() error = %v", err)
 	}
-	if got := len(pdf.images); got != 1 {
+	resources := pdf.ensureResourceStore()
+	if got := len(resources.images); got != 1 {
 		t.Fatalf("registered images = %d, want deterministic reuse of identical inline data", got)
 	}
-	for name := range pdf.images {
+	for name := range resources.images {
 		if !strings.HasPrefix(name, "document-image-") {
 			t.Fatalf("registered image name = %q, want hash-based document image name", name)
 		}

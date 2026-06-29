@@ -6,6 +6,7 @@ package document
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
@@ -20,6 +21,8 @@ import (
 
 const defaultAttachmentCompressionWorkers = 4
 
+const attachmentCompressionSpoolThreshold = 4 * 1024 * 1024
+
 // MaxAttachmentBytes is the default largest attachment content accepted for
 // embedding.
 const MaxAttachmentBytes = 64 * 1024 * 1024
@@ -28,6 +31,24 @@ const MaxAttachmentBytes = 64 * 1024 * 1024
 type AttachmentOptions struct {
 	MaxBytes int64 // Maximum file size; 0 uses MaxAttachmentBytes.
 	Eager    bool  // Validate file existence and size before returning.
+}
+
+// AttachmentLoader opens attachment content for output. The returned size may
+// be -1 when unknown. GoPDFKit still reads the stream into memory before
+// embedding in v0.9.x, so loader implementations must be bounded by policy.
+type AttachmentLoader interface {
+	OpenAttachment(ctx context.Context) (io.ReadCloser, int64, error)
+}
+
+// AttachmentLoaderFunc adapts a function into an AttachmentLoader.
+type AttachmentLoaderFunc func(context.Context) (io.ReadCloser, int64, error)
+
+// OpenAttachment calls f(ctx).
+func (f AttachmentLoaderFunc) OpenAttachment(ctx context.Context) (io.ReadCloser, int64, error) {
+	if f == nil {
+		return nil, 0, fmt.Errorf("attachment loader is nil")
+	}
+	return f(ctx)
 }
 
 // Attachment defines content to include in the PDF in one of the following ways:
@@ -57,11 +78,17 @@ type Attachment struct {
 	// Unspecified. When empty, Data is used.
 	AFRelationship string
 
+	// Loader optionally opens attachment content during output. Content takes
+	// precedence over Loader, and FilePath takes precedence over Loader.
+	Loader AttachmentLoader
+
 	objectNumber   int    // Filled when the filespec is embedded.
 	mimeType       string // Normalized lazily or when cloned.
 	afRelationship string // Normalized lazily or when cloned.
 	checksum       string // PDF MD5 checksum, computed once per attachment content.
 	maxBytes       int64  // Per-attachment maximum content size; 0 uses document/default limit.
+	contentSize    int    // Size of the attachment content once known.
+	contentReady   bool   // Whether checksum/contentSize describe loaded content.
 }
 
 type attachmentStreamKey struct {
@@ -77,6 +104,12 @@ type attachmentFileKey struct {
 	relationship string
 }
 
+type attachmentStream struct {
+	data     []byte
+	tempFile string
+	size     int
+}
+
 // checksum returns the hex-encoded PDF attachment checksum of data.
 func attachmentChecksum(data []byte) string {
 	tmp := md5.Sum(data)
@@ -85,22 +118,62 @@ func attachmentChecksum(data []byte) string {
 
 // writeCompressedFileObject writes a deflate-compressed /EmbeddedFile object
 // with length, compressed length, and MD5 checksum metadata.
-func (f *Document) writeCompressedFileObject(content []byte, mimeType, sum string) {
-	lenUncompressed := len(content)
-	streamKey := attachmentStreamKey{size: lenUncompressed, checksum: sum, mimeType: mimeType}
-	compressed := f.attachmentCompressed[streamKey]
-	if compressed == nil {
-		compressed = f.compressBytes(content)
+func (f *Document) writeCompressedFileObject(streamKey attachmentStreamKey, content []byte) {
+	compressed, ok := f.ensureResourceStore().compressedAttachment(streamKey)
+	if !ok {
+		if content == nil && streamKey.size > 0 {
+			f.SetErrorf("attachment content is unavailable")
+			return
+		}
+		data := f.compressBytes(content)
+		if f.err != nil {
+			return
+		}
+		compressed = attachmentStream{data: data, size: len(data)}
 	}
 	if f.err != nil {
 		return
 	}
-	lenCompressed := len(compressed)
-	f.newobj()
-	f.outf("<< /Type /EmbeddedFile /Subtype /%s /Length %d /Filter /FlateDecode /Params << /CheckSum <%s> /Size %d >> >>\n",
-		escapePDFName(mimeType), lenCompressed, sum, lenUncompressed)
-	f.putstream(compressed)
-	f.out("endobj")
+	f.newPDFDictObject()
+	f.outf("/Type /EmbeddedFile /Subtype /%s", escapePDFName(streamKey.mimeType))
+	f.outf("/Length %d /Filter /FlateDecode", compressed.size)
+	f.out("/Params")
+	f.beginPDFDict()
+	f.outf("/CheckSum <%s> /Size %d", streamKey.checksum, streamKey.size)
+	f.endPDFDict()
+	f.endPDFDict()
+	f.putAttachmentStream(compressed)
+	f.endPDFObject()
+}
+
+func (f *Document) putAttachmentStream(stream attachmentStream) {
+	if f.err != nil {
+		return
+	}
+	if stream.tempFile == "" {
+		f.putstream(stream.data)
+		return
+	}
+	file, err := os.Open(stream.tempFile)
+	if err != nil {
+		f.SetError(err)
+		return
+	}
+	defer func() { _ = file.Close() }()
+	if f.protect.encrypted {
+		data, err := io.ReadAll(file)
+		if err != nil {
+			f.SetError(err)
+			return
+		}
+		f.putstream(data)
+		return
+	}
+	f.out("stream")
+	if err := f.outbuf(file); err != nil {
+		return
+	}
+	f.out("endstream")
 }
 
 type attachmentCompressionTask struct {
@@ -110,10 +183,18 @@ type attachmentCompressionTask struct {
 }
 
 func (f *Document) prepareAttachmentCompression() {
+	f.prepareAttachmentCompressionContext(context.Background())
+}
+
+func (f *Document) prepareAttachmentCompressionContext(ctx context.Context) {
 	if f.err != nil {
 		return
 	}
-	tasks := f.attachmentCompressionTasks()
+	if err := outputCanceledError(ctx); err != nil {
+		f.SetError(err)
+		return
+	}
+	tasks := f.attachmentCompressionTasksContext(ctx)
 	if len(tasks) == 0 {
 		return
 	}
@@ -135,7 +216,8 @@ func (f *Document) prepareAttachmentCompression() {
 		attachment *Attachment
 		mimeType   string
 		checksum   string
-		data       []byte
+		stream     attachmentStream
+		size       int
 		err        error
 	}
 	results := make(chan result, len(tasks))
@@ -145,47 +227,87 @@ func (f *Document) prepareAttachmentCompression() {
 		go func() {
 			defer wg.Done()
 			for task := range jobs {
-				data, checksum, err := compressAttachmentWithChecksum(task.content, f.compressLevel)
-				results <- result{attachment: task.attachment, mimeType: task.mimeType, checksum: checksum, data: data, err: err}
+				if ctx.Err() != nil {
+					return
+				}
+				stream, checksum, err := compressAttachmentWithChecksum(task.content, f.compressLevel, attachmentShouldSpool(task.attachment, task.content))
+				select {
+				case results <- result{attachment: task.attachment, mimeType: task.mimeType, checksum: checksum, stream: stream, size: len(task.content), err: err}:
+				case <-ctx.Done():
+					stream.cleanup()
+					return
+				}
 			}
 		}()
 	}
+schedule:
 	for _, task := range tasks {
-		jobs <- task
+		select {
+		case jobs <- task:
+		case <-ctx.Done():
+			break schedule
+		}
 	}
 	close(jobs)
 	wg.Wait()
 	close(results)
+	if err := outputCanceledError(ctx); err != nil {
+		for result := range results {
+			result.stream.cleanup()
+		}
+		f.SetError(err)
+		return
+	}
 	for result := range results {
 		if result.err != nil {
+			result.stream.cleanup()
+			for remaining := range results {
+				remaining.stream.cleanup()
+			}
 			f.SetError(result.err)
 			return
 		}
 		if result.attachment.checksum == "" {
 			result.attachment.checksum = result.checksum
 		}
-		key := attachmentStreamKey{size: len(result.attachment.Content), checksum: result.attachment.checksum, mimeType: result.mimeType}
-		if f.attachmentCompressed[key] == nil {
-			f.attachmentCompressed[key] = result.data
+		result.attachment.contentSize = result.size
+		result.attachment.contentReady = true
+		key := attachmentStreamKey{size: result.size, checksum: result.attachment.checksum, mimeType: result.mimeType}
+		if !f.ensureResourceStore().addCompressedAttachment(key, result.stream) {
+			result.stream.cleanup()
+		}
+		if attachmentShouldReleaseLoadedContent(result.attachment, result.size) {
+			result.attachment.Content = nil
 		}
 	}
 }
 
 func (f *Document) attachmentCompressionTasks() []attachmentCompressionTask {
+	return f.attachmentCompressionTasksContext(context.Background())
+}
+
+func (f *Document) attachmentCompressionTasksContext(ctx context.Context) []attachmentCompressionTask {
 	seen := make(map[*Attachment]bool)
 	tasks := make([]attachmentCompressionTask, 0, len(f.attachments))
 	add := func(a *Attachment) {
 		if a == nil || seen[a] {
 			return
 		}
-		if !f.loadAttachmentContent(a) {
+		if outputCanceledError(ctx) != nil {
+			return
+		}
+		if !f.loadAttachmentContentContext(ctx, a) {
 			return
 		}
 		a.mimeType = attachmentMIMEType(*a)
 		a.afRelationship = attachmentAFRelationship(*a)
 		if a.checksum != "" {
-			key := attachmentStreamKey{size: len(a.Content), checksum: a.checksum, mimeType: a.mimeType}
-			if f.attachmentStreams[key] != 0 || f.attachmentCompressed[key] != nil {
+			resources := f.ensureResourceStore()
+			key := attachmentStreamKey{size: attachmentContentSize(*a), checksum: a.checksum, mimeType: a.mimeType}
+			if resources.attachmentStreamObject(key) != 0 {
+				return
+			}
+			if _, ok := resources.compressedAttachment(key); ok {
 				return
 			}
 		}
@@ -203,7 +325,10 @@ func (f *Document) attachmentCompressionTasks() []attachmentCompressionTask {
 	return tasks
 }
 
-func compressAttachmentWithChecksum(content []byte, level int) ([]byte, string, error) {
+func compressAttachmentWithChecksum(content []byte, level int, spool bool) (attachmentStream, string, error) {
+	if spool {
+		return compressAttachmentWithChecksumFile(content, level)
+	}
 	if !validCompressionLevel(level) {
 		level = zlib.BestSpeed
 	}
@@ -214,39 +339,101 @@ func compressAttachmentWithChecksum(content []byte, level int) ([]byte, string, 
 	cmp, err := pooledZlibWriter(list, buf, level)
 	if err != nil {
 		releaseCompressBuffer(buf)
-		return nil, "", err
+		return attachmentStream{}, "", err
 	}
 	if _, err = io.MultiWriter(cmp, sum).Write(content); err != nil {
 		_ = cmp.Close()
 		releaseZlibWriter(list, cmp)
 		releaseCompressBuffer(buf)
-		return nil, "", err
+		return attachmentStream{}, "", err
 	}
 	if err = cmp.Close(); err != nil {
 		releaseZlibWriter(list, cmp)
 		releaseCompressBuffer(buf)
-		return nil, "", err
+		return attachmentStream{}, "", err
 	}
 	releaseZlibWriter(list, cmp)
 	checksum := hex.EncodeToString(sum.Sum(nil))
 	if buf.Len() >= largeCompressedStreamNoCopyThreshold {
-		return buf.Bytes(), checksum, nil
+		return attachmentStream{data: buf.Bytes(), size: buf.Len()}, checksum, nil
 	}
 	defer releaseCompressBuffer(buf)
-	return append([]byte(nil), buf.Bytes()...), checksum, nil
+	data := append([]byte(nil), buf.Bytes()...)
+	return attachmentStream{data: data, size: len(data)}, checksum, nil
+}
+
+func compressAttachmentWithChecksumFile(content []byte, level int) (attachmentStream, string, error) {
+	if !validCompressionLevel(level) {
+		level = zlib.BestSpeed
+	}
+	file, err := os.CreateTemp("", "gopdfkit-attachment-*.z")
+	if err != nil {
+		return attachmentStream{}, "", err
+	}
+	path := file.Name()
+	cleanup := true
+	defer func() {
+		_ = file.Close()
+		if cleanup {
+			_ = os.Remove(path)
+		}
+	}()
+	sum := md5.New()
+	cmp, err := zlib.NewWriterLevel(file, level)
+	if err != nil {
+		return attachmentStream{}, "", err
+	}
+	if _, err = io.MultiWriter(cmp, sum).Write(content); err != nil {
+		_ = cmp.Close()
+		return attachmentStream{}, "", err
+	}
+	if err = cmp.Close(); err != nil {
+		return attachmentStream{}, "", err
+	}
+	if _, err = file.Seek(0, io.SeekStart); err != nil {
+		return attachmentStream{}, "", err
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return attachmentStream{}, "", err
+	}
+	cleanup = false
+	return attachmentStream{tempFile: path, size: int(info.Size())}, hex.EncodeToString(sum.Sum(nil)), nil
+}
+
+func (s attachmentStream) cleanup() {
+	if s.tempFile != "" {
+		_ = os.Remove(s.tempFile)
+	}
+}
+
+func attachmentShouldSpool(a *Attachment, content []byte) bool {
+	return a != nil && (a.FilePath != "" || a.Loader != nil) && len(content) >= attachmentCompressionSpoolThreshold
+}
+
+func attachmentShouldReleaseLoadedContent(a *Attachment, size int) bool {
+	return a != nil && (a.FilePath != "" || a.Loader != nil) && size >= attachmentCompressionSpoolThreshold
 }
 
 // embed includes the attachment content and updates its internal reference.
 func (f *Document) embed(a *Attachment) {
+	f.embedContext(context.Background(), a)
+}
+
+func (f *Document) embedContext(ctx context.Context, a *Attachment) {
+	if a == nil {
+		f.SetErrorf("attachment is nil")
+		return
+	}
 	if a.objectNumber != 0 { // Already embedded; object numbers start at 2.
 		return
 	}
-	if !f.loadAttachmentContent(a) {
+	if !a.contentReady && !f.loadAttachmentContentContext(ctx, a) {
 		return
 	}
 	normalizeAttachment(a)
 	streamKey := attachmentStreamKey{
-		size:     len(a.Content),
+		size:     attachmentContentSize(*a),
 		checksum: a.checksum,
 		mimeType: a.mimeType,
 	}
@@ -256,37 +443,42 @@ func (f *Document) embed(a *Attachment) {
 		description:  a.Description,
 		relationship: a.afRelationship,
 	}
-	if objectNumber := f.attachmentFiles[fileKey]; objectNumber != 0 {
+	resources := f.ensureResourceStore()
+	if objectNumber := resources.attachmentFileObject(fileKey); objectNumber != 0 {
 		a.objectNumber = objectNumber
 		return
 	}
 	oldState := f.state
 	f.state = 1 // Write file content to the main buffer.
-	streamID := f.attachmentStreams[streamKey]
+	streamID := resources.attachmentStreamObject(streamKey)
 	if streamID == 0 {
-		f.writeCompressedFileObject(a.Content, a.mimeType, a.checksum)
+		f.writeCompressedFileObject(streamKey, a.Content)
 		if f.err != nil {
 			f.state = oldState
 			return
 		}
 		streamID = f.n
-		f.attachmentStreams[streamKey] = streamID
+		resources.setAttachmentStreamObject(streamKey, streamID)
 	}
-	f.newobj()
-	fileSpec := make([]byte, 0, len(a.Filename)*2+len(a.Description)*2+128)
-	fileSpec = append(fileSpec, "<< /Type /Filespec /F () /UF "...)
+	f.newPDFDictObject()
+	f.out("/Type /Filespec /F ()")
+	fileSpec := make([]byte, 0, len(a.Filename)*2+len(a.Description)*2+16)
+	fileSpec = append(fileSpec, "/UF "...)
 	fileSpec = f.appendUTF16TextString(fileSpec, a.Filename)
-	fileSpec = append(fileSpec, " /AFRelationship /"...)
-	fileSpec = append(fileSpec, a.afRelationship...)
-	fileSpec = append(fileSpec, " /EF << /F "...)
-	fileSpec = appendPDFInt(fileSpec, streamID)
-	fileSpec = append(fileSpec, " 0 R >> /Desc "...)
-	fileSpec = f.appendUTF16TextString(fileSpec, a.Description)
-	fileSpec = append(fileSpec, "\n>>"...)
 	f.outbytes(fileSpec)
-	f.out("endobj")
+	f.outf("/AFRelationship /%s", a.afRelationship)
+	f.out("/EF")
+	f.beginPDFDict()
+	f.outf("/F %d 0 R", streamID)
+	f.endPDFDict()
+	fileSpec = fileSpec[:0]
+	fileSpec = append(fileSpec, "/Desc "...)
+	fileSpec = f.appendUTF16TextString(fileSpec, a.Description)
+	f.outbytes(fileSpec)
+	f.endPDFDict()
+	f.endPDFObject()
 	a.objectNumber = f.n
-	f.attachmentFiles[fileKey] = a.objectNumber
+	resources.setAttachmentFileObject(fileKey, a.objectNumber)
 	f.state = oldState
 }
 
@@ -339,29 +531,72 @@ func normalizeAttachment(a *Attachment) {
 	}
 	a.mimeType = attachmentMIMEType(*a)
 	a.afRelationship = attachmentAFRelationship(*a)
-	if a.checksum == "" && (len(a.Content) > 0 || strings.TrimSpace(a.FilePath) == "") {
+	if a.checksum == "" && attachmentHasInlineContent(*a) {
 		a.checksum = attachmentChecksum(a.Content)
+	}
+	if !a.contentReady && attachmentHasInlineContent(*a) {
+		a.contentSize = len(a.Content)
+		a.contentReady = true
 	}
 }
 
+func attachmentHasInlineContent(a Attachment) bool {
+	return a.Content != nil || (strings.TrimSpace(a.FilePath) == "" && a.Loader == nil)
+}
+
 func (f *Document) loadAttachmentContent(a *Attachment) bool {
+	return f.loadAttachmentContentContext(context.Background(), a)
+}
+
+func (f *Document) loadAttachmentContentContext(ctx context.Context, a *Attachment) bool {
 	if a == nil {
 		return true
 	}
-	if strings.TrimSpace(a.FilePath) != "" {
+	if err := outputCanceledError(ctx); err != nil {
+		f.SetError(err)
+		return false
+	}
+	filePath := strings.TrimSpace(a.FilePath)
+	hasInlineContent := attachmentHasInlineContent(*a)
+	if filePath != "" {
 		if err := f.requireSecurityFeature("file-backed attachments", f.securityPolicy.AllowFileAttachments); err != nil {
 			return false
 		}
 	}
+	if a.Loader != nil && filePath == "" && !hasInlineContent {
+		if err := f.requireSecurityFeature("attachment loaders", f.securityPolicy.AllowFileAttachments); err != nil {
+			return false
+		}
+	}
 	limit := f.attachmentMaxBytes(*a)
-	if limit >= 0 && int64(len(a.Content)) > limit {
+	if hasInlineContent && limit >= 0 && int64(len(a.Content)) > limit {
 		f.SetError(fmt.Errorf("%w: attachment data exceeds maximum size", ErrAttachmentTooLarge))
 		return false
 	}
-	if len(a.Content) > 0 || strings.TrimSpace(a.FilePath) == "" {
+	if hasInlineContent || filePath == "" {
+		if !hasInlineContent && a.Loader != nil {
+			data, err := readAttachmentLoaderLimitContext(ctx, a.Loader, limit)
+			if err != nil {
+				f.SetError(err)
+				return false
+			}
+			a.Content = data
+			if f.hooks.OnAttachmentLoaded != nil {
+				f.hooks.OnAttachmentLoaded(a.Filename, int64(len(data)))
+			}
+			if a.checksum == "" {
+				a.checksum = attachmentChecksum(data)
+			}
+			a.contentSize = len(data)
+			a.contentReady = true
+		}
+		if !a.contentReady {
+			a.contentSize = len(a.Content)
+			a.contentReady = true
+		}
 		return true
 	}
-	data, err := readAttachmentFileLimit(a.FilePath, limit)
+	data, err := f.readAttachmentFileLimitContext(ctx, a.FilePath, limit)
 	if err != nil {
 		f.SetError(err)
 		return false
@@ -376,7 +611,16 @@ func (f *Document) loadAttachmentContent(a *Attachment) bool {
 	if a.checksum == "" {
 		a.checksum = attachmentChecksum(data)
 	}
+	a.contentSize = len(data)
+	a.contentReady = true
 	return true
+}
+
+func attachmentContentSize(a Attachment) int {
+	if a.contentReady {
+		return a.contentSize
+	}
+	return len(a.Content)
 }
 
 func (f *Document) attachmentMaxBytes(a Attachment) int64 {
@@ -403,22 +647,91 @@ func (f *Document) SetMaxAttachmentBytes(maxBytes int64) {
 }
 
 func readAttachmentFileLimit(filename string, limit int64) ([]byte, error) {
+	return readAttachmentFileLimitContext(context.Background(), filename, limit)
+}
+
+func readAttachmentFileLimitContext(ctx context.Context, filename string, limit int64) ([]byte, error) {
+	if err := outputCanceledError(ctx); err != nil {
+		return nil, err
+	}
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = file.Close() }()
+	if err := outputCanceledError(ctx); err != nil {
+		return nil, err
+	}
 	if limit >= 0 {
 		if info, statErr := file.Stat(); statErr == nil && info.Mode().IsRegular() && info.Size() > limit {
 			return nil, fmt.Errorf("%w: attachment data exceeds maximum size", ErrAttachmentTooLarge)
 		}
-		data, err := io.ReadAll(io.LimitReader(file, limit+1))
+		return readAttachmentReaderLimitContext(ctx, file, limit)
+	}
+	return readAttachmentReaderLimitContext(ctx, file, limit)
+}
+
+func (f *Document) readAttachmentFileLimitContext(ctx context.Context, filename string, limit int64) ([]byte, error) {
+	if f.resourceLoader == nil {
+		return readAttachmentFileLimitContext(ctx, filename, limit)
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		return nil, err
+	}
+	reader, info, err := f.resourceLoader.OpenResource(ctx, ResourceAttachment, filename)
+	if err != nil {
+		return nil, err
+	}
+	if reader == nil {
+		return nil, fmt.Errorf("resource loader returned nil reader")
+	}
+	defer func() { _ = reader.Close() }()
+	if limit >= 0 && info.Size >= 0 && info.Size > limit {
+		return nil, fmt.Errorf("%w: attachment data exceeds maximum size", ErrAttachmentTooLarge)
+	}
+	return readAttachmentReaderLimitContext(ctx, reader, limit)
+}
+
+func readAttachmentLoaderLimitContext(ctx context.Context, loader AttachmentLoader, limit int64) ([]byte, error) {
+	if loader == nil {
+		return nil, fmt.Errorf("attachment loader is nil")
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		return nil, err
+	}
+	reader, size, err := loader.OpenAttachment(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if reader == nil {
+		return nil, fmt.Errorf("attachment loader returned nil reader")
+	}
+	defer func() { _ = reader.Close() }()
+	if limit >= 0 && size >= 0 && size > limit {
+		return nil, fmt.Errorf("%w: attachment data exceeds maximum size", ErrAttachmentTooLarge)
+	}
+	return readAttachmentReaderLimitContext(ctx, reader, limit)
+}
+
+func readAttachmentReaderLimitContext(ctx context.Context, r io.Reader, limit int64) ([]byte, error) {
+	if err := outputCanceledError(ctx); err != nil {
+		return nil, err
+	}
+	reader := io.Reader(contextReader{ctx: ctx, r: r})
+	var data []byte
+	var err error
+	if limit >= 0 {
+		data, err = io.ReadAll(io.LimitReader(reader, limit+1))
 		if err == nil && int64(len(data)) > limit {
 			err = fmt.Errorf("%w: attachment data exceeds maximum size", ErrAttachmentTooLarge)
 		}
-		return data, err
+	} else {
+		data, err = io.ReadAll(reader)
 	}
-	return io.ReadAll(file)
+	if err == nil {
+		err = outputCanceledError(ctx)
+	}
+	return data, err
 }
 
 var pdfNameReserved [256]bool
@@ -505,11 +818,61 @@ func AttachmentFromFileWithOptions(fileStr string, options AttachmentOptions) (A
 	return attachment, nil
 }
 
+// AttachmentFromLoader returns a loader-backed attachment descriptor. The
+// loader is opened when the document is output. Callers may override MIMEType,
+// Description, or AFRelationship on the returned value before passing it to
+// SetAttachments or AddAttachmentAnnotation.
+func AttachmentFromLoader(filename string, loader AttachmentLoader) Attachment {
+	return Attachment{Filename: filename, Loader: loader}
+}
+
+// AttachmentFromLoaderWithOptions returns a loader-backed attachment descriptor
+// and optionally opens the loader immediately to validate availability and known
+// size. Content is still read during output.
+func AttachmentFromLoaderWithOptions(filename string, loader AttachmentLoader, options AttachmentOptions) (Attachment, error) {
+	attachment := AttachmentFromLoader(filename, loader)
+	if loader == nil {
+		return attachment, fmt.Errorf("attachment loader is nil")
+	}
+	if options.MaxBytes < 0 {
+		return attachment, fmt.Errorf("invalid max attachment bytes: %d", options.MaxBytes)
+	}
+	if options.MaxBytes > 0 {
+		attachment.maxBytes = options.MaxBytes
+	}
+	if options.Eager {
+		limit := options.MaxBytes
+		if limit == 0 {
+			limit = MaxAttachmentBytes
+		}
+		reader, size, err := loader.OpenAttachment(context.Background())
+		if err != nil {
+			return attachment, err
+		}
+		if reader == nil {
+			return attachment, fmt.Errorf("attachment loader returned nil reader")
+		}
+		_ = reader.Close()
+		if size >= 0 && limit >= 0 && size > limit {
+			return attachment, fmt.Errorf("%w: attachment data exceeds maximum size", ErrAttachmentTooLarge)
+		}
+	}
+	return attachment, nil
+}
+
 // putAttachments embeds the current attachments and stores their object numbers
 // for later use by getEmbeddedFiles().
 func (f *Document) putAttachments() {
+	f.putAttachmentsContext(context.Background())
+}
+
+func (f *Document) putAttachmentsContext(ctx context.Context) {
 	for i, a := range f.attachments {
-		f.embed(&a)
+		if err := outputCanceledError(ctx); err != nil {
+			f.SetError(err)
+			return
+		}
+		f.embedContext(ctx, &a)
 		f.attachments[i] = a
 	}
 }
@@ -569,7 +932,9 @@ func (f *Document) AddAttachmentAnnotation(a *Attachment, x, y, w, h float64) {
 }
 
 func cloneAttachment(a Attachment) Attachment {
-	a.Content = append([]byte(nil), a.Content...)
+	if a.Content != nil {
+		a.Content = append([]byte{}, a.Content...)
+	}
 	normalizeAttachment(&a)
 	a.objectNumber = 0
 	return a
@@ -581,13 +946,25 @@ func cloneAttachmentImmutable(a Attachment) Attachment {
 	return a
 }
 
+func (f *Document) cleanupAttachmentCompressedFiles() {
+	f.ensureResourceStore().cleanupAttachmentCompressedFiles()
+}
+
 // putAnnotationsAttachments embeds attachments used by annotations and stores
 // their object numbers for appendAttachmentAnnotationLinks(), which is called for
 // each page.
 func (f *Document) putAnnotationsAttachments() {
+	f.putAnnotationsAttachmentsContext(context.Background())
+}
+
+func (f *Document) putAnnotationsAttachmentsContext(ctx context.Context) {
 	for _, l := range f.pageAttachments {
 		for _, an := range l {
-			f.embed(an.Attachment)
+			if err := outputCanceledError(ctx); err != nil {
+				f.SetError(err)
+				return
+			}
+			f.embedContext(ctx, an.Attachment)
 		}
 	}
 }

@@ -11,34 +11,9 @@ import (
 	"unicode/utf8"
 )
 
-// DocumentKind identifies the high-level purpose of a generated document.
-type DocumentKind string
-
-const (
-	// DocumentKindGeneric is the fallback kind for documents without a more
-	// specific category.
-	DocumentKindGeneric DocumentKind = "generic"
-	// DocumentKindReport identifies report-style documents.
-	DocumentKindReport DocumentKind = "report"
-	// DocumentKindForm identifies forms and questionnaires.
-	DocumentKindForm DocumentKind = "form"
-	// DocumentKindLetter identifies letter-style correspondence.
-	DocumentKindLetter DocumentKind = "letter"
-	// DocumentKindTransactional identifies invoices, receipts, and similar
-	// transactional documents.
-	DocumentKindTransactional DocumentKind = "transactional"
-	// DocumentKindAttestation identifies certificates and attestations.
-	DocumentKindAttestation DocumentKind = "attestation"
-	// DocumentKindStatement identifies account or status statements.
-	DocumentKindStatement DocumentKind = "statement"
-	// DocumentKindLongForm identifies contract-like long-form documents.
-	DocumentKindLongForm DocumentKind = "long-form"
-)
-
-// LayoutDocument is the shared model that document builders and HTML parsers can
-// produce before PDF layout and drawing.
+// LayoutDocument is the shared model that document assembly helpers and HTML
+// parsers can produce before PDF layout and drawing.
 type LayoutDocument struct {
-	Kind         DocumentKind      // High-level document category.
 	Title        string            // Human-readable document title.
 	Language     string            // Optional BCP 47 language tag.
 	Metadata     DocumentMetadata  // Document metadata and summary fields.
@@ -49,12 +24,21 @@ type LayoutDocument struct {
 	Attachments  []AttachmentBlock // Files embedded during document output.
 }
 
-// NewLayoutDocument creates a document model with a generic kind when kind is empty.
-func NewLayoutDocument(kind DocumentKind) *LayoutDocument {
-	if kind == "" {
-		kind = DocumentKindGeneric
+// NewLayoutDocument creates an empty renderer-independent document model.
+func NewLayoutDocument() *LayoutDocument {
+	return &LayoutDocument{}
+}
+
+// NewDocumentModel creates a renderer-independent document model with an
+// optional title heading followed by the supplied body blocks.
+func NewDocumentModel(title string, blocks ...Block) *LayoutDocument {
+	doc := NewLayoutDocument()
+	doc.Title = title
+	if title != "" {
+		doc.Body = append(doc.Body, HeadingBlock{Level: 1, Segments: []TextSegment{{Text: title}}})
 	}
-	return &LayoutDocument{Kind: kind}
+	doc.Body = append(doc.Body, blocks...)
+	return doc
 }
 
 // AddBlock appends a non-nil block to the document body.

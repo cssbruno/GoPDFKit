@@ -8,12 +8,6 @@ line starts at `v0.1.0`.
 - Use Go module semver tags: `vMAJOR.MINOR.PATCH`.
 - Keep `VERSION` set to the next tag.
 - Keep `CHANGELOG.md` updated with a matching `## vMAJOR.MINOR.PATCH` section.
-- Keep forward-looking release plans under `doc/` when a minor release has
-  pre-implementation API design work. For the pre-`v1.0.0` production policy
-  work, see `doc/release-plan-v0.9.0.md`, `doc/migration-v0.9.md`,
-  `doc/production.md`, `doc/security.md`, and
-  `doc/deterministic-output.md`. Track readiness and benchmark gates in
-  `doc/v0.9-readiness-checklist.md` and `doc/benchmark-budgets-v0.9.md`.
 - Until `v1.0.0`, the API is not considered stable and releases may include
   breaking changes.
 - For the `v0.x` line, bump `MINOR` for new public functions, new public

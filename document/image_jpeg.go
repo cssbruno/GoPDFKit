@@ -5,7 +5,6 @@ package document
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"image/color"
 	"image/jpeg"
@@ -26,7 +25,7 @@ func (p *imageParser) parsejpg(r io.Reader) (info *ImageInfo) {
 		return
 	}
 	if data.Len() > p.sourceLimit {
-		p.err = errors.New("image data exceeds maximum size")
+		p.err = fmt.Errorf("%w: image data exceeds maximum size", ErrImageTooLarge)
 		return
 	}
 	info.data = data.Bytes()

@@ -80,7 +80,7 @@ func (f *Document) RegisterQRCodePNG(payload string, sizePx int) (string, error)
 	}
 
 	name := QRCodeImageName(payload)
-	if info := f.images[name]; info != nil {
+	if info, _ := f.ensureResourceStore().image(name); info != nil {
 		return name, nil
 	}
 

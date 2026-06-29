@@ -147,7 +147,7 @@ func (f *Document) svgWriteImage(originX, originY, scale float64, image SVGImage
 		name = svgImageName(image.ImageType, image.Data)
 	}
 	options := ImageOptions{ImageType: image.ImageType, ReadDpi: true, Artifact: true}
-	if f.images[name] == nil {
+	if info, _ := f.ensureResourceStore().image(name); info == nil {
 		f.RegisterImageOptionsReader(name, options, bytes.NewReader(image.Data))
 	}
 	if !f.Ok() {
@@ -458,7 +458,7 @@ func (f *Document) svgWritePatternFill(originX, originY, scale float64, path SVG
 			f.svgEmitPath(x, y, scale, tileClip)
 			f.out("W n")
 			if tileTemplate != nil {
-				f.UseTemplateScaled(tileTemplate, Point{X: x, Y: y}, Size{Wd: tileWd * scale, Ht: tileHt * scale})
+				f.UseTemplateViewScaled(tileTemplate, Point{X: x, Y: y}, Size{Wd: tileWd * scale, Ht: tileHt * scale})
 			} else {
 				for i := range pattern.Elements {
 					f.svgWriteElement(x, y, scale, &pattern.Elements[i], svgWriteOptions{})
@@ -475,7 +475,7 @@ func (f *Document) svgWritePatternFill(originX, originY, scale float64, path SVG
 	f.out("Q")
 }
 
-func (f *Document) svgPatternTileTemplate(pattern SVGPattern, tileWd, tileHt, scale float64) Template {
+func (f *Document) svgPatternTileTemplate(pattern SVGPattern, tileWd, tileHt, scale float64) TemplateView {
 	if len(pattern.Elements) == 0 || tileWd <= 0 || tileHt <= 0 || f.err != nil {
 		return nil
 	}

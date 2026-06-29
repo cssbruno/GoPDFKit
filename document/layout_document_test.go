@@ -6,10 +6,7 @@ package document
 import "testing"
 
 func TestDocumentModelDefaultsAndBlocks(t *testing.T) {
-	doc := NewLayoutDocument("")
-	if doc.Kind != DocumentKindGeneric {
-		t.Fatalf("kind = %q, want %q", doc.Kind, DocumentKindGeneric)
-	}
+	doc := NewLayoutDocument()
 
 	doc.AddBlock(nil)
 	if len(doc.Body) != 0 {
@@ -129,7 +126,7 @@ func TestSignatureBlockPAdESFieldName(t *testing.T) {
 }
 
 func TestDocumentPageTemplateModel(t *testing.T) {
-	doc := NewLayoutDocument(DocumentKindReport)
+	doc := NewLayoutDocument()
 	doc.PageTemplate = PageTemplate{
 		Header: &HeaderBlock{Height: 12},
 		Footer: &FooterBlock{

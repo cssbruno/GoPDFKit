@@ -18,6 +18,16 @@ const (
 	CnProtectAnnotForms = 32
 )
 
+// ProtectionAlgorithm names a PDF protection implementation marker.
+type ProtectionAlgorithm string
+
+const (
+	// ProtectionLegacyRC4 names the legacy RC4-based PDF standard-security
+	// handler used by SetLegacyProtection. It is the only document-encryption
+	// handler implemented by this package.
+	ProtectionLegacyRC4 ProtectionAlgorithm = "legacy-rc4"
+)
+
 type protectType struct {
 	encrypted     bool
 	uValue        []byte
@@ -119,6 +129,25 @@ func (f *Document) SetProtection(actionFlag byte, userPassStr, ownerPassStr stri
 // Deprecated: use SetLegacyProtection.
 func (f *Document) SetProtectionError(actionFlag byte, userPassStr, ownerPassStr string) error {
 	return f.SetLegacyProtection(actionFlag, userPassStr, ownerPassStr)
+}
+
+// SetAESProtection reports that AES-based PDF standard-security encryption is
+// intentionally unsupported.
+//
+// This method exists to make the API boundary explicit: GoPDFKit does not
+// half-implement AES document encryption. Use SetLegacyProtection only for the
+// legacy RC4 compatibility handler, or use external PDF security tooling when
+// AES-based document encryption is required.
+func (f *Document) SetAESProtection(actionFlag byte, userPassStr, ownerPassStr string) error {
+	_ = actionFlag
+	_ = userPassStr
+	_ = ownerPassStr
+	if f.err != nil {
+		return f.err
+	}
+	err := ErrAESProtectionUnsupported
+	f.SetError(err)
+	return err
 }
 
 // SetLegacyProtection implements the legacy RC4-based PDF standard-security

@@ -7,6 +7,7 @@ package inspect
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -33,7 +34,13 @@ var mediaBoxPattern = regexp.MustCompile(`/MediaBox\s*\[\s*[-+]?(?:\d+(?:\.\d*)?
 // ValidateStructure checks that data can be parsed as an unencrypted classic
 // PDF with at least one importable page.
 func ValidateStructure(data []byte) error {
-	count, err := PageCount(data)
+	return ValidateStructureContext(context.Background(), data)
+}
+
+// ValidateStructureContext checks that data can be parsed as an unencrypted
+// classic PDF with at least one importable page and honors ctx during parsing.
+func ValidateStructureContext(ctx context.Context, data []byte) error {
+	count, err := PageCountContext(ctx, data)
 	if err != nil {
 		return err
 	}
@@ -45,8 +52,17 @@ func ValidateStructure(data []byte) error {
 
 // PageCount returns the number of pages GoPDFKit can import from data.
 func PageCount(data []byte) (int, error) {
+	return PageCountContext(context.Background(), data)
+}
+
+// PageCountContext returns the number of pages GoPDFKit can import from data
+// and honors ctx while importing the page tree.
+func PageCountContext(ctx context.Context, data []byte) (int, error) {
 	pdf := document.New("", "", "", "")
-	ids := pdf.ImportPagesFromSource(data, "MediaBox")
+	ids, err := pdf.ImportPagesFromSourceContext(ctx, data, "MediaBox")
+	if err != nil {
+		return 0, fmt.Errorf("parse pdf: %w", err)
+	}
 	if err := pdf.Error(); err != nil {
 		return 0, fmt.Errorf("parse pdf: %w", err)
 	}
@@ -73,14 +89,30 @@ func FirstPageSizePoints(data []byte) (float64, float64, error) {
 
 // Text extracts literal text operators from PDF content streams.
 func Text(data []byte) (string, error) {
-	streams, err := DecodedStreams(data)
+	return TextContext(context.Background(), data)
+}
+
+// TextContext extracts literal text operators from PDF content streams and
+// honors ctx during stream scanning and text tokenization.
+func TextContext(ctx context.Context, data []byte) (string, error) {
+	if err := inspectContextErr(ctx); err != nil {
+		return "", err
+	}
+	streams, err := DecodedStreamsContext(ctx, data)
 	if err != nil {
 		return "", err
 	}
 
 	var text strings.Builder
 	for _, stream := range streams {
-		text.WriteString(textFromContentStream(stream))
+		if err := inspectContextErr(ctx); err != nil {
+			return "", err
+		}
+		streamText, err := textFromContentStreamContext(ctx, stream)
+		if err != nil {
+			return "", err
+		}
+		text.WriteString(streamText)
 	}
 	return text.String(), nil
 }
@@ -88,12 +120,24 @@ func Text(data []byte) (string, error) {
 // PageText imports one PDF page through GoPDFKit and extracts text from the
 // resulting single-page PDF.
 func PageText(data []byte, pageNum int) (string, error) {
+	return PageTextContext(context.Background(), data, pageNum)
+}
+
+// PageTextContext imports one PDF page through GoPDFKit and extracts text from
+// the resulting single-page PDF while honoring ctx.
+func PageTextContext(ctx context.Context, data []byte, pageNum int) (string, error) {
+	if err := inspectContextErr(ctx); err != nil {
+		return "", err
+	}
 	if pageNum < 1 {
 		return "", errors.New("pdf page number must be positive")
 	}
 
 	pdf := document.New("", "", "", "")
-	pageID := pdf.ImportPageStream(bytes.NewReader(data), pageNum, "MediaBox")
+	pageID, err := pdf.ImportPageStreamContext(ctx, bytes.NewReader(data), pageNum, "MediaBox")
+	if err != nil {
+		return "", fmt.Errorf("parse pdf page: %w", err)
+	}
 	if err := pdf.Error(); err != nil {
 		return "", fmt.Errorf("parse pdf page: %w", err)
 	}
@@ -105,18 +149,30 @@ func PageText(data []byte, pageNum int) (string, error) {
 	pdf.UseImportedPage(pageID, 0, 0, 0, 0)
 
 	var buf bytes.Buffer
-	if err := pdf.Output(&buf); err != nil {
+	if err := pdf.OutputContext(ctx, &buf); err != nil {
 		return "", fmt.Errorf("render imported pdf page: %w", err)
 	}
-	return Text(buf.Bytes())
+	return TextContext(ctx, buf.Bytes())
 }
 
 // DecodedStreams returns raw or Flate-decoded PDF streams in file order.
 func DecodedStreams(data []byte) ([][]byte, error) {
+	return DecodedStreamsContext(context.Background(), data)
+}
+
+// DecodedStreamsContext returns raw or Flate-decoded PDF streams in file order
+// and honors ctx while scanning and decoding streams.
+func DecodedStreamsContext(ctx context.Context, data []byte) ([][]byte, error) {
+	if err := inspectContextErr(ctx); err != nil {
+		return nil, err
+	}
 	streams := make([][]byte, 0)
 	searchFrom := 0
 
 	for {
+		if err := inspectContextErr(ctx); err != nil {
+			return nil, err
+		}
 		streamIdxRel := bytes.Index(data[searchFrom:], []byte("stream"))
 		if streamIdxRel < 0 {
 			return streams, nil
@@ -137,7 +193,7 @@ func DecodedStreams(data []byte) ([][]byte, error) {
 
 		streamEnd := streamStart + endRel
 		stream := bytes.TrimRight(data[streamStart:streamEnd], "\r\n")
-		decoded, err := decodeStream(streamDictionaryBytes(data[:streamIdx]), stream)
+		decoded, err := decodeStreamContext(ctx, streamDictionaryBytes(data[:streamIdx]), stream)
 		if err != nil {
 			return nil, err
 		}
@@ -145,6 +201,13 @@ func DecodedStreams(data []byte) ([][]byte, error) {
 		streams = append(streams, decoded)
 		searchFrom = streamEnd + len("endstream")
 	}
+}
+
+func inspectContextErr(ctx context.Context) error {
+	if ctx == nil {
+		return nil
+	}
+	return ctx.Err()
 }
 
 func streamDictionaryBytes(beforeStream []byte) []byte {
@@ -156,8 +219,15 @@ func streamDictionaryBytes(beforeStream []byte) []byte {
 }
 
 func decodeStream(dict []byte, stream []byte) ([]byte, error) {
+	return decodeStreamContext(context.Background(), dict, stream)
+}
+
+func decodeStreamContext(ctx context.Context, dict []byte, stream []byte) ([]byte, error) {
+	if err := inspectContextErr(ctx); err != nil {
+		return nil, err
+	}
 	if hasFlateFilter(dict) {
-		return inflateStream(stream)
+		return inflateStreamContext(ctx, stream)
 	}
 	if len(stream) > maxDecodedStreamBytes {
 		return nil, errors.New("pdf stream exceeds maximum size")
@@ -190,6 +260,13 @@ func containsPDFName(data []byte, name string) bool {
 }
 
 func inflateStream(stream []byte) ([]byte, error) {
+	return inflateStreamContext(context.Background(), stream)
+}
+
+func inflateStreamContext(ctx context.Context, stream []byte) ([]byte, error) {
+	if err := inspectContextErr(ctx); err != nil {
+		return nil, err
+	}
 	reader, err := zlib.NewReader(bytes.NewReader(stream))
 	if err != nil {
 		return nil, fmt.Errorf("decode flate stream: %w", err)
@@ -198,7 +275,7 @@ func inflateStream(stream []byte) ([]byte, error) {
 		_ = reader.Close()
 	}()
 
-	decoded, err := io.ReadAll(io.LimitReader(reader, maxDecodedStreamBytes+1))
+	decoded, err := io.ReadAll(io.LimitReader(inspectContextReader{ctx: ctx, r: reader}, maxDecodedStreamBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read flate stream: %w", err)
 	}
@@ -208,17 +285,46 @@ func inflateStream(stream []byte) ([]byte, error) {
 	return decoded, nil
 }
 
+type inspectContextReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (r inspectContextReader) Read(p []byte) (int, error) {
+	if err := inspectContextErr(r.ctx); err != nil {
+		return 0, err
+	}
+	n, err := r.r.Read(p)
+	if err != nil {
+		return n, err
+	}
+	if n == 0 {
+		return n, inspectContextErr(r.ctx)
+	}
+	return n, nil
+}
+
 type pdfTextToken struct {
 	text   string
 	isText bool
 }
 
 func textFromContentStream(stream []byte) string {
+	text, _ := textFromContentStreamContext(context.Background(), stream)
+	return text
+}
+
+func textFromContentStreamContext(ctx context.Context, stream []byte) (string, error) {
 	var out strings.Builder
 	tokens := make([]pdfTextToken, 0, textTokenCapacity)
 	inText := false
 
 	for i := 0; i < len(stream); {
+		if i%1024 == 0 {
+			if err := inspectContextErr(ctx); err != nil {
+				return "", err
+			}
+		}
 		i = skipPDFWhitespaceAndComments(stream, i)
 		if i >= len(stream) {
 			break
@@ -269,7 +375,10 @@ func textFromContentStream(stream []byte) string {
 		}
 	}
 
-	return out.String()
+	if err := inspectContextErr(ctx); err != nil {
+		return "", err
+	}
+	return out.String(), nil
 }
 
 func isPDFTextStateOperator(word string) bool {

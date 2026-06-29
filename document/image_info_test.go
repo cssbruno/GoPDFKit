@@ -8,6 +8,8 @@ import (
 	"encoding/base64"
 	"image"
 	"image/color"
+	"image/gif"
+	"image/jpeg"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -55,6 +57,83 @@ func TestGenerateImageIDIgnoresRuntimeState(t *testing.T) {
 	}
 	if baseID != otherID {
 		t.Fatalf("image IDs differ for runtime-only fields: %s != %s", baseID, otherID)
+	}
+}
+
+func TestGenerateImageIDIncludesDPI(t *testing.T) {
+	base := &ImageInfo{data: []byte("image"), w: 1, h: 1, cs: "DeviceRGB", bpc: 8, f: "DCTDecode", dpi: 72}
+	other := base.clone()
+	other.dpi = 144
+
+	baseID, err := generateImageID(base)
+	if err != nil {
+		t.Fatalf("generateImageID(base) error = %v", err)
+	}
+	otherID, err := generateImageID(other)
+	if err != nil {
+		t.Fatalf("generateImageID(other) error = %v", err)
+	}
+	if baseID == otherID {
+		t.Fatal("image IDs are equal after changing DPI")
+	}
+}
+
+func TestRegisteredImageIDStableAcrossUnitsAndOutputState(t *testing.T) {
+	register := func(unit string) (*Document, *ImageInfo) {
+		t.Helper()
+		pdf := New("P", unit, "A4", "")
+		info, err := pdf.RegisterImageOptionsReaderError("pixel", ImageOptions{ImageType: "png"}, bytes.NewReader(decodeTinyPNG(t)))
+		if err != nil {
+			t.Fatalf("RegisterImageOptionsReaderError(%s) error = %v", unit, err)
+		}
+		return pdf, info
+	}
+
+	mmDoc, mmInfo := register("mm")
+	_, ptInfo := register("pt")
+	if mmInfo.i != ptInfo.i {
+		t.Fatalf("image ID differs by document unit: mm=%s pt=%s", mmInfo.i, ptInfo.i)
+	}
+
+	beforeOutputID := mmInfo.i
+	mmDoc.SetCompression(false)
+	mmDoc.AddPage()
+	mmDoc.ImageOptions("pixel", 10, 10, 5, 5, false, ImageOptions{ImageType: "png"}, 0, "")
+	var out bytes.Buffer
+	if err := mmDoc.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if mmInfo.n == 0 {
+		t.Fatal("output did not assign an image object number")
+	}
+	if mmInfo.i != beforeOutputID {
+		t.Fatalf("image ID changed after output object assignment: %s != %s", mmInfo.i, beforeOutputID)
+	}
+}
+
+func TestRegisteredImageIDsUseSHA256AcrossFormats(t *testing.T) {
+	cases := []struct {
+		name      string
+		imageType string
+		data      []byte
+	}{
+		{name: "png-alpha", imageType: "png", data: encodeAlphaPNG(t)},
+		{name: "jpeg", imageType: "jpg", data: encodeTinyJPEG(t)},
+		{name: "gif", imageType: "gif", data: encodeTinyGIF(t)},
+		{name: "webp", imageType: "webp", data: decodeTinyWebP(t)},
+		{name: "indexed-png", imageType: "png", data: encodeIndexedPNG(t)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pdf := New("P", "mm", "A4", "")
+			info, err := pdf.RegisterImageOptionsReaderError(tc.name, ImageOptions{ImageType: tc.imageType}, bytes.NewReader(tc.data))
+			if err != nil {
+				t.Fatalf("RegisterImageOptionsReaderError() error = %v", err)
+			}
+			if len(info.i) != 64 {
+				t.Fatalf("image ID length = %d, want SHA-256 hex length", len(info.i))
+			}
+		})
 	}
 }
 
@@ -249,6 +328,45 @@ func encodeAlphaPNG(t *testing.T) []byte {
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
 		t.Fatalf("encode PNG fixture: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func encodeIndexedPNG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewPaletted(image.Rect(0, 0, 1, 1), color.Palette{
+		color.RGBA{A: 0xff},
+		color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff},
+	})
+	img.SetColorIndex(0, 0, 1)
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("encode indexed PNG fixture: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func encodeTinyJPEG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	img.SetRGBA(0, 0, color.RGBA{R: 0xff, G: 0x80, A: 0xff})
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80}); err != nil {
+		t.Fatalf("encode JPEG fixture: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func encodeTinyGIF(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewPaletted(image.Rect(0, 0, 1, 1), color.Palette{
+		color.RGBA{A: 0xff},
+		color.RGBA{B: 0xff, A: 0xff},
+	})
+	img.SetColorIndex(0, 0, 1)
+	var buf bytes.Buffer
+	if err := gif.Encode(&buf, img, nil); err != nil {
+		t.Fatalf("encode GIF fixture: %v", err)
 	}
 	return buf.Bytes()
 }

@@ -15,14 +15,17 @@ import (
 
 // Sentinel errors for callers that need to branch on broad failure classes.
 var (
-	ErrInvalidPageSize      = errors.New("invalid page size")
-	ErrAttachmentTooLarge   = errors.New("attachment too large")
-	ErrUnsupportedImageType = errors.New("unsupported image type")
-	ErrUnsupportedPDFImport = errors.New("unsupported PDF import")
-	ErrHTMLLimitExceeded    = errors.New("HTML input exceeds maximum size")
-	ErrPageLimitExceeded    = errors.New("page limit exceeded")
-	ErrOutputCanceled       = errors.New("output canceled")
-	ErrSecurityPolicyDenied = errors.New("security policy denied feature")
+	ErrInvalidPageSize          = errors.New("invalid page size")
+	ErrAttachmentTooLarge       = errors.New("attachment too large")
+	ErrUnsupportedImageType     = errors.New("unsupported image type")
+	ErrUnsupportedPDFImport     = errors.New("unsupported PDF import")
+	ErrImageTooLarge            = errors.New("image too large")
+	ErrHTMLLimitExceeded        = errors.New("HTML input exceeds maximum size")
+	ErrPageLimitExceeded        = errors.New("page limit exceeded")
+	ErrOutputCanceled           = errors.New("output canceled")
+	ErrSecurityPolicyDenied     = errors.New("security policy denied feature")
+	ErrJavaScriptUnsupported    = errors.New("JavaScript actions are not supported")
+	ErrAESProtectionUnsupported = errors.New("AES-based PDF encryption is not supported")
 )
 
 // Limits bounds resource and document sizes for production deployments. A zero
@@ -43,6 +46,10 @@ type Limits struct {
 type OutputPolicy struct {
 	DisableSync   bool
 	Deterministic bool
+	// StreamFinal makes regular Output* methods use the one-shot streaming
+	// final-writer path. It is useful for very large unsigned PDFs when lower
+	// peak memory is more important than repeatable output from one Document.
+	StreamFinal bool
 }
 
 // SecurityPolicy gates features that server callers often disable. A policy is
@@ -51,15 +58,19 @@ type OutputPolicy struct {
 // feature.
 type SecurityPolicy struct {
 	AllowLegacyRC4Protection bool
-	AllowJavaScript          bool
+	AllowJavaScript          bool // Deprecated: ignored because PDF JavaScript actions are unsupported.
 	AllowLocalHTMLImages     bool
 	AllowFileAttachments     bool
 	AllowRawWrites           bool
+	AllowPDFImport           bool
+	AllowPDFSigning          bool
 	MaxEmbeddedFileBytes     int64
 }
 
 // Hooks receives optional production diagnostics. Hooks are best-effort and
-// must not be required for correctness.
+// must not be required for correctness. Hooks may be called concurrently from
+// output worker goroutines, so hook implementations must be safe for the
+// concurrency they observe.
 type Hooks struct {
 	OnResourceCacheHit  func(kind, key string)
 	OnResourceCacheMiss func(kind, key string)
@@ -74,6 +85,7 @@ type ProductionPolicy struct {
 	Limits        Limits
 	Compression   CompressionPolicy
 	Cache         ResourceCachePolicy
+	CacheSet      bool
 	Security      SecurityPolicy
 	Output        OutputPolicy
 	Hooks         Hooks
@@ -102,12 +114,12 @@ func BatchLimits() Limits {
 		MaxImageSourceBytes:        256 * 1024 * 1024,
 		MaxImageDecodedBytes:       1024 * 1024 * 1024,
 		MaxAttachmentBytes:         512 * 1024 * 1024,
-		MaxImportedPDFBytes:        512 * 1024 * 1024,
+		MaxImportedPDFBytes:        importPDFMaxSourceBytes(),
 		MaxHTMLBytes:               32 * 1024 * 1024,
 		MaxHTMLGeneratedPages:      10_000,
 		MaxTemplateSerializedBytes: 128 * 1024 * 1024,
 		MaxPages:                   100_000,
-		MaxReferencedObjects:       1_000_000,
+		MaxReferencedObjects:       importPDFMaxReferencedObjects(),
 	}
 }
 
@@ -118,13 +130,15 @@ func ServerSafePolicy() ProductionPolicy {
 	return ProductionPolicy{
 		Limits: ServerSafeLimits(),
 		Compression: CompressionPolicy{
+			Mode:                     CompressionEnabled,
 			Enabled:                  true,
 			Level:                    zlib.BestSpeed,
 			PageWorkers:              4,
 			AttachmentWorkers:        2,
 			TinyStreamThresholdBytes: defaultTinyStreamCompressionThreshold,
 		},
-		Cache: ResourceCacheDocument,
+		Cache:    ResourceCacheDocument,
+		CacheSet: true,
 		Security: SecurityPolicy{
 			MaxEmbeddedFileBytes: MaxAttachmentBytes,
 		},
@@ -140,22 +154,33 @@ func BatchPolicy() ProductionPolicy {
 	return ProductionPolicy{
 		Limits: BatchLimits(),
 		Compression: CompressionPolicy{
+			Mode:                     CompressionEnabled,
 			Enabled:                  true,
 			Level:                    zlib.DefaultCompression,
 			PageWorkers:              workers,
 			AttachmentWorkers:        workers,
 			TinyStreamThresholdBytes: defaultTinyStreamCompressionThreshold,
 		},
-		Cache: ResourceCacheShared,
+		Cache:    ResourceCacheShared,
+		CacheSet: true,
 		Security: SecurityPolicy{
 			AllowLegacyRC4Protection: true,
-			AllowJavaScript:          true,
 			AllowLocalHTMLImages:     true,
 			AllowFileAttachments:     true,
 			AllowRawWrites:           true,
+			AllowPDFImport:           true,
+			AllowPDFSigning:          true,
 			MaxEmbeddedFileBytes:     512 * 1024 * 1024,
 		},
 	}
+}
+
+func importPDFMaxSourceBytes() int64 {
+	return maxPDFImportSourceBytes
+}
+
+func importPDFMaxReferencedObjects() int {
+	return maxPDFImportReferencedObjects
 }
 
 // DeterministicPolicy returns a server-safe profile with deterministic output
@@ -221,6 +246,49 @@ func (f *Document) applyLimits(limits Limits) error {
 	f.limits = limits
 	f.limitsSet = true
 	return f.err
+}
+
+// SetLimits sets resource and document limits on an existing Document.
+func (f *Document) SetLimits(limits Limits) error {
+	return f.applyLimits(limits)
+}
+
+// SetSecurityPolicy installs feature gates on an existing Document. A zero
+// SecurityPolicy denies all gated features because it was explicitly installed.
+func (f *Document) SetSecurityPolicy(policy SecurityPolicy) error {
+	return f.applySecurityPolicy(policy)
+}
+
+// SetHooks installs optional production diagnostics callbacks.
+func (f *Document) SetHooks(hooks Hooks) {
+	f.hooks = hooks
+}
+
+// SetProductionPolicy applies production controls to an existing Document.
+func (f *Document) SetProductionPolicy(policy ProductionPolicy) error {
+	f.applyRuntimePolicy(runtimePolicyFromProductionPolicy(policy))
+	return f.err
+}
+
+func runtimePolicyFromProductionPolicy(policy ProductionPolicy) runtimePolicy {
+	cachePolicy := policy.Cache
+	if !policy.CacheSet && policy.Cache == ResourceCacheShared {
+		cachePolicy = ResourceCacheDocument
+	}
+	return runtimePolicy{
+		compressionPolicy:    policy.Compression,
+		compressionPolicySet: true,
+		cachePolicy:          cachePolicy,
+		limits:               policy.Limits,
+		limitsSet:            true,
+		securityPolicy:       policy.Security,
+		securityPolicySet:    true,
+		outputPolicy:         policy.Output,
+		outputPolicySet:      true,
+		hooks:                policy.Hooks,
+		hooksSet:             true,
+		deterministicOutput:  policy.Deterministic || policy.Output.Deterministic,
+	}
 }
 
 func (f *Document) imageSourceLimit() int {

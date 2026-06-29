@@ -1,13 +1,17 @@
 %PDF-1.4
 3 0 obj
-<</Type /Page
+<<
+/Type /Page
 /Parent 1 0 R
 /Resources 2 0 R
 /Group <</Type /Group /S /Transparency /CS /DeviceRGB>>
-/Contents 4 0 R>>
+/Contents 4 0 R
+>>
 endobj
 4 0 obj
-<</Length 22970>>
+<<
+/Length 22970
+>>
 stream
 0 J
 0 j
@@ -1027,14 +1031,18 @@ BT 61.77 364.87 Td (Solar energy \(MWh\) per month, 2016)Tj ET
 endstream
 endobj
 5 0 obj
-<</Type /Page
+<<
+/Type /Page
 /Parent 1 0 R
 /Resources 2 0 R
 /Group <</Type /Group /S /Transparency /CS /DeviceRGB>>
-/Contents 6 0 R>>
+/Contents 6 0 R
+>>
 endobj
 6 0 obj
-<</Length 6667>>
+<<
+/Length 6667
+>>
 stream
 0 J
 0 j
@@ -1392,20 +1400,26 @@ BT /F0a76705d18e0494dd24cb573e53aa0a8c710ec99 14.00 Tf ET
 endstream
 endobj
 1 0 obj
-<</Type /Pages
+<<
+/Type /Pages
 /Kids [3 0 R 5 0 R ]
 /Count 2
 /MediaBox [0 0 595.28 841.89]
 >>
 endobj
 7 0 obj
-<</Type /ExtGState /ca 1.000 /CA 1.000 /BM /Normal>>
+<<
+/Type /ExtGState /ca 1.000 /CA 1.000 /BM /Normal
+>>
 endobj
 8 0 obj
-<</Type /ExtGState /ca 0.500 /CA 0.500 /BM /Normal>>
+<<
+/Type /ExtGState /ca 0.500 /CA 0.500 /BM /Normal
+>>
 endobj
 9 0 obj
-<</Type /Font
+<<
+/Type /Font
 /BaseFont /Helvetica
 /Subtype /Type1
 /Encoding /WinAnsiEncoding
@@ -1414,16 +1428,20 @@ endobj
 2 0 obj
 <<
 /ProcSet [/PDF /Text /ImageB /ImageC /ImageI]
-/Font <<
+/Font
+<<
 /F0a76705d18e0494dd24cb573e53aa0a8c710ec99 9 0 R
 >>
-/XObject <<
+/XObject
+<<
 >>
-/ExtGState <<
+/ExtGState
+<<
 /GS1 7 0 R
 /GS2 8 0 R
 >>
-/ColorSpace <<
+/ColorSpace
+<<
 >>
 >>
 endobj
@@ -1443,17 +1461,17 @@ endobj
 xref
 0 12
 0000000000 65535 f 
-0000030015 00000 n 
-0000030340 00000 n 
+0000030023 00000 n 
+0000030354 00000 n 
 0000000009 00000 n 
-0000000143 00000 n 
-0000023164 00000 n 
-0000023298 00000 n 
-0000030108 00000 n 
-0000030176 00000 n 
-0000030244 00000 n 
-0000030540 00000 n 
-0000030662 00000 n 
+0000000145 00000 n 
+0000023168 00000 n 
+0000023304 00000 n 
+0000030117 00000 n 
+0000030187 00000 n 
+0000030257 00000 n 
+0000030554 00000 n 
+0000030676 00000 n 
 trailer
 <<
 /Size 12
@@ -1461,5 +1479,5 @@ trailer
 /Info 10 0 R
 >>
 startxref
-30712
+30726
 %%EOF

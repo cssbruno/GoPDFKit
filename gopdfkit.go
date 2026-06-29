@@ -3,7 +3,11 @@
 
 package gopdfkit
 
-import "github.com/cssbruno/gopdfkit/document"
+import (
+	"context"
+
+	"github.com/cssbruno/gopdfkit/document"
+)
 
 // Document is the high-level PDF document API exposed by the document package.
 type Document = document.Document
@@ -19,6 +23,10 @@ type Defaults = document.Defaults
 
 // CompressionPolicy controls generated stream compression and background work.
 type CompressionPolicy = document.CompressionPolicy
+
+// CompressionMode selects whether CompressionPolicy enables or disables
+// compression.
+type CompressionMode = document.CompressionMode
 
 // ResourceCachePolicy controls file-backed resource caching.
 type ResourceCachePolicy = document.ResourceCachePolicy
@@ -44,6 +52,36 @@ type Hooks = document.Hooks
 // ProductionPolicy groups operational controls for server and batch use.
 type ProductionPolicy = document.ProductionPolicy
 
+// ProtectionAlgorithm names a PDF protection implementation marker.
+type ProtectionAlgorithm = document.ProtectionAlgorithm
+
+// Template is a reusable PDF template.
+type Template = document.Template
+
+// TemplateView exposes the renderable content and resources of a template.
+type TemplateView = document.TemplateView
+
+// TemplateChildrenView exposes render-only child template dependencies.
+type TemplateChildrenView = document.TemplateChildrenView
+
+// PagedTemplate exposes page selection for multi-page templates.
+type PagedTemplate = document.PagedTemplate
+
+// SerializableTemplate exposes template persistence for cache/storage use.
+type SerializableTemplate = document.SerializableTemplate
+
+// TemplateDecodeOptions controls limits used when deserializing templates.
+type TemplateDecodeOptions = document.TemplateDecodeOptions
+
+// DocumentStats summarizes the current in-memory shape of a document.
+type DocumentStats = document.DocumentStats
+
+// CacheStats summarizes a reusable resource cache.
+type CacheStats = document.CacheStats
+
+// SharedCachesStats summarizes package-level resource caches.
+type SharedCachesStats = document.SharedCachesStats
+
 // ImageCache stores parsed image data for reuse across documents.
 type ImageCache = document.ImageCache
 
@@ -55,6 +93,36 @@ type Attachment = document.Attachment
 
 // AttachmentOptions controls file-backed attachment validation.
 type AttachmentOptions = document.AttachmentOptions
+
+// AttachmentLoader opens attachment content for output.
+type AttachmentLoader = document.AttachmentLoader
+
+// AttachmentLoaderFunc adapts a function into an AttachmentLoader.
+type AttachmentLoaderFunc = document.AttachmentLoaderFunc
+
+// ResourceKind identifies a generalized resource-loader input category.
+type ResourceKind = document.ResourceKind
+
+// ResourceInfo describes a resource opened by ResourceLoader.
+type ResourceInfo = document.ResourceInfo
+
+// ResourceLoader opens supported resource kinds.
+type ResourceLoader = document.ResourceLoader
+
+// ResourceLoaderFunc adapts a function into a ResourceLoader.
+type ResourceLoaderFunc = document.ResourceLoaderFunc
+
+// FileResourceLoader opens resources from the filesystem.
+type FileResourceLoader = document.FileResourceLoader
+
+// HTMLSegmentType identifies one supported HTML token.
+type HTMLSegmentType = document.HTMLSegmentType
+
+// CompiledHTML stores reusable parse products for an HTML fragment.
+type CompiledHTML = document.CompiledHTML
+
+// SVG stores parsed SVG content that can be rendered into a document.
+type SVG = document.SVG
 
 // ValidationSeverity classifies an external validator issue.
 type ValidationSeverity = document.ValidationSeverity
@@ -104,18 +172,35 @@ const (
 	ResourceCacheDocument = document.ResourceCacheDocument
 	ResourceCacheDisabled = document.ResourceCacheDisabled
 
+	CompressionDefault         = document.CompressionDefault
+	CompressionEnabled         = document.CompressionEnabled
+	CompressionDisabled        = document.CompressionDisabled
+	CompressionWorkersDefault  = document.CompressionWorkersDefault
+	CompressionWorkersDisabled = document.CompressionWorkersDisabled
+
+	ProtectionLegacyRC4 = document.ProtectionLegacyRC4
+
+	ResourceImage      = document.ResourceImage
+	ResourceFont       = document.ResourceFont
+	ResourceAttachment = document.ResourceAttachment
+	ResourcePDFImport  = document.ResourcePDFImport
+
 	MaxAttachmentBytes = document.MaxAttachmentBytes
 )
 
 var (
-	ErrInvalidPageSize      = document.ErrInvalidPageSize
-	ErrAttachmentTooLarge   = document.ErrAttachmentTooLarge
-	ErrUnsupportedImageType = document.ErrUnsupportedImageType
-	ErrUnsupportedPDFImport = document.ErrUnsupportedPDFImport
-	ErrHTMLLimitExceeded    = document.ErrHTMLLimitExceeded
-	ErrPageLimitExceeded    = document.ErrPageLimitExceeded
-	ErrOutputCanceled       = document.ErrOutputCanceled
-	ErrSecurityPolicyDenied = document.ErrSecurityPolicyDenied
+	ErrInvalidPageSize          = document.ErrInvalidPageSize
+	ErrAttachmentTooLarge       = document.ErrAttachmentTooLarge
+	ErrUnsupportedImageType     = document.ErrUnsupportedImageType
+	ErrUnsupportedPDFImport     = document.ErrUnsupportedPDFImport
+	ErrImageTooLarge            = document.ErrImageTooLarge
+	ErrHTMLLimitExceeded        = document.ErrHTMLLimitExceeded
+	ErrPageLimitExceeded        = document.ErrPageLimitExceeded
+	ErrOutputCanceled           = document.ErrOutputCanceled
+	ErrSecurityPolicyDenied     = document.ErrSecurityPolicyDenied
+	ErrStreamingOutputConsumed  = document.ErrStreamingOutputConsumed
+	ErrJavaScriptUnsupported    = document.ErrJavaScriptUnsupported
+	ErrAESProtectionUnsupported = document.ErrAESProtectionUnsupported
 )
 
 // WithOrientation sets the default page orientation.
@@ -165,6 +250,11 @@ func WithProductionPolicy(policy ProductionPolicy) Option {
 	return document.WithProductionPolicy(policy)
 }
 
+// WithServerSafeDefaults applies the built-in server-safe production policy.
+func WithServerSafeDefaults() Option {
+	return document.WithServerSafeDefaults()
+}
+
 // WithLimits sets resource and document limits.
 func WithLimits(limits Limits) Option {
 	return document.WithLimits(limits)
@@ -173,6 +263,11 @@ func WithLimits(limits Limits) Option {
 // WithSecurityPolicy sets explicit feature gates.
 func WithSecurityPolicy(policy SecurityPolicy) Option {
 	return document.WithSecurityPolicy(policy)
+}
+
+// WithOutputPolicy sets output-time defaults.
+func WithOutputPolicy(policy OutputPolicy) Option {
+	return document.WithOutputPolicy(policy)
 }
 
 // WithHooks installs optional production diagnostics callbacks.
@@ -222,6 +317,11 @@ func WithUTF8FontCache(cache *FontCache) Option {
 	return document.WithUTF8FontCache(cache)
 }
 
+// WithResourceLoader installs a generalized resource loader.
+func WithResourceLoader(loader ResourceLoader) Option {
+	return document.WithResourceLoader(loader)
+}
+
 // WithLegacyConstructorArgs applies the string arguments accepted by New.
 func WithLegacyConstructorArgs(orientationStr, unitStr, sizeStr, fontDirStr string) Option {
 	return document.WithLegacyConstructorArgs(orientationStr, unitStr, sizeStr, fontDirStr)
@@ -235,6 +335,16 @@ func NewImageCache() *ImageCache {
 // NewFontCache creates an empty reusable UTF-8 font cache.
 func NewFontCache() *FontCache {
 	return document.NewFontCache()
+}
+
+// SharedCacheStats returns a snapshot of package-level image and font caches.
+func SharedCacheStats() SharedCachesStats {
+	return document.SharedCacheStats()
+}
+
+// ClearSharedCaches removes all package-level image and font cache entries.
+func ClearSharedCaches() {
+	document.ClearSharedCaches()
 }
 
 // ServerSafeLimits returns conservative resource limits.
@@ -273,6 +383,64 @@ func TemplateSerializationVersion() string {
 	return document.TemplateSerializationVersion()
 }
 
+// TemplateFingerprintVersion returns the current template identity hash format
+// version.
+func TemplateFingerprintVersion() string {
+	return document.TemplateFingerprintVersion()
+}
+
+// DeserializeTemplate creates a template from a serialized template.
+func DeserializeTemplate(data []byte) (Template, error) {
+	return document.DeserializeTemplate(data)
+}
+
+// DeserializeTemplateWithOptions creates a template with explicit decode
+// limits.
+func DeserializeTemplateWithOptions(data []byte, options TemplateDecodeOptions) (Template, error) {
+	return document.DeserializeTemplateWithOptions(data, options)
+}
+
+// HTMLTokenize returns supported HTML tokens.
+func HTMLTokenize(htmlStr string) []HTMLSegmentType {
+	return document.HTMLTokenize(htmlStr)
+}
+
+// HTMLTokenizeContext returns supported HTML tokens and checks ctx during
+// tokenization.
+func HTMLTokenizeContext(ctx context.Context, htmlStr string) ([]HTMLSegmentType, error) {
+	return document.HTMLTokenizeContext(ctx, htmlStr)
+}
+
+// CompileHTML compiles an HTML fragment for repeated rendering.
+func CompileHTML(htmlStr string) (*CompiledHTML, error) {
+	return document.CompileHTML(htmlStr)
+}
+
+// CompileHTMLContext compiles an HTML fragment and checks ctx during parsing.
+func CompileHTMLContext(ctx context.Context, htmlStr string) (*CompiledHTML, error) {
+	return document.CompileHTMLContext(ctx, htmlStr)
+}
+
+// SVGParse parses an SVG buffer into a descriptor.
+func SVGParse(buf []byte) (SVG, error) {
+	return document.SVGParse(buf)
+}
+
+// SVGParseContext parses an SVG buffer and checks ctx during parsing.
+func SVGParseContext(ctx context.Context, buf []byte) (SVG, error) {
+	return document.SVGParseContext(ctx, buf)
+}
+
+// SVGFileParse parses an SVG file into a descriptor.
+func SVGFileParse(svgFileStr string) (SVG, error) {
+	return document.SVGFileParse(svgFileStr)
+}
+
+// SVGFileParseContext parses an SVG file and checks ctx during parsing.
+func SVGFileParseContext(ctx context.Context, svgFileStr string) (SVG, error) {
+	return document.SVGFileParseContext(ctx, svgFileStr)
+}
+
 // AttachmentFromFile returns a file-backed attachment descriptor.
 func AttachmentFromFile(fileStr string) Attachment {
 	return document.AttachmentFromFile(fileStr)
@@ -282,6 +450,17 @@ func AttachmentFromFile(fileStr string) Attachment {
 // optionally validates it immediately.
 func AttachmentFromFileWithOptions(fileStr string, options AttachmentOptions) (Attachment, error) {
 	return document.AttachmentFromFileWithOptions(fileStr, options)
+}
+
+// AttachmentFromLoader returns a loader-backed attachment descriptor.
+func AttachmentFromLoader(filename string, loader AttachmentLoader) Attachment {
+	return document.AttachmentFromLoader(filename, loader)
+}
+
+// AttachmentFromLoaderWithOptions returns a loader-backed attachment descriptor
+// and optionally validates it immediately.
+func AttachmentFromLoaderWithOptions(filename string, loader AttachmentLoader, options AttachmentOptions) (Attachment, error) {
+	return document.AttachmentFromLoaderWithOptions(filename, loader, options)
 }
 
 // New returns a new PDF document using the document package defaults.

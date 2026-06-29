@@ -57,27 +57,15 @@ func documentNewWithDefaults(orientationStr, unitStr, sizeStr, fontDirStr string
 	f.pageBoxes = make(map[int]map[string]PageBox)
 	f.defPageBoxes = make(map[string]PageBox)
 	f.state = 0
-	f.fonts = make(map[string]fontDefinition)
-	f.fontFiles = make(map[string]fontFile)
+	f.initResourceStore()
 	f.utf8FontPathCache = make(map[string]utf8FontPathInfo)
 	f.resourceCachePolicy = ResourceCacheShared
 	f.diffs = make([]string, 0, 8)
-	f.templates = make(map[string]Template)
-	f.templateObjects = make(map[string]int)
-	f.importedObjs = make(map[string][]byte, 0)
-	f.importedObjPos = make(map[string]map[int]string, 0)
-	f.importedTplObjs = make(map[string]string)
-	f.importedTplIDs = make(map[string]int, 0)
-	f.importedPages = make(map[int]*importedPDFPage)
-	f.images = make(map[string]*ImageInfo)
 	f.imageCache = sharedImageFileCache
 	f.pageLinks = make([][]pageLink, 0, 8)
 	f.pageLinks = append(f.pageLinks, make([]pageLink, 0)) // pageLinks[0] is unused (1-based)
 	f.links = make([]internalLink, 0, 8)
 	f.links = append(f.links, internalLink{}) // links[0] is unused (1-based)
-	f.attachmentStreams = make(map[attachmentStreamKey]int)
-	f.attachmentFiles = make(map[attachmentFileKey]int)
-	f.attachmentCompressed = make(map[attachmentStreamKey][]byte)
 	f.maxAttachmentBytes = MaxAttachmentBytes
 	f.pageAttachments = make([][]annotationAttach, 0, 8)
 	f.pageAttachments = append(f.pageAttachments, []annotationAttach{}) //
@@ -201,24 +189,41 @@ func documentNewWithDefaults(orientationStr, unitStr, sizeStr, fontDirStr string
 func newWithOptions(options Options) (f *Document) {
 	cfg := options.normalized()
 	f = documentNewWithDefaults(cfg.orientationStr, cfg.unitStr, cfg.sizeStr, cfg.fontDirStr, cfg.size, DefaultSettings())
-	if f.err == nil {
-		f.applyResourceCacheOptions(cfg)
-	}
-	if f.err == nil {
-		f.applyExecutionOptions(cfg)
-	}
-	if f.err == nil {
-		f.applyOperationalOptions(cfg)
-	}
-	if f.err == nil && cfg.optimize {
-		f.SetCompressionLevel(zlib.BestCompression)
-	}
+	f.applyNormalizedOptions(cfg, true)
 	return f
 }
 
-func (f *Document) applyResourceCacheOptions(cfg normalizedOptions) {
-	f.resourceCachePolicy = cfg.cachePolicy
-	switch cfg.cachePolicy {
+func (f *Document) applyNormalizedOptions(cfg normalizedOptions, allowOptimize bool) {
+	if f.err != nil {
+		return
+	}
+	f.applyRuntimePolicy(cfg.runtimePolicy())
+	if f.err != nil {
+		return
+	}
+	if cfg.optimize && allowOptimize {
+		f.SetCompressionLevel(zlib.BestCompression)
+	}
+}
+
+func (f *Document) applyRuntimePolicy(policy runtimePolicy) {
+	if f.err != nil {
+		return
+	}
+	f.applyResourceCachePolicy(policy)
+	if f.err != nil {
+		return
+	}
+	f.applyExecutionPolicy(policy)
+	if f.err != nil {
+		return
+	}
+	f.applyOperationalPolicy(policy)
+}
+
+func (f *Document) applyResourceCachePolicy(policy runtimePolicy) {
+	f.resourceCachePolicy = policy.cachePolicy
+	switch policy.cachePolicy {
 	case ResourceCacheShared:
 		f.imageCache = sharedImageFileCache
 		f.fontCache = nil
@@ -229,52 +234,55 @@ func (f *Document) applyResourceCacheOptions(cfg normalizedOptions) {
 		f.imageCache = nil
 		f.fontCache = nil
 	default:
-		f.SetErrorf("unknown resource cache policy: %d", cfg.cachePolicy)
+		f.SetErrorf("unknown resource cache policy: %d", policy.cachePolicy)
 		return
 	}
-	if cfg.imageCacheSet {
-		f.imageCache = cfg.imageCache
+	if policy.imageCacheSet {
+		f.imageCache = policy.imageCache
 	}
-	if cfg.fontCacheSet {
-		f.fontCache = cfg.fontCache
+	if policy.fontCacheSet {
+		f.fontCache = policy.fontCache
 	}
-}
-
-func (f *Document) applyExecutionOptions(cfg normalizedOptions) {
-	if cfg.compressionPolicySet {
-		_ = f.SetCompressionPolicy(cfg.compressionPolicy)
-		if f.err != nil {
-			return
-		}
-	}
-	if cfg.pageCompressionWorkersSet {
-		f.SetPageCompressionWorkers(cfg.pageCompressionWorkers)
-	}
-	if cfg.attachmentCompressionWorkersSet {
-		f.SetAttachmentCompressionWorkers(cfg.attachmentCompressionWorkers)
+	if policy.resourceLoaderSet {
+		f.resourceLoader = policy.resourceLoader
 	}
 }
 
-func (f *Document) applyOperationalOptions(cfg normalizedOptions) {
-	if cfg.limitsSet {
-		_ = f.applyLimits(cfg.limits)
+func (f *Document) applyExecutionPolicy(policy runtimePolicy) {
+	if policy.compressionPolicySet {
+		_ = f.SetCompressionPolicy(policy.compressionPolicy)
 		if f.err != nil {
 			return
 		}
 	}
-	if cfg.securityPolicySet {
-		_ = f.applySecurityPolicy(cfg.securityPolicy)
+	if policy.pageCompressionWorkersSet {
+		f.SetPageCompressionWorkers(policy.pageCompressionWorkers)
+	}
+	if policy.attachmentCompressionWorkersSet {
+		f.SetAttachmentCompressionWorkers(policy.attachmentCompressionWorkers)
+	}
+}
+
+func (f *Document) applyOperationalPolicy(policy runtimePolicy) {
+	if policy.limitsSet {
+		_ = f.applyLimits(policy.limits)
 		if f.err != nil {
 			return
 		}
 	}
-	if cfg.hooksSet {
-		f.hooks = cfg.hooks
+	if policy.securityPolicySet {
+		_ = f.applySecurityPolicy(policy.securityPolicy)
+		if f.err != nil {
+			return
+		}
 	}
-	if cfg.outputPolicySet {
-		f.outputPolicy = cfg.outputPolicy
+	if policy.hooksSet {
+		f.hooks = policy.hooks
 	}
-	if cfg.deterministicOutput {
+	if policy.outputPolicySet {
+		f.outputPolicy = policy.outputPolicy
+	}
+	if policy.deterministicOutput {
 		f.applyDeterministicOutput()
 	}
 }
@@ -319,24 +327,7 @@ func MustNew(options ...Option) *Document {
 func NewWithDefaults(options Options, defaults Defaults) (f *Document) {
 	cfg := options.normalized()
 	f = documentNewWithDefaults(cfg.orientationStr, cfg.unitStr, cfg.sizeStr, cfg.fontDirStr, cfg.size, defaults)
-	if f.err != nil {
-		return f
-	}
-	f.applyResourceCacheOptions(cfg)
-	if f.err != nil {
-		return f
-	}
-	f.applyExecutionOptions(cfg)
-	if f.err != nil {
-		return f
-	}
-	f.applyOperationalOptions(cfg)
-	if f.err != nil {
-		return f
-	}
-	if cfg.optimize && defaults.Compression {
-		f.SetCompressionLevel(zlib.BestCompression)
-	}
+	f.applyNormalizedOptions(cfg, defaults.Compression)
 	return f
 }
 

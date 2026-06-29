@@ -1,12 +1,16 @@
 %PDF-1.3
 3 0 obj
-<</Type /Page
+<<
+/Type /Page
 /Parent 1 0 R
 /Resources 2 0 R
-/Contents 4 0 R>>
+/Contents 4 0 R
+>>
 endobj
 4 0 obj
-<</Length 7263>>
+<<
+/Length 7263
+>>
 stream
 0 J
 0 j
@@ -122,13 +126,17 @@ q 0.502 g BT 284.96 25.95 Td (Page 1)Tj ET Q
 endstream
 endobj
 5 0 obj
-<</Type /Page
+<<
+/Type /Page
 /Parent 1 0 R
 /Resources 2 0 R
-/Contents 6 0 R>>
+/Contents 6 0 R
+>>
 endobj
 6 0 obj
-<</Length 2100>>
+<<
+/Length 2100
+>>
 stream
 0 J
 0 j
@@ -172,13 +180,17 @@ q 0.502 g BT 284.96 25.95 Td (Page 2)Tj ET Q
 endstream
 endobj
 7 0 obj
-<</Type /Page
+<<
+/Type /Page
 /Parent 1 0 R
 /Resources 2 0 R
-/Contents 8 0 R>>
+/Contents 8 0 R
+>>
 endobj
 8 0 obj
-<</Length 7198>>
+<<
+/Length 7198
+>>
 stream
 0 J
 0 j
@@ -294,13 +306,17 @@ q 0.502 g BT 284.96 25.95 Td (Page 3)Tj ET Q
 endstream
 endobj
 9 0 obj
-<</Type /Page
+<<
+/Type /Page
 /Parent 1 0 R
 /Resources 2 0 R
-/Contents 10 0 R>>
+/Contents 10 0 R
+>>
 endobj
 10 0 obj
-<</Length 5016>>
+<<
+/Length 5016
+>>
 stream
 0 J
 0 j
@@ -385,42 +401,48 @@ q 0.502 g BT 284.96 25.95 Td (Page 4)Tj ET Q
 endstream
 endobj
 1 0 obj
-<</Type /Pages
+<<
+/Type /Pages
 /Kids [3 0 R 5 0 R 7 0 R 9 0 R ]
 /Count 4
 /MediaBox [0 0 595.28 841.89]
 >>
 endobj
 11 0 obj
-<</Type /Font
+<<
+/Type /Font
 /BaseFont /Helvetica
 /Subtype /Type1
 /Encoding /WinAnsiEncoding
 >>
 endobj
 12 0 obj
-<</Type /Font
+<<
+/Type /Font
 /BaseFont /Helvetica-Bold
 /Subtype /Type1
 /Encoding /WinAnsiEncoding
 >>
 endobj
 13 0 obj
-<</Type /Font
+<<
+/Type /Font
 /BaseFont /Helvetica-Oblique
 /Subtype /Type1
 /Encoding /WinAnsiEncoding
 >>
 endobj
 14 0 obj
-<</Type /Font
+<<
+/Type /Font
 /BaseFont /Times-Roman
 /Subtype /Type1
 /Encoding /WinAnsiEncoding
 >>
 endobj
 15 0 obj
-<</Type /Font
+<<
+/Type /Font
 /BaseFont /Times-Italic
 /Subtype /Type1
 /Encoding /WinAnsiEncoding
@@ -429,16 +451,19 @@ endobj
 2 0 obj
 <<
 /ProcSet [/PDF /Text /ImageB /ImageC /ImageI]
-/Font <<
+/Font
+<<
 /F0a76705d18e0494dd24cb573e53aa0a8c710ec99 11 0 R
 /F912688e64350d2b8dc208002a1bfb37bc4ca9e43 15 0 R
 /F97f05bfb6ba727d84d5803987480190cb83c609d 13 0 R
 /Fd08375f64eb9861c6eae4dfcfdbd3500fbdbe33e 14 0 R
 /Ff5d2de5f3a71699ae4b2d83179e62d09e6fc4126 12 0 R
 >>
-/XObject <<
+/XObject
+<<
 >>
-/ColorSpace <<
+/ColorSpace
+<<
 >>
 >>
 endobj
@@ -460,23 +485,23 @@ endobj
 xref
 0 18
 0000000000 65535 f 
-0000022100 00000 n 
-0000022708 00000 n 
+0000022116 00000 n 
+0000022730 00000 n 
 0000000009 00000 n 
-0000000087 00000 n 
-0000007400 00000 n 
-0000007478 00000 n 
-0000009628 00000 n 
-0000009706 00000 n 
-0000016954 00000 n 
-0000017033 00000 n 
-0000022205 00000 n 
-0000022302 00000 n 
-0000022404 00000 n 
-0000022509 00000 n 
-0000022608 00000 n 
-0000023070 00000 n 
-0000023252 00000 n 
+0000000089 00000 n 
+0000007404 00000 n 
+0000007484 00000 n 
+0000009636 00000 n 
+0000009716 00000 n 
+0000016966 00000 n 
+0000017047 00000 n 
+0000022222 00000 n 
+0000022320 00000 n 
+0000022423 00000 n 
+0000022529 00000 n 
+0000022629 00000 n 
+0000023092 00000 n 
+0000023274 00000 n 
 trailer
 <<
 /Size 18
@@ -484,5 +509,5 @@ trailer
 /Info 16 0 R
 >>
 startxref
-23302
+23324
 %%EOF

@@ -7,7 +7,7 @@ package document
 // imageStr. If the image has not been registered, nil is returned. The
 // internal error is not modified by this method.
 func (f *Document) GetImageInfo(imageStr string) (info *ImageInfo) {
-	info = f.images[imageStr]
+	info, _ = f.ensureResourceStore().image(imageStr)
 	if info == nil {
 		return nil
 	}

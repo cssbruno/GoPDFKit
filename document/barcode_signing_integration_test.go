@@ -62,6 +62,45 @@ func TestOutputSignedIntegration(t *testing.T) {
 	}
 }
 
+func TestOutputSignedIgnoresStreamFinalPolicy(t *testing.T) {
+	cert, signer := rootTestSigner(t)
+	truststore := x509.NewCertPool()
+	truststore.AddCert(cert)
+
+	pdf, err := NewDocument(WithOutputPolicy(OutputPolicy{StreamFinal: true}))
+	if err != nil {
+		t.Fatalf("NewDocument() error = %v", err)
+	}
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(40, 10, "Signed with StreamFinal policy")
+
+	var signed bytes.Buffer
+	err = pdf.OutputSigned(&signed, sign.Options{
+		Signer:          signer,
+		Certificate:     cert,
+		DigestAlgorithm: crypto.SHA256,
+		SigningTime:     time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("OutputSigned() error = %v", err)
+	}
+	if pdf.streamedOutput {
+		t.Fatal("OutputSigned should not consume the document through StreamFinal")
+	}
+	if _, err := sign.Verify(signed.Bytes(), truststore); err != nil {
+		t.Fatalf("Verify() error = %v", err)
+	}
+
+	var repeated bytes.Buffer
+	if err := pdf.Output(&repeated); err != nil {
+		t.Fatalf("Output() after OutputSigned() error = %v", err)
+	}
+	if !bytes.HasPrefix(repeated.Bytes(), []byte("%PDF-")) {
+		t.Fatalf("Output() after OutputSigned() wrote non-PDF prefix %q", repeated.Bytes()[:min(repeated.Len(), 8)])
+	}
+}
+
 func TestOutputSignedRejectsNilWriter(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 

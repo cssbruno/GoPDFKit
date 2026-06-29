@@ -82,13 +82,16 @@ func (f *Document) compiledAliasNeedles() [][]byte {
 		seen[f.aliasNbPagesStr] = true
 		aliases = append(aliases, f.aliasNbPagesStr)
 	}
+	mapAliases := make([]string, 0, len(f.aliasMap))
 	for alias := range f.aliasMap {
 		if alias == "" || seen[alias] {
 			continue
 		}
 		seen[alias] = true
-		aliases = append(aliases, alias)
+		mapAliases = append(mapAliases, alias)
 	}
+	sort.Strings(mapAliases)
+	aliases = append(aliases, mapAliases...)
 	needles := make([][]byte, 0, len(aliases)*2)
 	needleStrings := make([]string, 0, len(aliases)*2)
 	for _, alias := range aliases {
@@ -263,9 +266,9 @@ func (f *Document) putpagesContext(ctx context.Context) {
 			f.SetError(err)
 			return
 		}
-		f.newobj()
+		f.newPDFDictObject()
 		f.tagged.pageObjNums[n] = f.n
-		f.out("<</Type /Page")
+		f.out("/Type /Page")
 		f.out("/Parent 1 0 R")
 		pageSize, ok = f.pageSizes[n]
 		if ok {
@@ -274,7 +277,9 @@ func (f *Document) putpagesContext(ctx context.Context) {
 		if rotation := f.pageRotations[n]; rotation != 0 {
 			f.outf("/Rotate %d", rotation)
 		}
-		for t, pb := range f.pageBoxes[n] {
+		pageBoxKeys := pageBoxOutputKeys(f.pageBoxes[n], f.catalogSort)
+		for _, t := range pageBoxKeys {
+			pb := f.pageBoxes[n][t]
 			f.outf("/%s [%.2f %.2f %.2f %.2f]", t, pb.X, pb.Y, pb.Wd, pb.Ht)
 		}
 		f.out("/Resources 2 0 R")
@@ -304,28 +309,34 @@ func (f *Document) putpagesContext(ctx context.Context) {
 		if f.pdfVersion > "1.3" {
 			f.out("/Group <</Type /Group /S /Transparency /CS /DeviceRGB>>")
 		}
-		f.outf("/Contents %d 0 R>>", f.n+1)
-		f.out("endobj")
-		f.newobj()
+		f.outf("/Contents %d 0 R", f.n+1)
+		f.endPDFDict()
+		f.endPDFObject()
+		f.newPDFDictObject()
 		data, compressed := f.pageStreamBytesContext(ctx, n, pageStreams)
 		if f.err != nil {
 			return
 		}
 		if compressed {
-			f.outf("<</Filter /FlateDecode /Length %d>>", len(data))
+			f.out("/Filter /FlateDecode")
+			f.outf("/Length %d", len(data))
+		} else {
+			f.outf("/Length %d", f.pages[n].Len())
+		}
+		f.endPDFDict()
+		if compressed {
 			f.putstream(data)
 		} else {
-			f.outf("<</Length %d>>", f.pages[n].Len())
 			f.putstream(f.pages[n].Bytes())
 		}
-		f.out("endobj")
+		f.endPDFObject()
 		for _, pl := range f.pageLinks[n] {
 			f.putLinkAnnotation(pl, pagesObjectNumbers, pageHeights)
 		}
 	}
-	f.offsets[1] = f.buffer.Len()
-	f.out("1 0 obj")
-	f.out("<</Type /Pages")
+	f.beginPDFObject(1)
+	f.beginPDFDict()
+	f.out("/Type /Pages")
 	kids := make([]byte, 0, 16+nb*8)
 	kids = append(kids, "/Kids ["...)
 	for i := 1; i <= nb; i++ {
@@ -336,8 +347,8 @@ func (f *Document) putpagesContext(ctx context.Context) {
 	f.outbytes(kids)
 	f.outf("/Count %d", nb)
 	f.outf("/MediaBox [0 0 %.2f %.2f]", wPt, hPt)
-	f.out(">>")
-	f.out("endobj")
+	f.endPDFDict()
+	f.endPDFObject()
 }
 
 func (f *Document) pageStreamBytes(page int, pageStreams *pageStreamCompressor) ([]byte, bool) {
@@ -454,6 +465,17 @@ func (f *Document) startPageStreamCompressorContext(ctx context.Context, nb int)
 	}
 }
 
+func pageBoxOutputKeys(pageBoxes map[string]PageBox, sorted bool) []string {
+	keys := make([]string, 0, len(pageBoxes))
+	for key := range pageBoxes {
+		keys = append(keys, key)
+	}
+	if sorted {
+		sort.Strings(keys)
+	}
+	return keys
+}
+
 func (c *pageStreamCompressor) page(page int) (pageStreamData, bool) {
 	return c.pageContext(context.Background(), page)
 }
@@ -486,13 +508,17 @@ func (c *pageStreamCompressor) pageContext(ctx context.Context, page int) (pageS
 }
 
 func (f *Document) putLinkAnnotation(pl pageLink, pagesObjectNumbers []int, pageHeights []float64) {
-	f.newobj()
-	f.outf("<< /Type /Annot /Subtype /Link /Rect [%.2f %.2f %.2f %.2f] /Border [0 0 0] /F 4", pl.x, pl.y, pl.x+pl.wd, pl.y-pl.ht)
+	f.newPDFDictObject()
+	f.outf("/Type /Annot /Subtype /Link /Rect [%.2f %.2f %.2f %.2f] /Border [0 0 0] /F 4", pl.x, pl.y, pl.x+pl.wd, pl.y-pl.ht)
 	if pl.structParent >= 0 {
 		f.outf("/StructParent %d", pl.structParent)
 	}
 	if pl.link == 0 {
-		f.outf("/A << /S /URI /URI %s >>", f.textstring(pl.linkStr))
+		f.out("/A")
+		f.beginPDFDict()
+		f.out("/S /URI")
+		f.outf("/URI %s", f.textstring(pl.linkStr))
+		f.endPDFDict()
 	} else {
 		l := f.links[pl.link]
 		h := pageHeights[0]
@@ -505,6 +531,6 @@ func (f *Document) putLinkAnnotation(pl pageLink, pagesObjectNumbers []int, page
 		}
 		f.outf("/Dest [%d 0 R /XYZ 0 %.2f null]", pageObj, h-l.y*f.k)
 	}
-	f.out(">>")
-	f.out("endobj")
+	f.endPDFDict()
+	f.endPDFObject()
 }

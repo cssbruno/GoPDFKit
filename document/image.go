@@ -4,10 +4,10 @@
 package document
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,26 +125,30 @@ func (f *Document) RegisterImageOptionsReader(imgName string, options ImageOptio
 // RegisterImageOptionsReaderError registers an image from r and returns
 // parsing failures directly.
 func (f *Document) RegisterImageOptionsReaderError(imgName string, options ImageOptions, r io.Reader) (*ImageInfo, error) {
+	return f.RegisterImageOptionsReaderContext(context.Background(), imgName, options, r)
+}
+
+// RegisterImageOptionsReaderContext registers an image from r and checks ctx
+// while reading image bytes and around format parsing.
+func (f *Document) RegisterImageOptionsReaderContext(ctx context.Context, imgName string, options ImageOptions, r io.Reader) (*ImageInfo, error) {
 	if f.err != nil {
 		return nil, f.err
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		return nil, err
 	}
 	if strings.TrimSpace(imgName) == "" {
 		return nil, errors.New("image name should not be blank")
 	}
-	info, ok := f.images[imgName]
+	resources := f.ensureResourceStore()
+	info, ok := resources.image(imgName)
 	if ok {
 		if info == nil {
 			return nil, fmt.Errorf("registered image is invalid: %s", imgName)
 		}
-		if f.hooks.OnResourceCacheHit != nil {
-			f.hooks.OnResourceCacheHit("image", imgName)
-		}
 		return info, nil
 	}
-	if f.hooks.OnResourceCacheMiss != nil {
-		f.hooks.OnResourceCacheMiss("image", imgName)
-	}
-	info, minVersion, err := parseImageOptionsReaderWithLimits(options, r, f.k, f.compressLevel, f.pdfVersion, f.imageSourceLimit(), f.imageDecodedLimit())
+	info, minVersion, err := parseImageOptionsReaderWithLimitsContext(ctx, options, r, f.k, f.compressLevel, f.pdfVersion, f.imageSourceLimit(), f.imageDecodedLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +156,7 @@ func (f *Document) RegisterImageOptionsReaderError(imgName string, options Image
 	if info.i, err = generateImageID(info); err != nil {
 		return nil, err
 	}
-	f.images[imgName] = info
+	resources.setImage(imgName, info)
 	return info, nil
 }
 
@@ -177,18 +181,16 @@ func (f *Document) RegisterImageOptionsError(fileStr string, options ImageOption
 	if f.err != nil {
 		return nil, f.err
 	}
-	info, ok := f.images[fileStr]
+	resources := f.ensureResourceStore()
+	info, ok := resources.image(fileStr)
 	if ok {
 		if err := f.validateImageInfoLimits(info); err != nil {
 			return nil, err
 		}
-		if f.hooks.OnResourceCacheHit != nil {
-			f.hooks.OnResourceCacheHit("image", fileStr)
-		}
 		return info, nil
 	}
-	if f.hooks.OnResourceCacheMiss != nil {
-		f.hooks.OnResourceCacheMiss("image", fileStr)
+	if f.resourceLoader != nil {
+		return f.registerImageOptionsResource(context.Background(), fileStr, options)
 	}
 	if err := f.checkImageFileSourceLimit(fileStr); err != nil {
 		return nil, err
@@ -214,12 +216,19 @@ func (f *Document) RegisterImageOptionsError(fileStr string, options ImageOption
 		if info.i, err = generateImageID(info); err != nil {
 			return nil, err
 		}
-		f.images[fileStr] = info
+		resources.setImage(fileStr, info)
 		return info, nil
 	}
-	info, err := f.imageCache.RegisterImageOptions(fileStr, fileStr, options)
+	info, hit, err := f.imageCache.registerImageOptions(fileStr, fileStr, options)
 	if err != nil {
 		return nil, err
+	}
+	if hit {
+		if f.hooks.OnResourceCacheHit != nil {
+			f.hooks.OnResourceCacheHit("image", fileStr)
+		}
+	} else if f.hooks.OnResourceCacheMiss != nil {
+		f.hooks.OnResourceCacheMiss("image", fileStr)
 	}
 	registered := f.registerCachedImageInfo(fileStr, info)
 	if f.err != nil {
@@ -234,12 +243,66 @@ func (f *Document) RegisterImageOptionsError(fileStr string, options ImageOption
 	return registered, nil
 }
 
+func (f *Document) registerImageOptionsResource(ctx context.Context, name string, options ImageOptions) (*ImageInfo, error) {
+	reader, info, err := f.resourceLoader.OpenResource(ctx, ResourceImage, name)
+	if err != nil {
+		return nil, err
+	}
+	if reader == nil {
+		return nil, fmt.Errorf("resource loader returned nil reader: %s", name)
+	}
+	defer func() { _ = reader.Close() }()
+	if f.limits.MaxImageSourceBytes > 0 && info.Size > f.limits.MaxImageSourceBytes {
+		err := fmt.Errorf("%w: source image exceeds maximum size", ErrImageTooLarge)
+		f.SetError(err)
+		return nil, err
+	}
+	if options.ImageType == "" {
+		imageType, ok := inferImageTypeFromPath(name)
+		if !ok {
+			return nil, fmt.Errorf("image resource has no extension and no type was specified: %s", name)
+		}
+		options.ImageType = imageType
+	}
+	options.ImageType = normalizeImageType(options.ImageType)
+	var cacheKey imageFileCacheKey
+	if f.imageCache != nil && info.StableID != "" {
+		cacheKey = imageResourceCacheKey(info, options)
+		if cached, ok := f.imageCache.resourceImage(name, cacheKey); ok {
+			if f.hooks.OnResourceCacheHit != nil {
+				f.hooks.OnResourceCacheHit("image", name)
+			}
+			return f.registerCachedImageInfo(name, cached), f.err
+		}
+		if f.hooks.OnResourceCacheMiss != nil {
+			f.hooks.OnResourceCacheMiss("image", name)
+		}
+	}
+	parsed, minVersion, err := parseImageOptionsReaderWithLimitsContext(ctx, options, reader, f.k, f.compressLevel, f.pdfVersion, f.imageSourceLimit(), f.imageDecodedLimit())
+	if err != nil {
+		return nil, err
+	}
+	f.requirePDFVersion(minVersion)
+	if parsed.i, err = generateImageID(parsed); err != nil {
+		return nil, err
+	}
+	if cacheKey.path != "" {
+		f.imageCache.storeResourceImage(name, cacheKey, parsed)
+	}
+	resources := f.ensureResourceStore()
+	resources.setImage(name, parsed)
+	if err := f.validateImageInfoLimits(parsed); err != nil {
+		return nil, err
+	}
+	return parsed, nil
+}
+
 func (f *Document) checkImageFileSourceLimit(fileStr string) error {
 	if f.limits.MaxImageSourceBytes <= 0 {
 		return nil
 	}
 	if info, err := os.Stat(fileStr); err == nil && info.Mode().IsRegular() && info.Size() > f.limits.MaxImageSourceBytes {
-		err := fmt.Errorf("%w: source image exceeds maximum size", ErrUnsupportedImageType)
+		err := fmt.Errorf("%w: source image exceeds maximum size", ErrImageTooLarge)
 		f.SetError(err)
 		return err
 	}
@@ -252,7 +315,7 @@ func (f *Document) validateImageInfoLimits(info *ImageInfo) error {
 	}
 	decoded := estimatedImageDecodedBytes(info)
 	if decoded > f.limits.MaxImageDecodedBytes {
-		err := fmt.Errorf("%w: decoded image exceeds maximum size", ErrUnsupportedImageType)
+		err := fmt.Errorf("%w: decoded image exceeds maximum size", ErrImageTooLarge)
 		f.SetError(err)
 		return err
 	}
@@ -282,17 +345,25 @@ func estimatedImageDecodedBytes(info *ImageInfo) int64 {
 }
 
 func parseImageOptionsReader(options ImageOptions, r io.Reader, scale float64, compressLevel int, pdfVersion string) (*ImageInfo, string, error) {
-	return parseImageOptionsReaderWithLimits(options, r, scale, compressLevel, pdfVersion, maxImageSourceBytes, maxImageDecodedBytes)
+	return parseImageOptionsReaderWithLimitsContext(context.Background(), options, r, scale, compressLevel, pdfVersion, maxImageSourceBytes, maxImageDecodedBytes)
 }
 
 func parseImageOptionsReaderWithLimits(options ImageOptions, r io.Reader, scale float64, compressLevel int, pdfVersion string, sourceLimit, decodedLimit int) (*ImageInfo, string, error) {
+	return parseImageOptionsReaderWithLimitsContext(context.Background(), options, r, scale, compressLevel, pdfVersion, sourceLimit, decodedLimit)
+}
+
+func parseImageOptionsReaderWithLimitsContext(ctx context.Context, options ImageOptions, r io.Reader, scale float64, compressLevel int, pdfVersion string, sourceLimit, decodedLimit int) (*ImageInfo, string, error) {
 	if r == nil {
 		return nil, "", errors.New("image reader is nil")
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		return nil, "", err
 	}
 	if options.ImageType == "" {
 		return nil, "", errors.New("image type should be specified if reading from custom reader")
 	}
 	parser := newImageParserWithLimits(scale, compressLevel, pdfVersion, sourceLimit, decodedLimit)
+	r = contextReader{ctx: ctx, r: r}
 	imageType := normalizeImageType(options.ImageType)
 	var info *ImageInfo
 	switch imageType {
@@ -309,6 +380,9 @@ func parseImageOptionsReaderWithLimits(options ImageOptions, r io.Reader, scale 
 	}
 	if parser.err != nil {
 		return nil, "", parser.err
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		return nil, "", err
 	}
 	if info == nil {
 		return nil, "", errors.New("image parser returned no image info")
@@ -348,17 +422,17 @@ func inferImageTypeFromPath(path string) (string, bool) {
 
 // ImportObjects imports external template objects into the current document.
 func (f *Document) ImportObjects(objs map[string][]byte) {
+	resources := f.ensureResourceStore()
 	for name, data := range objs {
-		f.importedObjs[name] = append([]byte(nil), data...)
+		resources.addImportedObject(name, data)
 	}
 }
 
 // ImportObjPos imports external template object hash positions.
 func (f *Document) ImportObjPos(objPos map[string]map[int]string) {
+	resources := f.ensureResourceStore()
 	for name, positions := range objPos {
-		copied := make(map[int]string, len(positions))
-		maps.Copy(copied, positions)
-		f.importedObjPos[name] = copied
+		resources.addImportedObjectPositions(name, positions)
 	}
 }
 
@@ -392,5 +466,5 @@ func (f *Document) ImportTemplates(tpls map[string]string) {
 			return
 		}
 	}
-	maps.Copy(f.importedTplObjs, tpls)
+	f.ensureResourceStore().addImportedTemplates(tpls)
 }

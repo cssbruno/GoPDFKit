@@ -5,6 +5,7 @@ package document
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -103,11 +104,11 @@ func (f *Document) SetTextSpotColor(name string, tint byte) {
 }
 
 func spotColorDrawCommand(colorID int, tint byte) string {
-	return sprintf("/CS%d CS %.3f SCN", colorID, float64(clampSpotColorPercent(tint))/100)
+	return sprintf("%s CS %.3f SCN", spotColorPDFResourceName(colorID).String(), float64(clampSpotColorPercent(tint))/100)
 }
 
 func spotColorFillCommand(colorID int, tint byte) string {
-	return sprintf("/CS%d cs %.3f scn", colorID, float64(clampSpotColorPercent(tint))/100)
+	return sprintf("%s cs %.3f scn", spotColorPDFResourceName(colorID).String(), float64(clampSpotColorPercent(tint))/100)
 }
 
 func (f *Document) currentSpotColorComponents(color pdfColor) (name string, cyan, magenta, yellow, black byte) {
@@ -151,7 +152,8 @@ func (f *Document) GetFillSpotColor() (name string, c, m, y, k byte) {
 }
 
 func (f *Document) putSpotColors() {
-	for name, spotColor := range f.spotColorMap {
+	for _, name := range f.spotColorOutputNames() {
+		spotColor := f.spotColorMap[name]
 		f.newobj()
 		f.outf("[/Separation /%s", strings.ReplaceAll(name, " ", "#20"))
 		f.out("/DeviceCMYK <<")
@@ -159,16 +161,29 @@ func (f *Document) putSpotColors() {
 		f.outf("/C1 [%.3f %.3f %.3f %.3f] ", float64(spotColor.cmyk.c)/100, float64(spotColor.cmyk.m)/100,
 			float64(spotColor.cmyk.y)/100, float64(spotColor.cmyk.k)/100)
 		f.out("/FunctionType 2 /Domain [0 1] /N 1>>]")
-		f.out("endobj")
+		f.endPDFObject()
 		spotColor.objID = f.n
 		f.spotColorMap[name] = spotColor
 	}
 }
 
 func (f *Document) putSpotColorResourceDict() {
-	f.out("/ColorSpace <<")
-	for _, spotColor := range f.spotColorMap {
-		f.outf("/CS%d %d 0 R", spotColor.id, spotColor.objID)
+	f.out("/ColorSpace")
+	f.beginPDFDict()
+	for _, name := range f.spotColorOutputNames() {
+		spotColor := f.spotColorMap[name]
+		f.outbytes(appendPDFResourceRefValue(nil, spotColorPDFResourceRef(spotColor.id, spotColor.objID)))
 	}
-	f.out(">>")
+	f.endPDFDict()
+}
+
+func (f *Document) spotColorOutputNames() []string {
+	names := make([]string, 0, len(f.spotColorMap))
+	for name := range f.spotColorMap {
+		names = append(names, name)
+	}
+	if f.catalogSort {
+		sort.Strings(names)
+	}
+	return names
 }

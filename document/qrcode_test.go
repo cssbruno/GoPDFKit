@@ -62,8 +62,8 @@ func TestRegisterQRCodePNGRegistersImage(t *testing.T) {
 	if again != name {
 		t.Fatalf("duplicate RegisterQRCodePNG() name = %q, want %q", again, name)
 	}
-	if len(pdf.images) != 1 {
-		t.Fatalf("registered QR image count = %d, want 1", len(pdf.images))
+	if got := len(pdf.ensureResourceStore().images); got != 1 {
+		t.Fatalf("registered QR image count = %d, want 1", got)
 	}
 
 	if want := QRCodeImageName("https://example.test/verify/document-1"); name != want {

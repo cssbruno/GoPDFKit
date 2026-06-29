@@ -20,8 +20,8 @@ func TestLongFormHTMLDocumentModel(t *testing.T) {
 	if len(messages) != 0 {
 		t.Fatalf("messages = %#v, want none", messages)
 	}
-	if doc.Kind != DocumentKindLongForm {
-		t.Fatalf("kind = %q, want long-form", doc.Kind)
+	if doc.Title != "Long Form" {
+		t.Fatalf("title = %q, want Long Form", doc.Title)
 	}
 	if doc.PageTemplate.Footer == nil {
 		t.Fatal("footer = nil, want extracted footer")

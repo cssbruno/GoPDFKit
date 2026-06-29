@@ -359,8 +359,7 @@ func (f *Document) putTaggedPDF() {
 }
 
 func (f *Document) putTaggedElement(elem *taggedElement) {
-	f.newobj()
-	f.out("<<")
+	f.newPDFDictObject()
 	f.out("/Type /StructElem")
 	f.outf("/S /%s", elem.Role)
 	if elem.Parent != nil {
@@ -399,8 +398,8 @@ func (f *Document) putTaggedElement(elem *taggedElement) {
 		out = append(out, ']')
 		f.outbytes(out)
 	}
-	f.out(">>")
-	f.out("endobj")
+	f.endPDFDict()
+	f.endPDFObject()
 }
 
 func (f *Document) taggedTableAttributeString(elem *taggedElement) string {
@@ -501,8 +500,7 @@ func (f *Document) appendTaggedMCR(out []byte, page, mcid int) []byte {
 }
 
 func (f *Document) putTaggedDocumentElement() {
-	f.newobj()
-	f.out("<<")
+	f.newPDFDictObject()
 	f.out("/Type /StructElem")
 	f.out("/S /Document")
 	f.outf("/P %d 0 R", f.tagged.structTreeRootObj)
@@ -523,13 +521,12 @@ func (f *Document) putTaggedDocumentElement() {
 	} else {
 		f.out("/K []")
 	}
-	f.out(">>")
-	f.out("endobj")
+	f.endPDFDict()
+	f.endPDFObject()
 }
 
 func (f *Document) putTaggedParentTree() {
-	f.newobj()
-	f.out("<<")
+	f.newPDFDictObject()
 	nums := make([]byte, 0, 64)
 	nums = append(nums, "/Nums ["...)
 	for page := 1; page < len(f.tagged.pageElems); page++ {
@@ -556,30 +553,28 @@ func (f *Document) putTaggedParentTree() {
 	}
 	nums = append(nums, ']')
 	f.outbytes(nums)
-	f.out(">>")
-	f.out("endobj")
+	f.endPDFDict()
+	f.endPDFObject()
 }
 
 func (f *Document) putTaggedStructTreeRoot() {
-	f.newobj()
-	f.out("<<")
+	f.newPDFDictObject()
 	f.out("/Type /StructTreeRoot")
 	f.outf("/K %d 0 R", f.tagged.documentElemObj)
 	f.outf("/ParentTree %d 0 R", f.tagged.parentTreeObj)
 	if f.tagged.namespaceObj > 0 {
 		f.outf("/Namespaces [%d 0 R]", f.tagged.namespaceObj)
 	}
-	f.out(">>")
-	f.out("endobj")
+	f.endPDFDict()
+	f.endPDFObject()
 }
 
 func (f *Document) putTaggedNamespace() {
-	f.newobj()
-	f.out("<<")
+	f.newPDFDictObject()
 	f.out("/Type /Namespace")
 	f.out("/NS (http://iso.org/pdf2/ssn)")
-	f.out(">>")
-	f.out("endobj")
+	f.endPDFDict()
+	f.endPDFObject()
 }
 
 func normalizeTaggedRole(role string) string {

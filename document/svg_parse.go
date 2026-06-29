@@ -4,6 +4,7 @@
 package document
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/xml"
 	"errors"
@@ -713,6 +714,13 @@ func svgApplyPatternNode(pattern SVGPattern, node svgNode) SVGPattern {
 }
 
 func svgResolvePattern(id string, refs map[string]svgNode, gradients map[string]SVGGradient, cache map[string]SVGPattern, clipCache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int, seen map[string]bool) (SVGPattern, bool, error) {
+	return svgResolvePatternContext(context.Background(), id, refs, gradients, cache, clipCache, rules, ancestors, depth, seen)
+}
+
+func svgResolvePatternContext(ctx context.Context, id string, refs map[string]svgNode, gradients map[string]SVGGradient, cache map[string]SVGPattern, clipCache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int, seen map[string]bool) (SVGPattern, bool, error) {
+	if err := outputCanceledError(ctx); err != nil {
+		return SVGPattern{}, false, err
+	}
 	if depth > svgMaxNestingDepth {
 		return SVGPattern{}, false, fmt.Errorf("SVG nesting depth exceeds %d", svgMaxNestingDepth)
 	}
@@ -729,7 +737,7 @@ func svgResolvePattern(id string, refs map[string]svgNode, gradients map[string]
 	seen[id] = true
 	pattern := svgDefaultPattern()
 	if refID := svgUseRef(node); refID != "" {
-		if base, ok, err := svgResolvePattern(refID, refs, gradients, cache, clipCache, rules, ancestors, depth+1, seen); err != nil {
+		if base, ok, err := svgResolvePatternContext(ctx, refID, refs, gradients, cache, clipCache, rules, ancestors, depth+1, seen); err != nil {
 			return SVGPattern{}, false, err
 		} else if ok {
 			pattern = base
@@ -742,7 +750,7 @@ func svgResolvePattern(id string, refs map[string]svgNode, gradients map[string]
 		cache[id] = SVGPattern{}
 		return SVGPattern{}, false, nil
 	}
-	elements, err := svgPatternElements(node, pattern, refs, gradients, clipCache, rules, ancestors, depth+1)
+	elements, err := svgPatternElementsContext(ctx, node, pattern, refs, gradients, clipCache, rules, ancestors, depth+1)
 	if err != nil {
 		return SVGPattern{}, false, err
 	}
@@ -755,6 +763,13 @@ func svgResolvePattern(id string, refs map[string]svgNode, gradients map[string]
 }
 
 func svgPatternElements(node svgNode, pattern SVGPattern, refs map[string]svgNode, gradients map[string]SVGGradient, clipCache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) ([]SVGElement, error) {
+	return svgPatternElementsContext(context.Background(), node, pattern, refs, gradients, clipCache, rules, ancestors, depth)
+}
+
+func svgPatternElementsContext(ctx context.Context, node svgNode, pattern SVGPattern, refs map[string]svgNode, gradients map[string]SVGGradient, clipCache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) ([]SVGElement, error) {
+	if err := outputCanceledError(ctx); err != nil {
+		return nil, err
+	}
 	transform, err := svgViewBoxTransform(node.attr("viewBox"), node.attr("preserveAspectRatio"), pattern.Wd, pattern.Ht)
 	if err != nil {
 		return nil, err
@@ -763,7 +778,7 @@ func svgPatternElements(node svgNode, pattern SVGPattern, refs map[string]svgNod
 	sig := SVG{}
 	childAncestors := append(ancestors, svgHTMLSegment(node))
 	for _, child := range node.Children {
-		if err := svgCollectDepth(child, style, transform, &sig, refs, gradients, nil, clipCache, rules, childAncestors, depth+1, false); err != nil {
+		if err := svgCollectDepthContext(ctx, child, style, transform, &sig, refs, gradients, nil, clipCache, rules, childAncestors, depth+1, false); err != nil {
 			return nil, err
 		}
 	}
@@ -771,13 +786,17 @@ func svgPatternElements(node svgNode, pattern SVGPattern, refs map[string]svgNod
 }
 
 func svgCollect(node svgNode, style SVGStyle, transform svgMatrix, sig *SVG) error {
+	return svgCollectContext(context.Background(), node, style, transform, sig)
+}
+
+func svgCollectContext(ctx context.Context, node svgNode, style SVGStyle, transform svgMatrix, sig *SVG) error {
 	refs := map[string]svgNode{}
 	svgIndexRefs(node, refs)
 	gradients := map[string]SVGGradient{}
 	patterns := map[string]SVGPattern{}
 	clipCache := map[svgClipCacheKey]svgClipCacheEntry{}
 	rules := svgCollectStyleRules(node)
-	return svgCollectDepth(node, style, transform, sig, refs, gradients, patterns, clipCache, rules, nil, 0, false)
+	return svgCollectDepthContext(ctx, node, style, transform, sig, refs, gradients, patterns, clipCache, rules, nil, 0, false)
 }
 
 func svgCollectStyleRules(node svgNode) []htmlCSSRule {
@@ -874,6 +893,13 @@ type svgClipCacheEntry struct {
 }
 
 func svgResolveStyleRefs(style SVGStyle, transform svgMatrix, refs map[string]svgNode, gradients map[string]SVGGradient, patterns map[string]SVGPattern, clipCache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) (SVGStyle, error) {
+	return svgResolveStyleRefsContext(context.Background(), style, transform, refs, gradients, patterns, clipCache, rules, ancestors, depth)
+}
+
+func svgResolveStyleRefsContext(ctx context.Context, style SVGStyle, transform svgMatrix, refs map[string]svgNode, gradients map[string]SVGGradient, patterns map[string]SVGPattern, clipCache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) (SVGStyle, error) {
+	if err := outputCanceledError(ctx); err != nil {
+		return style, err
+	}
 	if style.FillRef != "" {
 		gradient, ok, err := svgResolveGradient(style.FillRef, refs, gradients, map[string]bool{})
 		if err != nil {
@@ -882,7 +908,7 @@ func svgResolveStyleRefs(style SVGStyle, transform svgMatrix, refs map[string]sv
 		if ok {
 			style.FillGradient = gradient
 		} else if patterns != nil {
-			pattern, ok, err := svgResolvePattern(style.FillRef, refs, gradients, patterns, clipCache, rules, ancestors, depth+1, map[string]bool{})
+			pattern, ok, err := svgResolvePatternContext(ctx, style.FillRef, refs, gradients, patterns, clipCache, rules, ancestors, depth+1, map[string]bool{})
 			if err != nil {
 				return style, err
 			}
@@ -892,7 +918,7 @@ func svgResolveStyleRefs(style SVGStyle, transform svgMatrix, refs map[string]sv
 		}
 	}
 	if style.ClipRef != "" {
-		clip, rule, err := svgResolveClipPath(style.ClipRef, refs, transform, clipCache, rules, ancestors, depth+1)
+		clip, rule, err := svgResolveClipPathContext(ctx, style.ClipRef, refs, transform, clipCache, rules, ancestors, depth+1)
 		if err != nil {
 			return style, err
 		}
@@ -903,6 +929,13 @@ func svgResolveStyleRefs(style SVGStyle, transform svgMatrix, refs map[string]sv
 }
 
 func svgResolveClipPath(id string, refs map[string]svgNode, transform svgMatrix, cache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) ([]SVGSegment, string, error) {
+	return svgResolveClipPathContext(context.Background(), id, refs, transform, cache, rules, ancestors, depth)
+}
+
+func svgResolveClipPathContext(ctx context.Context, id string, refs map[string]svgNode, transform svgMatrix, cache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) ([]SVGSegment, string, error) {
+	if err := outputCanceledError(ctx); err != nil {
+		return nil, "", err
+	}
 	if depth > svgMaxNestingDepth {
 		return nil, "", fmt.Errorf("SVG nesting depth exceeds %d", svgMaxNestingDepth)
 	}
@@ -922,7 +955,7 @@ func svgResolveClipPath(id string, refs map[string]svgNode, transform svgMatrix,
 		}
 	}
 	rule := parseSVGFillRule(firstNonEmpty(node.attr("clip-rule"), node.attr("fill-rule")))
-	segs, err := svgCollectClipSegments(node, SVGStyle{}, transform, refs, cache, rules, ancestors, depth+1)
+	segs, err := svgCollectClipSegmentsContext(ctx, node, SVGStyle{}, transform, refs, cache, rules, ancestors, depth+1)
 	if err == nil && cache != nil {
 		cache[key] = svgClipCacheEntry{segments: segs, rule: rule}
 	}
@@ -930,6 +963,13 @@ func svgResolveClipPath(id string, refs map[string]svgNode, transform svgMatrix,
 }
 
 func svgCollectClipSegments(node svgNode, style SVGStyle, transform svgMatrix, refs map[string]svgNode, cache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) ([]SVGSegment, error) {
+	return svgCollectClipSegmentsContext(context.Background(), node, style, transform, refs, cache, rules, ancestors, depth)
+}
+
+func svgCollectClipSegmentsContext(ctx context.Context, node svgNode, style SVGStyle, transform svgMatrix, refs map[string]svgNode, cache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int) ([]SVGSegment, error) {
+	if err := outputCanceledError(ctx); err != nil {
+		return nil, err
+	}
 	if depth > svgMaxNestingDepth {
 		return nil, fmt.Errorf("SVG nesting depth exceeds %d", svgMaxNestingDepth)
 	}
@@ -957,7 +997,7 @@ func svgCollectClipSegments(node svgNode, style SVGStyle, transform svgMatrix, r
 		if err != nil {
 			return nil, err
 		}
-		return svgCollectClipSegments(ref, style, useTransform, refs, cache, rules, childAncestors, depth+1)
+		return svgCollectClipSegmentsContext(ctx, ref, style, useTransform, refs, cache, rules, childAncestors, depth+1)
 	}
 	out := []SVGSegment{}
 	if path, ok, err := svgElementPath(node, style, transform); err != nil {
@@ -966,7 +1006,7 @@ func svgCollectClipSegments(node svgNode, style SVGStyle, transform svgMatrix, r
 		out = append(out, path.Segments...)
 	}
 	for _, child := range node.Children {
-		childSegs, err := svgCollectClipSegments(child, style, transform, refs, cache, rules, childAncestors, depth+1)
+		childSegs, err := svgCollectClipSegmentsContext(ctx, child, style, transform, refs, cache, rules, childAncestors, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -976,6 +1016,13 @@ func svgCollectClipSegments(node svgNode, style SVGStyle, transform svgMatrix, r
 }
 
 func svgCollectDepth(node svgNode, style SVGStyle, transform svgMatrix, sig *SVG, refs map[string]svgNode, gradients map[string]SVGGradient, patterns map[string]SVGPattern, clipCache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int, renderingRef bool) error {
+	return svgCollectDepthContext(context.Background(), node, style, transform, sig, refs, gradients, patterns, clipCache, rules, ancestors, depth, renderingRef)
+}
+
+func svgCollectDepthContext(ctx context.Context, node svgNode, style SVGStyle, transform svgMatrix, sig *SVG, refs map[string]svgNode, gradients map[string]SVGGradient, patterns map[string]SVGPattern, clipCache map[svgClipCacheKey]svgClipCacheEntry, rules []htmlCSSRule, ancestors []HTMLSegmentType, depth int, renderingRef bool) error {
+	if err := outputCanceledError(ctx); err != nil {
+		return err
+	}
 	if depth > svgMaxNestingDepth {
 		return fmt.Errorf("SVG nesting depth exceeds %d", svgMaxNestingDepth)
 	}
@@ -1007,9 +1054,9 @@ func svgCollectDepth(node svgNode, style SVGStyle, transform svgMatrix, sig *SVG
 		if err != nil {
 			return err
 		}
-		return svgCollectDepth(ref, style, useTransform, sig, refs, gradients, patterns, clipCache, rules, childAncestors, depth+1, true)
+		return svgCollectDepthContext(ctx, ref, style, useTransform, sig, refs, gradients, patterns, clipCache, rules, childAncestors, depth+1, true)
 	}
-	style, err = svgResolveStyleRefs(style, transform, refs, gradients, patterns, clipCache, rules, ancestors, depth)
+	style, err = svgResolveStyleRefsContext(ctx, style, transform, refs, gradients, patterns, clipCache, rules, ancestors, depth)
 	if err != nil {
 		return err
 	}
@@ -1048,7 +1095,7 @@ func svgCollectDepth(node svgNode, style SVGStyle, transform svgMatrix, sig *SVG
 		sig.Elements = append(sig.Elements, SVGElement{Kind: "image", Image: image})
 	}
 	for _, child := range node.Children {
-		if err := svgCollectDepth(child, style, transform, sig, refs, gradients, patterns, clipCache, rules, childAncestors, depth+1, renderingRef); err != nil {
+		if err := svgCollectDepthContext(ctx, child, style, transform, sig, refs, gradients, patterns, clipCache, rules, childAncestors, depth+1, renderingRef); err != nil {
 			return err
 		}
 	}
@@ -1060,6 +1107,16 @@ func svgCollectDepth(node svgNode, style SVGStyle, transform svgMatrix, sig *SVG
 // inherited presentation attributes are converted to data that SVGWrite can
 // render.
 func SVGParse(buf []byte) (sig SVG, err error) {
+	return SVGParseContext(context.Background(), buf)
+}
+
+// SVGParseContext parses a Scalable Vector Graphics (SVG) buffer into a
+// descriptor and checks ctx before XML parsing and while traversing the SVG
+// node tree.
+func SVGParseContext(ctx context.Context, buf []byte) (sig SVG, err error) {
+	if err := outputCanceledError(ctx); err != nil {
+		return SVG{}, err
+	}
 	if len(buf) > maxSVGSourceBytes {
 		return SVG{}, errors.New("SVG source exceeds maximum size")
 	}
@@ -1070,7 +1127,13 @@ func SVGParse(buf []byte) (sig SVG, err error) {
 	var src svgNode
 	err = xml.Unmarshal(buf, &src)
 	if err == nil {
+		err = outputCanceledError(ctx)
+	}
+	if err == nil {
 		svgPrepareNodes(&src)
+	}
+	if err == nil {
+		err = outputCanceledError(ctx)
 	}
 	if err == nil {
 		sig.Wd, sig.Ht, err = svgExtent(src)
@@ -1079,7 +1142,7 @@ func SVGParse(buf []byte) (sig SVG, err error) {
 		var transform svgMatrix
 		transform, err = svgRootTransform(src, sig.Wd, sig.Ht)
 		if err == nil {
-			err = svgCollect(src, SVGStyle{}, transform, &sig)
+			err = svgCollectContext(ctx, src, SVGStyle{}, transform, &sig)
 		}
 	}
 	if err != nil {
@@ -1092,26 +1155,45 @@ func SVGParse(buf []byte) (sig SVG, err error) {
 
 // SVGFileParse parses an SVG file into a descriptor that SVGWrite can render.
 func SVGFileParse(svgFileStr string) (sig SVG, err error) {
+	return SVGFileParseContext(context.Background(), svgFileStr)
+}
+
+// SVGFileParseContext parses an SVG file into a descriptor and checks ctx
+// while reading and traversing it.
+func SVGFileParseContext(ctx context.Context, svgFileStr string) (sig SVG, err error) {
 	var buf []byte
-	buf, err = readSVGFile(svgFileStr)
+	buf, err = readSVGFileContext(ctx, svgFileStr)
 	if err == nil {
-		sig, err = SVGParse(buf)
+		sig, err = SVGParseContext(ctx, buf)
 	}
 	return
 }
 
 func readSVGFile(path string) ([]byte, error) {
+	return readSVGFileContext(context.Background(), path)
+}
+
+func readSVGFileContext(ctx context.Context, path string) ([]byte, error) {
+	if err := outputCanceledError(ctx); err != nil {
+		return nil, err
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = file.Close() }()
+	if err := outputCanceledError(ctx); err != nil {
+		return nil, err
+	}
 	if info, err := file.Stat(); err == nil && info.Mode().IsRegular() && info.Size() > maxSVGSourceBytes {
 		return nil, errors.New("SVG source exceeds maximum size")
 	}
-	data, err := io.ReadAll(io.LimitReader(file, maxSVGSourceBytes+1))
+	data, err := io.ReadAll(io.LimitReader(contextReader{ctx: ctx, r: file}, maxSVGSourceBytes+1))
 	if err == nil && len(data) > maxSVGSourceBytes {
 		err = errors.New("SVG source exceeds maximum size")
+	}
+	if err == nil {
+		err = outputCanceledError(ctx)
 	}
 	return data, err
 }

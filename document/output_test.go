@@ -164,6 +164,26 @@ func TestOutputFileAndCloseNoSyncWritesPDF(t *testing.T) {
 	}
 }
 
+func TestOutputFileWritesPDF(t *testing.T) {
+	fileStr := filepath.Join(t.TempDir(), "out.pdf")
+
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(20, 10, "hello")
+
+	if err := pdf.OutputFile(fileStr); err != nil {
+		t.Fatalf("OutputFile() error = %v", err)
+	}
+	got, err := os.ReadFile(fileStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(got, []byte("%PDF-")) {
+		t.Fatalf("OutputFile() wrote non-PDF prefix %q", got[:min(len(got), 8)])
+	}
+}
+
 func TestOutputFileAndCloseWithOptionsZeroValueWritesPDF(t *testing.T) {
 	fileStr := filepath.Join(t.TempDir(), "out.pdf")
 

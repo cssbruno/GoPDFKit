@@ -3,6 +3,39 @@
 
 package document
 
+import (
+	"fmt"
+	"net/url"
+	"strings"
+)
+
+func allowedExternalLinkScheme(scheme string) bool {
+	switch strings.ToLower(scheme) {
+	case "http", "https", "mailto":
+		return true
+	default:
+		return false
+	}
+}
+
+func checkedExternalLinkTarget(target string) (string, error) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return "", nil
+	}
+	if strings.HasPrefix(target, "#") {
+		return "", fmt.Errorf("fragment links are not supported: %s", target)
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		return "", fmt.Errorf("invalid link target: %w", err)
+	}
+	if !allowedExternalLinkScheme(u.Scheme) {
+		return "", fmt.Errorf("unsupported link scheme: %s", u.Scheme)
+	}
+	return target, nil
+}
+
 // AddLink creates a new internal link and returns its identifier. An internal
 // link is a clickable area that points to another place within the document.
 // The identifier can then be passed to Cell, Write, ImageOptions, or Link. The
@@ -44,6 +77,17 @@ func (f *Document) newLink(x, y, w, h float64, link int, linkStr string) {
 	if link != 0 && !f.validLinkID(link) {
 		f.SetErrorf("invalid link id: %d", link)
 		return
+	}
+	if link == 0 {
+		checked, err := checkedExternalLinkTarget(linkStr)
+		if err != nil {
+			f.SetError(err)
+			return
+		}
+		if checked == "" {
+			return
+		}
+		linkStr = checked
 	}
 	if !finiteNumbers(x, y, w, h) {
 		f.SetErrorf("invalid link rectangle")

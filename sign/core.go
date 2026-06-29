@@ -5,6 +5,7 @@ package sign
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	_ "crypto/sha256" // Register SHA-256 algorithms with crypto.Hash.
 	_ "crypto/sha512" // Register SHA-512 algorithms with crypto.Hash.
@@ -84,35 +85,73 @@ type preparedOptions struct {
 
 // Bytes signs a PDF byte slice and returns a new signed PDF.
 func Bytes(input []byte, options Options) ([]byte, error) {
+	return BytesContext(context.Background(), input, options)
+}
+
+// BytesContext signs a PDF byte slice and checks ctx around parsing and
+// signing. Cancellation during a crypto.Signer implementation depends on that
+// signer returning.
+func BytesContext(ctx context.Context, input []byte, options Options) ([]byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if len(input) == 0 {
 		return nil, ErrMissingInput
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	prepared, err := prepareSigningOptions(options)
 	if err != nil {
 		return nil, err
 	}
-	ctx, err := analyzePDF(input)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	pdfCtx, err := analyzePDFContext(ctx, input)
 	if err != nil {
 		return nil, err
 	}
-	return signPDFContext(ctx, prepared, false)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return signPDFContext(ctx, pdfCtx, prepared, false)
 }
 
 // AppendBytes signs a PDF byte slice and may reuse input's backing array for
 // the returned signed PDF. Callers must not use input after calling AppendBytes.
 func AppendBytes(input []byte, options Options) ([]byte, error) {
+	return AppendBytesContext(context.Background(), input, options)
+}
+
+// AppendBytesContext signs a PDF byte slice and checks ctx around parsing and
+// signing. Cancellation during a crypto.Signer implementation depends on that
+// signer returning.
+func AppendBytesContext(ctx context.Context, input []byte, options Options) ([]byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if len(input) == 0 {
 		return nil, ErrMissingInput
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	prepared, err := prepareSigningOptions(options)
 	if err != nil {
 		return nil, err
 	}
-	ctx, err := analyzePDF(input)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	pdfCtx, err := analyzePDFContext(ctx, input)
 	if err != nil {
 		return nil, err
 	}
-	return signPDFContext(ctx, prepared, true)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return signPDFContext(ctx, pdfCtx, prepared, true)
 }
 
 // File signs inputPath and writes the signed PDF to outputPath.
@@ -195,34 +234,54 @@ func normalizeSubFilter(subFilter string) (string, error) {
 	}
 }
 
-func signPDFContext(ctx pdfContext, options preparedOptions, reuseInput bool) ([]byte, error) {
+func signPDFContext(ctx context.Context, pdfCtx pdfContext, options preparedOptions, reuseInput bool) ([]byte, error) {
+	if err := signContextErr(ctx); err != nil {
+		return nil, err
+	}
 	placeholderHex := make([]byte, options.SignatureBytes*2)
 	for i := range placeholderHex {
+		if i%1024 == 0 {
+			if err := signContextErr(ctx); err != nil {
+				return nil, err
+			}
+		}
 		placeholderHex[i] = '0'
 	}
 	byteRangePlaceholder := byteRangePlaceholder()
-	increment, err := buildIncrement(ctx, options, byteRangePlaceholder, placeholderHex)
+	increment, err := buildIncrementContext(ctx, pdfCtx, options, byteRangePlaceholder, placeholderHex)
 	if err != nil {
 		return nil, err
 	}
 	var output []byte
 	if reuseInput {
-		output = append(ctx.Data, increment.data...)
+		output = append(pdfCtx.Data, increment.data...)
 	} else {
-		output = make([]byte, 0, len(ctx.Data)+len(increment.data))
-		output = append(output, ctx.Data...)
+		output = make([]byte, 0, len(pdfCtx.Data)+len(increment.data))
+		output = append(output, pdfCtx.Data...)
 		output = append(output, increment.data...)
 	}
-	incrementStart := len(ctx.Data)
+	if err := signContextErr(ctx); err != nil {
+		return nil, err
+	}
+	incrementStart := len(pdfCtx.Data)
 	contentsStart := incrementStart + increment.contentsStart
 	contentsEnd := incrementStart + increment.contentsEnd
 	byteRange := []int{0, contentsStart, contentsEnd, len(output) - contentsEnd}
 	byteRangeValue := formatByteRange(byteRange)
 	byteRangeOffset := incrementStart + increment.byteRangeOffset
 	copy(output[byteRangeOffset:byteRangeOffset+len(byteRangeValue)], byteRangeValue)
+	if err := signContextErr(ctx); err != nil {
+		return nil, err
+	}
 	contentDigest := digestByteRange(output, contentsStart, contentsEnd, options.DigestAlgorithm)
+	if err := signContextErr(ctx); err != nil {
+		return nil, err
+	}
 	cms, err := createDetachedCMSWithPreparedDigest(contentDigest, options)
 	if err != nil {
+		return nil, err
+	}
+	if err := signContextErr(ctx); err != nil {
 		return nil, err
 	}
 	cmsHex := make([]byte, hex.EncodedLen(len(cms)))
@@ -257,21 +316,31 @@ type signatureDictionaryData struct {
 }
 
 func buildIncrement(ctx pdfContext, options preparedOptions, byteRangePlaceholder string, contentsPlaceholder []byte) (signingIncrement, error) {
-	rootOffset, err := ctx.Xref.objectOffset(ctx.Root.Object)
+	return buildIncrementContext(context.Background(), ctx, options, byteRangePlaceholder, contentsPlaceholder)
+}
+
+func buildIncrementContext(cancelCtx context.Context, ctx pdfContext, options preparedOptions, byteRangePlaceholder string, contentsPlaceholder []byte) (signingIncrement, error) {
+	if err := signContextErr(cancelCtx); err != nil {
+		return signingIncrement{}, err
+	}
+	rootOffset, err := ctx.Xref.objectOffsetContext(cancelCtx, ctx.Root.Object)
 	if err != nil {
 		return signingIncrement{}, fmt.Errorf("read root object: %w", err)
 	}
-	rootDict, err := readObjectDict(ctx.Data, ctx.Root, rootOffset)
+	rootDict, err := readObjectDictContext(cancelCtx, ctx.Data, ctx.Root, rootOffset)
 	if err != nil {
 		return signingIncrement{}, fmt.Errorf("read root object: %w", err)
 	}
-	pageOffset, err := ctx.Xref.objectOffset(ctx.Page.Object)
+	pageOffset, err := ctx.Xref.objectOffsetContext(cancelCtx, ctx.Page.Object)
 	if err != nil {
 		return signingIncrement{}, fmt.Errorf("read page object: %w", err)
 	}
-	pageDict, err := readObjectDict(ctx.Data, ctx.Page, pageOffset)
+	pageDict, err := readObjectDictContext(cancelCtx, ctx.Data, ctx.Page, pageOffset)
 	if err != nil {
 		return signingIncrement{}, fmt.Errorf("read page object: %w", err)
+	}
+	if err := signContextErr(cancelCtx); err != nil {
+		return signingIncrement{}, err
 	}
 	acroObject := ctx.Size
 	fieldObject := ctx.Size + 1
@@ -289,6 +358,9 @@ func buildIncrement(ctx pdfContext, options preparedOptions, byteRangePlaceholde
 	}
 	rootDict, err = addDictEntries(rootDict, rootEntries...)
 	if err != nil {
+		return signingIncrement{}, err
+	}
+	if err := signContextErr(cancelCtx); err != nil {
 		return signingIncrement{}, err
 	}
 	pageDict, err = addAnnotation(pageDict, fmt.Sprintf("%d 0 R", fieldObject))
@@ -318,6 +390,9 @@ func buildIncrement(ctx pdfContext, options preparedOptions, byteRangePlaceholde
 	}
 	addObjectBytes(ctx.Root, rootDict)
 	addObjectBytes(ctx.Page, pageDict)
+	if err := signContextErr(cancelCtx); err != nil {
+		return signingIncrement{}, err
+	}
 	addObject(pdfRef{Object: acroObject}, fmt.Sprintf("<< /Fields [%d 0 R] /SigFlags 3 >>", fieldObject))
 	addObject(pdfRef{Object: fieldObject}, fmt.Sprintf("<< /Type /Annot /Subtype /Widget /FT /Sig /T %s /Rect [0 0 0 0] /F 132 /P %d %d R /V %d 0 R >>", pdfString(fieldName), ctx.Page.Object, ctx.Page.Generation, signatureObject))
 	signatureDict := signatureDictionaryBytes(options, byteRangePlaceholder, contentsPlaceholder)
@@ -327,7 +402,10 @@ func buildIncrement(ctx pdfContext, options preparedOptions, byteRangePlaceholde
 	contentsEnd := signatureBodyStart + signatureDict.contentsEnd
 	xrefOffset := len(ctx.Data) + buf.Len()
 	writeXref(&buf, entries)
-	trailerExtras, err := preservedTrailerEntries(ctx.Trailer)
+	if err := signContextErr(cancelCtx); err != nil {
+		return signingIncrement{}, err
+	}
+	trailerExtras, err := preservedTrailerEntriesContext(cancelCtx, ctx.Trailer)
 	if err != nil {
 		return signingIncrement{}, err
 	}

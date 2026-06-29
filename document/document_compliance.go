@@ -206,10 +206,6 @@ func (f *Document) validateComplianceMetadata() {
 			f.SetErrorf("PDF/A metadata mode does not allow encrypted output")
 			return
 		}
-		if f.javascript != nil {
-			f.SetErrorf("PDF/A metadata mode does not allow JavaScript actions")
-			return
-		}
 		if len(f.outputIntent.iccProfile) == 0 {
 			f.SetErrorf("PDF/A metadata mode requires an ICC output intent")
 			return
@@ -218,7 +214,7 @@ func (f *Document) validateComplianceMetadata() {
 			f.SetErrorf("PDF/A-4 metadata mode requires PDF/A-4f or PDF/A-4e for attachments")
 			return
 		}
-		for _, font := range f.fonts {
+		for _, font := range f.ensureResourceStore().fontsByKey(false) {
 			if font.Tp != "UTF8" || font.utf8File == nil {
 				f.SetErrorf("PDF/A metadata mode requires embedded UTF-8 fonts with ToUnicode maps")
 				return

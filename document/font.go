@@ -27,7 +27,8 @@ func (f *Document) GetFontDesc(familyStr, styleStr string) FontDescriptor {
 	if familyStr == "" {
 		return f.currentFont.Desc
 	}
-	return f.fonts[getFontKey(fontFamilyEscape(familyStr), styleStr)].Desc
+	font, _ := f.ensureResourceStore().font(getFontKey(fontFamilyEscape(familyStr), styleStr))
+	return font.Desc
 }
 
 // SetFont sets the font used to print character strings. It is mandatory to
@@ -83,8 +84,9 @@ func (f *Document) SetFont(familyStr, styleStr string, size float64) {
 	if size == 0.0 {
 		size = f.fontSizePt
 	}
+	resources := f.ensureResourceStore()
 	fontKey := familyStr + styleStr
-	_, ok = f.fonts[fontKey]
+	_, ok = resources.font(fontKey)
 	if !ok {
 		if familyStr == "arial" {
 			familyStr = "helvetica"
@@ -98,14 +100,14 @@ func (f *Document) SetFont(familyStr, styleStr string, size float64) {
 				styleStr = ""
 			}
 			fontKey = familyStr + styleStr
-			_, ok = f.fonts[fontKey]
+			_, ok = resources.font(fontKey)
 			if !ok {
 				def, err := loadCoreFontDef(fontKey)
 				if err != nil {
 					f.err = err
 					return
 				}
-				f.fonts[fontKey] = def
+				resources.setFont(fontKey, def)
 			}
 		} else {
 			f.err = fmt.Errorf("undefined font: %s %s", familyStr, styleStr)
@@ -116,7 +118,7 @@ func (f *Document) SetFont(familyStr, styleStr string, size float64) {
 	f.fontStyle = styleStr
 	f.fontSizePt = size
 	f.fontSize = size / f.k
-	f.currentFont = f.fonts[fontKey]
+	f.currentFont, _ = resources.font(fontKey)
 	if f.currentFont.Tp == "UTF8" {
 		f.isCurrentUTF8 = true
 	} else {

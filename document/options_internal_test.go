@@ -105,6 +105,7 @@ func TestCompressionWorkerOptionsCanDisableBackgroundWork(t *testing.T) {
 
 func TestCompressionPolicyOptionConfiguresAllFields(t *testing.T) {
 	policy := CompressionPolicy{
+		Mode:                     CompressionEnabled,
 		Enabled:                  true,
 		Level:                    zlib.BestCompression,
 		PageWorkers:              3,
@@ -120,6 +121,41 @@ func TestCompressionPolicyOptionConfiguresAllFields(t *testing.T) {
 	}
 }
 
+func TestCompressionPolicyPartialStructsDoNotDisableCompression(t *testing.T) {
+	pdf, err := NewDocument(WithCompressionPolicy(CompressionPolicy{PageWorkers: 2}))
+	if err != nil {
+		t.Fatalf("NewDocument returned error: %s", err)
+	}
+	got := pdf.CompressionPolicy()
+	if !got.Enabled || got.Level != zlib.BestSpeed || got.PageWorkers != 2 {
+		t.Fatalf("CompressionPolicy() = %#v, want enabled best-speed with 2 page workers", got)
+	}
+
+	pdf, err = NewDocument(WithCompressionPolicy(CompressionPolicy{Level: zlib.BestCompression}))
+	if err != nil {
+		t.Fatalf("NewDocument returned error: %s", err)
+	}
+	got = pdf.CompressionPolicy()
+	if !got.Enabled || got.Level != zlib.BestCompression || got.PageWorkers == 0 || got.AttachmentWorkers == 0 {
+		t.Fatalf("CompressionPolicy() = %#v, want enabled best-compression with default workers", got)
+	}
+}
+
+func TestCompressionPolicyCanExplicitlyDisableWorkers(t *testing.T) {
+	pdf, err := NewDocument(WithCompressionPolicy(CompressionPolicy{
+		Level:             zlib.BestSpeed,
+		PageWorkers:       CompressionWorkersDisabled,
+		AttachmentWorkers: CompressionWorkersDisabled,
+	}))
+	if err != nil {
+		t.Fatalf("NewDocument returned error: %s", err)
+	}
+	got := pdf.CompressionPolicy()
+	if !got.Enabled || got.PageWorkers != 0 || got.AttachmentWorkers != 0 {
+		t.Fatalf("CompressionPolicy() = %#v, want enabled compression with workers disabled", got)
+	}
+}
+
 func TestNoCompressionOptionDisablesCompression(t *testing.T) {
 	pdf, err := NewDocument(WithNoCompression())
 	if err != nil {
@@ -127,6 +163,35 @@ func TestNoCompressionOptionDisablesCompression(t *testing.T) {
 	}
 	if pdf.compress || pdf.compressLevel != zlib.NoCompression {
 		t.Fatalf("compression = %v level %d, want disabled", pdf.compress, pdf.compressLevel)
+	}
+}
+
+func TestRuntimePolicyFromProductionPolicyResolvesOperationalDefaults(t *testing.T) {
+	policy := ProductionPolicy{
+		Limits:        ServerSafeLimits(),
+		Deterministic: true,
+	}
+	runtime := runtimePolicyFromProductionPolicy(policy)
+	if runtime.cachePolicy != ResourceCacheDocument {
+		t.Fatalf("runtime cachePolicy = %v, want ResourceCacheDocument", runtime.cachePolicy)
+	}
+	if !runtime.compressionPolicySet {
+		t.Fatal("runtime policy should carry explicit compression settings for production policies")
+	}
+	if !runtime.limitsSet || runtime.limits.MaxAttachmentBytes != ServerSafeLimits().MaxAttachmentBytes {
+		t.Fatalf("runtime limits = %#v, want server-safe limits set", runtime.limits)
+	}
+	if !runtime.securityPolicySet {
+		t.Fatal("runtime policy should install production security gates")
+	}
+	if !runtime.outputPolicySet {
+		t.Fatal("runtime policy should carry output defaults")
+	}
+	if !runtime.hooksSet {
+		t.Fatal("runtime policy should carry hook defaults")
+	}
+	if !runtime.deterministicOutput {
+		t.Fatal("runtime policy should resolve deterministic output")
 	}
 }
 

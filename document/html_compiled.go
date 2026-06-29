@@ -5,6 +5,7 @@ package document
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
@@ -89,20 +90,36 @@ type CompiledHTMLRecoveryIssue struct {
 // boundaries, pre-parses tables, and pre-parses inline SVGs for repeated
 // rendering.
 func CompileHTML(htmlStr string) (*CompiledHTML, error) {
-	return compileHTMLWithDataImageLimit(htmlStr, true, htmlDefaultMaxDataImageBytes)
+	return CompileHTMLContext(context.Background(), htmlStr)
+}
+
+// CompileHTMLContext tokenizes and compiles an HTML fragment while checking ctx
+// during tokenization, data-image decoding, and inline-SVG parsing.
+func CompileHTMLContext(ctx context.Context, htmlStr string) (*CompiledHTML, error) {
+	return compileHTMLWithDataImageLimitContext(ctx, htmlStr, true, htmlDefaultMaxDataImageBytes)
 }
 
 func compileHTML(htmlStr string, cacheReusableData bool) (*CompiledHTML, error) {
-	return compileHTMLWithDataImageLimit(htmlStr, cacheReusableData, htmlDefaultMaxDataImageBytes)
+	return compileHTMLWithDataImageLimitContext(context.Background(), htmlStr, cacheReusableData, htmlDefaultMaxDataImageBytes)
 }
 
 func compileHTMLWithDataImageLimit(htmlStr string, cacheReusableData bool, maxDataImageBytes int) (*CompiledHTML, error) {
-	tokens := htmlTokenize(htmlStr, make(map[string]map[string]string))
-	compiled := compileHTMLTokens(tokens, cacheReusableData)
-	if err := compiled.compileDataImages(maxDataImageBytes); err != nil {
+	return compileHTMLWithDataImageLimitContext(context.Background(), htmlStr, cacheReusableData, maxDataImageBytes)
+}
+
+func compileHTMLWithDataImageLimitContext(ctx context.Context, htmlStr string, cacheReusableData bool, maxDataImageBytes int) (*CompiledHTML, error) {
+	tokens, err := htmlTokenizeContext(ctx, htmlStr, make(map[string]map[string]string))
+	if err != nil {
 		return nil, err
 	}
-	if err := compiled.compileInlineSVGs(); err != nil {
+	compiled := compileHTMLTokens(tokens, cacheReusableData)
+	if err := outputCanceledError(ctx); err != nil {
+		return nil, err
+	}
+	if err := compiled.compileDataImagesContext(ctx, maxDataImageBytes); err != nil {
+		return nil, err
+	}
+	if err := compiled.compileInlineSVGsContext(ctx); err != nil {
 		return nil, err
 	}
 	return compiled, nil
@@ -343,8 +360,17 @@ func (compiled *CompiledHTML) compileStyleDeclarations(attrs map[string]string) 
 }
 
 func (compiled *CompiledHTML) compileInlineSVGs() error {
+	return compiled.compileInlineSVGsContext(context.Background())
+}
+
+func (compiled *CompiledHTML) compileInlineSVGsContext(ctx context.Context) error {
 	var cache map[string]*SVG
 	for i := 0; i < len(compiled.tokens); i++ {
+		if i%128 == 0 {
+			if err := outputCanceledError(ctx); err != nil {
+				return err
+			}
+		}
 		token := compiled.tokens[i]
 		if token.Cat != 'O' || token.Str != "svg" {
 			if token.Cat == 'O' && (token.Str == "style" || token.Str == "script" || token.Str == "head") {
@@ -359,7 +385,7 @@ func (compiled *CompiledHTML) compileInlineSVGs() error {
 		svgText := htmlSerializeTokens(svgTokens)
 		svg, ok := cache[svgText]
 		if !ok {
-			parsed, err := SVGParse([]byte(svgText))
+			parsed, err := SVGParseContext(ctx, []byte(svgText))
 			if err != nil {
 				return err
 			}
@@ -376,11 +402,20 @@ func (compiled *CompiledHTML) compileInlineSVGs() error {
 }
 
 func (compiled *CompiledHTML) compileDataImages(maxBytes int) error {
+	return compiled.compileDataImagesContext(context.Background(), maxBytes)
+}
+
+func (compiled *CompiledHTML) compileDataImagesContext(ctx context.Context, maxBytes int) error {
 	if compiled == nil {
 		return nil
 	}
 	var cache map[string]compiledHTMLDataImage
 	for i, token := range compiled.tokens {
+		if i%128 == 0 {
+			if err := outputCanceledError(ctx); err != nil {
+				return err
+			}
+		}
 		if token.Cat != 'O' || token.Str != "img" {
 			continue
 		}
@@ -391,7 +426,7 @@ func (compiled *CompiledHTML) compileDataImages(maxBytes int) error {
 				continue
 			}
 		}
-		source, ok, err := compileHTMLDataImageSource(src, maxBytes)
+		source, ok, err := compileHTMLDataImageSourceContext(ctx, src, maxBytes)
 		if err != nil {
 			return err
 		}
@@ -407,6 +442,13 @@ func (compiled *CompiledHTML) compileDataImages(maxBytes int) error {
 }
 
 func compileHTMLDataImageSource(src string, maxBytes int) (compiledHTMLDataImage, bool, error) {
+	return compileHTMLDataImageSourceContext(context.Background(), src, maxBytes)
+}
+
+func compileHTMLDataImageSourceContext(ctx context.Context, src string, maxBytes int) (compiledHTMLDataImage, bool, error) {
+	if err := outputCanceledError(ctx); err != nil {
+		return compiledHTMLDataImage{}, false, err
+	}
 	src = strings.TrimSpace(src)
 	if !strings.HasPrefix(strings.ToLower(src), "data:") {
 		return compiledHTMLDataImage{}, false, nil
@@ -436,9 +478,15 @@ func compileHTMLDataImageSource(src string, maxBytes int) (compiledHTMLDataImage
 	if base64.StdEncoding.DecodedLen(len(data)) > maxBytes {
 		return compiledHTMLDataImage{}, false, errors.New("HTML image data URI exceeds maximum size")
 	}
+	if err := outputCanceledError(ctx); err != nil {
+		return compiledHTMLDataImage{}, false, err
+	}
 	buf, err := base64.StdEncoding.DecodeString(data)
 	if err != nil {
 		return compiledHTMLDataImage{}, false, fmt.Errorf("invalid HTML image data URI: %w", err)
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		return compiledHTMLDataImage{}, false, err
 	}
 	if len(buf) > maxBytes {
 		return compiledHTMLDataImage{}, false, errors.New("HTML image data URI exceeds maximum size")
@@ -633,7 +681,7 @@ func (img compiledHTMLDataImage) register(pdf *Document) (string, ImageOptions, 
 	if pdf == nil {
 		return "", img.options, errors.New("PDF document is nil")
 	}
-	if _, ok := pdf.images[img.name]; !ok {
+	if _, ok := pdf.ensureResourceStore().image(img.name); !ok {
 		pdf.RegisterImageOptionsReader(img.name, img.options, bytes.NewReader(img.data))
 		if pdf.err != nil {
 			return "", img.options, pdf.err

@@ -190,13 +190,19 @@ func (f *Document) AddUTF8FontFromCacheError(family, style string, cache *FontCa
 	}
 	family = fontFamilyEscape(family)
 	fontKey := getFontKey(family, style)
-	if _, ok := f.fonts[fontKey]; ok {
+	if _, ok := f.ensureResourceStore().font(fontKey); ok {
 		return nil
 	}
 	cached, ok := cache.font(family, style)
 	if !ok {
+		if f.hooks.OnResourceCacheMiss != nil {
+			f.hooks.OnResourceCacheMiss("font", fontKey)
+		}
 		f.SetErrorf("cached UTF-8 font not found: %s %s", family, style)
 		return f.err
+	}
+	if f.hooks.OnResourceCacheHit != nil {
+		f.hooks.OnResourceCacheHit("font", fontKey)
 	}
 	f.addCachedUTF8Font(fontKey, family, style, cached)
 	return f.err
@@ -222,7 +228,7 @@ func (f *Document) addCachedUTF8Font(fontKey, family, style string, cached cache
 			return
 		}
 	}
-	f.fonts[fontKey] = def
+	f.ensureResourceStore().setFont(fontKey, def)
 }
 
 func (c cachedUTF8Font) newUTF8Font() *utf8FontFile {

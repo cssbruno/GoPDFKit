@@ -155,7 +155,7 @@ func (p *imageParser) parsepngstream(buf *bytes.Buffer, readdpi bool) (info *Ima
 			// Read an image data block.
 			data = append(data, chunkData...)
 			if len(data) > p.sourceLimit {
-				p.err = errors.New("PNG image data exceeds maximum size")
+				p.err = fmt.Errorf("%w: PNG image data exceeds maximum size", ErrImageTooLarge)
 				return
 			}
 		case "IEND":

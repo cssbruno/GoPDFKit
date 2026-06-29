@@ -100,22 +100,23 @@ func (f *Document) imageOut(info *ImageInfo, x, y, w, h float64, allowNegativeX,
 
 // putImportedTemplates writes the imported template objects to the PDF.
 func (f *Document) putImportedTemplates() {
+	resources := f.ensureResourceStore()
 	nOffset := f.n + 1
-	objsIDHash := make([]string, len(f.importedObjs))
-	objsIDData := make([][]byte, len(f.importedObjs))
-	i := 0
-	for k, v := range f.importedObjs {
-		objsIDHash[i] = k
-		objsIDData[i] = v
-		i++
+	objsIDHash := resources.importedObjectHashes(f.catalogSort)
+	objsIDData := make([][]byte, len(objsIDHash))
+	var i int
+	for i = 0; i < len(objsIDHash); i++ {
+		objsIDData[i] = resources.importedObjectData(objsIDHash[i])
 	}
-	hashToObjID := make(map[string]int, len(f.importedObjs))
+	hashToObjID := make(map[string]int, len(objsIDHash))
 	for i = 0; i < len(objsIDHash); i++ {
 		hashToObjID[objsIDHash[i]] = i + nOffset
 	}
 	for i = 0; i < len(objsIDData); i++ {
 		hash := objsIDHash[i]
-		for pos, h := range f.importedObjPos[hash] {
+		positions := resources.importedObjectPositions(hash)
+		for _, pos := range importedObjectReplacementPositions(positions, f.catalogSort) {
+			h := positions[pos]
 			objID, ok := hashToObjID[h]
 			if !ok {
 				f.SetErrorf("invalid imported object reference: %s", h)
@@ -127,7 +128,7 @@ func (f *Document) putImportedTemplates() {
 			}
 			writePaddedObjectID(objsIDData[i][pos:pos+40], objID)
 		}
-		f.importedTplIDs[hash] = i + nOffset
+		resources.setImportedTemplateObjectID(hash, i+nOffset)
 	}
 	for i = range objsIDData {
 		f.newobj()
@@ -145,11 +146,12 @@ func writePaddedObjectID(dst []byte, objID int) {
 }
 
 func (f *Document) putImportedPages() {
-	if len(f.importedPages) == 0 {
+	resources := f.ensureResourceStore()
+	if !resources.hasImportedPages() {
 		return
 	}
 	for id := 1; id <= f.importedPageSeq; id++ {
-		page := f.importedPages[id]
+		page, _ := resources.importedPage(id)
 		if page == nil || page.page == nil {
 			continue
 		}
@@ -165,12 +167,12 @@ func (f *Document) putImportedPages() {
 		for _, body := range rewrittenObjects {
 			f.newobj()
 			f.outbuf(bytes.NewReader(body))
-			f.out("endobj")
+			f.endPDFObject()
 		}
 		filter := ""
 		content, encodedFilter, encoded := page.page.EncodedContent()
 		if encoded {
-			filter = "/Filter /" + encodedFilter + "\n"
+			filter = encodedFilter
 		} else {
 			content = page.page.Content()
 			if err := page.page.ContentErr(); err != nil {
@@ -179,42 +181,33 @@ func (f *Document) putImportedPages() {
 			}
 			if compressedContent, compressed := f.compressStreamBytes(content); compressed {
 				content = compressedContent
-				filter = "/Filter /FlateDecode\n"
+				filter = "FlateDecode"
 			} else if f.err != nil {
 				return
 			}
 		}
-		f.newobj()
+		f.newPDFDictObject()
 		page.objectID = f.n
-		f.outf("<</Type /XObject\n/Subtype /Form\n/FormType 1\n/BBox [0 0 %.2f %.2f]\n/Matrix [1 0 0 1 0 0]\n/Resources %s\n%s/Length %d>>",
-			page.page.WidthPoints(), page.page.HeightPoints(), string(resources), filter, len(content))
+		f.out("/Type /XObject")
+		f.out("/Subtype /Form")
+		f.out("/FormType 1")
+		f.outf("/BBox [0 0 %.2f %.2f]", page.page.WidthPoints(), page.page.HeightPoints())
+		f.out("/Matrix [1 0 0 1 0 0]")
+		f.outf("/Resources %s", string(resources))
+		if filter != "" {
+			f.outf("/Filter /%s", filter)
+		}
+		f.outf("/Length %d", len(content))
+		f.endPDFDict()
 		f.putstream(content)
-		f.out("endobj")
+		f.endPDFObject()
 	}
 }
 
 func (f *Document) putimages() {
-	insertedImages := make(map[string]int, len(f.images))
-	if !f.catalogSort {
-		for _, image := range f.images {
-			f.putImageOnce(image, insertedImages)
-		}
-		return
-	}
-	keyList := make([]string, 0, len(f.images))
-	for key := range f.images {
-		keyList = append(keyList, key)
-	}
-	sort.SliceStable(keyList, func(i, j int) bool {
-		left := f.images[keyList[i]]
-		right := f.images[keyList[j]]
-		if left.w != right.w {
-			return left.w < right.w
-		}
-		return left.i < right.i
-	})
-	for _, key := range keyList {
-		image := f.images[key]
+	images := f.ensureResourceStore().imagesForOutput(f.catalogSort)
+	insertedImages := make(map[string]int, len(images))
+	for _, image := range images {
 		f.putImageOnce(image, insertedImages)
 	}
 }
@@ -236,9 +229,9 @@ func (f *Document) putimage(info *ImageInfo) {
 		f.err = err
 		return
 	}
-	f.newobj()
+	f.newPDFDictObject()
 	info.n = f.n
-	f.out("<</Type /XObject")
+	f.out("/Type /XObject")
 	f.out("/Subtype /Image")
 	f.outf("/Width %d", int(info.w))
 	f.outf("/Height %d", int(info.h))
@@ -255,7 +248,10 @@ func (f *Document) putimage(info *ImageInfo) {
 		f.outf("/Filter /%s", info.f)
 	}
 	if len(info.dp) > 0 {
-		f.outf("/DecodeParms <<%s>>", info.dp)
+		f.out("/DecodeParms")
+		f.beginPDFDict()
+		f.out(info.dp)
+		f.endPDFDict()
 	}
 	if len(info.trns) > 0 {
 		trns := make([]byte, 0, len(info.trns)*8)
@@ -270,101 +266,113 @@ func (f *Document) putimage(info *ImageInfo) {
 	if info.smask != nil {
 		f.outf("/SMask %d 0 R", f.n+1)
 	}
-	f.outf("/Length %d>>", len(info.data))
+	f.outf("/Length %d", len(info.data))
+	f.endPDFDict()
 	f.putstream(info.data)
-	f.out("endobj")
+	f.endPDFObject()
 	if len(info.smask) > 0 {
 		f.putSoftMaskImage(info)
 	}
 	if info.cs == "Indexed" {
-		f.newobj()
+		f.newPDFDictObject()
 		if f.compress {
 			pal := f.compressBytes(info.pal)
 			if f.err != nil {
 				return
 			}
-			f.outf("<</Filter /FlateDecode /Length %d>>", len(pal))
+			f.out("/Filter /FlateDecode")
+			f.outf("/Length %d", len(pal))
+			f.endPDFDict()
 			f.putstream(pal)
 		} else {
-			f.outf("<</Length %d>>", len(info.pal))
+			f.outf("/Length %d", len(info.pal))
+			f.endPDFDict()
 			f.putstream(info.pal)
 		}
-		f.out("endobj")
+		f.endPDFObject()
 	}
 }
 
 func (f *Document) putSoftMaskImage(info *ImageInfo) {
-	f.newobj()
-	f.out("<</Type /XObject")
+	f.newPDFDictObject()
+	f.out("/Type /XObject")
 	f.out("/Subtype /Image")
 	f.outf("/Width %d", int(info.w))
 	f.outf("/Height %d", int(info.h))
 	f.out("/ColorSpace /DeviceGray")
 	f.out("/BitsPerComponent 8")
 	f.out("/Filter /FlateDecode")
-	f.outf("/DecodeParms <</Predictor 15 /Colors 1 /BitsPerComponent 8 /Columns %d>>", int(info.w))
-	f.outf("/Length %d>>", len(info.smask))
+	f.out("/DecodeParms")
+	f.beginPDFDict()
+	f.outf("/Predictor 15 /Colors 1 /BitsPerComponent 8 /Columns %d", int(info.w))
+	f.endPDFDict()
+	f.outf("/Length %d", len(info.smask))
+	f.endPDFDict()
 	f.putstream(info.smask)
-	f.out("endobj")
+	f.endPDFObject()
 }
 
 func (f *Document) putxobjectdict() {
 	{
-		if !f.catalogSort {
-			for _, image := range f.images {
-				if image == nil {
-					continue
-				}
-				f.outf("/I%s %d 0 R", image.i, image.n)
+		for _, image := range f.ensureResourceStore().imagesByResourceID(f.catalogSort) {
+			if image == nil {
+				continue
 			}
-		} else {
-			keyList := make([]string, 0, len(f.images))
-			for key := range f.images {
-				keyList = append(keyList, key)
-			}
-			sort.SliceStable(keyList, func(i, j int) bool {
-				return f.images[keyList[i]].i < f.images[keyList[j]].i
-			})
-			for _, key := range keyList {
-				image := f.images[key]
-				if image == nil {
-					continue
-				}
-				f.outf("/I%s %d 0 R", image.i, image.n)
-			}
+			f.outbytes(appendPDFResourceRefValue(nil, imagePDFResourceRef(image)))
 		}
 	}
 	{
-		var keyList []string
-		var key string
-		var tpl Template
-		keyList = templateKeyList(f.templates, f.catalogSort)
-		for _, key = range keyList {
-			tpl = f.templates[key]
+		resources := f.ensureResourceStore()
+		for _, key := range resources.templateCatalogKeys(f.catalogSort) {
+			tpl, _ := resources.template(key)
 			if tpl == nil || invalidTemplate(tpl) {
 				continue
 			}
 			id := tpl.ID()
-			if objID, ok := f.templateObjects[id]; ok {
-				f.outf("/TPL%s %d 0 R", id, objID)
+			if objID, ok := resources.templateObject(id); ok {
+				f.outbytes(appendPDFResourceRefValue(nil, templatePDFResourceRef(id, objID)))
 			}
 		}
 	}
 	{
-		for tplName, objID := range f.importedTplObjs {
-			if !validPDFResourceName(tplName) {
-				f.SetErrorf("invalid imported template name: %s", tplName)
+		resources := f.ensureResourceStore()
+		for _, ref := range resources.importedTemplateResourceRefs(f.catalogSort) {
+			if !validPDFResourceName(ref.name.String()) {
+				f.SetErrorf("invalid imported template name: %s", ref.name.String())
 				return
 			}
-			f.outf("%s %d 0 R", tplName, f.importedTplIDs[objID])
+			f.outbytes(appendPDFResourceRefValue(nil, ref))
 		}
 	}
 	{
+		resources := f.ensureResourceStore()
 		for id := 1; id <= f.importedPageSeq; id++ {
-			page := f.importedPages[id]
+			page, _ := resources.importedPage(id)
 			if page != nil && page.objectID > 0 {
-				f.outf("/IPG%d %d 0 R", id, page.objectID)
+				f.outbytes(appendPDFResourceRefValue(nil, importedPagePDFResourceRef(id, page.objectID)))
 			}
 		}
 	}
+}
+
+func importedObjectReplacementPositions(positions map[int]string, sorted bool) []int {
+	keys := make([]int, 0, len(positions))
+	for pos := range positions {
+		keys = append(keys, pos)
+	}
+	if sorted {
+		sort.Ints(keys)
+	}
+	return keys
+}
+
+func importedTemplateOutputNames(templates map[string]string, sorted bool) []string {
+	names := make([]string, 0, len(templates))
+	for name := range templates {
+		names = append(names, name)
+	}
+	if sorted {
+		sort.Strings(names)
+	}
+	return names
 }

@@ -143,14 +143,42 @@ type Defaults struct {
 	ModificationDate time.Time // Fixed ModDate; zero uses generation time.
 }
 
+// CompressionMode selects whether CompressionPolicy should enable or disable
+// generated stream compression. CompressionDefault lets the policy infer the
+// mode from the other fields.
+type CompressionMode int
+
+const (
+	// CompressionDefault uses package defaults unless other policy fields imply
+	// compression should be enabled.
+	CompressionDefault CompressionMode = iota
+	// CompressionEnabled enables Flate compression.
+	CompressionEnabled
+	// CompressionDisabled disables Flate compression.
+	CompressionDisabled
+)
+
+const (
+	// CompressionWorkersDefault uses the package default worker count inside a
+	// CompressionPolicy.
+	CompressionWorkersDefault = 0
+	// CompressionWorkersDisabled disables background compression workers inside
+	// a CompressionPolicy. The legacy Set*Workers methods still use 0 to
+	// disable workers.
+	CompressionWorkersDisabled = -1
+)
+
 // CompressionPolicy controls generated stream compression and background
-// compression work. The zero value means package defaults.
+// compression work. The zero value means package defaults. For partial structs,
+// fields such as Level or PageWorkers keep compression enabled; use Mode:
+// CompressionDisabled to disable compression.
 type CompressionPolicy struct {
-	Enabled                  bool // Whether generated streams should be compressed.
-	Level                    int  // zlib compression level; 0 uses the default level.
-	PageWorkers              int  // Background page compression workers; 0 disables background page compression.
-	AttachmentWorkers        int  // Background attachment compression workers; 0 disables background attachment compression.
-	TinyStreamThresholdBytes int  // Streams smaller than this are left uncompressed; 0 uses the default threshold.
+	Mode                     CompressionMode // Explicit compression mode; 0 infers from other fields.
+	Enabled                  bool            // Deprecated: use Mode. True enables compression.
+	Level                    int             // zlib compression level; 0 uses the default level.
+	PageWorkers              int             // Background page compression workers; 0 defaults, -1 disables.
+	AttachmentWorkers        int             // Background attachment compression workers; 0 defaults, -1 disables.
+	TinyStreamThresholdBytes int             // Streams smaller than this are left uncompressed; 0 uses the default threshold.
 }
 
 // ResourceCachePolicy controls file-backed resource caching for images and
@@ -185,6 +213,7 @@ type Options struct {
 	CachePolicy                  ResourceCachePolicy // File-backed image and UTF-8 font cache policy.
 	ImageCache                   *ImageCache         // Optional explicit image cache.
 	FontCache                    *FontCache          // Optional explicit UTF-8 font cache.
+	ResourceLoader               ResourceLoader      // Optional generalized loader for supported resource kinds.
 	Limits                       *Limits             // Optional resource and document limits.
 	SecurityPolicy               *SecurityPolicy     // Optional security feature gates.
 	OutputPolicy                 *OutputPolicy       // Optional output-time defaults.

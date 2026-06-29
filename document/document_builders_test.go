@@ -9,33 +9,42 @@ import (
 	"testing"
 )
 
-func TestDocumentKindBuilders(t *testing.T) {
-	cases := []struct {
-		name string
-		doc  *LayoutDocument
-		kind DocumentKind
-	}{
-		{name: "report", doc: NewReportDocument("Report", ParagraphBlock{Segments: []TextSegment{{Text: "Report body"}}}), kind: DocumentKindReport},
-		{name: "transactional", doc: NewTransactionalDocument("Transaction", ParagraphBlock{Segments: []TextSegment{{Text: "Transaction body"}}}), kind: DocumentKindTransactional},
-		{name: "attestation", doc: NewAttestationDocument("Attestation", ParagraphBlock{Segments: []TextSegment{{Text: "Attestation body"}}}), kind: DocumentKindAttestation},
-		{name: "statement", doc: NewStatementDocument("Statement", ParagraphBlock{Segments: []TextSegment{{Text: "Statement body"}}}), kind: DocumentKindStatement},
-		{name: "generic", doc: NewGenericDocument("Generic", ParagraphBlock{Segments: []TextSegment{{Text: "Generic body"}}}), kind: DocumentKindGeneric},
+func TestNewDocumentModel(t *testing.T) {
+	doc := NewDocumentModel("Custom Document", ParagraphBlock{Segments: []TextSegment{{Text: "Body text"}}})
+	if doc.Title != "Custom Document" {
+		t.Fatalf("title = %q, want Custom Document", doc.Title)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if tc.doc.Kind != tc.kind {
-				t.Fatalf("kind = %q, want %q", tc.doc.Kind, tc.kind)
-			}
-			pdf := New("P", "mm", "A4", "")
-			pdf.SetCompression(false)
-			pdf.WriteDocument(tc.doc)
-			var out bytes.Buffer
-			if err := pdf.Output(&out); err != nil {
-				t.Fatalf("Output() error = %v", err)
-			}
-			if !strings.Contains(out.String(), tc.doc.Title) {
-				t.Fatalf("PDF output missing title %q", tc.doc.Title)
-			}
-		})
+	if len(doc.Body) != 2 {
+		t.Fatalf("body blocks = %d, want title heading and body block", len(doc.Body))
+	}
+	heading, ok := doc.Body[0].(HeadingBlock)
+	if !ok {
+		t.Fatalf("body[0] = %T, want HeadingBlock", doc.Body[0])
+	}
+	if heading.Level != 1 || len(heading.Segments) != 1 || heading.Segments[0].Text != "Custom Document" {
+		t.Fatalf("heading = %#v, want title heading", heading)
+	}
+
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.WriteDocument(doc)
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	for _, want := range []string{"Custom Document", "Body text"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("PDF output missing %q", want)
+		}
+	}
+}
+
+func TestNewDocumentModelWithoutTitle(t *testing.T) {
+	doc := NewDocumentModel("", ParagraphBlock{Segments: []TextSegment{{Text: "Body text"}}})
+	if doc.Title != "" {
+		t.Fatalf("title = %q, want empty", doc.Title)
+	}
+	if len(doc.Body) != 1 {
+		t.Fatalf("body blocks = %d, want only supplied body block", len(doc.Body))
 	}
 }

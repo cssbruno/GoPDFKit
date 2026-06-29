@@ -89,8 +89,13 @@ func (c *ImageCache) RegisterImageOptionsReader(name string, options ImageOption
 
 // RegisterImageOptions parses and stores an image from a file.
 func (c *ImageCache) RegisterImageOptions(name, fileStr string, options ImageOptions) (*ImageInfo, error) {
+	info, _, err := c.registerImageOptions(name, fileStr, options)
+	return info, err
+}
+
+func (c *ImageCache) registerImageOptions(name, fileStr string, options ImageOptions) (*ImageInfo, bool, error) {
 	if c == nil {
-		return nil, errors.New("image cache is nil")
+		return nil, false, errors.New("image cache is nil")
 	}
 	if name == "" {
 		name = fileStr
@@ -101,12 +106,12 @@ func (c *ImageCache) RegisterImageOptions(name, fileStr string, options ImageOpt
 	}
 	imageType, err := c.imageTypeForFile(cachePath, fileStr, options.ImageType)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	options.ImageType = imageType
 	stat, err := os.Stat(fileStr)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	key := imageFileCacheKey{
 		path:      cachePath,
@@ -126,16 +131,16 @@ func (c *ImageCache) RegisterImageOptions(name, fileStr string, options ImageOpt
 		c.images[name] = cached.cloneMetadata()
 		info := c.images[name].cloneMetadata()
 		c.mu.Unlock()
-		return info, nil
+		return info, true, nil
 	}
 	file, err := os.Open(fileStr)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer func() { _ = file.Close() }()
 	info, err := c.RegisterImageOptionsReader(name, options, file)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	c.mu.Lock()
 	if c.fileImages == nil {
@@ -145,7 +150,40 @@ func (c *ImageCache) RegisterImageOptions(name, fileStr string, options ImageOpt
 		c.storeFileImageLocked(key, name, cached)
 	}
 	c.mu.Unlock()
-	return info, nil
+	return info, false, nil
+}
+
+func (c *ImageCache) resourceImage(name string, key imageFileCacheKey) (*ImageInfo, bool) {
+	if c == nil {
+		return nil, false
+	}
+	c.mu.RLock()
+	cached := c.fileImages[key]
+	c.mu.RUnlock()
+	if cached == nil {
+		return nil, false
+	}
+	c.mu.Lock()
+	if c.images == nil {
+		c.images = make(map[string]*ImageInfo)
+	}
+	c.images[name] = cached.cloneMetadata()
+	info := c.images[name].cloneMetadata()
+	c.mu.Unlock()
+	return info, true
+}
+
+func (c *ImageCache) storeResourceImage(name string, key imageFileCacheKey, info *ImageInfo) {
+	if c == nil || info == nil {
+		return
+	}
+	c.mu.Lock()
+	if c.images == nil {
+		c.images = make(map[string]*ImageInfo)
+	}
+	c.images[name] = info.cloneMetadata()
+	c.storeFileImageLocked(key, name, c.images[name])
+	c.mu.Unlock()
 }
 
 func (c *ImageCache) storeFileImageLocked(key imageFileCacheKey, name string, info *ImageInfo) {
@@ -191,6 +229,16 @@ func imageCachePath(fileStr string) string {
 		return abs
 	}
 	return fileStr
+}
+
+func imageResourceCacheKey(info ResourceInfo, options ImageOptions) imageFileCacheKey {
+	return imageFileCacheKey{
+		path:      "resource:" + info.StableID,
+		size:      info.Size,
+		modTime:   info.ModTime.UnixNano(),
+		imageType: normalizeImageType(options.ImageType),
+		readDpi:   options.ReadDpi,
+	}
 }
 
 func (c *ImageCache) imageTypeForFile(cachePath, fileStr, imageType string) (string, error) {
@@ -242,10 +290,8 @@ func (f *Document) RegisterImageFromCache(name string, cache *ImageCache) *Image
 		f.err = errors.New("image cache name is empty")
 		return nil
 	}
-	if info, ok := f.images[name]; ok {
-		if f.hooks.OnResourceCacheHit != nil {
-			f.hooks.OnResourceCacheHit("image", name)
-		}
+	resources := f.ensureResourceStore()
+	if info, ok := resources.image(name); ok {
 		return info
 	}
 	info, ok := cache.Get(name)
@@ -283,7 +329,7 @@ func (f *Document) registerCachedImageInfo(name string, info *ImageInfo) *ImageI
 		f.err = err
 		return nil
 	}
-	f.images[name] = info
+	f.ensureResourceStore().setImage(name, info)
 	return info
 }
 

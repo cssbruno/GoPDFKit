@@ -80,6 +80,12 @@ The root `gopdfkit` package is intentionally small. It exposes the default
 constructor and public aliases. Import `github.com/cssbruno/gopdfkit/document`
 when you need the full API.
 
+Structured document model types live in `github.com/cssbruno/gopdfkit/layout`
+and are re-exported by the `document` package. These model types are
+domain-neutral building blocks. GoPDFKit does not own application document
+categories such as invoices, reports, certificates, or statements; callers
+should define those helpers in their own code.
+
 ## Install
 
 ```shell
@@ -94,11 +100,14 @@ package main
 import "github.com/cssbruno/gopdfkit"
 
 func main() {
-	pdf := gopdfkit.New()
+	pdf, err := gopdfkit.NewDocument()
+	if err != nil {
+		panic(err)
+	}
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "B", 16)
 	pdf.Cell(40, 10, "Hello, world")
-	if err := pdf.OutputFileAndClose("hello.pdf"); err != nil {
+	if err := pdf.OutputFile("hello.pdf"); err != nil {
 		panic(err)
 	}
 }
@@ -120,6 +129,49 @@ pdf := document.NewWithOptions(document.Options{
 streams. It is not a full PDF optimizer for images, object streams, fonts, or
 arbitrary existing PDFs.
 
+## Large PDF Output
+
+Normal `Output` and `OutputFile` calls keep the final PDF bytes in the document
+buffer, which makes repeated output from one `Document` possible. For very
+large unsigned PDFs where peak memory matters more than repeatability, use the
+one-shot streaming path:
+
+```go
+err := pdf.OutputFileStream("large.pdf")
+```
+
+The same path is available through `OutputStream`,
+`OutputOptions{StreamFinal: true}`, or
+`WithOutputPolicy(document.OutputPolicy{StreamFinal: true})`.
+Streaming final output is opt-in, consumes the document for final output, and is
+disabled for signed output because signing needs the complete byte range.
+
+## Document Models
+
+Use `document.NewDocumentModel` when your application wants to assemble a
+structured model from GoPDFKit blocks before rendering it with `WriteDocument`.
+Keep product-specific document names in your application:
+
+```go
+func receiptModel(number string, rows []document.TableRow) *document.LayoutDocument {
+	return document.NewDocumentModel("Receipt "+number,
+		document.MetadataGridBlock{Fields: []document.MetadataField{
+			{Label: "Number", Value: number},
+		}},
+		document.TableBlock{Body: rows},
+	)
+}
+```
+
+Migration from the previous document-kind helpers:
+
+* `document.NewLayoutDocument(document.DocumentKindReport)` becomes
+  `document.NewLayoutDocument()`.
+* `document.NewGenericDocument("Title", blocks...)` becomes
+  `document.NewDocumentModel("Title", blocks...)`.
+* Replace report, transactional, attestation, and statement builders with
+  caller-owned functions that return `*document.LayoutDocument`.
+
 ## Current Capabilities
 
 GoPDFKit currently supports:
@@ -129,8 +181,8 @@ GoPDFKit currently supports:
 * Standard PDF fonts and UTF-8 TrueType fonts
 * Text, cells, multicells, aligned writing, styled paragraphs, links, bookmarks,
   and aliases
-* Tables, reports, invoices, static filled form documents, and shared document
-  model rendering
+* Tables, reusable block-based layouts, static filled form documents, and shared
+  document model rendering
 * Drawing primitives: lines, rectangles, rounded rectangles, arcs, Bezier
   curves, polygons, paths, clipping, transforms, transparency, gradients, spot
   colors, and layers
@@ -141,9 +193,8 @@ GoPDFKit currently supports:
 * Templates and imported PDF pages
 * Page workflows built from imported pages: merge, split, reorder, rotate,
   4-up layout, template overlay, and watermark overlay
-* Attachments, metadata, XMP metadata, JavaScript actions, legacy PDF
-  standard-security protection, PDF signing, CMS signature verification, and
-  lightweight PDF inspection
+* Attachments, metadata, XMP metadata, legacy PDF standard-security protection,
+  PDF signing, CMS signature verification, and lightweight PDF inspection
 
 ## Current Limits
 
@@ -151,6 +202,10 @@ These are not implemented as general-purpose features:
 
 * Full browser-compatible HTML/CSS layout
 * JavaScript page rendering
+* PDF JavaScript actions; `SetJavascript` returns
+  `ErrJavaScriptUnsupported`, and `javascript:` URI links are rejected
+* AES-based PDF document encryption; `SetAESProtection` returns
+  `ErrAESProtectionUnsupported` instead of emitting partial encryption syntax
 * DOCX conversion
 * Interactive AcroForm field creation
 * Filling, flattening, or FDF-merging existing interactive forms
@@ -181,8 +236,7 @@ encryption, no JavaScript, an ICC output intent, embedded UTF-8 fonts with
 Unicode maps, and PDF/A-4f or PDF/A-4e when attachments are present.
 
 This is not a full validator replacement. Use `make compliance-fixtures` and
-`make compliance-validate` with external validators for standards checks. See
-[`compliance-validation.md`][compliance-validation].
+`make compliance-validate` with external validators for standards checks.
 
 Strict validation can be run with Dockerized veraPDF plus the Arlington REST
 service:
@@ -201,8 +255,7 @@ make compliance-validate
 ## Examples
 
 Runnable examples live under [`examples/`][examples]. They write PDFs to
-`assets/generated/pdf/examples`. For compact code snippets grouped by workflow,
-see [`generation-examples.md`][generation-examples].
+`assets/generated/pdf/examples`.
 
 | Workflow | Command | Output |
 | --- | --- | --- |
@@ -263,7 +316,7 @@ cmd/list               generated-reference listing utility
 examples/              runnable examples
 assets/static/         checked-in fonts, images, and text fixtures
 assets/generated/pdf/  generated PDFs
-doc/                   Markdown documentation
+doc/                   Markdown source for README.md
 tools/                 tool-only module for quality/security commands
 ```
 
@@ -311,8 +364,6 @@ inline SVGs, CSS rules, cached text, cached styles, and malformed-fragment
 recoveries. `RecoveryIssues` reports unclosed, misnested, or unexpected closing
 tags observed while building the private node model. `DebugDump` is intended for
 human diagnostics and should not be parsed as a stable wire format.
-
-See [`doc/pdf-html-subset.md`][pdf-html-subset] for the full contract.
 
 ## Fonts
 
@@ -461,10 +512,7 @@ Dave Barnes, Brigham Thompson, Joe Westcott, and Benoit KUGLER.
 [badge-doc]: https://img.shields.io/badge/godoc-GoPDFKit-blue.svg
 [badge-mit]: https://img.shields.io/badge/license-MIT-blue.svg
 [ci]: https://github.com/cssbruno/gopdfkit/actions/workflows/ci.yml
-[compliance-validation]: compliance-validation.md
 [examples]: ../examples
 [fpdf-site]: http://www.fpdf.org/
-[generation-examples]: generation-examples.md
 [godoc]: https://pkg.go.dev/github.com/cssbruno/gopdfkit
 [license]: https://raw.githubusercontent.com/cssbruno/gopdfkit/master/LICENSE
-[pdf-html-subset]: pdf-html-subset.md

@@ -5,7 +5,6 @@ package document
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -23,7 +22,7 @@ func bufferFromReaderLimit(r io.Reader, limit int) (b *bytes.Buffer, err error) 
 	if limit >= 0 {
 		_, err = b.ReadFrom(io.LimitReader(r, int64(limit)+1))
 		if err == nil && b.Len() > limit {
-			err = errors.New("image data exceeds maximum size")
+			err = fmt.Errorf("%w: image data exceeds maximum size", ErrImageTooLarge)
 		}
 		return
 	}
@@ -39,11 +38,11 @@ func readFileLimit(filename string, limit int64) ([]byte, error) {
 	defer func() { _ = file.Close() }()
 	if limit >= 0 {
 		if info, statErr := file.Stat(); statErr == nil && info.Mode().IsRegular() && info.Size() > limit {
-			return nil, errors.New("image data exceeds maximum size")
+			return nil, fmt.Errorf("%w: image data exceeds maximum size", ErrImageTooLarge)
 		}
 		data, err := io.ReadAll(io.LimitReader(file, limit+1))
 		if err == nil && int64(len(data)) > limit {
-			err = errors.New("image data exceeds maximum size")
+			err = fmt.Errorf("%w: image data exceeds maximum size", ErrImageTooLarge)
 		}
 		return data, err
 	}

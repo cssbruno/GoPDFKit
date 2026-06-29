@@ -78,7 +78,7 @@ func TestWriteDocumentRendersExtractedHTMLFooterBlock(t *testing.T) {
 	_, footer := ExtractHTMLFooterBlock(`<p>Body</p><footer>Extracted footer</footer>`)
 	pdf := New("P", "mm", "A4", "")
 	pdf.SetCompression(false)
-	doc := NewLayoutDocument(DocumentKindGeneric)
+	doc := NewLayoutDocument()
 	doc.Body = []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Document body"}}}}
 	doc.PageTemplate.Footer = footer
 

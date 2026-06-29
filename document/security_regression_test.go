@@ -513,6 +513,44 @@ func TestSecurityHTMLRejectsUnsafeLinkSchemes(t *testing.T) {
 	}
 }
 
+func TestSecurityDirectLinksRejectUnsafeSchemes(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(*Document)
+	}{
+		{
+			name: "LinkString",
+			run: func(pdf *Document) {
+				pdf.LinkString(1, 1, 10, 10, "javascript:app.alert(1)")
+			},
+		},
+		{
+			name: "WriteLinkString",
+			run: func(pdf *Document) {
+				pdf.WriteLinkString(5, "bad", " JaVaScRiPt:app.alert(1)")
+			},
+		},
+		{
+			name: "CellFormat",
+			run: func(pdf *Document) {
+				pdf.CellFormat(10, 5, "bad", "", 0, "", false, 0, "data:text/html,<script>alert(1)</script>")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pdf := New("P", "mm", "A4", "")
+			pdf.AddPage()
+			pdf.SetFont("Helvetica", "", 12)
+			tt.run(pdf)
+			if pdf.Error() == nil || !strings.Contains(pdf.Error().Error(), "unsupported link scheme") {
+				t.Fatalf("%s error = %v, want unsupported link scheme", tt.name, pdf.Error())
+			}
+		})
+	}
+}
+
 func TestSecurityHTMLCSSParsingIsCapped(t *testing.T) {
 	var css strings.Builder
 	for i := range htmlMaxCSSRules + 128 {

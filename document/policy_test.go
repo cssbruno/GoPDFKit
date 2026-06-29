@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/cssbruno/gopdfkit/sign"
 )
 
 func TestProductionPolicyAppliesSupportedSettings(t *testing.T) {
@@ -39,6 +41,50 @@ func TestProductionPolicyAppliesSupportedSettings(t *testing.T) {
 	}
 }
 
+func TestWithServerSafeDefaultsAppliesServerPolicy(t *testing.T) {
+	pdf, err := NewDocument(WithServerSafeDefaults())
+	if err != nil {
+		t.Fatalf("NewDocument() error = %v", err)
+	}
+	if pdf.resourceCachePolicy != ResourceCacheDocument {
+		t.Fatalf("resourceCachePolicy = %v, want ResourceCacheDocument", pdf.resourceCachePolicy)
+	}
+	gotCompression := pdf.CompressionPolicy()
+	if gotCompression.PageWorkers != 4 || gotCompression.AttachmentWorkers != 2 {
+		t.Fatalf("CompressionPolicy() = %#v, want server-safe workers", gotCompression)
+	}
+	if !pdf.securityPolicySet {
+		t.Fatal("WithServerSafeDefaults should install a security policy")
+	}
+}
+
+func TestSetProductionPolicyAppliesToLegacyDocument(t *testing.T) {
+	pdf := New("", "", "", "")
+	policy := ServerSafePolicy()
+	policy.Limits.MaxPages = 1
+	if err := pdf.SetProductionPolicy(policy); err != nil {
+		t.Fatalf("SetProductionPolicy() error = %v", err)
+	}
+	if pdf.resourceCachePolicy != ResourceCacheDocument {
+		t.Fatalf("resourceCachePolicy = %v, want ResourceCacheDocument", pdf.resourceCachePolicy)
+	}
+	pdf.AddPage()
+	pdf.AddPage()
+	if !errors.Is(pdf.Error(), ErrPageLimitExceeded) {
+		t.Fatalf("AddPage() error = %v, want ErrPageLimitExceeded", pdf.Error())
+	}
+}
+
+func TestPartialProductionPolicyUsesDocumentLocalCache(t *testing.T) {
+	pdf, err := NewDocument(WithProductionPolicy(ProductionPolicy{Limits: ServerSafeLimits()}))
+	if err != nil {
+		t.Fatalf("NewDocument() error = %v", err)
+	}
+	if pdf.resourceCachePolicy != ResourceCacheDocument {
+		t.Fatalf("resourceCachePolicy = %v, want ResourceCacheDocument for partial policy", pdf.resourceCachePolicy)
+	}
+}
+
 func TestSecurityPolicyGatesFeatures(t *testing.T) {
 	t.Run("JavaScript", func(t *testing.T) {
 		pdf, err := NewDocument(WithSecurityPolicy(SecurityPolicy{}))
@@ -46,8 +92,8 @@ func TestSecurityPolicyGatesFeatures(t *testing.T) {
 			t.Fatalf("NewDocument() error = %v", err)
 		}
 		pdf.SetJavascript("app.alert('blocked')")
-		if !errors.Is(pdf.Error(), ErrSecurityPolicyDenied) {
-			t.Fatalf("SetJavascript() error = %v, want ErrSecurityPolicyDenied", pdf.Error())
+		if !errors.Is(pdf.Error(), ErrJavaScriptUnsupported) {
+			t.Fatalf("SetJavascript() error = %v, want ErrJavaScriptUnsupported", pdf.Error())
 		}
 	})
 
@@ -89,6 +135,45 @@ func TestSecurityPolicyGatesFeatures(t *testing.T) {
 			t.Fatalf("Output() error = %v, want ErrSecurityPolicyDenied", err)
 		}
 	})
+
+	t.Run("PDF import", func(t *testing.T) {
+		pdf, err := NewDocument(WithSecurityPolicy(SecurityPolicy{}))
+		if err != nil {
+			t.Fatalf("NewDocument() error = %v", err)
+		}
+		_, err = pdf.ImportPageStreamError(strings.NewReader("%PDF-1.4\n%%EOF"), 1, "MediaBox")
+		if !errors.Is(err, ErrSecurityPolicyDenied) {
+			t.Fatalf("ImportPageStreamError() error = %v, want ErrSecurityPolicyDenied", err)
+		}
+	})
+
+	t.Run("PDF signing", func(t *testing.T) {
+		pdf, err := NewDocument(WithSecurityPolicy(SecurityPolicy{}))
+		if err != nil {
+			t.Fatalf("NewDocument() error = %v", err)
+		}
+		err = pdf.OutputSigned(&bytes.Buffer{}, sign.Options{})
+		if !errors.Is(err, ErrSecurityPolicyDenied) {
+			t.Fatalf("OutputSigned() error = %v, want ErrSecurityPolicyDenied", err)
+		}
+	})
+}
+
+func TestImportPageStreamContextCanceled(t *testing.T) {
+	pdf, err := NewDocument()
+	if err != nil {
+		t.Fatalf("NewDocument() error = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err = pdf.ImportPageStreamContext(ctx, strings.NewReader("%PDF-1.4\n%%EOF"), 1, "MediaBox")
+	if !errors.Is(err, ErrOutputCanceled) {
+		t.Fatalf("ImportPageStreamContext() error = %v, want ErrOutputCanceled", err)
+	}
+	if !errors.Is(pdf.Error(), ErrOutputCanceled) {
+		t.Fatalf("document error = %v, want ErrOutputCanceled", pdf.Error())
+	}
 }
 
 func TestOutputOptionsApplyAttachmentLimits(t *testing.T) {
@@ -146,8 +231,8 @@ func TestLimitsApplyImageSourceLimit(t *testing.T) {
 		t.Fatalf("NewDocument() error = %v", err)
 	}
 	_, err = pdf.RegisterImageOptionsError(fileStr, ImageOptions{ImageType: "png"})
-	if !errors.Is(err, ErrUnsupportedImageType) {
-		t.Fatalf("RegisterImageOptionsError() error = %v, want ErrUnsupportedImageType", err)
+	if !errors.Is(err, ErrImageTooLarge) {
+		t.Fatalf("RegisterImageOptionsError() error = %v, want ErrImageTooLarge", err)
 	}
 }
 
@@ -171,7 +256,7 @@ func TestOutputOptionsApplyCompression(t *testing.T) {
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(10, 10, "compressed")
 	var out bytes.Buffer
-	policy := CompressionPolicy{Enabled: true, Level: zlib.BestCompression, PageWorkers: 0, AttachmentWorkers: 0}
+	policy := CompressionPolicy{Level: zlib.BestCompression}
 	if err := pdf.OutputWithOptions(&out, OutputOptions{Compression: policy}); err != nil {
 		t.Fatalf("OutputWithOptions() error = %v", err)
 	}
@@ -195,6 +280,27 @@ func TestOutputContextCanceledBeforeOutput(t *testing.T) {
 	}
 	if out.Len() != 0 {
 		t.Fatalf("OutputContext() wrote %d bytes after cancellation", out.Len())
+	}
+}
+
+func TestOutputWithOptionsContextCanceledRestoresOutputSettings(t *testing.T) {
+	pdf, err := NewDocument()
+	if err != nil {
+		t.Fatalf("NewDocument() error = %v", err)
+	}
+	before := pdf.CompressionPolicy()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var out bytes.Buffer
+	err = pdf.OutputWithOptionsContext(ctx, &out, OutputOptions{
+		Compression: CompressionPolicy{Level: zlib.BestCompression},
+	})
+	if !errors.Is(err, ErrOutputCanceled) {
+		t.Fatalf("OutputWithOptionsContext() error = %v, want ErrOutputCanceled", err)
+	}
+	after := pdf.CompressionPolicy()
+	if after != before {
+		t.Fatalf("CompressionPolicy after canceled output = %#v, want restored %#v", after, before)
 	}
 }
 
@@ -270,6 +376,9 @@ func TestPublicProductionContracts(t *testing.T) {
 	if got := TemplateSerializationVersion(); got != "GPKTPL1" {
 		t.Fatalf("TemplateSerializationVersion() = %q, want GPKTPL1", got)
 	}
+	if got := TemplateFingerprintVersion(); got != "GPKTPL2" {
+		t.Fatalf("TemplateFingerprintVersion() = %q, want GPKTPL2", got)
+	}
 
 	var validator Validator = validationFunc(func([]byte) (ValidationReport, error) {
 		return ValidationReport{}, nil
@@ -280,5 +389,22 @@ func TestPublicProductionContracts(t *testing.T) {
 	}
 	if report.Failed() {
 		t.Fatal("empty validation report should not fail")
+	}
+}
+
+func TestTemplateDecodeOptionsApplySerializedLimit(t *testing.T) {
+	tpl := CreateTpl(Point{}, Size{Wd: 10, Ht: 10}, "P", "pt", "", func(t *Tpl) {
+		t.RawWriteStr("0 0 m")
+	})
+	encoded, err := tpl.Serialize()
+	if err != nil {
+		t.Fatalf("Serialize() error = %v", err)
+	}
+	_, err = DeserializeTemplateWithOptions(encoded, TemplateDecodeOptions{MaxSerializedBytes: len(encoded) - 1})
+	if err == nil {
+		t.Fatal("DeserializeTemplateWithOptions() error = nil, want size limit")
+	}
+	if _, err = DeserializeTemplateWithOptions(encoded, TemplateDecodeOptions{MaxSerializedBytes: len(encoded)}); err != nil {
+		t.Fatalf("DeserializeTemplateWithOptions() error = %v", err)
 	}
 }

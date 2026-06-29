@@ -87,7 +87,7 @@ func FormDocumentBlocks(form FormDocument) []Block {
 
 // FormDocumentModel converts a form into a shared Document.
 func FormDocumentModel(form FormDocument) *LayoutDocument {
-	doc := NewLayoutDocument(DocumentKindForm)
+	doc := NewLayoutDocument()
 	doc.Title = form.Title
 	doc.Body = FormDocumentBlocks(form)
 	return doc

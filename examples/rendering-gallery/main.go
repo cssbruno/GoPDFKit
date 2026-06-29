@@ -655,7 +655,7 @@ func generateAttachmentsAnnotations() {
 func generateMetadataXMP() {
 	pdf := newPDF("Metadata and XMP")
 	pdf.SetSubject("Generated metadata showcase", false)
-	pdf.SetKeywords("pdf,metadata,xmp,javascript,generated", false)
+	pdf.SetKeywords("pdf,metadata,xmp,generated", false)
 	pdf.SetProducer("GoPDFKit metadata example", false)
 	pdf.SetXmpMetadata([]byte(`<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
@@ -666,12 +666,11 @@ func generateMetadataXMP() {
   </rdf:RDF>
 </x:xmpmeta>
 <?xpacket end="w"?>`))
-	pdf.SetJavascript("this.info.Subject = 'Generated metadata showcase';")
 	pdf.AddPage()
-	title(pdf, "Metadata and XMP", "Info dictionary, XMP packet, keywords, and JavaScript action")
+	title(pdf, "Metadata and XMP", "Info dictionary, XMP packet, and keywords")
 	pdf.SetFont("Helvetica", "", 11)
 	pdf.SetXY(16, 52)
-	pdf.MultiCell(176, 6, "This example sets PDF metadata fields, embeds an XMP metadata packet, and includes a small JavaScript action for readers that support it.", "", "L", false)
+	pdf.MultiCell(176, 6, "This example sets PDF metadata fields and embeds an XMP metadata packet without PDF JavaScript actions.", "", "L", false)
 
 	save(pdf, "metadata-xmp.pdf")
 }

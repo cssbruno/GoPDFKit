@@ -5,8 +5,11 @@ package document
 
 import (
 	"bytes"
+	"context"
 	crand "crypto/rand"
+	"crypto/sha256"
 	"errors"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -248,6 +251,154 @@ func TestAttachmentFromFileWithOptionsEagerValidation(t *testing.T) {
 	}
 }
 
+func TestAttachmentFromLoaderLoadsDuringOutput(t *testing.T) {
+	opened := 0
+	loader := AttachmentLoaderFunc(func(ctx context.Context) (io.ReadCloser, int64, error) {
+		opened++
+		if err := outputCanceledError(ctx); err != nil {
+			return nil, 0, err
+		}
+		return io.NopCloser(strings.NewReader("loader payload")), int64(len("loader payload")), nil
+	})
+
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.SetAttachments([]Attachment{AttachmentFromLoader("loader.txt", loader)})
+	if len(pdf.attachments[0].Content) != 0 {
+		t.Fatal("loader-backed attachment loaded before output")
+	}
+	pdf.AddPage()
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if opened == 0 {
+		t.Fatal("loader was not opened during output")
+	}
+	if got := string(pdf.attachments[0].Content); got != "loader payload" {
+		t.Fatalf("loaded attachment content = %q, want loader payload", got)
+	}
+	if !bytes.Contains(out.Bytes(), []byte("/EmbeddedFiles")) {
+		t.Fatal("output missing embedded file name tree")
+	}
+}
+
+func TestAttachmentEmptyContentTakesPrecedenceOverLoader(t *testing.T) {
+	opened := 0
+	loader := AttachmentLoaderFunc(func(context.Context) (io.ReadCloser, int64, error) {
+		opened++
+		return io.NopCloser(strings.NewReader("loader payload")), int64(len("loader payload")), nil
+	})
+
+	pdf, err := NewDocument(WithSecurityPolicy(SecurityPolicy{}))
+	if err != nil {
+		t.Fatalf("NewDocument() error = %v", err)
+	}
+	pdf.SetCompression(false)
+	pdf.SetAttachments([]Attachment{{
+		Content:  []byte{},
+		Filename: "empty.txt",
+		Loader:   loader,
+	}})
+	if pdf.attachments[0].Content == nil {
+		t.Fatal("SetAttachments dropped explicit empty content")
+	}
+	pdf.AddPage()
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if opened != 0 {
+		t.Fatalf("loader opened %d times, want 0", opened)
+	}
+	if pdf.attachments[0].Content == nil || len(pdf.attachments[0].Content) != 0 {
+		t.Fatalf("attachment content = %#v, want explicit empty content", pdf.attachments[0].Content)
+	}
+	if !bytes.Contains(out.Bytes(), []byte("/Size 0")) {
+		t.Fatal("output missing zero-size embedded file metadata")
+	}
+}
+
+func TestAttachmentFromLoaderWithOptionsEagerValidation(t *testing.T) {
+	loader := AttachmentLoaderFunc(func(context.Context) (io.ReadCloser, int64, error) {
+		return io.NopCloser(strings.NewReader("payload")), int64(len("payload")), nil
+	})
+	if _, err := AttachmentFromLoaderWithOptions("loader.txt", loader, AttachmentOptions{Eager: true, MaxBytes: 3}); !errors.Is(err, ErrAttachmentTooLarge) {
+		t.Fatalf("AttachmentFromLoaderWithOptions oversize error = %v, want ErrAttachmentTooLarge", err)
+	}
+	attachment, err := AttachmentFromLoaderWithOptions("loader.txt", loader, AttachmentOptions{Eager: true, MaxBytes: 16})
+	if err != nil {
+		t.Fatalf("AttachmentFromLoaderWithOptions valid error = %v", err)
+	}
+	if attachment.maxBytes != 16 {
+		t.Fatalf("loader attachment maxBytes = %d, want 16", attachment.maxBytes)
+	}
+}
+
+func TestAttachmentCompressionCanSpoolToTempFile(t *testing.T) {
+	content := bytes.Repeat([]byte("payload"), attachmentCompressionSpoolThreshold/len("payload")+1)
+	stream, checksum, err := compressAttachmentWithChecksum(content, defaultCompressionLevel(), true)
+	if err != nil {
+		t.Fatalf("compressAttachmentWithChecksum() error = %v", err)
+	}
+	defer stream.cleanup()
+	if stream.tempFile == "" {
+		t.Fatal("spooled attachment stream tempFile is empty")
+	}
+	if stream.size <= 0 {
+		t.Fatalf("spooled attachment stream size = %d, want > 0", stream.size)
+	}
+	if checksum != attachmentChecksum(content) {
+		t.Fatalf("checksum = %s, want %s", checksum, attachmentChecksum(content))
+	}
+	if _, err := os.Stat(stream.tempFile); err != nil {
+		t.Fatalf("stat spooled attachment stream: %v", err)
+	}
+	stream.cleanup()
+	if _, err := os.Stat(stream.tempFile); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stat after cleanup = %v, want os.ErrNotExist", err)
+	}
+}
+
+func TestParserContextAPIsCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := HTMLTokenizeContext(ctx, "<p>hello</p>"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("HTMLTokenizeContext() error = %v, want context.Canceled", err)
+	}
+	if _, err := CompileHTMLContext(ctx, "<p>hello</p>"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("CompileHTMLContext() error = %v, want context.Canceled", err)
+	}
+	if _, err := SVGParseContext(ctx, []byte(`<svg width="1" height="1"/>`)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("SVGParseContext() error = %v, want context.Canceled", err)
+	}
+	pdf := New("P", "mm", "A4", "")
+	if _, err := pdf.RegisterImageOptionsReaderContext(ctx, "img", ImageOptions{ImageType: "png"}, strings.NewReader("")); !errors.Is(err, context.Canceled) {
+		t.Fatalf("RegisterImageOptionsReaderContext() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestSecurityPolicyGatesAttachmentLoaders(t *testing.T) {
+	loader := AttachmentLoaderFunc(func(context.Context) (io.ReadCloser, int64, error) {
+		return io.NopCloser(strings.NewReader("payload")), int64(len("payload")), nil
+	})
+	pdf, err := NewDocument(WithSecurityPolicy(SecurityPolicy{}))
+	if err != nil {
+		t.Fatalf("NewDocument() error = %v", err)
+	}
+	pdf.SetAttachments([]Attachment{AttachmentFromLoader("loader.txt", loader)})
+	pdf.AddPage()
+
+	var out bytes.Buffer
+	err = pdf.Output(&out)
+	if !errors.Is(err, ErrSecurityPolicyDenied) {
+		t.Fatalf("Output() error = %v, want ErrSecurityPolicyDenied", err)
+	}
+}
+
 func TestSetMaxAttachmentBytesAppliesDocumentLimit(t *testing.T) {
 	fileStr := filepath.Join(t.TempDir(), "payload.bin")
 	if err := os.WriteFile(fileStr, []byte("payload"), 0o600); err != nil {
@@ -347,6 +498,293 @@ func TestCatalogOmitsNamesWhenUnused(t *testing.T) {
 	}
 }
 
+func TestSetJavascriptIsUnsupported(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	if err := pdf.SetJavascriptError("app.alert('blocked')"); !errors.Is(err, ErrJavaScriptUnsupported) {
+		t.Fatalf("SetJavascriptError() error = %v, want ErrJavaScriptUnsupported", err)
+	}
+	if !errors.Is(pdf.Error(), ErrJavaScriptUnsupported) {
+		t.Fatalf("document error = %v, want ErrJavaScriptUnsupported", pdf.Error())
+	}
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); !errors.Is(err, ErrJavaScriptUnsupported) {
+		t.Fatalf("Output() error = %v, want ErrJavaScriptUnsupported", err)
+	}
+	if bytes.Contains(out.Bytes(), []byte("/JavaScript")) || bytes.Contains(out.Bytes(), []byte("/JS")) {
+		t.Fatal("unsupported JavaScript API emitted JavaScript action bytes")
+	}
+}
+
+func TestSetAESProtectionIsUnsupported(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	if err := pdf.SetAESProtection(CnProtectPrint, "reader", "owner"); !errors.Is(err, ErrAESProtectionUnsupported) {
+		t.Fatalf("SetAESProtection() error = %v, want ErrAESProtectionUnsupported", err)
+	}
+	if !errors.Is(pdf.Error(), ErrAESProtectionUnsupported) {
+		t.Fatalf("document error = %v, want ErrAESProtectionUnsupported", pdf.Error())
+	}
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); !errors.Is(err, ErrAESProtectionUnsupported) {
+		t.Fatalf("Output() error = %v, want ErrAESProtectionUnsupported", err)
+	}
+	if bytes.Contains(out.Bytes(), []byte("/Encrypt")) ||
+		bytes.Contains(out.Bytes(), []byte("/AESV2")) ||
+		bytes.Contains(out.Bytes(), []byte("/AESV3")) {
+		t.Fatal("unsupported AES protection API emitted encryption dictionary bytes")
+	}
+}
+
+func TestDeterministicOutputSortsPageBoxes(t *testing.T) {
+	first := deterministicPageBoxOutput(t, []string{"trim", "crop", "bleed", "art"})
+	second := deterministicPageBoxOutput(t, []string{"art", "bleed", "crop", "trim"})
+	if !bytes.Equal(first, second) {
+		t.Fatal("deterministic page-box output changed with insertion order")
+	}
+
+	previous := -1
+	for _, name := range []string{"/ArtBox", "/BleedBox", "/CropBox", "/TrimBox"} {
+		index := bytes.Index(first, []byte(name))
+		if index < 0 {
+			t.Fatalf("output missing %s", name)
+		}
+		if index < previous {
+			t.Fatalf("%s appeared before previous page box", name)
+		}
+		previous = index
+	}
+}
+
+func deterministicPageBoxOutput(t *testing.T, boxOrder []string) []byte {
+	t.Helper()
+	pdf, err := NewDocument(WithDeterministicOutput())
+	if err != nil {
+		t.Fatalf("NewDocument() error = %v", err)
+	}
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	for _, name := range boxOrder {
+		pdf.SetPageBox(name, 1, 2, 30, 40)
+	}
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(20, 10, "boxes")
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	return out.Bytes()
+}
+
+func TestDeterministicOutputSortsSpotColorResourceDictionaries(t *testing.T) {
+	first := deterministicSpotColorOutput(t, false)
+	second := deterministicSpotColorOutput(t, true)
+	if !bytes.Equal(first, second) {
+		t.Fatal("deterministic spot-color output changed with map insertion order")
+	}
+	assertOutputOrder(t, first, "/CS1", "/CS2")
+}
+
+func deterministicSpotColorOutput(t *testing.T, reverse bool) []byte {
+	t.Helper()
+	pdf, err := NewDocument(WithDeterministicOutput())
+	if err != nil {
+		t.Fatalf("NewDocument() error = %v", err)
+	}
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	pdf.spotColorMap = make(map[string]spotColorType)
+	colors := []struct {
+		name string
+		info spotColorType
+	}{
+		{name: "Alpha", info: spotColorType{id: 1, cmyk: cmykColorType{c: 1, m: 2, y: 3, k: 4}}},
+		{name: "Zeta", info: spotColorType{id: 2, cmyk: cmykColorType{c: 5, m: 6, y: 7, k: 8}}},
+	}
+	if reverse {
+		colors[0], colors[1] = colors[1], colors[0]
+	}
+	for _, color := range colors {
+		pdf.spotColorMap[color.name] = color.info
+	}
+	pdf.SetFillSpotColor("Alpha", 70)
+	pdf.Rect(10, 10, 20, 10, "F")
+	pdf.SetDrawSpotColor("Zeta", 50)
+	pdf.Rect(35, 10, 20, 10, "D")
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	return out.Bytes()
+}
+
+func TestDeterministicOutputSortsImportedTemplateMaps(t *testing.T) {
+	first := deterministicImportedTemplateOutput(t, false)
+	second := deterministicImportedTemplateOutput(t, true)
+	if !bytes.Equal(first, second) {
+		t.Fatal("deterministic imported-template output changed with map insertion order")
+	}
+	assertOutputOrder(t, first, "/TplA", "/TplZ")
+}
+
+func deterministicImportedTemplateOutput(t *testing.T, reverse bool) []byte {
+	t.Helper()
+	pdf, err := NewDocument(WithDeterministicOutput())
+	if err != nil {
+		t.Fatalf("NewDocument() error = %v", err)
+	}
+	pdf.SetCompression(false)
+	objA := []byte("<< /Type /XObject /Subtype /Form /BBox [0 0 10 10] /Resources << >> /Length 0 >>\nstream\n\nendstream\nendobj\n")
+	objZ := []byte("<< /Type /XObject /Subtype /Form /BBox [0 0 12 12] /Resources << >> /Length 0 >>\nstream\n\nendstream\nendobj\n")
+	objs := make(map[string][]byte)
+	tpls := make(map[string]string)
+	if reverse {
+		objs["hash-z"] = objZ
+		objs["hash-a"] = objA
+		tpls["/TplZ"] = "hash-z"
+		tpls["/TplA"] = "hash-a"
+	} else {
+		objs["hash-a"] = objA
+		objs["hash-z"] = objZ
+		tpls["/TplA"] = "hash-a"
+		tpls["/TplZ"] = "hash-z"
+	}
+	pdf.ImportObjects(objs)
+	pdf.ImportObjPos(map[string]map[int]string{
+		"hash-a": {},
+		"hash-z": {},
+	})
+	pdf.ImportTemplates(tpls)
+	pdf.AddPage()
+	pdf.UseImportedTemplate("/TplA", 1, 1, 10, 10)
+	pdf.UseImportedTemplate("/TplZ", 1, 1, 30, 10)
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	return out.Bytes()
+}
+
+func TestDeterministicOutputSortsTemplateImageResourceNames(t *testing.T) {
+	first := deterministicTemplateImageOutput(t, false)
+	second := deterministicTemplateImageOutput(t, true)
+	if !bytes.Equal(first, second) {
+		t.Fatal("deterministic template image output changed with map insertion order")
+	}
+}
+
+func deterministicTemplateImageOutput(t *testing.T, reverse bool) []byte {
+	t.Helper()
+	pdf, err := NewDocument(WithDeterministicOutput())
+	if err != nil {
+		t.Fatalf("NewDocument() error = %v", err)
+	}
+	pdf.SetCompression(false)
+	alpha, err := pdf.RegisterImageOptionsReaderError("alpha", ImageOptions{ImageType: "png"}, bytes.NewReader(decodeTinyPNG(t)))
+	if err != nil {
+		t.Fatalf("RegisterImageOptionsReaderError(alpha) error = %v", err)
+	}
+	zeta, err := pdf.RegisterImageOptionsReaderError("zeta", ImageOptions{ImageType: "png"}, bytes.NewReader(encodeAlphaPNG(t)))
+	if err != nil {
+		t.Fatalf("RegisterImageOptionsReaderError(zeta) error = %v", err)
+	}
+	images := make(map[string]*ImageInfo)
+	if reverse {
+		images["zeta"] = zeta
+		images["alpha"] = alpha
+	} else {
+		images["alpha"] = alpha
+		images["zeta"] = zeta
+	}
+	pdf.AddPage()
+	pdf.UseTemplateView(renderOnlyTemplateView{
+		id:     "images",
+		size:   Size{Wd: 10, Ht: 10},
+		data:   []byte("q\nQ"),
+		images: images,
+	})
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	return out.Bytes()
+}
+
+func assertOutputOrder(t *testing.T, output []byte, ordered ...string) {
+	t.Helper()
+	previous := -1
+	for _, item := range ordered {
+		index := bytes.Index(output, []byte(item))
+		if index < 0 {
+			t.Fatalf("output missing %s", item)
+		}
+		if index < previous {
+			t.Fatalf("%s appeared before previous item in output", item)
+		}
+		previous = index
+	}
+}
+
+func TestDeterministicOutputSortsMapBackedResourceKeys(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetCatalogSort(true)
+	pdf.AddSpotColor("Zeta", 1, 2, 3, 4)
+	pdf.AddSpotColor("Alpha", 5, 6, 7, 8)
+	assertStringSlice(t, pdf.spotColorOutputNames(), []string{"Alpha", "Zeta"})
+
+	assertIntSlice(t, importedObjectReplacementPositions(map[int]string{
+		20: "b",
+		4:  "a",
+		12: "c",
+	}, true), []int{4, 12, 20})
+
+	assertStringSlice(t, importedTemplateOutputNames(map[string]string{
+		"/TplZ": "z",
+		"/TplA": "a",
+	}, true), []string{"/TplA", "/TplZ"})
+
+	assertStringSlice(t, templateImageKeys(map[string]*ImageInfo{
+		"zeta":  nil,
+		"alpha": nil,
+	}, true), []string{"alpha", "zeta"})
+
+	pdf.aliasMap = map[string]string{
+		"zeta":  "Z",
+		"alpha": "A",
+	}
+	pdf.aliasNeedlesDirty = true
+	pdf.compiledAliasNeedles()
+	assertStringSlice(t, []string{pdf.aliasNeedleStrings[0], pdf.aliasNeedleStrings[2]}, []string{"alpha", "zeta"})
+}
+
+func assertStringSlice(t *testing.T, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("len(%v) = %d, want %d", got, len(got), len(want))
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("slice[%d] = %q, want %q in %v", i, got[i], want[i], got)
+		}
+	}
+}
+
+func assertIntSlice(t *testing.T, got, want []int) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("len(%v) = %d, want %d", got, len(got), len(want))
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("slice[%d] = %d, want %d in %v", i, got[i], want[i], got)
+		}
+	}
+}
+
 func TestRawWriteBufLatchesReaderErrors(t *testing.T) {
 	want := errors.New("reader failed")
 	pdf := New("P", "mm", "A4", "")
@@ -386,6 +824,282 @@ func TestRawWriteArtifactStrErrorAllowsTaggedArtifacts(t *testing.T) {
 	}
 }
 
+func TestPDFOutputSinkCountsAndHashesWrites(t *testing.T) {
+	var out bytes.Buffer
+	hash := sha256.New()
+	sink := newPDFOutputSink(&out, 7, hash)
+
+	if err := sink.WriteString("abc"); err != nil {
+		t.Fatalf("WriteString() error = %v", err)
+	}
+	if err := sink.WriteByte('\n'); err != nil {
+		t.Fatalf("WriteByte() error = %v", err)
+	}
+	if _, err := sink.ReadFrom(strings.NewReader("def")); err != nil {
+		t.Fatalf("ReadFrom() error = %v", err)
+	}
+	if got := sink.Len(); got != 14 {
+		t.Fatalf("Len() = %d, want 14", got)
+	}
+	if got := out.String(); got != "abc\ndef" {
+		t.Fatalf("output = %q, want abc\\ndef", got)
+	}
+	wantHash := sha256.Sum256([]byte("abc\ndef"))
+	if !bytes.Equal(hash.Sum(nil), wantHash[:]) {
+		t.Fatal("hash did not match written bytes")
+	}
+}
+
+func TestPDFOutputSinkUsesSpecializedWriters(t *testing.T) {
+	var out specializedOutputWriter
+	sink := newPDFOutputSink(&out, 0, nil)
+
+	if err := sink.WriteString("abc"); err != nil {
+		t.Fatalf("WriteString() error = %v", err)
+	}
+	if err := sink.WriteByte('\n'); err != nil {
+		t.Fatalf("WriteByte() error = %v", err)
+	}
+	if got := sink.Len(); got != 4 {
+		t.Fatalf("Len() = %d, want 4", got)
+	}
+	if got := out.String(); got != "abc\n" {
+		t.Fatalf("output = %q, want abc\\n", got)
+	}
+	if out.stringWrites != 1 {
+		t.Fatalf("stringWrites = %d, want 1", out.stringWrites)
+	}
+	if out.byteWrites != 1 {
+		t.Fatalf("byteWrites = %d, want 1", out.byteWrites)
+	}
+	if out.rawWrites != 0 {
+		t.Fatalf("rawWrites = %d, want 0", out.rawWrites)
+	}
+}
+
+type specializedOutputWriter struct {
+	bytes.Buffer
+	rawWrites    int
+	stringWrites int
+	byteWrites   int
+}
+
+func (w *specializedOutputWriter) Write(p []byte) (int, error) {
+	w.rawWrites++
+	return w.Buffer.Write(p)
+}
+
+func (w *specializedOutputWriter) WriteString(s string) (int, error) {
+	w.stringWrites++
+	return w.Buffer.WriteString(s)
+}
+
+func (w *specializedOutputWriter) WriteByte(b byte) error {
+	w.byteWrites++
+	return w.Buffer.WriteByte(b)
+}
+
+func TestPDFSyntaxBoundaryHelpersWriteExpectedTokens(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.beginPDFDict()
+	pdf.endPDFDict()
+	pdf.beginPDFStream()
+	pdf.endPDFStream()
+	pdf.endPDFObject()
+
+	want := "<<\n>>\nstream\nendstream\nendobj\n"
+	if got := pdf.buffer.String(); got != want {
+		t.Fatalf("syntax helper output = %q, want %q", got, want)
+	}
+}
+
+func TestPDFResourceNameHelpersWriteExpectedReferences(t *testing.T) {
+	if got := fontPDFResourceName(fontDefinition{i: "abc"}).String(); got != "/Fabc" {
+		t.Fatalf("fontPDFResourceName() = %q, want /Fabc", got)
+	}
+	if got := fontPDFResourceRef(fontDefinition{i: "abc", N: 3}); got.name != "/Fabc" || got.objectNumber != 3 {
+		t.Fatalf("fontPDFResourceRef() = %#v, want /Fabc 3", got)
+	}
+	if got := imagePDFResourceName(&ImageInfo{i: "img"}).String(); got != "/Iimg" {
+		t.Fatalf("imagePDFResourceName() = %q, want /Iimg", got)
+	}
+	if got := imagePDFResourceRef(&ImageInfo{i: "img", n: 4}); got.name != "/Iimg" || got.objectNumber != 4 {
+		t.Fatalf("imagePDFResourceRef() = %#v, want /Iimg 4", got)
+	}
+	if got := templatePDFResourceName("tpl").String(); got != "/TPLtpl" {
+		t.Fatalf("templatePDFResourceName() = %q, want /TPLtpl", got)
+	}
+	if got := templatePDFResourceRef("tpl", 5); got.name != "/TPLtpl" || got.objectNumber != 5 {
+		t.Fatalf("templatePDFResourceRef() = %#v, want /TPLtpl 5", got)
+	}
+	if got := importedPagePDFResourceName(12).String(); got != "/IPG12" {
+		t.Fatalf("importedPagePDFResourceName() = %q, want /IPG12", got)
+	}
+	if got := importedPagePDFResourceRef(12, 6); got.name != "/IPG12" || got.objectNumber != 6 {
+		t.Fatalf("importedPagePDFResourceRef() = %#v, want /IPG12 6", got)
+	}
+	if got := graphicsStatePDFResourceName(2).String(); got != "/GS2" {
+		t.Fatalf("graphicsStatePDFResourceName() = %q, want /GS2", got)
+	}
+	if got := graphicsStatePDFResourceRef(2, 10); got.name != "/GS2" || got.objectNumber != 10 {
+		t.Fatalf("graphicsStatePDFResourceRef() = %#v, want /GS2 10", got)
+	}
+	if got := shadingPDFResourceName(3).String(); got != "/Sh3" {
+		t.Fatalf("shadingPDFResourceName() = %q, want /Sh3", got)
+	}
+	if got := shadingPDFResourceRef(3, 11); got.name != "/Sh3" || got.objectNumber != 11 {
+		t.Fatalf("shadingPDFResourceRef() = %#v, want /Sh3 11", got)
+	}
+	if got := spotColorPDFResourceName(4).String(); got != "/CS4" {
+		t.Fatalf("spotColorPDFResourceName() = %q, want /CS4", got)
+	}
+	if got := spotColorPDFResourceRef(4, 12); got.name != "/CS4" || got.objectNumber != 12 {
+		t.Fatalf("spotColorPDFResourceRef() = %#v, want /CS4 12", got)
+	}
+	if got := optionalContentPDFResourceName(5).String(); got != "/OC5" {
+		t.Fatalf("optionalContentPDFResourceName() = %q, want /OC5", got)
+	}
+	if got := optionalContentPDFResourceRef(5, 13); got.name != "/OC5" || got.objectNumber != 13 {
+		t.Fatalf("optionalContentPDFResourceRef() = %#v, want /OC5 13", got)
+	}
+	if got := string(appendPDFResourceNameRef(nil, templatePDFResourceName("tpl"), 7)); got != "/TPLtpl 7 0 R" {
+		t.Fatalf("appendPDFResourceNameRef() = %q, want /TPLtpl 7 0 R", got)
+	}
+	if got := string(appendPDFResourceRefValue(nil, pdfResourceRef{name: pdfResourceName("/TplA"), objectNumber: 9})); got != "/TplA 9 0 R" {
+		t.Fatalf("appendPDFResourceRefValue() = %q, want /TplA 9 0 R", got)
+	}
+	if got := string(appendPDFResourceRef(nil, "/F", "abc", 3)); got != "/Fabc 3 0 R" {
+		t.Fatalf("appendPDFResourceRef() = %q, want /Fabc 3 0 R", got)
+	}
+}
+
+func TestOutputStreamContextDoesNotRetainFinalBuffer(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(20, 10, "streamed")
+
+	var out chunkRecordingWriter
+	if err := pdf.OutputStreamContext(context.Background(), &out); err != nil {
+		t.Fatalf("OutputStreamContext() error = %v", err)
+	}
+	if len(out.chunks) < 2 {
+		t.Fatalf("streaming output used %d writer call(s), want incremental final writes", len(out.chunks))
+	}
+	if !bytes.HasPrefix(out.Bytes(), []byte("%PDF-")) {
+		t.Fatalf("streaming output wrote non-PDF prefix %q", out.Bytes()[:min(len(out.Bytes()), 8)])
+	}
+	if got := pdf.buffer.Len(); got != 0 {
+		t.Fatalf("final buffer length after streaming = %d, want 0", got)
+	}
+	if !pdf.streamedOutput {
+		t.Fatal("streamedOutput flag not set")
+	}
+
+	var retry bytes.Buffer
+	if err := pdf.Output(&retry); !errors.Is(err, ErrStreamingOutputConsumed) {
+		t.Fatalf("Output() after streaming error = %v, want ErrStreamingOutputConsumed", err)
+	}
+}
+
+func TestOutputFileStreamWritesPDFWithoutRetainingFinalBuffer(t *testing.T) {
+	fileStr := filepath.Join(t.TempDir(), "out.pdf")
+
+	pdf := New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(20, 10, "streamed file")
+
+	if err := pdf.OutputFileStream(fileStr); err != nil {
+		t.Fatalf("OutputFileStream() error = %v", err)
+	}
+	got, err := os.ReadFile(fileStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(got, []byte("%PDF-")) {
+		t.Fatalf("OutputFileStream() wrote non-PDF prefix %q", got[:min(len(got), 8)])
+	}
+	if got := pdf.buffer.Len(); got != 0 {
+		t.Fatalf("final buffer length after file streaming = %d, want 0", got)
+	}
+}
+
+func TestOutputOptionsStreamFinalRoutesNormalOutput(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(20, 10, "option streamed")
+
+	var out chunkRecordingWriter
+	if err := pdf.OutputWithOptions(&out, OutputOptions{StreamFinal: true}); err != nil {
+		t.Fatalf("OutputWithOptions(StreamFinal) error = %v", err)
+	}
+	if len(out.chunks) < 2 {
+		t.Fatalf("stream-final output used %d writer call(s), want incremental final writes", len(out.chunks))
+	}
+	if !bytes.HasPrefix(out.Bytes(), []byte("%PDF-")) {
+		t.Fatalf("stream-final output wrote non-PDF prefix %q", out.Bytes()[:min(len(out.Bytes()), 8)])
+	}
+	if got := pdf.buffer.Len(); got != 0 {
+		t.Fatalf("final buffer length after stream-final output = %d, want 0", got)
+	}
+	if !pdf.streamedOutput {
+		t.Fatal("streamedOutput flag not set")
+	}
+
+	var retry bytes.Buffer
+	if err := pdf.Output(&retry); !errors.Is(err, ErrStreamingOutputConsumed) {
+		t.Fatalf("Output() after stream-final output error = %v, want ErrStreamingOutputConsumed", err)
+	}
+}
+
+func TestOutputPolicyStreamFinalRoutesOutputFile(t *testing.T) {
+	fileStr := filepath.Join(t.TempDir(), "out.pdf")
+
+	pdf, err := NewDocument(WithOutputPolicy(OutputPolicy{StreamFinal: true}))
+	if err != nil {
+		t.Fatalf("NewDocument() error = %v", err)
+	}
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(20, 10, "policy streamed file")
+
+	if err := pdf.OutputFile(fileStr); err != nil {
+		t.Fatalf("OutputFile() with StreamFinal policy error = %v", err)
+	}
+	got, err := os.ReadFile(fileStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(got, []byte("%PDF-")) {
+		t.Fatalf("OutputFile() with StreamFinal policy wrote non-PDF prefix %q", got[:min(len(got), 8)])
+	}
+	if got := pdf.buffer.Len(); got != 0 {
+		t.Fatalf("final buffer length after policy stream-final file output = %d, want 0", got)
+	}
+	if !pdf.streamedOutput {
+		t.Fatal("streamedOutput flag not set")
+	}
+}
+
+type chunkRecordingWriter struct {
+	chunks [][]byte
+}
+
+func (w *chunkRecordingWriter) Write(p []byte) (int, error) {
+	w.chunks = append(w.chunks, append([]byte(nil), p...))
+	return len(p), nil
+}
+
+func (w *chunkRecordingWriter) Bytes() []byte {
+	var out []byte
+	for _, chunk := range w.chunks {
+		out = append(out, chunk...)
+	}
+	return out
+}
+
 func TestSetLegacyProtectionLatchesRandomOwnerPasswordError(t *testing.T) {
 	want := errors.New("random failed")
 	original := crand.Reader
@@ -414,12 +1128,14 @@ func TestGetImageInfoReturnsClone(t *testing.T) {
 	info := pdf.newImageInfo()
 	info.w = 72
 	info.h = 72
-	pdf.images["img"] = info
+	resources := pdf.ensureResourceStore()
+	resources.setImage("img", info)
 
 	got := pdf.GetImageInfo("img")
 	got.SetDpi(144)
-	if pdf.images["img"].dpi != 72 {
-		t.Fatalf("registered image dpi = %.2f, want 72", pdf.images["img"].dpi)
+	stored, _ := resources.image("img")
+	if stored.dpi != 72 {
+		t.Fatalf("registered image dpi = %.2f, want 72", stored.dpi)
 	}
 }
 
@@ -516,6 +1232,100 @@ func TestUseTemplateScaledRejectsInvalidPlacement(t *testing.T) {
 	if pdf.Error() == nil || !strings.Contains(pdf.Error().Error(), "invalid template geometry") {
 		t.Fatalf("UseTemplateScaled error = %v", pdf.Error())
 	}
+}
+
+func TestTemplateViewChildDependenciesDoNotRequireSerializableTemplate(t *testing.T) {
+	child := renderOnlyTemplateView{
+		id:   "child",
+		size: Size{Wd: 8, Ht: 8},
+		data: []byte("0 0 m"),
+	}
+	pdf := New("P", "mm", "A4", "")
+	parent := pdf.CreateTemplateCustom(Point{}, Size{Wd: 20, Ht: 20}, func(tpl *Tpl) {
+		tpl.UseTemplateView(child)
+	})
+	if parent == nil {
+		t.Fatalf("CreateTemplateCustom() returned nil: %v", pdf.Error())
+	}
+	parentDoc, ok := parent.(*DocumentTpl)
+	if !ok {
+		t.Fatalf("template type = %T, want *DocumentTpl", parent)
+	}
+	if got := parentDoc.TemplateViews(); len(got) != 1 || got[0].ID() != "child" {
+		t.Fatalf("TemplateViews() = %#v, want child dependency", got)
+	}
+	if got := parentDoc.Templates(); len(got) != 0 {
+		t.Fatalf("Templates() = %#v, want no serializable children", got)
+	}
+	if _, err := parent.Serialize(); err == nil || !strings.Contains(err.Error(), "non-serializable child") {
+		t.Fatalf("Serialize() error = %v, want non-serializable child error", err)
+	}
+
+	pdf.AddPage()
+	pdf.UseTemplate(parent)
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if count := bytes.Count(out.Bytes(), []byte("/TPLchild")); count < 2 {
+		t.Fatalf("output contains /TPLchild %d times, want child object and resource dependency", count)
+	}
+}
+
+func TestNestedTemplateViewDependenciesDoNotRequireSerializableTemplate(t *testing.T) {
+	grandchild := renderOnlyTemplateView{
+		id:   "grandchild",
+		size: Size{Wd: 4, Ht: 4},
+		data: []byte("0 0 m"),
+	}
+	child := renderOnlyTemplateView{
+		id:       "child",
+		size:     Size{Wd: 8, Ht: 8},
+		data:     []byte("0 0 m"),
+		children: []TemplateView{grandchild},
+	}
+
+	templates := collectTemplates(child)
+	if len(templates) != 2 {
+		t.Fatalf("collectTemplates() length = %d, want child and grandchild", len(templates))
+	}
+	if templates[0].ID() != "child" || templates[1].ID() != "grandchild" {
+		t.Fatalf("collectTemplates() = [%s, %s], want [child, grandchild]", templates[0].ID(), templates[1].ID())
+	}
+
+	pdf := New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.UseTemplateView(child)
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if !bytes.Contains(out.Bytes(), []byte("/TPLchild")) {
+		t.Fatal("output is missing child template resource")
+	}
+	if !bytes.Contains(out.Bytes(), []byte("/TPLgrandchild")) {
+		t.Fatal("output is missing nested render-only template resource")
+	}
+}
+
+type renderOnlyTemplateView struct {
+	id       string
+	size     Size
+	data     []byte
+	images   map[string]*ImageInfo
+	children []TemplateView
+}
+
+func (t renderOnlyTemplateView) ID() string { return t.id }
+
+func (t renderOnlyTemplateView) Size() (Point, Size) { return Point{}, t.size }
+
+func (t renderOnlyTemplateView) Bytes() []byte { return append([]byte(nil), t.data...) }
+
+func (t renderOnlyTemplateView) Images() map[string]*ImageInfo { return t.images }
+
+func (t renderOnlyTemplateView) TemplateViews() []TemplateView {
+	return append([]TemplateView(nil), t.children...)
 }
 
 func TestSetMinimumPDFVersionUsesNumericOrdering(t *testing.T) {
@@ -648,10 +1458,11 @@ func TestImportObjectsCopiesInputMaps(t *testing.T) {
 	objs["a"][0] = 'X'
 	pos["a"][1] = "new"
 
-	if got := string(pdf.importedObjs["a"]); got != "object" {
+	resources := pdf.ensureResourceStore()
+	if got := string(resources.importedObjectData("a")); got != "object" {
 		t.Fatalf("imported object = %q, want object", got)
 	}
-	if got := pdf.importedObjPos["a"][1]; got != "old" {
+	if got := resources.importedObjectPositions("a")[1]; got != "old" {
 		t.Fatalf("imported object position = %q, want old", got)
 	}
 }

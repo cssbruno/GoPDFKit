@@ -84,6 +84,15 @@ func WithSecurityPolicy(policy SecurityPolicy) Option {
 	}
 }
 
+// WithOutputPolicy sets output-time defaults such as deterministic metadata,
+// file sync behavior, and one-shot final streaming.
+func WithOutputPolicy(policy OutputPolicy) Option {
+	return func(options *Options) {
+		policy := policy
+		options.OutputPolicy = &policy
+	}
+}
+
 // WithHooks installs optional production diagnostics callbacks.
 func WithHooks(hooks Hooks) Option {
 	return func(options *Options) {
@@ -114,15 +123,26 @@ func WithProductionPolicy(policy ProductionPolicy) Option {
 		options.OutputPolicy = &output
 		options.Hooks = &hooks
 		options.CompressionPolicy = &compression
-		options.CachePolicy = policy.Cache
+		if policy.CacheSet || policy.Cache != ResourceCacheShared {
+			options.CachePolicy = policy.Cache
+		} else {
+			options.CachePolicy = ResourceCacheDocument
+		}
 		options.DeterministicOutput = policy.Deterministic || policy.Output.Deterministic
 	}
+}
+
+// WithServerSafeDefaults applies the built-in server-safe production policy.
+// Later options override fields set by this option.
+func WithServerSafeDefaults() Option {
+	return WithProductionPolicy(ServerSafePolicy())
 }
 
 // WithNoCompression disables Flate compression for generated streams.
 func WithNoCompression() Option {
 	return func(options *Options) {
 		policy := defaultCompressionPolicy()
+		policy.Mode = CompressionDisabled
 		policy.Enabled = false
 		policy.Level = zlib.NoCompression
 		options.CompressionPolicy = &policy
@@ -178,6 +198,15 @@ func WithUTF8FontCache(cache *FontCache) Option {
 	return WithFontCache(cache)
 }
 
+// WithResourceLoader installs a generalized loader for supported resource
+// kinds. Specialized loaders and explicit content still take precedence where
+// their APIs define that behavior.
+func WithResourceLoader(loader ResourceLoader) Option {
+	return func(options *Options) {
+		options.ResourceLoader = loader
+	}
+}
+
 // WithLegacyConstructorArgs applies the string arguments accepted by New. It is
 // mainly useful while migrating old code to typed construction options.
 func WithLegacyConstructorArgs(orientationStr, unitStr, sizeStr, fontDirStr string) Option {
@@ -217,6 +246,33 @@ type normalizedOptions struct {
 	imageCacheSet                   bool
 	fontCache                       *FontCache
 	fontCacheSet                    bool
+	resourceLoader                  ResourceLoader
+	resourceLoaderSet               bool
+	limits                          Limits
+	limitsSet                       bool
+	securityPolicy                  SecurityPolicy
+	securityPolicySet               bool
+	outputPolicy                    OutputPolicy
+	outputPolicySet                 bool
+	hooks                           Hooks
+	hooksSet                        bool
+	deterministicOutput             bool
+}
+
+type runtimePolicy struct {
+	compressionPolicy               CompressionPolicy
+	compressionPolicySet            bool
+	pageCompressionWorkers          int
+	pageCompressionWorkersSet       bool
+	attachmentCompressionWorkers    int
+	attachmentCompressionWorkersSet bool
+	cachePolicy                     ResourceCachePolicy
+	imageCache                      *ImageCache
+	imageCacheSet                   bool
+	fontCache                       *FontCache
+	fontCacheSet                    bool
+	resourceLoader                  ResourceLoader
+	resourceLoaderSet               bool
 	limits                          Limits
 	limitsSet                       bool
 	securityPolicy                  SecurityPolicy
@@ -241,6 +297,8 @@ func (options Options) normalized() normalizedOptions {
 		imageCacheSet:       options.ImageCache != nil,
 		fontCache:           options.FontCache,
 		fontCacheSet:        options.FontCache != nil,
+		resourceLoader:      options.ResourceLoader,
+		resourceLoaderSet:   options.ResourceLoader != nil,
 		deterministicOutput: options.DeterministicOutput,
 	}
 	if options.CompressionPolicy != nil {
@@ -287,4 +345,31 @@ func (options Options) normalized() normalizedOptions {
 		cfg.fontDirStr = options.FontDirStr
 	}
 	return cfg
+}
+
+func (cfg normalizedOptions) runtimePolicy() runtimePolicy {
+	return runtimePolicy{
+		compressionPolicy:               cfg.compressionPolicy,
+		compressionPolicySet:            cfg.compressionPolicySet,
+		pageCompressionWorkers:          cfg.pageCompressionWorkers,
+		pageCompressionWorkersSet:       cfg.pageCompressionWorkersSet,
+		attachmentCompressionWorkers:    cfg.attachmentCompressionWorkers,
+		attachmentCompressionWorkersSet: cfg.attachmentCompressionWorkersSet,
+		cachePolicy:                     cfg.cachePolicy,
+		imageCache:                      cfg.imageCache,
+		imageCacheSet:                   cfg.imageCacheSet,
+		fontCache:                       cfg.fontCache,
+		fontCacheSet:                    cfg.fontCacheSet,
+		resourceLoader:                  cfg.resourceLoader,
+		resourceLoaderSet:               cfg.resourceLoaderSet,
+		limits:                          cfg.limits,
+		limitsSet:                       cfg.limitsSet,
+		securityPolicy:                  cfg.securityPolicy,
+		securityPolicySet:               cfg.securityPolicySet,
+		outputPolicy:                    cfg.outputPolicy,
+		outputPolicySet:                 cfg.outputPolicySet,
+		hooks:                           cfg.hooks,
+		hooksSet:                        cfg.hooksSet,
+		deterministicOutput:             cfg.deterministicOutput,
+	}
 }

@@ -5,6 +5,8 @@ package inspect
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -56,6 +58,28 @@ func TestInspectGeneratedPDF(t *testing.T) {
 	}
 	if len(streams) == 0 {
 		t.Fatal("DecodedStreams() returned no streams")
+	}
+}
+
+func TestInspectContextCanceled(t *testing.T) {
+	pdfBytes := inspectTestPDF(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := ValidateStructureContext(ctx, pdfBytes); !errors.Is(err, context.Canceled) {
+		t.Fatalf("ValidateStructureContext() error = %v, want context.Canceled", err)
+	}
+	if _, err := PageCountContext(ctx, pdfBytes); !errors.Is(err, context.Canceled) {
+		t.Fatalf("PageCountContext() error = %v, want context.Canceled", err)
+	}
+	if _, err := TextContext(ctx, pdfBytes); !errors.Is(err, context.Canceled) {
+		t.Fatalf("TextContext() error = %v, want context.Canceled", err)
+	}
+	if _, err := PageTextContext(ctx, pdfBytes, 1); !errors.Is(err, context.Canceled) {
+		t.Fatalf("PageTextContext() error = %v, want context.Canceled", err)
+	}
+	if _, err := DecodedStreamsContext(ctx, pdfBytes); !errors.Is(err, context.Canceled) {
+		t.Fatalf("DecodedStreamsContext() error = %v, want context.Canceled", err)
 	}
 }
 

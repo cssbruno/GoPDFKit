@@ -4,7 +4,6 @@
 package document
 
 import (
-	"bytes"
 	"fmt"
 	"strconv"
 )
@@ -57,7 +56,7 @@ func (f *Document) SetAlpha(alpha float64, blendModeStr string) {
 		f.blendList = append(f.blendList, blendModeType{alphaStr, alphaStr, bl.modeStr, 0})
 		f.blendMap[keyStr] = pos
 	}
-	f.outf("/GS%d gs", pos)
+	f.outf("%s gs", graphicsStatePDFResourceName(pos).String())
 }
 
 func (f *Document) gradientClipStart(x, y, w, h float64) {
@@ -100,7 +99,7 @@ func (f *Document) gradientWithStops(tp int, stops []gradientStopType, x1, y1, x
 		}
 	}
 	f.gradientList = append(f.gradientList, gradientType{tp: tp, clr1Str: stops[0].clrStr, clr2Str: stops[len(stops)-1].clrStr, stops: stops, x1: x1, y1: y1, x2: x2, y2: y2, r: r})
-	f.outf("/Sh%d sh", pos)
+	f.outf("%s sh", shadingPDFResourceName(pos).String())
 }
 
 // LinearGradient draws a rectangular area with a blend from one color to
@@ -153,10 +152,11 @@ func (f *Document) putBlendModes() {
 	count := len(f.blendList)
 	for j := 1; j < count; j++ {
 		bl := f.blendList[j]
-		f.newobj()
+		f.newPDFDictObject()
 		f.blendList[j].objNum = f.n
-		f.outf("<</Type /ExtGState /ca %s /CA %s /BM /%s>>", bl.fillStr, bl.strokeStr, bl.modeStr)
-		f.out("endobj")
+		f.outf("/Type /ExtGState /ca %s /CA %s /BM /%s", bl.fillStr, bl.strokeStr, bl.modeStr)
+		f.endPDFDict()
+		f.endPDFObject()
 	}
 }
 
@@ -168,15 +168,16 @@ func (f *Document) putGradients() {
 		if gr.tp == 2 || gr.tp == 3 {
 			f1 = f.putGradientFunction(gr)
 		}
-		f.newobj()
-		f.outf("<</ShadingType %d /ColorSpace /DeviceRGB", gr.tp)
+		f.newPDFDictObject()
+		f.outf("/ShadingType %d /ColorSpace /DeviceRGB", gr.tp)
 		switch gr.tp {
 		case 2:
-			f.outf("/Coords [%.5f %.5f %.5f %.5f] /Function %d 0 R /Extend [true true]>>", gr.x1, gr.y1, gr.x2, gr.y2, f1)
+			f.outf("/Coords [%.5f %.5f %.5f %.5f] /Function %d 0 R /Extend [true true]", gr.x1, gr.y1, gr.x2, gr.y2, f1)
 		case 3:
-			f.outf("/Coords [%.5f %.5f 0 %.5f %.5f %.5f] /Function %d 0 R /Extend [true true]>>", gr.x1, gr.y1, gr.x2, gr.y2, gr.r, f1)
+			f.outf("/Coords [%.5f %.5f 0 %.5f %.5f %.5f] /Function %d 0 R /Extend [true true]", gr.x1, gr.y1, gr.x2, gr.y2, gr.r, f1)
 		}
-		f.out("endobj")
+		f.endPDFDict()
+		f.endPDFObject()
 		f.gradientList[j].objNum = f.n
 	}
 }
@@ -187,44 +188,48 @@ func (f *Document) putGradientFunction(gr gradientType) int {
 		stops = []gradientStopType{{offset: 0, clrStr: gr.clr1Str}, {offset: 1, clrStr: gr.clr2Str}}
 	}
 	if len(stops) == 2 {
-		f.newobj()
-		f.outf("<</FunctionType 2 /Domain [0.0 1.0] /C0 [%s] /C1 [%s] /N 1>>", stops[0].clrStr, stops[1].clrStr)
-		f.out("endobj")
+		f.newPDFDictObject()
+		f.outf("/FunctionType 2 /Domain [0.0 1.0] /C0 [%s] /C1 [%s] /N 1", stops[0].clrStr, stops[1].clrStr)
+		f.endPDFDict()
+		f.endPDFObject()
 		return f.n
 	}
 	functionObjs := make([]int, 0, len(stops)-1)
 	for j := 0; j < len(stops)-1; j++ {
-		f.newobj()
-		f.outf("<</FunctionType 2 /Domain [0.0 1.0] /C0 [%s] /C1 [%s] /N 1>>", stops[j].clrStr, stops[j+1].clrStr)
-		f.out("endobj")
+		f.newPDFDictObject()
+		f.outf("/FunctionType 2 /Domain [0.0 1.0] /C0 [%s] /C1 [%s] /N 1", stops[j].clrStr, stops[j+1].clrStr)
+		f.endPDFDict()
+		f.endPDFObject()
 		functionObjs = append(functionObjs, f.n)
 	}
-	f.newobj()
-	var buf bytes.Buffer
-	buf.WriteString("<</FunctionType 3 /Domain [0.0 1.0] /Functions [")
+	f.newPDFDictObject()
+	f.out("/FunctionType 3 /Domain [0.0 1.0]")
+	var buf []byte
+	buf = append(buf, "/Functions ["...)
 	for j, objNum := range functionObjs {
 		if j > 0 {
-			buf.WriteByte(' ')
+			buf = append(buf, ' ')
 		}
-		buf.WriteString(strconv.Itoa(objNum))
-		buf.WriteString(" 0 R")
+		buf = append(buf, strconv.Itoa(objNum)...)
+		buf = append(buf, " 0 R"...)
 	}
-	buf.WriteString("] /Bounds [")
+	buf = append(buf, "] /Bounds ["...)
 	for j := 1; j < len(stops)-1; j++ {
 		if j > 1 {
-			buf.WriteByte(' ')
+			buf = append(buf, ' ')
 		}
-		buf.WriteString(strconv.FormatFloat(stops[j].offset, 'f', 5, 64))
+		buf = strconv.AppendFloat(buf, stops[j].offset, 'f', 5, 64)
 	}
-	buf.WriteString("] /Encode [")
+	buf = append(buf, "] /Encode ["...)
 	for j := range functionObjs {
 		if j > 0 {
-			buf.WriteByte(' ')
+			buf = append(buf, ' ')
 		}
-		buf.WriteString("0 1")
+		buf = append(buf, "0 1"...)
 	}
-	buf.WriteString("]>>")
-	f.out(buf.String())
-	f.out("endobj")
+	buf = append(buf, ']')
+	f.outbytes(buf)
+	f.endPDFDict()
+	f.endPDFObject()
 	return f.n
 }

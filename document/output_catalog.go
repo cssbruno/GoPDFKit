@@ -7,7 +7,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -62,15 +61,23 @@ func (f *Document) SetModificationDate(tm time.Time) {
 	f.modDate = tm
 }
 
-// SetJavascript adds Adobe JavaScript to the document.
+// SetJavascript rejects embedded PDF JavaScript actions.
+//
+// Deprecated: GoPDFKit no longer emits PDF JavaScript actions. This method is
+// kept only as a compatibility shim that latches ErrJavaScriptUnsupported.
 func (f *Document) SetJavascript(script string) {
+	_ = f.SetJavascriptError(script)
+}
+
+// SetJavascriptError rejects embedded PDF JavaScript actions and reports the
+// error directly.
+func (f *Document) SetJavascriptError(script string) error {
 	if f.err != nil {
-		return
+		return f.err
 	}
-	if err := f.requireSecurityFeature("JavaScript actions", f.securityPolicy.AllowJavaScript); err != nil {
-		return
-	}
-	f.javascript = &script
+	err := ErrJavaScriptUnsupported
+	f.SetError(err)
+	return err
 }
 
 // RegisterAlias adds an (alias, replacement) pair to the document so we can
@@ -91,74 +98,38 @@ func (f *Document) putresourcedict() {
 	if !f.omitDeprecatedPDF2Entries() {
 		f.out("/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]")
 	}
-	f.out("/Font <<")
+	f.out("/Font")
+	f.beginPDFDict()
 	{
-		if !f.catalogSort {
-			for _, font := range f.fonts {
-				f.outbytes(appendPDFResourceRef(nil, "/F", font.i, font.N))
-			}
-		} else {
-			keyList := make([]string, 0, len(f.fonts))
-			for key := range f.fonts {
-				keyList = append(keyList, key)
-			}
-			sort.SliceStable(keyList, func(i, j int) bool {
-				return f.fonts[keyList[i]].i < f.fonts[keyList[j]].i
-			})
-			for _, key := range keyList {
-				font := f.fonts[key]
-				f.outbytes(appendPDFResourceRef(nil, "/F", font.i, font.N))
-			}
+		for _, font := range f.ensureResourceStore().fontsByResourceID(f.catalogSort) {
+			f.outbytes(appendPDFResourceRefValue(nil, fontPDFResourceRef(font)))
 		}
 	}
-	f.out(">>")
-	f.out("/XObject <<")
+	f.endPDFDict()
+	f.out("/XObject")
+	f.beginPDFDict()
 	f.putxobjectdict()
-	f.out(">>")
+	f.endPDFDict()
 	count := len(f.blendList)
 	if count > 1 {
-		f.out("/ExtGState <<")
+		f.out("/ExtGState")
+		f.beginPDFDict()
 		for j := 1; j < count; j++ {
-			buf := strconv.AppendInt([]byte("/GS"), int64(j), 10)
-			buf = append(buf, ' ')
-			buf = strconv.AppendInt(buf, int64(f.blendList[j].objNum), 10)
-			buf = append(buf, " 0 R"...)
-			f.outbytes(buf)
+			f.outbytes(appendPDFResourceRefValue(nil, graphicsStatePDFResourceRef(j, f.blendList[j].objNum)))
 		}
-		f.out(">>")
+		f.endPDFDict()
 	}
 	count = len(f.gradientList)
 	if count > 1 {
-		f.out("/Shading <<")
+		f.out("/Shading")
+		f.beginPDFDict()
 		for j := 1; j < count; j++ {
-			buf := strconv.AppendInt([]byte("/Sh"), int64(j), 10)
-			buf = append(buf, ' ')
-			buf = strconv.AppendInt(buf, int64(f.gradientList[j].objNum), 10)
-			buf = append(buf, " 0 R"...)
-			f.outbytes(buf)
+			f.outbytes(appendPDFResourceRefValue(nil, shadingPDFResourceRef(j, f.gradientList[j].objNum)))
 		}
-		f.out(">>")
+		f.endPDFDict()
 	}
 	f.layerPutResourceDict()
 	f.putSpotColorResourceDict()
-}
-
-func (f *Document) putjavascript() {
-	if f.javascript == nil {
-		return
-	}
-	f.newobj()
-	f.nJs = f.n
-	f.out("<<")
-	f.outf("/Names [(EmbeddedJS) %d 0 R]", f.n+1)
-	f.out(">>")
-	f.out("endobj")
-	f.newobj()
-	f.out("<<")
-	f.out("/S /JavaScript")
-	f.outbytes(f.appendTextString([]byte("/JS "), *f.javascript))
-	f.out(">>")
-	f.out("endobj")
 }
 
 func (f *Document) putresources() {
@@ -177,35 +148,27 @@ func (f *Document) putresources() {
 	f.putTemplates()
 	f.putImportedTemplates()
 	f.putImportedPages()
-	f.offsets[2] = f.buffer.Len()
-	f.out("2 0 obj")
-	f.out("<<")
+	f.beginPDFObject(2)
+	f.beginPDFDict()
 	f.putresourcedict()
-	f.out(">>")
-	f.out("endobj")
-	f.putjavascript()
+	f.endPDFDict()
+	f.endPDFObject()
 	if f.protect.encrypted {
-		f.newobj()
+		f.newPDFDictObject()
 		f.protect.objNum = f.n
-		f.out("<<")
 		f.out("/Filter /Standard")
 		f.out("/V 1")
 		f.out("/R 2")
 		f.outf("/O (%s)", f.escape(string(f.protect.oValue)))
 		f.outf("/U (%s)", f.escape(string(f.protect.uValue)))
 		f.outf("/P %d", f.protect.pValue)
-		f.out(">>")
-		f.out("endobj")
+		f.endPDFDict()
+		f.endPDFObject()
 	}
 }
 
 func appendPDFResourceRef(buf []byte, prefix, name string, objNum int) []byte {
-	buf = append(buf, prefix...)
-	buf = append(buf, name...)
-	buf = append(buf, ' ')
-	buf = strconv.AppendInt(buf, int64(objNum), 10)
-	buf = append(buf, " 0 R"...)
-	return buf
+	return appendPDFResourceNameRef(buf, pdfResourceName(prefix+name), objNum)
 }
 
 // timeOrNow returns time.Now() if tm is zero.
@@ -289,15 +252,11 @@ func (f *Document) putcatalog() {
 		f.out("/PageMode /UseOutlines")
 	}
 	f.layerPutCatalog()
-	if f.javascript != nil || len(f.attachments) > 0 {
-		f.out("/Names <<")
-		if f.javascript != nil {
-			f.outf("/JavaScript %d 0 R", f.nJs)
-		}
-		if len(f.attachments) > 0 {
-			f.outf("/EmbeddedFiles %s", f.getEmbeddedFiles())
-		}
-		f.out(">>")
+	if len(f.attachments) > 0 {
+		f.out("/Names")
+		f.beginPDFDict()
+		f.outf("/EmbeddedFiles %s", f.getEmbeddedFiles())
+		f.endPDFDict()
 	}
 }
 
@@ -346,22 +305,26 @@ func (f *Document) putxmp() {
 	if len(f.xmp) == 0 {
 		return
 	}
-	f.newobj()
+	f.newPDFDictObject()
 	f.nXmp = f.n
-	f.outf("<< /Type /Metadata /Subtype /XML /Length %d >>", len(f.xmp))
+	f.out("/Type /Metadata /Subtype /XML")
+	f.outf("/Length %d", len(f.xmp))
+	f.endPDFDict()
 	f.putstream(f.xmp)
-	f.out("endobj")
+	f.endPDFObject()
 }
 
 func (f *Document) putOutputIntent() {
 	if len(f.outputIntent.iccProfile) == 0 {
 		return
 	}
-	f.newobj()
+	f.newPDFDictObject()
 	f.nOutputIntentICC = f.n
-	f.outf("<< /N 3 /Alternate /DeviceRGB /Length %d >>", len(f.outputIntent.iccProfile))
+	f.out("/N 3 /Alternate /DeviceRGB")
+	f.outf("/Length %d", len(f.outputIntent.iccProfile))
+	f.endPDFDict()
 	f.putstream(f.outputIntent.iccProfile)
-	f.out("endobj")
+	f.endPDFObject()
 }
 
 func (f *Document) putbookmarks() {
@@ -474,6 +437,7 @@ func (f *Document) enddocContext(ctx context.Context) {
 	if f.err != nil {
 		return
 	}
+	defer f.cleanupAttachmentCompressedFiles()
 	if err := outputCanceledError(ctx); err != nil {
 		f.SetError(err)
 		return
@@ -487,17 +451,26 @@ func (f *Document) enddocContext(ctx context.Context) {
 		return
 	}
 	f.ensureComplianceMetadata()
-	f.buffer.Grow(f.estimateFinalBufferSize())
+	externalSink := f.outputSink
+	if externalSink == nil {
+		f.buffer.Grow(f.estimateFinalBufferSize())
+	}
 	if f.needsFileIDHash() {
 		f.fileIDHash = sha256.New()
 	} else {
 		f.fileIDHash = nil
 	}
+	if externalSink == nil {
+		f.outputSink = newPDFOutputSink(&f.buffer.Buffer, f.buffer.Len(), f.fileIDHash)
+		defer func() { f.outputSink = nil }()
+	} else {
+		externalSink.hash = f.fileIDHash
+	}
 	f.layerEndDoc()
 	f.putheader()
-	f.prepareAttachmentCompression()
-	f.putAttachments()
-	f.putAnnotationsAttachments()
+	f.prepareAttachmentCompressionContext(ctx)
+	f.putAttachmentsContext(ctx)
+	f.putAnnotationsAttachmentsContext(ctx)
 	f.putpagesContext(ctx)
 	f.putresources()
 	if f.err != nil {
@@ -512,18 +485,16 @@ func (f *Document) enddocContext(ctx context.Context) {
 	f.putxmp()
 	f.putTaggedPDF()
 	if !f.omitInfoDictionary() {
-		f.newobj()
-		f.out("<<")
+		f.newPDFDictObject()
 		f.putinfo()
-		f.out(">>")
-		f.out("endobj")
+		f.endPDFDict()
+		f.endPDFObject()
 	}
-	f.newobj()
-	f.out("<<")
+	f.newPDFDictObject()
 	f.putcatalog()
-	f.out(">>")
-	f.out("endobj")
-	o := f.buffer.Len()
+	f.endPDFDict()
+	f.endPDFObject()
+	o := f.finalOutputOffset()
 	f.out("xref")
 	f.outPDFXrefRange(f.n + 1)
 	f.out("0000000000 65535 f ")
@@ -531,12 +502,16 @@ func (f *Document) enddocContext(ctx context.Context) {
 		f.outPDFXrefOffset(f.offsets[j])
 	}
 	f.out("trailer")
-	f.out("<<")
+	f.beginPDFDict()
 	f.puttrailer()
-	f.out(">>")
+	f.endPDFDict()
 	f.out("startxref")
 	f.outPDFIntLine(o)
 	f.out("%%EOF")
+	if f.outputSink != nil && f.outputSink.err != nil {
+		f.SetError(f.outputSink.err)
+		return
+	}
 	f.state = 3
 }
 
@@ -545,18 +520,16 @@ func (f *Document) needsFileIDHash() bool {
 }
 
 func (f *Document) estimateFinalBufferSize() int {
+	resources := f.ensureResourceStore()
 	size := f.buffer.Len() + 4096
 	size += len(f.pages) * 1024
-	size += len(f.images) * 2048
-	size += len(f.fonts) * 1024
-	size += len(f.templates) * 1024
-	size += len(f.importedObjs) * 1024
-	size += len(f.importedPages) * 1024
+	size += len(resources.images) * 2048
+	size += len(resources.fonts) * 1024
+	size += len(resources.templates) * 1024
+	size += len(resources.importedObjs) * 1024
+	size += len(resources.importedPages) * 1024
 	size += len(f.attachments) * 1024
 	size += len(f.xmp)
-	if f.javascript != nil {
-		size += len(*f.javascript)
-	}
 	if size < 0 {
 		return 0
 	}

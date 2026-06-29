@@ -122,7 +122,13 @@ func prepareCMSOptions(options CMSOptions) (crypto.Hash, time.Time, error) {
 	return digest, signingTime, nil
 }
 
-func createCMSWithDigest(content, contentDigest []byte, digest crypto.Hash, signingTime time.Time, options CMSOptions) ([]byte, error) {
+func createCMSWithDigest(content, contentDigest []byte, digest crypto.Hash, signingTime time.Time, options CMSOptions) (out []byte, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			out = nil
+			err = fmt.Errorf("pdfsigning: DER/CMS encoding failed: %v", recovered)
+		}
+	}()
 	signedAttrs, err := signedAttributes(contentDigest, signingTime)
 	if err != nil {
 		return nil, err

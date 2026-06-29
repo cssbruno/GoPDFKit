@@ -3,9 +3,6 @@
 Each directory is a runnable example. Generated PDFs are written under
 `assets/generated/pdf/examples`.
 
-For compact code snippets that show how to generate each workflow, see
-[`../doc/generation-examples.md`](../doc/generation-examples.md).
-
 ## Run All Core Examples
 
 ```sh

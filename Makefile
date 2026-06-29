@@ -1,6 +1,6 @@
 all : documentation
 
-documentation : doc/index.html doc.go README.md 
+documentation : README.md
 
 GO_PACKAGES ?= ./...
 VERSION ?= $(shell sed -n '1p' VERSION 2>/dev/null)
@@ -15,7 +15,7 @@ GOSEC_EXCLUDES ?= G115,G304,G401,G405,G501,G503,G505,G703
 COMPLIANCE_OUT ?= artifacts/compliance
 GENERATION_CORE_BENCH ?= BenchmarkGeneration(BaselineNoCompliance.*Concurrent40|TextConcurrent40|LongTextConcurrent40|UTF8Text.*Concurrent40|TextCompressionLevelConcurrent40|Images.*Concurrent40|SVGConcurrent40|TemplatesConcurrent40|ImportedPDFPagesConcurrent40|ProtectionConcurrent40|AttachmentsConcurrent40)$
 
-.PHONY: all documentation cov test vet fmt-check check tools tools-clean lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate clean
+.PHONY: all documentation cov test vet fmt-check check tools tools-clean lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate clean
 
 cov : all
 	go test $(GO_PACKAGES) -coverprofile=coverage && go tool cover -html=coverage -o=coverage.html
@@ -92,14 +92,6 @@ release : release-tag
 README.md : doc/document.md
 	pandoc --read=markdown --write=gfm < $< > $@
 
-doc/index.html : doc/document.md doc/html.txt
-	pandoc --read=markdown --write=html --template=doc/html.txt \
-		--metadata pagetitle="GoPDFKit Document Generator" < $< > $@
-
-doc.go : doc/document.md doc/go.awk
-	pandoc --read=markdown --write=plain $< | awk --assign=package_name=gopdfkit --file=doc/go.awk > $@
-	gofmt -s -w $@
-
 build :
 	go build -v $(GO_PACKAGES)
 
@@ -117,6 +109,9 @@ bench-generation-core-ci :
 	mkdir -p artifacts
 	go test ./document -run '^$$' -bench '$(GENERATION_CORE_BENCH)' -benchmem -count=3 | tee artifacts/generation-core-benchmarks.txt
 
+bench-generation-core-budget :
+	sh tools/benchmark-budget-check.sh artifacts/generation-core-benchmarks.txt
+
 compliance-fixtures :
 	go run ./cmd/compliance-fixtures -out "$(COMPLIANCE_OUT)" $(if $(SRGB_ICC),-icc "$(SRGB_ICC)")
 
@@ -130,5 +125,5 @@ compliance-regenerate :
 	COMPLIANCE_OUT="$(COMPLIANCE_OUT)" SRGB_ICC="$(SRGB_ICC)" VERAPDF="$(VERAPDF)" PDFUA_CHECKER="$(PDFUA_CHECKER)" ARLINGTON_CHECKER="$(ARLINGTON_CHECKER)" ARLINGTON_URL="$(ARLINGTON_URL)" ARLINGTON_PROFILE="$(ARLINGTON_PROFILE)" ARLINGTON_REPORT_DIR="$(ARLINGTON_REPORT_DIR)" REQUIRE_COMPLIANCE_TOOLS="$(REQUIRE_COMPLIANCE_TOOLS)" sh tools/compliance-regenerate.sh
 
 clean :
-	rm -f coverage.html coverage doc/index.html
+	rm -f coverage.html coverage
 	rm -f assets/generated/pdf/*.pdf

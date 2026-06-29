@@ -5,6 +5,7 @@ package sign
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -802,6 +803,47 @@ func TestAnalyzePDFFollowsIncrementalPrevChain(t *testing.T) {
 	if _, err := analyzePDF(signedPDF); err != nil {
 		t.Fatalf("analyzePDF() error = %v", err)
 	}
+}
+
+func TestAnalyzePDFContextCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := analyzePDFContext(ctx, testPDFBytes(t))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("analyzePDFContext() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestSigningScannersHonorContextInsideLoops(t *testing.T) {
+	ctx := &errAfterContext{Context: context.Background(), remaining: 1}
+	input := []byte("<<" + strings.Repeat("/LongName 1 ", 4096))
+	if _, err := findDictionaryEndContext(ctx, input); !errors.Is(err, context.Canceled) {
+		t.Fatalf("findDictionaryEndContext() error = %v, want context.Canceled", err)
+	}
+
+	ctx = &errAfterContext{Context: context.Background(), remaining: 1}
+	if _, err := findPDFNameContext(ctx, []byte(strings.Repeat("/Other 1 ", 4096)), "/Missing"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("findPDFNameContext() error = %v, want context.Canceled", err)
+	}
+
+	ctx = &errAfterContext{Context: context.Background(), remaining: 1}
+	if _, err := pdfValueEndContext(ctx, []byte("("+strings.Repeat("x", 4096)), 0); !errors.Is(err, context.Canceled) {
+		t.Fatalf("pdfValueEndContext() error = %v, want context.Canceled", err)
+	}
+}
+
+type errAfterContext struct {
+	context.Context
+	remaining int
+}
+
+func (ctx *errAfterContext) Err() error {
+	if ctx.remaining <= 0 {
+		return context.Canceled
+	}
+	ctx.remaining--
+	return nil
 }
 
 func testPDFBytes(t *testing.T) []byte {

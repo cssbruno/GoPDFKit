@@ -1,0 +1,104 @@
+#!/bin/sh
+set -eu
+
+input=${1:-artifacts/generation-core-benchmarks.txt}
+
+if [ ! -f "$input" ]; then
+	echo "benchmark budget input not found: $input" >&2
+	exit 1
+fi
+
+awk '
+function strip_arch(name) {
+	sub(/-[0-9]+$/, "", name)
+	return name
+}
+
+function fail(name, metric, got, limit) {
+	printf("benchmark budget exceeded: %s %s=%s limit=%s\n", name, metric, got, limit) > "/dev/stderr"
+	failures++
+}
+
+function check_max(name, metric, got, limit) {
+	if (got != "" && got + 0 > limit) {
+		fail(name, metric, got, limit)
+	}
+}
+
+function check_generation_budget(name, ns, bytes, allocs) {
+	# Budgets intentionally check only stable Go benchmark metrics: ns/op,
+	# B/op, and allocs/op.
+	if (name ~ /^BenchmarkGenerationLongText/) {
+		check_max(name, "B/op", bytes, 153600)
+		check_max(name, "allocs/op", allocs, 500)
+		return
+	}
+	if (name ~ /^BenchmarkGenerationImagesCached/) {
+		check_max(name, "B/op", bytes, 153600)
+		return
+	}
+	if (name ~ /^BenchmarkGenerationImages/) {
+		check_max(name, "B/op", bytes, 2097152)
+		return
+	}
+	if (name ~ /^BenchmarkGenerationHTMLLargeTableCompiled/) {
+		check_max(name, "ns/op", ns, 8000000)
+		check_max(name, "B/op", bytes, 8388608)
+		return
+	}
+	if (name ~ /^BenchmarkGenerationHTMLWideTableCompiled/) {
+		check_max(name, "ns/op", ns, 3000000)
+		check_max(name, "B/op", bytes, 3145728)
+		return
+	}
+	if (name ~ /^BenchmarkGenerationImportedPDFPages/) {
+		check_max(name, "B/op", bytes, 102400)
+		check_max(name, "allocs/op", allocs, 500)
+		return
+	}
+	if (name ~ /^BenchmarkGenerationAttachments/) {
+		check_max(name, "B/op", bytes, 256000)
+		check_max(name, "allocs/op", allocs, 400)
+		return
+	}
+	if (name ~ /^BenchmarkGeneration.*Signed/) {
+		check_max(name, "B/op", bytes, 1572864)
+		check_max(name, "allocs/op", allocs, 2000)
+		return
+	}
+	if (name ~ /^BenchmarkGeneration(TextConcurrent40|UTF8Text.*Concurrent40|TextCompressionLevelConcurrent40)$/) {
+		check_max(name, "B/op", bytes, 614400)
+		check_max(name, "allocs/op", allocs, 2500)
+		return
+	}
+}
+
+/^Benchmark/ {
+	seen++
+	name = strip_arch($1)
+	ns = bytes = allocs = ""
+	for (i = 2; i < NF; i++) {
+		if ($(i + 1) == "ns/op") {
+			ns = $i
+		}
+		if ($(i + 1) == "B/op") {
+			bytes = $i
+		}
+		if ($(i + 1) == "allocs/op") {
+			allocs = $i
+		}
+	}
+	check_generation_budget(name, ns, bytes, allocs)
+}
+
+END {
+	if (seen == 0) {
+		print "no benchmark rows found" > "/dev/stderr"
+		exit 1
+	}
+	if (failures > 0) {
+		exit 1
+	}
+	printf("benchmark budgets ok: %d rows checked\n", seen)
+}
+' "$input"

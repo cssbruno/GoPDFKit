@@ -6,15 +6,110 @@ package document
 import (
 	"context"
 	"errors"
+	"hash"
 	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"time"
 )
 
 // ErrNilWriter reports that a PDF output method received a nil writer.
 var ErrNilWriter = errors.New("pdf output writer is nil")
+
+// ErrStreamingOutputConsumed reports that final PDF bytes were previously
+// streamed without retaining the in-memory output buffer.
+var ErrStreamingOutputConsumed = errors.New("streaming PDF output has already been consumed")
+
+type pdfOutputSink struct {
+	w    io.Writer
+	n    int
+	hash hash.Hash
+	err  error
+}
+
+func newPDFOutputSink(w io.Writer, offset int, hash hash.Hash) *pdfOutputSink {
+	return &pdfOutputSink{w: w, n: offset, hash: hash}
+}
+
+func (s *pdfOutputSink) Len() int {
+	if s == nil {
+		return 0
+	}
+	return s.n
+}
+
+func (s *pdfOutputSink) Write(p []byte) (int, error) {
+	if s.err != nil {
+		return 0, s.err
+	}
+	n, err := s.w.Write(p)
+	if n > 0 {
+		if s.hash != nil {
+			_, _ = s.hash.Write(p[:n])
+		}
+		s.n += n
+	}
+	if err == nil && n != len(p) {
+		err = io.ErrShortWrite
+	}
+	if err != nil {
+		s.err = err
+	}
+	return n, err
+}
+
+func (s *pdfOutputSink) WriteString(str string) error {
+	if s.err != nil {
+		return s.err
+	}
+	if stringWriter, ok := s.w.(io.StringWriter); ok {
+		n, err := stringWriter.WriteString(str)
+		if n > 0 {
+			if s.hash != nil {
+				written := n
+				if written > len(str) {
+					written = len(str)
+				}
+				_, _ = io.WriteString(s.hash, str[:written])
+			}
+			s.n += n
+		}
+		if err == nil && n != len(str) {
+			err = io.ErrShortWrite
+		}
+		if err != nil {
+			s.err = err
+		}
+		return err
+	}
+	_, err := s.Write([]byte(str))
+	return err
+}
+
+func (s *pdfOutputSink) WriteByte(b byte) error {
+	if s.err != nil {
+		return s.err
+	}
+	if byteWriter, ok := s.w.(interface{ WriteByte(byte) error }); ok {
+		if err := byteWriter.WriteByte(b); err != nil {
+			s.err = err
+			return err
+		}
+		if s.hash != nil {
+			_, _ = s.hash.Write([]byte{b})
+		}
+		s.n++
+		return nil
+	}
+	_, err := s.Write([]byte{b})
+	return err
+}
+
+func (s *pdfOutputSink) ReadFrom(r io.Reader) (int64, error) {
+	return io.Copy(s, r)
+}
 
 // OutputOptions controls behavior applied during PDF output. Zero fields leave
 // the document's current settings unchanged, except DisableSync which defaults
@@ -29,6 +124,10 @@ type OutputOptions struct {
 	Limits Limits
 	// Deterministic applies deterministic output defaults before output.
 	Deterministic bool
+	// StreamFinal uses the one-shot streaming final-writer path for this
+	// output. It lowers peak memory for very large unsigned PDFs but does not
+	// retain the final PDF buffer for repeated output from the same Document.
+	StreamFinal bool
 }
 
 // OutputFileOptions is kept for source compatibility. Prefer OutputOptions for
@@ -66,6 +165,11 @@ func (f *Document) OutputFileAndCloseNoSync(fileStr string) error {
 	return f.outputFileAndClose(fileStr, false)
 }
 
+// OutputFile creates or truncates fileStr and writes the PDF document to it.
+func (f *Document) OutputFile(fileStr string) error {
+	return f.OutputFileContext(context.Background(), fileStr)
+}
+
 // OutputFileAndCloseWithOptions creates or truncates fileStr using explicit
 // file output options. A zero-value OutputFileOptions keeps the durable default.
 func (f *Document) OutputFileAndCloseWithOptions(fileStr string, options OutputFileOptions) error {
@@ -76,16 +180,63 @@ func (f *Document) outputFileAndClose(fileStr string, syncOutput bool) error {
 	if f.err != nil {
 		return f.err
 	}
-	return writeFileAtomically(fileStr, syncOutput, f.Output)
+	write := f.Output
+	if f.outputPolicy.StreamFinal {
+		write = f.OutputStream
+	}
+	return writeFileAtomically(fileStr, syncOutput, write)
 }
 
 // OutputFileWithOptions creates or truncates fileStr using output-wide options.
 func (f *Document) OutputFileWithOptions(fileStr string, options OutputOptions) error {
+	return f.OutputFileWithOptionsContext(context.Background(), fileStr, options)
+}
+
+// OutputFileWithOptionsContext creates or truncates fileStr using output-wide
+// options and context cancellation.
+func (f *Document) OutputFileWithOptionsContext(ctx context.Context, fileStr string, options OutputOptions) error {
 	if f.err != nil {
 		return f.err
 	}
 	return writeFileAtomically(fileStr, f.syncOutputForOptions(options), func(w io.Writer) error {
-		return f.OutputWithOptions(w, options)
+		if f.streamFinalForOptions(options) {
+			return f.OutputStreamWithOptionsContext(ctx, w, options)
+		}
+		return f.OutputWithOptionsContext(ctx, w, options)
+	})
+}
+
+// OutputFileStream creates or truncates fileStr and streams final PDF
+// serialization directly to the temporary file used for atomic output.
+func (f *Document) OutputFileStream(fileStr string) error {
+	return f.OutputFileStreamContext(context.Background(), fileStr)
+}
+
+// OutputFileStreamContext creates or truncates fileStr and streams final PDF
+// serialization directly to the temporary file used for atomic output.
+func (f *Document) OutputFileStreamContext(ctx context.Context, fileStr string) error {
+	if f.err != nil {
+		return f.err
+	}
+	return writeFileAtomically(fileStr, !f.outputPolicy.DisableSync, func(w io.Writer) error {
+		return f.OutputStreamContext(ctx, w)
+	})
+}
+
+// OutputFileStreamWithOptions creates or truncates fileStr and streams final
+// PDF serialization using output-wide options.
+func (f *Document) OutputFileStreamWithOptions(fileStr string, options OutputOptions) error {
+	return f.OutputFileStreamWithOptionsContext(context.Background(), fileStr, options)
+}
+
+// OutputFileStreamWithOptionsContext creates or truncates fileStr and streams
+// final PDF serialization using output-wide options and context cancellation.
+func (f *Document) OutputFileStreamWithOptionsContext(ctx context.Context, fileStr string, options OutputOptions) error {
+	if f.err != nil {
+		return f.err
+	}
+	return writeFileAtomically(fileStr, f.syncOutputForOptions(options), func(w io.Writer) error {
+		return f.OutputStreamWithOptionsContext(ctx, w, options)
 	})
 }
 
@@ -96,6 +247,9 @@ func (f *Document) OutputFileContext(ctx context.Context, fileStr string) error 
 		return f.err
 	}
 	return writeFileAtomically(fileStr, !f.outputPolicy.DisableSync, func(w io.Writer) error {
+		if f.outputPolicy.StreamFinal {
+			return f.OutputStreamContext(ctx, w)
+		}
 		return f.OutputContext(ctx, w)
 	})
 }
@@ -157,10 +311,56 @@ func (f *Document) Output(w io.Writer) error {
 
 // OutputWithOptions sends the PDF document to w using output-wide options.
 func (f *Document) OutputWithOptions(w io.Writer, options OutputOptions) error {
+	return f.OutputWithOptionsContext(context.Background(), w, options)
+}
+
+// OutputWithOptionsContext sends the PDF document to w using output-wide
+// options and context cancellation. Output options are applied to the document;
+// if output fails before the document closes, the previous output settings are
+// restored while the output error remains latched.
+func (f *Document) OutputWithOptionsContext(ctx context.Context, w io.Writer, options OutputOptions) error {
+	if f.streamFinalForOptions(options) {
+		return f.OutputStreamWithOptionsContext(ctx, w, options)
+	}
+	snapshot := f.outputSettingsSnapshot()
 	if err := f.applyOutputOptions(options); err != nil {
 		return err
 	}
-	return f.OutputContext(context.Background(), w)
+	err := f.OutputContext(ctx, w)
+	if err != nil && f.state < 3 {
+		f.restoreOutputSettings(snapshot)
+	}
+	return err
+}
+
+// OutputStream sends the PDF document to w while streaming final PDF
+// serialization directly to w.
+//
+// Unlike Output, this method does not retain the final PDF buffer for repeated
+// output. Use it for very large unsigned PDFs where lower peak memory is more
+// important than writing the same Document instance more than once.
+func (f *Document) OutputStream(w io.Writer) error {
+	return f.OutputStreamContext(context.Background(), w)
+}
+
+// OutputStreamWithOptions streams final PDF serialization to w using
+// output-wide options.
+func (f *Document) OutputStreamWithOptions(w io.Writer, options OutputOptions) error {
+	return f.OutputStreamWithOptionsContext(context.Background(), w, options)
+}
+
+// OutputStreamWithOptionsContext streams final PDF serialization to w using
+// output-wide options and context cancellation.
+func (f *Document) OutputStreamWithOptionsContext(ctx context.Context, w io.Writer, options OutputOptions) error {
+	snapshot := f.outputSettingsSnapshot()
+	if err := f.applyOutputOptions(options); err != nil {
+		return err
+	}
+	err := f.OutputStreamContext(ctx, w)
+	if err != nil && f.state < 3 {
+		f.restoreOutputSettings(snapshot)
+	}
+	return err
 }
 
 // OutputContext sends the PDF document to w and checks ctx before document
@@ -172,6 +372,13 @@ func (f *Document) OutputContext(ctx context.Context, w io.Writer) error {
 	}
 	if f.err != nil {
 		return f.err
+	}
+	if f.streamedOutput {
+		f.SetError(ErrStreamingOutputConsumed)
+		return f.err
+	}
+	if f.outputPolicy.StreamFinal && f.state < 3 {
+		return f.OutputStreamContext(ctx, w)
 	}
 	if err := outputCanceledError(ctx); err != nil {
 		f.SetError(err)
@@ -201,6 +408,63 @@ func (f *Document) OutputContext(ctx context.Context, w io.Writer) error {
 	return nil
 }
 
+// OutputStreamContext sends the PDF document to w and writes final PDF objects
+// directly to w instead of first assembling the final PDF in Document.buffer.
+//
+// This is a one-shot output path for very large unsigned documents. It
+// preserves the existing Output behavior by being opt-in: Output remains
+// repeatable because it retains the final PDF buffer, while OutputStreamContext
+// trades repeatability for lower peak memory. Signed output still buffers
+// because PDF signing needs the complete byte range.
+func (f *Document) OutputStreamContext(ctx context.Context, w io.Writer) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if f.err != nil {
+		return f.err
+	}
+	if f.streamedOutput {
+		f.SetError(ErrStreamingOutputConsumed)
+		return f.err
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		f.SetError(err)
+		return err
+	}
+	if isNilWriter(w) {
+		f.SetError(ErrNilWriter)
+		return f.err
+	}
+	if f.state == 3 {
+		return f.OutputContext(ctx, w)
+	}
+
+	sink := newPDFOutputSink(w, 0, nil)
+	if f.buffer.Len() > 0 {
+		if _, err := sink.Write(f.buffer.Bytes()); err != nil {
+			f.SetError(err)
+			return err
+		}
+		f.buffer.Reset()
+	}
+
+	previousSink := f.outputSink
+	f.outputSink = sink
+	defer func() { f.outputSink = previousSink }()
+
+	f.closeContext(ctx)
+	if sink.err != nil {
+		f.SetError(sink.err)
+		return sink.err
+	}
+	if f.err != nil {
+		return f.err
+	}
+	f.buffer.Reset()
+	f.streamedOutput = true
+	return nil
+}
+
 func (f *Document) applyOutputOptions(options OutputOptions) error {
 	if options.Compression != (CompressionPolicy{}) {
 		if err := f.SetCompressionPolicy(options.Compression); err != nil {
@@ -218,8 +482,56 @@ func (f *Document) applyOutputOptions(options OutputOptions) error {
 	return f.err
 }
 
+type outputSettingsSnapshot struct {
+	compress                       bool
+	compressLevel                  int
+	pageCompressionWorkers         int
+	attachmentCompressionWorkers   int
+	compressionTinyStreamThreshold int
+	limits                         Limits
+	limitsSet                      bool
+	maxAttachmentBytes             int64
+	catalogSort                    bool
+	creationDate                   time.Time
+	modDate                        time.Time
+}
+
+func (f *Document) outputSettingsSnapshot() outputSettingsSnapshot {
+	return outputSettingsSnapshot{
+		compress:                       f.compress,
+		compressLevel:                  f.compressLevel,
+		pageCompressionWorkers:         f.pageCompressionWorkers,
+		attachmentCompressionWorkers:   f.attachmentCompressionWorkers,
+		compressionTinyStreamThreshold: f.compressionTinyStreamThreshold,
+		limits:                         f.limits,
+		limitsSet:                      f.limitsSet,
+		maxAttachmentBytes:             f.maxAttachmentBytes,
+		catalogSort:                    f.catalogSort,
+		creationDate:                   f.creationDate,
+		modDate:                        f.modDate,
+	}
+}
+
+func (f *Document) restoreOutputSettings(snapshot outputSettingsSnapshot) {
+	f.compress = snapshot.compress
+	f.compressLevel = snapshot.compressLevel
+	f.pageCompressionWorkers = snapshot.pageCompressionWorkers
+	f.attachmentCompressionWorkers = snapshot.attachmentCompressionWorkers
+	f.compressionTinyStreamThreshold = snapshot.compressionTinyStreamThreshold
+	f.limits = snapshot.limits
+	f.limitsSet = snapshot.limitsSet
+	f.maxAttachmentBytes = snapshot.maxAttachmentBytes
+	f.catalogSort = snapshot.catalogSort
+	f.creationDate = snapshot.creationDate
+	f.modDate = snapshot.modDate
+}
+
 func (f *Document) syncOutputForOptions(options OutputOptions) bool {
 	return !(f.outputPolicy.DisableSync || options.DisableSync)
+}
+
+func (f *Document) streamFinalForOptions(options OutputOptions) bool {
+	return f.outputPolicy.StreamFinal || options.StreamFinal
 }
 
 func isNilWriter(w io.Writer) bool {
@@ -242,12 +554,8 @@ func (f *Document) out(s string) {
 		_, _ = f.pages[f.page].WriteString(s)
 		_, _ = f.pages[f.page].WriteString("\n")
 	} else {
-		_, _ = f.buffer.WriteString(s)
-		_, _ = f.buffer.WriteString("\n")
-		if f.fileIDHash != nil {
-			_, _ = f.fileIDHash.Write([]byte(s))
-			_, _ = f.fileIDHash.Write([]byte{'\n'})
-		}
+		f.writeFinalString(s)
+		f.writeFinalString("\n")
 	}
 }
 
@@ -266,17 +574,11 @@ func (f *Document) outbuf(r io.Reader) error {
 		}
 		_, _ = f.pages[f.page].WriteString("\n")
 	} else {
-		if f.fileIDHash != nil {
-			r = io.TeeReader(r, f.fileIDHash)
-		}
-		if _, err := f.buffer.ReadFrom(r); err != nil {
+		if _, err := f.readFinalFrom(r); err != nil {
 			f.SetError(err)
 			return err
 		}
-		_, _ = f.buffer.WriteString("\n")
-		if f.fileIDHash != nil {
-			_, _ = f.fileIDHash.Write([]byte{'\n'})
-		}
+		f.writeFinalString("\n")
 	}
 	return nil
 }
@@ -287,12 +589,8 @@ func (f *Document) outbytes(b []byte) {
 		_, _ = f.pages[f.page].Write(b)
 		_ = f.pages[f.page].WriteByte('\n')
 	} else {
-		_, _ = f.buffer.Write(b)
-		_ = f.buffer.WriteByte('\n')
-		if f.fileIDHash != nil {
-			_, _ = f.fileIDHash.Write(b)
-			_, _ = f.fileIDHash.Write([]byte{'\n'})
-		}
+		f.writeFinalBytes(b)
+		f.writeFinalByte('\n')
 	}
 }
 
@@ -301,10 +599,7 @@ func (f *Document) writeRawBytes(b []byte) {
 		f.markAliasPageBytes(b)
 		_, _ = f.pages[f.page].Write(b)
 	} else {
-		_, _ = f.buffer.Write(b)
-		if f.fileIDHash != nil {
-			_, _ = f.fileIDHash.Write(b)
-		}
+		f.writeFinalBytes(b)
 	}
 }
 
@@ -312,11 +607,64 @@ func (f *Document) writeRawByte(b byte) {
 	if f.state == 2 {
 		_ = f.pages[f.page].WriteByte(b)
 	} else {
-		_ = f.buffer.WriteByte(b)
-		if f.fileIDHash != nil {
-			_, _ = f.fileIDHash.Write([]byte{b})
-		}
+		f.writeFinalByte(b)
 	}
+}
+
+func (f *Document) finalOutputOffset() int {
+	if f.outputSink != nil {
+		return f.outputSink.Len()
+	}
+	return f.buffer.Len()
+}
+
+func (f *Document) writeFinalString(s string) {
+	if f.outputSink != nil {
+		if err := f.outputSink.WriteString(s); err != nil {
+			f.SetError(err)
+		}
+		return
+	}
+	_, _ = f.buffer.WriteString(s)
+	if f.fileIDHash != nil {
+		_, _ = f.fileIDHash.Write([]byte(s))
+	}
+}
+
+func (f *Document) writeFinalBytes(b []byte) {
+	if f.outputSink != nil {
+		if _, err := f.outputSink.Write(b); err != nil {
+			f.SetError(err)
+		}
+		return
+	}
+	_, _ = f.buffer.Write(b)
+	if f.fileIDHash != nil {
+		_, _ = f.fileIDHash.Write(b)
+	}
+}
+
+func (f *Document) writeFinalByte(b byte) {
+	if f.outputSink != nil {
+		if err := f.outputSink.WriteByte(b); err != nil {
+			f.SetError(err)
+		}
+		return
+	}
+	_ = f.buffer.WriteByte(b)
+	if f.fileIDHash != nil {
+		_, _ = f.fileIDHash.Write([]byte{b})
+	}
+}
+
+func (f *Document) readFinalFrom(r io.Reader) (int64, error) {
+	if f.outputSink != nil {
+		return f.outputSink.ReadFrom(r)
+	}
+	if f.fileIDHash != nil {
+		r = io.TeeReader(r, f.fileIDHash)
+	}
+	return f.buffer.ReadFrom(r)
 }
 
 // RawWriteStr writes a string directly to the PDF generation buffer. This is a

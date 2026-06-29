@@ -129,6 +129,9 @@ jobs:
       - name: Run generation benchmarks
         run: make bench-generation-core-ci
 
+      - name: Check benchmark budgets
+        run: make bench-generation-core-budget
+
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
         with:

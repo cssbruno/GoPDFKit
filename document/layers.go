@@ -42,7 +42,7 @@ func (f *Document) AddLayer(name string, visible bool) (layerID int) {
 func (f *Document) BeginLayer(id int) {
 	f.EndLayer()
 	if id >= 0 && id < len(f.layer.list) {
-		f.outf("/OC /OC%d BDC", id)
+		f.outf("/OC %s BDC", optionalContentPDFResourceName(id).String())
 		f.layer.currentLayer = id
 	}
 }
@@ -70,23 +70,25 @@ func (f *Document) layerEndDoc() {
 
 func (f *Document) layerPutLayers() {
 	for j, l := range f.layer.list {
-		f.newobj()
+		f.newPDFDictObject()
 		f.layer.list[j].objNum = f.n
-		buf := []byte("<</Type /OCG /Name ")
+		f.out("/Type /OCG")
+		buf := []byte("/Name ")
 		buf = f.appendUTF16TextString(buf, l.name)
-		buf = append(buf, ">>"...)
 		f.outbytes(buf)
-		f.out("endobj")
+		f.endPDFDict()
+		f.endPDFObject()
 	}
 }
 
 func (f *Document) layerPutResourceDict() {
 	if len(f.layer.list) > 0 {
-		f.out("/Properties <<")
+		f.out("/Properties")
+		f.beginPDFDict()
 		for j, layer := range f.layer.list {
-			f.outf("/OC%d %d 0 R", j, layer.objNum)
+			f.outbytes(appendPDFResourceRefValue(nil, optionalContentPDFResourceRef(j, layer.objNum)))
 		}
-		f.out(">>")
+		f.endPDFDict()
 	}
 }
 
@@ -102,7 +104,15 @@ func (f *Document) layerPutCatalog() {
 			}
 		}
 		onStr += onStrSb97.String()
-		f.outf("/OCProperties <</OCGs [%s] /D <</OFF [%s] /Order [%s]>>>>", onStr, offStr.String(), onStr)
+		f.out("/OCProperties")
+		f.beginPDFDict()
+		f.outf("/OCGs [%s]", onStr)
+		f.out("/D")
+		f.beginPDFDict()
+		f.outf("/OFF [%s]", offStr.String())
+		f.outf("/Order [%s]", onStr)
+		f.endPDFDict()
+		f.endPDFDict()
 		if f.layer.openLayerPane {
 			f.out("/PageMode /UseOC")
 		}

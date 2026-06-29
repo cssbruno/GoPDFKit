@@ -47,6 +47,9 @@ WebP, controlled HTML fragments, thumbnails, attachments, metadata, XMP
 metadata, JavaScript actions, password protection, PDF signing, and signature
 verification through CMS SignedData. The inspect package provides lightweight
 PDF structure, stream, page, and literal text inspection helpers.
+Shared layout document models are domain-neutral; application-specific
+document categories should be modeled by callers using layout blocks and
+document.WriteDocument.
 
 Imported-page examples cover merge, split, reorder, rotate, 4-up layout,
 template overlay, and watermark overlay by creating a new PDF from imported
@@ -99,8 +102,6 @@ Use document.RenderHTMLTemplate for simple {{key}} substitution before
 rendering HTML. Plain values are escaped, HTMLTemplateRaw inserts trusted HTML,
 and HTMLTemplateImage inserts an img tag that can be sized and spaced with
 supported HTML/CSS.
-
-See doc/pdf-html-subset.md for the full renderer contract.
 
 # Errors
 

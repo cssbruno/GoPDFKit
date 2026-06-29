@@ -12,7 +12,7 @@ func LongFormHTMLDocumentModel(title, htmlStr string) (*LayoutDocument, []string
 	pdf := New("P", "mm", "A4", "")
 	html := pdf.HTMLNew()
 	messages := html.ValidateHTML(bodyHTML)
-	doc := NewLayoutDocument(DocumentKindLongForm)
+	doc := NewLayoutDocument()
 	doc.Title = strings.TrimSpace(title)
 	if doc.Title != "" {
 		doc.Body = append(doc.Body, HeadingBlock{Level: 1, Segments: []TextSegment{{Text: doc.Title}}})

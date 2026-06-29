@@ -5,27 +5,19 @@ package document
 
 import "github.com/cssbruno/gopdfkit/layout"
 
-// DocumentKind identifies the high-level purpose of a generated document.
-type DocumentKind = layout.DocumentKind
-
-const (
-	DocumentKindGeneric       = layout.DocumentKindGeneric
-	DocumentKindReport        = layout.DocumentKindReport
-	DocumentKindForm          = layout.DocumentKindForm
-	DocumentKindLetter        = layout.DocumentKindLetter
-	DocumentKindTransactional = layout.DocumentKindTransactional
-	DocumentKindAttestation   = layout.DocumentKindAttestation
-	DocumentKindStatement     = layout.DocumentKindStatement
-	DocumentKindLongForm      = layout.DocumentKindLongForm
-)
-
-// LayoutDocument is the shared model that document builders and HTML parsers can
-// produce before PDF layout and drawing.
+// LayoutDocument is the shared model that document assembly helpers and HTML
+// parsers can produce before PDF layout and drawing.
 type LayoutDocument = layout.LayoutDocument
 
-// NewLayoutDocument creates a document model with a generic kind when kind is empty.
-func NewLayoutDocument(kind DocumentKind) *LayoutDocument {
-	return layout.NewLayoutDocument(kind)
+// NewLayoutDocument creates an empty renderer-independent document model.
+func NewLayoutDocument() *LayoutDocument {
+	return layout.NewLayoutDocument()
+}
+
+// NewDocumentModel creates a renderer-independent document model with an
+// optional title heading followed by the supplied body blocks.
+func NewDocumentModel(title string, blocks ...Block) *LayoutDocument {
+	return layout.NewDocumentModel(title, blocks...)
 }
 
 type DocumentMetadata = layout.DocumentMetadata

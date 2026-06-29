@@ -96,6 +96,7 @@ func defaultCompressionPolicy() CompressionPolicy {
 		pageWorkers = 1
 	}
 	return CompressionPolicy{
+		Mode:                     CompressionEnabled,
 		Enabled:                  true,
 		Level:                    zlib.BestSpeed,
 		PageWorkers:              pageWorkers,
@@ -104,10 +105,27 @@ func defaultCompressionPolicy() CompressionPolicy {
 	}
 }
 
+func compressionPolicyHasFields(policy CompressionPolicy) bool {
+	return policy.Level != 0 ||
+		policy.PageWorkers != CompressionWorkersDefault ||
+		policy.AttachmentWorkers != CompressionWorkersDefault ||
+		policy.TinyStreamThresholdBytes != 0
+}
+
 func normalizeCompressionPolicy(policy CompressionPolicy) (CompressionPolicy, error) {
 	defaults := defaultCompressionPolicy()
 	if policy == (CompressionPolicy{}) {
 		return defaults, nil
+	}
+	switch policy.Mode {
+	case CompressionDefault:
+		policy.Enabled = policy.Enabled || compressionPolicyHasFields(policy)
+	case CompressionEnabled:
+		policy.Enabled = true
+	case CompressionDisabled:
+		policy.Enabled = false
+	default:
+		return CompressionPolicy{}, fmt.Errorf("invalid compression mode: %d", policy.Mode)
 	}
 	if policy.Level == 0 && policy.Enabled {
 		policy.Level = defaults.Level
@@ -121,16 +139,31 @@ func normalizeCompressionPolicy(policy CompressionPolicy) (CompressionPolicy, er
 		policy.Enabled = false
 	}
 	if policy.PageWorkers < 0 {
-		return CompressionPolicy{}, fmt.Errorf("invalid page compression workers: %d", policy.PageWorkers)
+		if policy.PageWorkers != CompressionWorkersDisabled {
+			return CompressionPolicy{}, fmt.Errorf("invalid page compression workers: %d", policy.PageWorkers)
+		}
+		policy.PageWorkers = 0
+	} else if policy.PageWorkers == CompressionWorkersDefault {
+		policy.PageWorkers = defaults.PageWorkers
 	}
 	if policy.AttachmentWorkers < 0 {
-		return CompressionPolicy{}, fmt.Errorf("invalid attachment compression workers: %d", policy.AttachmentWorkers)
+		if policy.AttachmentWorkers != CompressionWorkersDisabled {
+			return CompressionPolicy{}, fmt.Errorf("invalid attachment compression workers: %d", policy.AttachmentWorkers)
+		}
+		policy.AttachmentWorkers = 0
+	} else if policy.AttachmentWorkers == CompressionWorkersDefault {
+		policy.AttachmentWorkers = defaults.AttachmentWorkers
 	}
 	if policy.TinyStreamThresholdBytes < 0 {
 		return CompressionPolicy{}, fmt.Errorf("invalid tiny stream threshold: %d", policy.TinyStreamThresholdBytes)
 	}
 	if policy.TinyStreamThresholdBytes == 0 {
 		policy.TinyStreamThresholdBytes = defaults.TinyStreamThresholdBytes
+	}
+	if policy.Enabled {
+		policy.Mode = CompressionEnabled
+	} else {
+		policy.Mode = CompressionDisabled
 	}
 	return policy, nil
 }
@@ -154,12 +187,20 @@ func (f *Document) SetCompressionPolicy(policy CompressionPolicy) error {
 // CompressionPolicy returns the document's current compression settings.
 func (f *Document) CompressionPolicy() CompressionPolicy {
 	return CompressionPolicy{
+		Mode:                     compressionModeForEnabled(f.compress),
 		Enabled:                  f.compress,
 		Level:                    f.compressLevel,
 		PageWorkers:              f.pageCompressionWorkers,
 		AttachmentWorkers:        f.attachmentCompressionWorkers,
 		TinyStreamThresholdBytes: f.compressionTinyStreamThreshold,
 	}
+}
+
+func compressionModeForEnabled(enabled bool) CompressionMode {
+	if enabled {
+		return CompressionEnabled
+	}
+	return CompressionDisabled
 }
 
 // SetPageCompressionWorkers sets how many goroutines may compress page streams

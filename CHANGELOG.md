@@ -1,5 +1,116 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added `layout.NewDocumentModel` and `document.NewDocumentModel` as neutral
+  helpers for assembling a title plus caller-supplied layout blocks.
+
+### Removed
+
+- Removed GoPDFKit-owned `DocumentKind` values and the named document model
+  builders. This is a breaking pre-v1 API change: GoPDFKit now exposes layout
+  primitives and model assembly tools; application-specific document categories
+  should live in caller code.
+
+### Migration
+
+- Replace `document.NewLayoutDocument(document.DocumentKindReport)` and other
+  kind-based construction with `document.NewLayoutDocument()`.
+- Replace `document.NewGenericDocument("Title", blocks...)` with
+  `document.NewDocumentModel("Title", blocks...)`.
+- Replace report, transactional, attestation, and statement builders with
+  caller-owned functions that return `*document.LayoutDocument`.
+
+## v0.9.1 - 2026-06-28
+
+Patch release for v0.9 production-policy semantics and API polish.
+
+### Added
+
+- Added tri-state `CompressionMode` values for `CompressionPolicy`, plus
+  explicit worker-default and worker-disabled constants.
+- Added `OutputWithOptionsContext`, `OutputFileWithOptionsContext`,
+  `OutputSignedFileContext`, `OutputSignedWithOptionsContext`, and
+  `OutputSignedFileWithOptionsContext`.
+- Added `SetLimits`, `SetSecurityPolicy`, `SetHooks`, and
+  `SetProductionPolicy` for legacy-constructed documents.
+- Added `WithServerSafeDefaults` and `OutputFile` convenience wrappers for the
+  v0.9 production entry points.
+- Added the `ProtectionLegacyRC4` algorithm marker for the legacy protection
+  compatibility path.
+- Added `SetAESProtection` and `ErrAESProtectionUnsupported` to make AES-based
+  PDF encryption explicitly unsupported instead of partially implemented.
+- Added `importpdf.ImportOptions` and `Open*WithOptions` parsing entry points.
+- Added `TemplateDecodeOptions`, `DeserializeTemplateWithOptions`, and
+  `TemplateFingerprintVersion`.
+- Added `TemplateView`, `TemplateChildrenView`, `PagedTemplate`, and
+  `SerializableTemplate` as narrow additive template interfaces.
+- Added `ErrImageTooLarge` for source and decoded image limit failures.
+- Added `Document.Stats`, cache `Stats`/`Clear` methods, shared cache stats,
+  and shared cache clearing helpers.
+- Added opt-in `OutputStream*` and `OutputFileStream*` methods that stream
+  unsigned final PDF serialization directly to the caller or atomic temp file.
+- Added `OutputOptions.StreamFinal`, `OutputPolicy.StreamFinal`, and
+  `WithOutputPolicy` so memory-constrained callers can route ordinary output
+  methods through the streaming final writer explicitly.
+- Added the `v0.10` architecture roadmap and the pre-`v1.0` API freeze map.
+
+### Changed
+
+- Fixed partial `CompressionPolicy` structs so setting only `Level` or worker
+  counts no longer disables compression.
+- Made partial `ProductionPolicy` cache behavior server-safe by defaulting to
+  document-local caches unless shared caching is explicitly selected by a
+  preset or `CacheSet`.
+- Routed document import limits into `importpdf` parser options and aligned
+  batch presets with parser hard caps where appropriate.
+- Passed output context through attachment loading and attachment compression
+  scheduling.
+- Moved resource cache hit/miss hooks to real image/font cache boundaries and
+  documented hook concurrency requirements.
+- Made output-with-options restore output settings when canceled before close.
+- Converted DER/CMS encoding panics into signing errors at the CMS construction
+  boundary.
+- Preserved render-only `TemplateView` child dependencies when creating parent
+  templates, while keeping serialized-template output limited to serializable
+  child templates.
+- Routed final PDF serialization writes through a counted internal output sink
+  so object offsets are no longer tied directly to `Document.buffer`.
+- Moved central PDF object, dictionary, and stream boundary writes behind
+  internal syntax helpers as groundwork for the v0.10 writer cleanup.
+- Started internal runtime-policy consolidation so constructors and
+  `SetProductionPolicy` apply production/cache/compression/output settings
+  through one transition snapshot.
+- Started the internal `ResourceStore` transition by binding new documents to a
+  store-owned set of resource maps and routing stats/final-size estimates
+  through that store.
+- Routed initial image, template, imported-object, and imported-page
+  registration writes through internal `ResourceStore` methods.
+- Routed embedded-attachment stream, filespec, and compressed-stream object
+  caches through internal `ResourceStore` methods.
+- Routed core, cached UTF-8, byte-backed, reader-backed, and output-time font
+  registration updates through internal `ResourceStore` methods.
+- Routed resource dictionary, image/template/import output, compliance checks,
+  and image lookup reads through internal `ResourceStore` helpers.
+- Added internal PDF resource-name helpers for font, image, template, and
+  imported-page references so output-local names are less coupled to resource
+  identity fields.
+- Added generalized `ResourceLoader` APIs and routed image registration,
+  file-backed attachments, font resources, and string-based PDF imports through
+  the loader when installed.
+
+### Fixed
+
+- Used `ForEachObjectBorrowed` internally when rewriting imported PDF objects to
+  avoid unnecessary copies.
+- Returned `ErrImageTooLarge` instead of `ErrUnsupportedImageType` for image
+  size-limit failures.
+- Expanded fuzz seeds and targets for imported PDFs, image formats, serialized
+  templates, inspect stream/text extraction, PDF literal escaping, and DER/CMS
+  parsing and verification.
+
 ## v0.9.0 - 2026-06-28
 
 Production-stability release for the pre-v1.0 API contract.
@@ -12,8 +123,17 @@ Production-stability release for the pre-v1.0 API contract.
   `ServerSafeLimits`, `BatchLimits`, and deterministic defaults.
 - Added output-wide options and context-aware output entry points for normal and
   signed PDF output.
-- Added security gates for JavaScript actions, local HTML images, file-backed
-  attachments, raw writes, and legacy RC4 protection.
+- Added parser-level context cancellation for the built-in PDF importer,
+  imported-page lazy content, HTML tokenization/compilation, SVG parsing, image
+  reader parsing, signing analysis/scanners, and context-aware inspect helpers.
+- Added bounded, context-aware attachment loader APIs.
+- Added temp-file spooling for large deferred attachment compression to avoid
+  retaining duplicate heap copies before final PDF assembly.
+- Added automated generation benchmark budget checking.
+- Hard-disabled PDF JavaScript action output through
+  `ErrJavaScriptUnsupported` and added security gates for local HTML images,
+  file-backed attachments, raw writes, legacy RC4 protection, PDF import, and
+  PDF signing.
 - Added sentinel errors for production error handling and initial fuzz targets
   for HTML, SVG, template deserialization, image parsing, imported PDFs, and
   CMS/DER parsing.

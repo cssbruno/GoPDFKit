@@ -4,6 +4,7 @@
 package document
 
 import (
+	"context"
 	stdhtml "html"
 	"strings"
 )
@@ -23,12 +24,30 @@ type HTMLSegmentType struct {
 
 // HTMLTokenize returns a list of supported HTML tags and literal text elements.
 func HTMLTokenize(htmlStr string) []HTMLSegmentType {
-	return htmlTokenize(htmlStr, nil)
+	tokens, _ := HTMLTokenizeContext(context.Background(), htmlStr)
+	return tokens
+}
+
+// HTMLTokenizeContext returns HTML tokens and checks ctx during tokenization.
+func HTMLTokenizeContext(ctx context.Context, htmlStr string) ([]HTMLSegmentType, error) {
+	return htmlTokenizeContext(ctx, htmlStr, nil)
 }
 
 func htmlTokenize(htmlStr string, attrCache map[string]map[string]string) []HTMLSegmentType {
+	tokens, _ := htmlTokenizeContext(context.Background(), htmlStr, attrCache)
+	return tokens
+}
+
+func htmlTokenizeContext(ctx context.Context, htmlStr string, attrCache map[string]map[string]string) ([]HTMLSegmentType, error) {
 	list := make([]HTMLSegmentType, 0, strings.Count(htmlStr, "<")+1)
+	processed := 0
 	for len(htmlStr) > 0 {
+		if processed%1024 == 0 {
+			if err := outputCanceledError(ctx); err != nil {
+				return nil, err
+			}
+		}
+		processed++
 		tagStart := strings.IndexByte(htmlStr, '<')
 		if tagStart < 0 {
 			if htmlStr != "" {
@@ -72,7 +91,10 @@ func htmlTokenize(htmlStr string, attrCache map[string]map[string]string) []HTML
 			list = append(list, HTMLSegmentType{Cat: 'C', Str: name})
 		}
 	}
-	return list
+	if err := outputCanceledError(ctx); err != nil {
+		return nil, err
+	}
+	return list, nil
 }
 
 func htmlUnescapeString(s string) string {

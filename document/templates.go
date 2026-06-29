@@ -40,17 +40,31 @@ func CreateTpl(corner Point, size Size, orientationStr, unitStr, fontDirStr stri
 // UseTemplate adds a template to the current page or another template,
 // using the size and position at which it was originally written.
 func (f *Document) UseTemplate(t Template) {
+	f.UseTemplateView(t)
+}
+
+// UseTemplateView adds a renderable template view to the current page or
+// another template using the size and position at which it was originally
+// written. It does not require paging or serialization support.
+func (f *Document) UseTemplateView(t TemplateView) {
 	if t == nil {
 		f.SetErrorf("template is nil")
 		return
 	}
 	corner, size := t.Size()
-	f.UseTemplateScaled(t, corner, size)
+	f.UseTemplateViewScaled(t, corner, size)
 }
 
 // UseTemplateScaled adds a template to the current page or another template,
 // using the given page coordinates.
 func (f *Document) UseTemplateScaled(t Template, corner Point, size Size) {
+	f.UseTemplateViewScaled(t, corner, size)
+}
+
+// UseTemplateViewScaled adds a renderable template view to the current page or
+// another template using the given page coordinates. It does not require paging
+// or serialization support.
+func (f *Document) UseTemplateViewScaled(t TemplateView, corner Point, size Size) {
 	if f.err != nil {
 		return
 	}
@@ -86,7 +100,7 @@ func (f *Document) UseTemplateScaled(t Template, corner Point, size Size) {
 	tx := corner.X * f.k
 	ty := (f.curPageSize.Ht - corner.Y - size.Ht) * f.k
 
-	content := []byte(sprintf("q %.4f 0 0 %.4f %.4f %.4f cm\n/TPL%s Do Q", scaleX, scaleY, tx, ty, t.ID()))
+	content := []byte(sprintf("q %.4f 0 0 %.4f %.4f %.4f cm\n%s Do Q", scaleX, scaleY, tx, ty, templatePDFResourceName(t.ID()).String()))
 	f.outTaggedContent(content, taggedContentOptions{Artifact: true})
 }
 
@@ -97,18 +111,19 @@ func validateTemplateGeometry(corner Point, size Size) error {
 	return nil
 }
 
-func (f *Document) registerTemplate(t Template) {
+func (f *Document) registerTemplate(t TemplateView) {
+	resources := f.ensureResourceStore()
 	for _, tpl := range collectTemplates(t) {
-		f.templates[tpl.ID()] = tpl
+		resources.addTemplate(tpl)
 	}
 }
 
-func collectTemplates(root Template) []Template {
-	templates := make([]Template, 0)
+func collectTemplates(root TemplateView) []TemplateView {
+	templates := make([]TemplateView, 0)
 	seen := make(map[string]bool)
 
-	var visit func(Template)
-	visit = func(t Template) {
+	var visit func(TemplateView)
+	visit = func(t TemplateView) {
 		if invalidTemplate(t) {
 			return
 		}
@@ -119,7 +134,7 @@ func collectTemplates(root Template) []Template {
 		seen[id] = true
 		templates = append(templates, t)
 
-		for _, child := range t.Templates() {
+		for _, child := range templateChildren(t) {
 			visit(child)
 		}
 	}
@@ -128,15 +143,18 @@ func collectTemplates(root Template) []Template {
 	return templates
 }
 
-func (f *Document) registerTemplateImages(t Template) {
-	existingImages := make(map[string]bool, len(f.images))
-	for _, image := range f.images {
+func (f *Document) registerTemplateImages(t TemplateView) {
+	resources := f.ensureResourceStore()
+	existingImages := make(map[string]bool, len(resources.images))
+	for _, image := range resources.images {
 		if image != nil {
 			existingImages[image.i] = true
 		}
 	}
 
-	for name, image := range templateImages(t) {
+	images := templateImages(t)
+	for _, name := range templateImageKeys(images, true) {
+		image := images[name]
 		if image == nil {
 			f.SetErrorf("invalid template image %s: image info is nil", name)
 			return
@@ -144,17 +162,26 @@ func (f *Document) registerTemplateImages(t Template) {
 		if existingImages[image.i] {
 			continue
 		}
-		f.images[sprintf("t%s-%s", t.ID(), name)] = cloneTemplateImage(image)
+		resources.setImage(sprintf("t%s-%s", t.ID(), name), cloneTemplateImage(image))
 	}
 }
 
 // TemplateView exposes the renderable content and resources of a template.
+// Rendering code should accept this narrow interface unless it needs paging or
+// serialization.
 type TemplateView interface {
 	ID() string
 	Size() (Point, Size)
 	Bytes() []byte
 	Images() map[string]*ImageInfo
-	Templates() []Template
+}
+
+// TemplateChildrenView exposes render-only child template dependencies without
+// requiring those children to support paging or serialization. Implement this
+// alongside TemplateView when a render-only template view depends on other
+// render-only templates.
+type TemplateChildrenView interface {
+	TemplateViews() []TemplateView
 }
 
 // PagedTemplate exposes page selection for multi-page templates.
@@ -170,44 +197,40 @@ type SerializableTemplate interface {
 }
 
 // Template is an object that can be written to, then reused any number of times
-// within a document.
+// within a document. New rendering integrations should prefer TemplateView and
+// only require Template when they need paging, persistence, or gob support.
 type Template interface {
 	TemplateView
 	PagedTemplate
 	SerializableTemplate
 	gob.GobDecoder
 	gob.GobEncoder
+	Templates() []Template
+}
+
+type templateLegacyChildrenView interface {
+	Templates() []Template
 }
 
 func (f *Document) templateFontCatalog() {
-	f.out("/Font <<")
-	if !f.catalogSort {
-		for _, font := range f.fonts {
-			f.outf("/F%s %d 0 R", font.i, font.N)
-		}
-	} else {
-		keyList := make([]string, 0, len(f.fonts))
-		for key := range f.fonts {
-			keyList = append(keyList, key)
-		}
-		sort.Strings(keyList)
-		for _, key := range keyList {
-			font := f.fonts[key]
-			f.outf("/F%s %d 0 R", font.i, font.N)
-		}
+	f.out("/Font")
+	f.beginPDFDict()
+	for _, font := range f.ensureResourceStore().fontsByKey(f.catalogSort) {
+		f.outbytes(appendPDFResourceRefValue(nil, fontPDFResourceRef(font)))
 	}
-	f.out(">>")
+	f.endPDFDict()
 }
 
 // putTemplates writes the templates to the PDF.
 func (f *Document) putTemplates() {
-	templates := sortTemplates(f.templates, f.catalogSort)
+	resources := f.ensureResourceStore()
+	templates := resources.templatesForOutput(f.catalogSort)
 	for _, t := range templates {
 		corner, size := t.Size()
 
-		f.newobj()
-		f.templateObjects[t.ID()] = f.n
-		f.out("<< /Type /XObject")
+		f.newPDFDictObject()
+		resources.setTemplateObject(t.ID(), f.n)
+		f.out("/Type /XObject")
 		f.out("/Subtype /Form")
 		f.out("/Formtype 1")
 		f.outf("/BBox [%.2f %.2f %.2f %.2f]", corner.X*f.k, corner.Y*f.k, (corner.X+size.Wd)*f.k, (corner.Y+size.Ht)*f.k)
@@ -217,7 +240,7 @@ func (f *Document) putTemplates() {
 
 		// Template's resource dictionary
 		f.out("/Resources ")
-		f.out("<<")
+		f.beginPDFDict()
 		if !f.omitDeprecatedPDF2Entries() {
 			f.out("/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]")
 		}
@@ -225,7 +248,7 @@ func (f *Document) putTemplates() {
 		f.templateFontCatalog()
 		f.templateXObjectCatalog(t)
 
-		f.out(">>")
+		f.endPDFDict()
 
 		buffer := t.Bytes()
 		buffer, compressed := f.compressStreamBytes(buffer)
@@ -235,76 +258,52 @@ func (f *Document) putTemplates() {
 		if compressed {
 			f.out("/Filter /FlateDecode")
 		}
-		f.outf("/Length %d >>", len(buffer))
+		f.outf("/Length %d", len(buffer))
+		f.endPDFDict()
 		f.putstream(buffer)
-		f.out("endobj")
+		f.endPDFObject()
 	}
 }
 
-func (f *Document) templateXObjectCatalog(t Template) {
+func (f *Document) templateXObjectCatalog(t TemplateView) {
 	images := templateImages(t)
 	templates := templateChildren(t)
 	if len(images) == 0 && len(templates) == 0 {
 		return
 	}
 
-	f.out("/XObject <<")
+	f.out("/XObject")
+	f.beginPDFDict()
 	f.templateImageCatalog(t, images)
 	f.templateDependencyCatalog(templates)
-	f.out(">>")
+	f.endPDFDict()
 }
 
-func (f *Document) templateImageCatalog(t Template, images map[string]*ImageInfo) {
-	if !f.catalogSort {
-		for name, image := range images {
-			if image := f.templateOutputImage(t, name, image); image != nil {
-				f.outf("/I%s %d 0 R", image.i, image.n)
-			}
-		}
-		return
-	}
-	keyList := make([]string, 0, len(images))
-	for key := range images {
-		keyList = append(keyList, key)
-	}
-	if f.catalogSort {
-		sort.Strings(keyList)
-	}
-
-	for _, key := range keyList {
+func (f *Document) templateImageCatalog(t TemplateView, images map[string]*ImageInfo) {
+	for _, key := range templateImageKeys(images, f.catalogSort) {
 		if image := f.templateOutputImage(t, key, images[key]); image != nil {
-			f.outf("/I%s %d 0 R", image.i, image.n)
+			f.outbytes(appendPDFResourceRefValue(nil, imagePDFResourceRef(image)))
 		}
 	}
 }
 
-func (f *Document) templateOutputImage(t Template, name string, image *ImageInfo) *ImageInfo {
-	if image == nil {
-		return nil
-	}
-	if stored := f.images[sprintf("t%s-%s", t.ID(), name)]; stored != nil {
-		return stored
-	}
-	for _, stored := range f.images {
-		if stored != nil && stored.i == image.i {
-			return stored
-		}
-	}
-	return image
+func (f *Document) templateOutputImage(t TemplateView, name string, image *ImageInfo) *ImageInfo {
+	return f.ensureResourceStore().templateOutputImage(t.ID(), name, image)
 }
 
-func (f *Document) templateDependencyCatalog(templates []Template) {
+func (f *Document) templateDependencyCatalog(templates []TemplateView) {
+	resources := f.ensureResourceStore()
 	for _, t := range templates {
 		if invalidTemplate(t) {
 			continue
 		}
-		if objID, ok := f.templateObjects[t.ID()]; ok {
-			f.outf("/TPL%s %d 0 R", t.ID(), objID)
+		if objID, ok := resources.templateObject(t.ID()); ok {
+			f.outbytes(appendPDFResourceRefValue(nil, templatePDFResourceRef(t.ID(), objID)))
 		}
 	}
 }
 
-func templateKeyList(mp map[string]Template, sorted bool) (keyList []string) {
+func templateKeyList(mp map[string]TemplateView, sorted bool) (keyList []string) {
 	for key := range mp {
 		keyList = append(keyList, key)
 	}
@@ -316,8 +315,8 @@ func templateKeyList(mp map[string]Template, sorted bool) (keyList []string) {
 
 // sortTemplates orders templates so dependencies are written before the
 // templates that use them.
-func sortTemplates(templates map[string]Template, catalogSort bool) []Template {
-	sorted := make([]Template, 0, len(templates))
+func sortTemplates(templates map[string]TemplateView, catalogSort bool) []TemplateView {
+	sorted := make([]TemplateView, 0, len(templates))
 	visited := make(map[string]bool, len(templates))
 	visiting := make(map[string]bool, len(templates))
 
@@ -333,11 +332,11 @@ func sortTemplates(templates map[string]Template, catalogSort bool) []Template {
 }
 
 func appendTemplateDependencies(
-	t Template,
+	t TemplateView,
 	catalogSort bool,
 	visited map[string]bool,
 	visiting map[string]bool,
-	sorted *[]Template,
+	sorted *[]TemplateView,
 ) {
 	if t == nil || invalidTemplate(t) {
 		return
@@ -358,11 +357,11 @@ func appendTemplateDependencies(
 	*sorted = append(*sorted, t)
 }
 
-func sortedTemplateDependencies(t Template, catalogSort bool) []Template {
+func sortedTemplateDependencies(t TemplateView, catalogSort bool) []TemplateView {
 	if t == nil || invalidTemplate(t) {
 		return nil
 	}
-	dependencies := append([]Template(nil), templateChildren(t)...)
+	dependencies := append([]TemplateView(nil), templateChildren(t)...)
 	if catalogSort {
 		sort.SliceStable(dependencies, func(i, j int) bool {
 			if invalidTemplate(dependencies[i]) {
@@ -377,16 +376,36 @@ func sortedTemplateDependencies(t Template, catalogSort bool) []Template {
 	return dependencies
 }
 
-func templateImages(t Template) map[string]*ImageInfo {
+func templateImages(t TemplateView) map[string]*ImageInfo {
 	if tpl, ok := t.(*DocumentTpl); ok && tpl != nil {
 		return tpl.images
 	}
 	return t.Images()
 }
 
-func templateChildren(t Template) []Template {
-	if tpl, ok := t.(*DocumentTpl); ok && tpl != nil {
-		return tpl.templates
+func templateImageKeys(images map[string]*ImageInfo, sorted bool) []string {
+	keys := make([]string, 0, len(images))
+	for key := range images {
+		keys = append(keys, key)
 	}
-	return t.Templates()
+	if sorted {
+		sort.Strings(keys)
+	}
+	return keys
+}
+
+func templateChildren(t TemplateView) []TemplateView {
+	if withChildren, ok := t.(TemplateChildrenView); ok && withChildren != nil {
+		return withChildren.TemplateViews()
+	}
+	withChildren, ok := t.(templateLegacyChildrenView)
+	if !ok || withChildren == nil {
+		return nil
+	}
+	children := withChildren.Templates()
+	views := make([]TemplateView, 0, len(children))
+	for _, child := range children {
+		views = append(views, child)
+	}
+	return views
 }

@@ -21,12 +21,10 @@ func htmlLinkTarget(href string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid HTML link target: %w", err)
 	}
-	switch strings.ToLower(u.Scheme) {
-	case "http", "https", "mailto":
+	if allowedExternalLinkScheme(u.Scheme) {
 		return href, nil
-	default:
-		return "", fmt.Errorf("unsupported HTML link scheme: %s", u.Scheme)
 	}
+	return "", fmt.Errorf("unsupported HTML link scheme: %s", u.Scheme)
 }
 
 func htmlImageTypeFromMime(mimeType string) string {

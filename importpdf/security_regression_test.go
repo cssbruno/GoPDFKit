@@ -6,7 +6,9 @@ package importpdf
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 )
@@ -29,6 +31,64 @@ func TestObjRefAccessors(t *testing.T) {
 	}
 	if ref.String() != "12 3" {
 		t.Fatalf("String() = %q, want 12 3", ref.String())
+	}
+}
+
+func TestOpenBytesWithOptionsAppliesSourceLimit(t *testing.T) {
+	_, err := OpenBytesWithOptions([]byte("%PDF-too-large"), ImportOptions{MaxSourceBytes: 3})
+	if err == nil || !strings.Contains(err.Error(), "PDF import source exceeds maximum size") {
+		t.Fatalf("OpenBytesWithOptions() error = %v, want source size limit", err)
+	}
+}
+
+func TestOpenReaderWithOptionsAppliesSourceLimit(t *testing.T) {
+	_, err := OpenReaderWithOptions(strings.NewReader("%PDF-too-large"), ImportOptions{MaxSourceBytes: 3})
+	if err == nil || !strings.Contains(err.Error(), "PDF import source exceeds maximum size") {
+		t.Fatalf("OpenReaderWithOptions() error = %v, want source size limit", err)
+	}
+}
+
+func TestOpenReaderRejectsNil(t *testing.T) {
+	if _, err := OpenReader(nil); err == nil {
+		t.Fatal("OpenReader(nil) error = nil, want error")
+	}
+	if _, err := OpenReaderWithOptions(nil, ImportOptions{}); err == nil {
+		t.Fatal("OpenReaderWithOptions(nil) error = nil, want error")
+	}
+}
+
+func TestOpenReaderWithOptionsContextCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := OpenReaderWithOptionsContext(ctx, strings.NewReader("%PDF-1.4\n%%EOF"), ImportOptions{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("OpenReaderWithOptionsContext() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestOpenReaderAtWithOptionsContextCanceledDuringParse(t *testing.T) {
+	source := minimalImportPDF()
+	ctx, cancel := context.WithCancel(context.Background())
+	reader := cancelingReaderAt{data: source, cancel: cancel}
+
+	_, err := OpenReaderAtWithOptionsContext(ctx, reader, int64(len(source)), ImportOptions{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("OpenReaderAtWithOptionsContext() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestPageContextCanceled(t *testing.T) {
+	source, err := OpenBytes(minimalImportPDF())
+	if err != nil {
+		t.Fatalf("OpenBytes() error = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err = source.PageContext(ctx, 1, "MediaBox")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("PageContext() error = %v, want context.Canceled", err)
 	}
 }
 
@@ -79,6 +139,30 @@ func TestPageRefContentErrReportsLazyError(t *testing.T) {
 	}
 }
 
+func TestPageRefContentWithContextCanceled(t *testing.T) {
+	page := &PageRef{
+		source: &Source{},
+		box:    pdfBox{urx: 10, ury: 10},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	content, err := page.ContentWithContext(ctx)
+	if !errors.Is(err, context.Canceled) || content != nil {
+		t.Fatalf("ContentWithContext() = %q, %v; want nil, context.Canceled", content, err)
+	}
+	if page.contentErr != nil {
+		t.Fatalf("ContentWithContext canceled before lazy load poisoned ContentErr: %v", page.contentErr)
+	}
+	content, err = page.ContentWithError()
+	if err != nil {
+		t.Fatalf("ContentWithError() after canceled context error = %v", err)
+	}
+	if string(content) != "q\nQ" {
+		t.Fatalf("ContentWithError() after canceled context = %q, want wrapped empty content", content)
+	}
+}
+
 func TestSecurityValueArrayLimit(t *testing.T) {
 	var input strings.Builder
 	input.WriteByte('[')
@@ -99,4 +183,38 @@ func zlibBytes(data []byte) []byte {
 	_, _ = writer.Write(data)
 	_ = writer.Close()
 	return out.Bytes()
+}
+
+type cancelingReaderAt struct {
+	data   []byte
+	cancel context.CancelFunc
+}
+
+func (r cancelingReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	if r.cancel != nil {
+		r.cancel()
+	}
+	if off < 0 || off >= int64(len(r.data)) {
+		return 0, io.EOF
+	}
+	n := copy(p, r.data[off:])
+	if n < len(p) {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
+func minimalImportPDF() []byte {
+	return []byte("%PDF-1.4\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Resources <<>> /Contents 4 0 R >>\nendobj\n" +
+		"4 0 obj\n<< /Length 0 >>\nstream\n\nendstream\nendobj\n" +
+		"xref\n0 5\n" +
+		"0000000000 65535 f \n" +
+		"0000000009 00000 n \n" +
+		"0000000058 00000 n \n" +
+		"0000000115 00000 n \n" +
+		"0000000216 00000 n \n" +
+		"trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n265\n%%EOF\n")
 }

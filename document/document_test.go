@@ -2926,18 +2926,14 @@ func ExampleDocument_Rect() {
 	// Successfully generated assets/generated/pdf/Document_WrappedTableCells.pdf
 }
 
-// ExampleDocument_SetJavascript demonstrates including JavaScript in the document.
+// ExampleDocument_SetJavascript demonstrates that PDF JavaScript actions are
+// rejected.
 func ExampleDocument_SetJavascript() {
 	pdf := document.New("P", "mm", "A4", "")
-	pdf.SetJavascript("print(true);")
-	pdf.AddPage()
-	pdf.SetFont("Arial", "", 12)
-	pdf.Write(10, "Auto-print.")
-	fileStr := example.Filename("Document_SetJavascript")
-	err := pdf.OutputFileAndClose(fileStr)
-	example.Summary(err, fileStr)
+	err := pdf.SetJavascriptError("print(true);")
+	fmt.Println(err)
 	// Output:
-	// Successfully generated assets/generated/pdf/Document_SetJavascript.pdf
+	// JavaScript actions are not supported
 }
 
 // ExampleDocument_AddSpotColor demonstrates spot color use
