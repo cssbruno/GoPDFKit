@@ -2,33 +2,15 @@
 
 ## Unreleased
 
+## v0.10.0 - 2026-06-29
+
+Minor release for v0.9 production-policy semantics, API polish, and the
+breaking pre-v1 layout model cleanup.
+
 ### Added
 
 - Added `layout.NewDocumentModel` and `document.NewDocumentModel` as neutral
   helpers for assembling a title plus caller-supplied layout blocks.
-
-### Removed
-
-- Removed GoPDFKit-owned `DocumentKind` values and the named document model
-  builders. This is a breaking pre-v1 API change: GoPDFKit now exposes layout
-  primitives and model assembly tools; application-specific document categories
-  should live in caller code.
-
-### Migration
-
-- Replace `document.NewLayoutDocument(document.DocumentKindReport)` and other
-  kind-based construction with `document.NewLayoutDocument()`.
-- Replace `document.NewGenericDocument("Title", blocks...)` with
-  `document.NewDocumentModel("Title", blocks...)`.
-- Replace report, transactional, attestation, and statement builders with
-  caller-owned functions that return `*document.LayoutDocument`.
-
-## v0.9.1 - 2026-06-28
-
-Patch release for v0.9 production-policy semantics and API polish.
-
-### Added
-
 - Added tri-state `CompressionMode` values for `CompressionPolicy`, plus
   explicit worker-default and worker-disabled constants.
 - Added `OutputWithOptionsContext`, `OutputFileWithOptionsContext`,
@@ -110,6 +92,22 @@ Patch release for v0.9 production-policy semantics and API polish.
 - Expanded fuzz seeds and targets for imported PDFs, image formats, serialized
   templates, inspect stream/text extraction, PDF literal escaping, and DER/CMS
   parsing and verification.
+
+### Removed
+
+- Removed GoPDFKit-owned `DocumentKind` values and the named document model
+  builders. This is a breaking pre-v1 API change: GoPDFKit now exposes layout
+  primitives and model assembly tools; application-specific document categories
+  should live in caller code.
+
+### Migration
+
+- Replace `document.NewLayoutDocument(document.DocumentKindReport)` and other
+  kind-based construction with `document.NewLayoutDocument()`.
+- Replace `document.NewGenericDocument("Title", blocks...)` with
+  `document.NewDocumentModel("Title", blocks...)`.
+- Replace report, transactional, attestation, and statement builders with
+  caller-owned functions that return `*document.LayoutDocument`.
 
 ## v0.9.0 - 2026-06-28
 
