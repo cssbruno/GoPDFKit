@@ -212,7 +212,6 @@ func (f *Document) addCachedUTF8Font(fontKey, family, style string, cached cache
 	def := cached.def
 	def.File = ""
 	def.Name = fontKey
-	def.i = ""
 	def.Cw = cached.def.Cw
 	def.usedRunes = defaultUTF8UsedRunes(f.aliasNbPagesStr)
 	def.utf8File = cached.newUTF8Font()

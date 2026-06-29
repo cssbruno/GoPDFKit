@@ -1016,131 +1016,80 @@ func (f *Document) generateCIDFontMap(font *fontDefinition, lastRune int) {
 		f.out("/W []")
 		return
 	}
-	rangeID := 0
-	cidArray := make(map[int]*phpOrderedIntMap)
-	cidArrayKeys := make([]int, 0)
-	prevCid := -2
-	prevWidth := -1
-	interval := false
-	startCid := 1
+	buf := make([]byte, 0, 2048)
+	buf = append(buf, "/W ["...)
+	widths := make([]int, 0, 256)
+	startCid := 0
+	prevCid := 0
 	cwLen := lastRune + 1
-	for cid := startCid; cid < cwLen; cid++ {
-		if font.Cw[cid] == 0x00 {
+	for cid := 1; cid < cwLen; cid++ {
+		width, ok := cidFontWidth(font, cid)
+		if !ok {
 			continue
 		}
-		width := font.Cw[cid]
-		if width == 65535 {
-			width = 0
+		if len(widths) > 0 && cid != prevCid+1 {
+			buf = appendCIDWidthRun(buf, startCid, widths)
+			widths = widths[:0]
 		}
-		if numb, OK := font.usedRunes[cid]; cid > 255 && (!OK || numb == 0) {
-			continue
+		if len(widths) == 0 {
+			startCid = cid
 		}
-		if cid == prevCid+1 {
-			if width == prevWidth {
-				if width == cidArray[rangeID].get(0) {
-					cidArray[rangeID].put(nil, width)
-				} else {
-					cidArray[rangeID].pop()
-					rangeID = prevCid
-					r := phpOrderedIntMap{valueSet: make([]int, 0), keySet: make([]any, 0)}
-					cidArray[rangeID] = &r
-					cidArrayKeys = append(cidArrayKeys, rangeID)
-					cidArray[rangeID].put(nil, prevWidth)
-					cidArray[rangeID].put(nil, width)
-				}
-				interval = true
-				cidArray[rangeID].put("interval", 1)
-			} else {
-				if interval {
-					rangeID = cid
-					r := phpOrderedIntMap{valueSet: make([]int, 0), keySet: make([]any, 0)}
-					cidArray[rangeID] = &r
-					cidArrayKeys = append(cidArrayKeys, rangeID)
-					cidArray[rangeID].put(nil, width)
-				} else {
-					cidArray[rangeID].put(nil, width)
-				}
-				interval = false
-			}
-		} else {
-			rangeID = cid
-			r := phpOrderedIntMap{valueSet: make([]int, 0), keySet: make([]any, 0)}
-			cidArray[rangeID] = &r
-			cidArrayKeys = append(cidArrayKeys, rangeID)
-			cidArray[rangeID].put(nil, width)
-			interval = false
-		}
+		widths = append(widths, width)
 		prevCid = cid
-		prevWidth = width
 	}
-	previousKey := -1
-	nextKey := -1
-	isInterval := false
-	for g := 0; g < len(cidArrayKeys); {
-		key := cidArrayKeys[g]
-		if cidArray[key] == nil {
-			g++
-			continue
-		}
-		ws := *cidArray[key]
-		cws := len(ws.keySet)
-		if (key == nextKey) && (!isInterval) && (ws.getIndex("interval") < 0 || cws < 4) {
-			if cidArray[key].getIndex("interval") >= 0 {
-				cidArray[key].delete("interval")
-			}
-			cidArray[previousKey] = arrayMerge(cidArray[previousKey], cidArray[key])
-			cidArrayKeys = remove(cidArrayKeys, key)
-		} else {
-			g++
-			previousKey = key
-		}
-		nextKey = key + cws
-		if ws.getIndex("interval") >= 0 {
-			if cws > 3 {
-				isInterval = true
-			} else {
-				isInterval = false
-			}
-			cidArray[key].delete("interval")
-			nextKey--
-		} else {
-			isInterval = false
-		}
-	}
-	var w fmtBuffer
-	for _, k := range cidArrayKeys {
-		ws := cidArray[k]
-		if ws == nil {
-			continue
-		}
-		if len(arrayCountValues(ws.valueSet)) == 1 {
-			w.printf(" %d %d %d", k, k+len(ws.valueSet)-1, ws.get(0))
-		} else {
-			w.printf(" %d [ %s ]\n", k, implode(" ", ws.valueSet))
-		}
-	}
-	f.out("/W [" + w.String() + " ]")
+	buf = appendCIDWidthRun(buf, startCid, widths)
+	buf = append(buf, " ]"...)
+	f.outbytes(buf)
 }
 
-func implode(sep string, arr []int) string {
-	var s fmtBuffer
-	for i := 0; i < len(arr)-1; i++ {
-		s.printf("%v", arr[i])
-		_, _ = s.WriteString(sep)
+func cidFontWidth(font *fontDefinition, cid int) (int, bool) {
+	if cid <= 0 || cid >= len(font.Cw) {
+		return 0, false
 	}
-	if len(arr) > 0 {
-		s.printf("%v", arr[len(arr)-1])
+	width := font.Cw[cid]
+	if width == 0 {
+		return 0, false
 	}
-	return s.String()
+	if width == 65535 {
+		width = 0
+	}
+	if cid > 255 {
+		numb, ok := font.usedRunes[cid]
+		if !ok || numb == 0 {
+			return 0, false
+		}
+	}
+	return width, true
 }
 
-// arrayCountValues counts the occurrences of each item in mp.
-func arrayCountValues(mp []int) map[int]int {
-	answer := make(map[int]int)
-	for _, v := range mp {
-		answer[v]++
+func appendCIDWidthRun(dst []byte, startCID int, widths []int) []byte {
+	if len(widths) == 0 {
+		return dst
 	}
-	return answer
+	allSame := true
+	width := widths[0]
+	for _, next := range widths[1:] {
+		if next != width {
+			allSame = false
+			break
+		}
+	}
+	dst = append(dst, ' ')
+	dst = appendPDFInt(dst, startCID)
+	if allSame {
+		dst = append(dst, ' ')
+		dst = appendPDFInt(dst, startCID+len(widths)-1)
+		dst = append(dst, ' ')
+		return appendPDFInt(dst, width)
+	}
+	dst = append(dst, " [ "...)
+	for i, width := range widths {
+		if i > 0 {
+			dst = append(dst, ' ')
+		}
+		dst = appendPDFInt(dst, width)
+	}
+	return append(dst, " ]\n"...)
 }
 
 func (f *Document) loadFontFile(name string) ([]byte, error) {

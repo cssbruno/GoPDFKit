@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## v0.10.1 - 2026-06-29
+
+Patch release for UTF-8 generation benchmark budget stability.
+
+### Fixed
+
+- Reused cached UTF-8 font IDs instead of re-hashing full font definitions for
+  every document.
+- Reduced UTF-8 CID width-map allocations by emitting compact `/W` arrays
+  directly during font output.
+
 ## v0.10.0 - 2026-06-29
 
 Minor release for v0.9 production-policy semantics, API polish, and the
