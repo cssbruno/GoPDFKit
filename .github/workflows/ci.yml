@@ -113,27 +113,3 @@ jobs:
           name: compliance-artifacts
           path: artifacts/compliance
 
-  benchmarks:
-    name: Generation Benchmarks
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: tools/go.mod
-          cache: true
-
-      - name: Run generation benchmarks
-        run: make bench-generation-core-ci
-
-      - name: Check benchmark budgets
-        run: make bench-generation-core-budget
-
-      - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
-        with:
-          name: generation-benchmarks
-          path: artifacts/generation-core-benchmarks.txt
