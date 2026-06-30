@@ -82,11 +82,13 @@ type htmlTableMeasuredCell struct {
 
 type htmlTableCellStyleCacheKey struct {
 	cellStyle       string
+	cellDecl        string
 	cellAlign       string
 	cellBgColor     string
 	cellBorder      string
 	cellBorderColor string
 	rowStyle        string
+	rowDecl         string
 	rowBgColor      string
 	rowBorder       string
 	rowBorderColor  string
@@ -1075,7 +1077,7 @@ func (html *HTML) measureTableRows(compiled *CompiledHTML, rows []htmlTableLayou
 	measuredRows := make([]htmlTableMeasuredRow, len(rows))
 	heights := make([]float64, len(rows))
 	for i := range heights {
-		heights[i] = lineHt + 2*padding
+		heights[i] = lineHt
 	}
 	tableFill := html.cellBackground(tableAttrs)
 	var cellStyleCache htmlTableCellStyleCache
@@ -1113,9 +1115,10 @@ func (html *HTML) measureTableRow(compiled *CompiledHTML, rowIndex int, row html
 	measuredRow := htmlTableMeasuredRow{index: rowIndex, row: row, cells: make([]htmlTableMeasuredCell, 0, len(row.cells))}
 	rowEl := HTMLSegmentType{Cat: 'O', Str: "tr", Attr: row.row.attrs}
 	rowAncestors := appendHTMLAncestors(tableAncestors, rowEl)
-	rowFill := html.cellBackground(row.row.attrs)
+	rowDecl := html.tableElementDeclarations(compiled, row.row.start, rowEl, cssRules, tableAncestors)
+	rowFill := html.cellBackgroundFromDeclarations(row.row.attrs, rowDecl)
 	for _, placement := range row.cells {
-		measuredRow.cells = append(measuredRow.cells, html.measureTableCell(compiled, row, placement, colOffsets, padding, lineHt, inherited, fallback, cssRules, rowAncestors, tableBorder, rowFill, tableFill, cellStyleCache))
+		measuredRow.cells = append(measuredRow.cells, html.measureTableCell(compiled, row, placement, colOffsets, padding, lineHt, inherited, fallback, cssRules, rowAncestors, tableBorder, rowDecl, rowFill, tableFill, cellStyleCache))
 	}
 	return measuredRow
 }
@@ -1123,16 +1126,17 @@ func (html *HTML) measureTableRow(compiled *CompiledHTML, rowIndex int, row html
 func (html *HTML) measureTableRowHeights(compiled *CompiledHTML, rows []htmlTableLayoutRow, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, tableAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, tableAttrs map[string]string) []float64 {
 	heights := make([]float64, len(rows))
 	for i := range heights {
-		heights[i] = lineHt + 2*padding
+		heights[i] = lineHt
 	}
 	tableFill := html.cellBackground(tableAttrs)
 	var cellStyleCache htmlTableCellStyleCache
 	for rowIndex, row := range rows {
 		rowEl := HTMLSegmentType{Cat: 'O', Str: "tr", Attr: row.row.attrs}
 		rowAncestors := appendHTMLAncestors(tableAncestors, rowEl)
-		rowFill := html.cellBackground(row.row.attrs)
+		rowDecl := html.tableElementDeclarations(compiled, row.row.start, rowEl, cssRules, tableAncestors)
+		rowFill := html.cellBackgroundFromDeclarations(row.row.attrs, rowDecl)
 		for _, placement := range row.cells {
-			required := html.measureTableCellRequiredHeight(compiled, row, placement, colOffsets, padding, lineHt, inherited, fallback, cssRules, rowAncestors, tableBorder, rowFill, tableFill, &cellStyleCache)
+			required := html.measureTableCellRequiredHeight(compiled, row, placement, colOffsets, padding, lineHt, inherited, fallback, cssRules, rowAncestors, tableBorder, rowDecl, rowFill, tableFill, &cellStyleCache)
 			span := placement.rowspan
 			if span < 1 {
 				span = 1
@@ -1158,7 +1162,7 @@ func (html *HTML) measureTableRowHeights(compiled *CompiledHTML, rows []htmlTabl
 	return heights
 }
 
-func (html *HTML) measureTableCellRequiredHeight(compiled *CompiledHTML, row htmlTableLayoutRow, placement htmlTableCellPlacement, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, rowAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, rowFill, tableFill CSSColorType, cellStyleCache *htmlTableCellStyleCache) float64 {
+func (html *HTML) measureTableCellRequiredHeight(compiled *CompiledHTML, row htmlTableLayoutRow, placement htmlTableCellPlacement, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, rowAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, rowDecl map[string]string, rowFill, tableFill CSSColorType, cellStyleCache *htmlTableCellStyleCache) float64 {
 	cell := row.row.cells[placement.cellIndex]
 	style := inherited
 	if cell.header {
@@ -1170,14 +1174,15 @@ func (html *HTML) measureTableCellRequiredHeight(compiled *CompiledHTML, row htm
 	cellEl := HTMLSegmentType{Cat: 'O', Str: cell.tag, Attr: cell.attrs}
 	html.applyCompiledElementStyle(compiled, cell.start, &style, cellEl, cssRules, inherited.fontSize, inherited.lineHeight, rowAncestors...)
 	html.applyTextStyle(style, fallback)
+	cellDecl := html.tableElementDeclarations(compiled, cell.start, cellEl, cssRules, rowAncestors)
 	wd := htmlTablePrefixSpanWidth(colOffsets, placement.col, placement.colspan)
-	cellStyle := html.cachedTableCellStyle(cell.attrs, row.row.attrs, style.align, padding, wd, tableBorder, rowFill, tableFill, cellStyleCache)
+	cellStyle := html.cachedTableCellStyle(cell.attrs, row.row.attrs, cellDecl, rowDecl, style.align, padding, wd, tableBorder, rowFill, tableFill, cellStyleCache)
 	contentWd := htmlMaxFloat(wd-cellStyle.padding.left-cellStyle.padding.right, 0)
 	text := htmlTableCellText(cell, style.preserveWhitespace)
 	return html.tableCellTextHeight(text, contentWd, style, lineHt) + cellStyle.padding.top + cellStyle.padding.bottom
 }
 
-func (html *HTML) measureTableCell(compiled *CompiledHTML, row htmlTableLayoutRow, placement htmlTableCellPlacement, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, rowAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, rowFill, tableFill CSSColorType, cellStyleCache *htmlTableCellStyleCache) htmlTableMeasuredCell {
+func (html *HTML) measureTableCell(compiled *CompiledHTML, row htmlTableLayoutRow, placement htmlTableCellPlacement, colOffsets []float64, padding, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, rowAncestors []HTMLSegmentType, tableBorder htmlBorderStyle, rowDecl map[string]string, rowFill, tableFill CSSColorType, cellStyleCache *htmlTableCellStyleCache) htmlTableMeasuredCell {
 	cell := row.row.cells[placement.cellIndex]
 	style := inherited
 	if cell.header {
@@ -1189,8 +1194,9 @@ func (html *HTML) measureTableCell(compiled *CompiledHTML, row htmlTableLayoutRo
 	cellEl := HTMLSegmentType{Cat: 'O', Str: cell.tag, Attr: cell.attrs}
 	html.applyCompiledElementStyle(compiled, cell.start, &style, cellEl, cssRules, inherited.fontSize, inherited.lineHeight, rowAncestors...)
 	html.applyTextStyle(style, fallback)
+	cellDecl := html.tableElementDeclarations(compiled, cell.start, cellEl, cssRules, rowAncestors)
 	wd := htmlTablePrefixSpanWidth(colOffsets, placement.col, placement.colspan)
-	cellStyle := html.cachedTableCellStyle(cell.attrs, row.row.attrs, style.align, padding, wd, tableBorder, rowFill, tableFill, cellStyleCache)
+	cellStyle := html.cachedTableCellStyle(cell.attrs, row.row.attrs, cellDecl, rowDecl, style.align, padding, wd, tableBorder, rowFill, tableFill, cellStyleCache)
 	contentWd := htmlMaxFloat(wd-cellStyle.padding.left-cellStyle.padding.right, 0)
 	text := htmlTableCellText(cell, style.preserveWhitespace)
 	lineCount := htmlSplitLineCount(html.pdf, text, contentWd)
@@ -1683,7 +1689,11 @@ func htmlTableCellPaddingFromStyle(decl map[string]string, pdf *Document, fallba
 }
 
 func (html *HTML) cellAlign(attrs map[string]string, fallback string) string {
-	align := strings.ToLower(firstNonEmpty(html.styleValue(attrs, "text-align"), attrs["align"]))
+	return html.cellAlignFromDeclarations(attrs, html.styleDeclarations(attrs), fallback)
+}
+
+func (html *HTML) cellAlignFromDeclarations(attrs map[string]string, decl map[string]string, fallback string) string {
+	align := strings.ToLower(firstNonEmpty(decl["text-align"], attrs["align"]))
 	switch align {
 	case "center":
 		return "C"
@@ -1698,14 +1708,16 @@ func (html *HTML) cellAlign(attrs map[string]string, fallback string) string {
 	return "L"
 }
 
-func (html *HTML) cachedTableCellStyle(cellAttrs, rowAttrs map[string]string, alignFallback string, paddingFallback, relative float64, tableBorder htmlBorderStyle, rowFill, tableFill CSSColorType, cache *htmlTableCellStyleCache) htmlTableCellStyleCacheValue {
+func (html *HTML) cachedTableCellStyle(cellAttrs, rowAttrs map[string]string, cellDecl, rowDecl map[string]string, alignFallback string, paddingFallback, relative float64, tableBorder htmlBorderStyle, rowFill, tableFill CSSColorType, cache *htmlTableCellStyleCache) htmlTableCellStyleCacheValue {
 	key := htmlTableCellStyleCacheKey{
 		cellStyle:       cellAttrs["style"],
+		cellDecl:        htmlTableCellStyleDeclarationKey(cellDecl),
 		cellAlign:       cellAttrs["align"],
 		cellBgColor:     cellAttrs["bgcolor"],
 		cellBorder:      cellAttrs["border"],
 		cellBorderColor: cellAttrs["bordercolor"],
 		rowStyle:        rowAttrs["style"],
+		rowDecl:         htmlTableCellStyleDeclarationKey(rowDecl),
 		rowBgColor:      rowAttrs["bgcolor"],
 		rowBorder:       rowAttrs["border"],
 		rowBorderColor:  rowAttrs["bordercolor"],
@@ -1725,10 +1737,10 @@ func (html *HTML) cachedTableCellStyle(cellAttrs, rowAttrs map[string]string, al
 		}
 	}
 	value := htmlTableCellStyleCacheValue{
-		align:   html.cellAlign(cellAttrs, alignFallback),
-		fill:    htmlTableBackground(firstColor(html.cellBackground(cellAttrs), rowFill, tableFill)),
-		border:  html.tableCellBorder(tableBorder, cellAttrs, rowAttrs, html.pdf, relative),
-		padding: html.cellPadding(cellAttrs, html.pdf, paddingFallback, relative),
+		align:   html.cellAlignFromDeclarations(cellAttrs, cellDecl, alignFallback),
+		fill:    htmlTableBackground(firstColor(html.cellBackgroundFromDeclarations(cellAttrs, cellDecl), rowFill, tableFill)),
+		border:  html.tableCellBorder(tableBorder, cellAttrs, rowAttrs, cellDecl, rowDecl, html.pdf, relative),
+		padding: html.cellPaddingFromDeclarations(cellAttrs, cellDecl, html.pdf, paddingFallback, relative),
 	}
 	if cache != nil {
 		if !cache.hasLast {
@@ -1748,25 +1760,61 @@ func (html *HTML) cachedTableCellStyle(cellAttrs, rowAttrs map[string]string, al
 	return value
 }
 
+func htmlTableCellStyleDeclarationKey(decl map[string]string) string {
+	if len(decl) == 0 {
+		return ""
+	}
+	names := [...]string{
+		"text-align",
+		"background", "background-color",
+		"border", "border-width", "border-style", "border-color",
+		"border-top", "border-top-width", "border-top-style", "border-top-color",
+		"border-right", "border-right-width", "border-right-style", "border-right-color",
+		"border-bottom", "border-bottom-width", "border-bottom-style", "border-bottom-color",
+		"border-left", "border-left-width", "border-left-style", "border-left-color",
+		"padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
+	}
+	var b strings.Builder
+	for _, name := range names {
+		value := strings.TrimSpace(decl[name])
+		if value == "" {
+			continue
+		}
+		b.WriteString(name)
+		b.WriteByte(':')
+		b.WriteString(value)
+		b.WriteByte(';')
+	}
+	return b.String()
+}
+
 func (html *HTML) cellBackground(attrs map[string]string) CSSColorType {
-	if color, ok := parseCSSColor(firstNonEmpty(html.styleValue(attrs, "background-color"), html.styleValue(attrs, "background"), attrs["bgcolor"])); ok {
+	return html.cellBackgroundFromDeclarations(attrs, html.styleDeclarations(attrs))
+}
+
+func (html *HTML) cellBackgroundFromDeclarations(attrs map[string]string, decl map[string]string) CSSColorType {
+	if color, ok := parseCSSColor(firstNonEmpty(decl["background-color"], decl["background"], attrs["bgcolor"])); ok {
 		return color
 	}
 	return CSSColorType{}
 }
 
-func (html *HTML) tableCellBorder(fallback htmlBorderStyle, cellAttrs, rowAttrs map[string]string, pdf *Document, relative float64) htmlBorderStyle {
+func (html *HTML) tableCellBorder(fallback htmlBorderStyle, cellAttrs, rowAttrs map[string]string, cellDecl, rowDecl map[string]string, pdf *Document, relative float64) htmlBorderStyle {
 	border := fallback
-	border = html.tableCellBorderFromAttrs(border, rowAttrs, pdf, relative)
-	border = html.tableCellBorderFromAttrs(border, cellAttrs, pdf, relative)
+	border = html.tableCellBorderFromDeclarations(border, rowAttrs, rowDecl, pdf, relative)
+	border = html.tableCellBorderFromDeclarations(border, cellAttrs, cellDecl, pdf, relative)
 	return border
 }
 
 func (html *HTML) tableCellBorderFromAttrs(fallback htmlBorderStyle, attrs map[string]string, pdf *Document, relative float64) htmlBorderStyle {
-	if !htmlAttrsMayAffectCellBorder(html.styleDeclarations(attrs), attrs) {
+	return html.tableCellBorderFromDeclarations(fallback, attrs, html.styleDeclarations(attrs), pdf, relative)
+}
+
+func (html *HTML) tableCellBorderFromDeclarations(fallback htmlBorderStyle, attrs map[string]string, decl map[string]string, pdf *Document, relative float64) htmlBorderStyle {
+	if !htmlAttrsMayAffectCellBorder(decl, attrs) {
 		return fallback
 	}
-	next := html.borderFromAttrs(attrs, pdf, relative)
+	next := htmlBorderFromStyle(attrs, decl, pdf, relative)
 	if next.hasAny() {
 		return next
 	}
@@ -1778,6 +1826,10 @@ func (html *HTML) tableCellBorderFromAttrs(fallback htmlBorderStyle, attrs map[s
 		fallback.left.color = next.color
 	}
 	return fallback
+}
+
+func (html *HTML) cellPaddingFromDeclarations(attrs map[string]string, decl map[string]string, pdf *Document, fallback, relative float64) htmlBoxEdges {
+	return htmlTableCellPaddingFromStyle(decl, pdf, fallback, relative)
 }
 
 func htmlAttrsMayAffectCellBorder(decl map[string]string, attrs map[string]string) bool {

@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## v0.11.1 - 2026-06-30
+
+Patch release for HTML table CSS rendering and a Brazilian lab-report example.
+
+### Added
+
+- Added a runnable Brazilian hemograma HTML example using flex layout, spans,
+  compact tables, and a clinical-report style header/footer.
+
+### Fixed
+
+- Applied selector-resolved table cell CSS to HTML table padding, background,
+  borders, and alignment in the compiled rendering path.
+- Allowed CSS table cell padding rules to reduce row height instead of being
+  clamped by the default table padding fallback.
+
 ## v0.11.0 - 2026-06-30
 
 Minor release for faster HTML rendering, compiled HTML templates, and a bounded

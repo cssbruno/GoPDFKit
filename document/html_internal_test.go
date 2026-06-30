@@ -395,6 +395,56 @@ func TestHTMLTableCellPadding(t *testing.T) {
 	}
 }
 
+func TestCompiledHTMLTableCellCSSRuleBoxStyles(t *testing.T) {
+	defaultHeight := renderedCompiledHTMLTableHeight(t, `<table><tr><td>Cell</td></tr></table>`)
+	compactHeight := renderedCompiledHTMLTableHeight(t, `<style>td.compact{padding:0}</style><table><tr><td class="compact">Cell</td></tr></table>`)
+	if compactHeight >= defaultHeight-2.5 {
+		t.Fatalf("CSS table cell padding was not applied: compact height %.2f, default height %.2f", compactHeight, defaultHeight)
+	}
+
+	pdf := New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	_, lineHeight := pdf.GetFontSize()
+	compiled, err := CompileHTML(`<style>
+		td.box { background-color:#eeeeee; border:1px solid #123456; padding:0; text-align:right; }
+	</style><table><tr><td class="box">Boxed</td></tr></table>`)
+	if err != nil {
+		t.Fatalf("CompileHTML() error = %v", err)
+	}
+	html := pdf.HTMLNew()
+	html.WriteCompiled(lineHeight, compiled)
+
+	var output bytes.Buffer
+	if err := pdf.Output(&output); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	pdfText := output.String()
+	if !strings.Contains(pdfText, "Boxed") {
+		t.Fatal("generated PDF does not contain cell text")
+	}
+	if !strings.Contains(pdfText, " re ") {
+		t.Fatal("generated PDF does not contain rectangle drawing for CSS cell box styles")
+	}
+}
+
+func renderedCompiledHTMLTableHeight(t *testing.T, fragment string) float64 {
+	t.Helper()
+	pdf := New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	_, lineHeight := pdf.GetFontSize()
+	compiled, err := CompileHTML(fragment)
+	if err != nil {
+		t.Fatalf("CompileHTML() error = %v", err)
+	}
+	startY := pdf.GetY()
+	html := pdf.HTMLNew()
+	html.WriteCompiled(lineHeight, compiled)
+	return pdf.GetY() - startY
+}
+
 func TestHTMLResolvedImageSize(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	info := &ImageInfo{w: 96, h: 48, scale: pdf.k, dpi: 72}

@@ -23,6 +23,7 @@ go run ./examples/html-template
 go run ./examples/image-from-memory
 go run ./examples/import-page
 go run ./examples/invoice
+go run ./examples/lab-hemograma-html
 go run ./examples/lab-hemograma-report
 go run ./examples/merge-pdf-pages
 go run ./examples/pagination-document
@@ -76,6 +77,7 @@ go run .
 | Image from memory | `go run ./examples/image-from-memory` | `image-from-memory.pdf` |
 | Import page | `go run ./examples/import-page` | `import-page.pdf` |
 | Invoice | `go run ./examples/invoice` | `invoice.pdf` |
+| Brazilian lab hemograma HTML template | `go run ./examples/lab-hemograma-html` | `lab-hemograma-html.pdf` |
 | Brazilian lab hemograma report | `go run ./examples/lab-hemograma-report` | `lab-hemograma-report.pdf` |
 | Merge pages | `go run ./examples/merge-pdf-pages` | `merged-pages.pdf` |
 | Document pagination | `go run ./examples/pagination-document` | `pagination-document.pdf` |
