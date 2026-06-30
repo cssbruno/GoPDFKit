@@ -210,6 +210,7 @@ func ClearSharedCaches() {
 	if sharedImageFileCache != nil {
 		sharedImageFileCache.Clear()
 	}
+	clearSharedCompiledHTMLCache()
 	sharedUTF8FontFileCache.Lock()
 	sharedUTF8FontFileCache.fonts = make(map[sharedUTF8FontFileCacheKey]cachedUTF8Font)
 	sharedUTF8FontFileCache.order = nil

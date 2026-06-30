@@ -43,13 +43,16 @@ package-wide defaults:
 The document package supports page generation, text, cells, multicells, tables,
 headers, footers, drawing primitives, clipping, transforms, transparency,
 gradients, spot colors, layers, templates, imported PDF pages, images, SVG,
-WebP, controlled HTML fragments, thumbnails, attachments, metadata, XMP
-metadata, JavaScript actions, password protection, PDF signing, and signature
-verification through CMS SignedData. The inspect package provides lightweight
-PDF structure, stream, page, and literal text inspection helpers.
-Shared layout document models are domain-neutral; application-specific
-document categories should be modeled by callers using layout blocks and
-document.WriteDocument.
+WebP, controlled HTML fragments, compiled HTML templates, thumbnails,
+attachments, metadata, XMP metadata, JavaScript actions, password protection,
+PDF signing, and signature verification through CMS SignedData. The inspect
+package provides lightweight PDF structure, stream, page, and literal text
+inspection helpers.
+
+For report-like documents with fixed HTML/CSS and changing values, prefer
+CompileHTMLTemplate with HTML.WriteTemplate. The layout package is optional: it
+provides typed block model values for callers that want Go structs instead of
+HTML strings, and for existing code rendered with document.WriteDocument.
 
 Imported-page examples cover merge, split, reorder, rotate, 4-up layout,
 template overlay, and watermark overlay by creating a new PDF from imported
@@ -74,7 +77,7 @@ The main packages are:
 
   - gopdfkit: root facade with the default constructor and public aliases.
   - document: main PDF generation API.
-  - layout: renderer-independent structured document model types.
+  - layout: optional typed block model used by document.WriteDocument.
   - font: font parsing and JSON font definition generation.
   - importpdf: small wrappers around imported-page APIs.
   - inspect: lightweight PDF structure, stream, page, and text inspection.
@@ -85,23 +88,26 @@ The main packages are:
 
 Runnable examples live under examples/ and write PDFs under
 assets/generated/pdf/examples. Focused examples include reports, table reports,
-invoices, styled paragraphs, HTML/CSS styling, manual pagination,
-document-model pagination, images, compression, watermarks, merge/split/
+invoices, styled paragraphs, HTML/CSS styling, compiled HTML templates, manual
+pagination, document-model pagination, images, compression, watermarks, merge/split/
 reorder/rotate page workflows, 4-up pages, template overlays, static form
 documents, password protection, templates, thumbnails, UTF-8 fonts, and signing.
 
 # HTML Support
 
 HTMLNew renders a controlled subset of HTML fragments into PDF drawing
-operations. It is useful for rich text, generated sections, reports, letters,
-and static forms. Supported CSS maps to PDF operations for text, colors,
-spacing, borders, border radius, backgrounds, simple box shadows, line height,
-page breaks, and table layout. It is not a browser engine.
+operations. Each Write call uses a bounded shared cache of compiled render
+plans; CompileHTML and WriteCompiled expose explicit plan ownership. Supported
+CSS maps to PDF operations for text, colors, spacing, borders, backgrounds, page
+breaks, table layout, and a bounded flexbox subset. It is not a browser engine.
 
-Use document.RenderHTMLTemplate for simple {{key}} substitution before
-rendering HTML. Plain values are escaped, HTMLTemplateRaw inserts trusted HTML,
-and HTMLTemplateImage inserts an img tag that can be sized and spaced with
-supported HTML/CSS.
+Use HTML.Write for normal fragments, CompileHTML with HTML.WriteCompiled when
+you want to own a reusable compiled plan, RenderHTMLTemplate with HTML.Write for
+one-off templates that insert trusted raw HTML or HTMLTemplateImage, and
+CompileHTMLTemplate with HTML.WriteTemplate for repeated documents where the
+HTML shape stays fixed but text or safe attributes change. Compiled-template
+slots are limited to text nodes and non-structural attributes such as href, src,
+alt, width, and height.
 
 # Errors
 

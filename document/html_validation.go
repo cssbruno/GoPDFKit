@@ -114,9 +114,9 @@ func htmlElementDepthMessage(tokens []HTMLSegmentType, maxDepth int) string {
 	return ""
 }
 
-var htmlSupportedTags = map[string]bool{"a": true, "article": true, "b": true, "br": true, "center": true, "caption": true, "code": true, "dd": true, "del": true, "div": true, "dl": true, "dt": true, "em": true, "figcaption": true, "figure": true, "footer": true, "h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true, "head": true, "header": true, "hr": true, "i": true, "img": true, "ins": true, "kbd": true, "left": true, "li": true, "ol": true, "p": true, "pre": true, "right": true, "s": true, "samp": true, "script": true, "section": true, "strike": true, "strong": true, "style": true, "sub": true, "sup": true, "svg": true, "table": true, "tbody": true, "td": true, "tfoot": true, "th": true, "thead": true, "tr": true, "u": true, "ul": true}
+var htmlSupportedTags = map[string]bool{"a": true, "article": true, "b": true, "br": true, "center": true, "caption": true, "code": true, "dd": true, "del": true, "div": true, "dl": true, "dt": true, "em": true, "figcaption": true, "figure": true, "footer": true, "h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true, "head": true, "header": true, "hr": true, "i": true, "img": true, "ins": true, "kbd": true, "left": true, "li": true, "ol": true, "p": true, "pre": true, "right": true, "s": true, "samp": true, "script": true, "section": true, "span": true, "strike": true, "strong": true, "style": true, "sub": true, "sup": true, "svg": true, "table": true, "tbody": true, "td": true, "tfoot": true, "th": true, "thead": true, "tr": true, "u": true, "ul": true}
 
-var htmlSupportedCSSProperties = map[string]bool{"background": true, "background-color": true, "border": true, "border-bottom": true, "border-bottom-color": true, "border-bottom-left-radius": true, "border-bottom-right-radius": true, "border-bottom-style": true, "border-bottom-width": true, "border-collapse": true, "border-color": true, "border-left": true, "border-left-color": true, "border-left-style": true, "border-left-width": true, "border-radius": true, "border-right": true, "border-right-color": true, "border-right-style": true, "border-right-width": true, "border-style": true, "border-top": true, "border-top-color": true, "border-top-left-radius": true, "border-top-right-radius": true, "border-top-style": true, "border-top-width": true, "border-width": true, "box-shadow": true, "break-after": true, "break-before": true, "break-inside": true, "color": true, "font-family": true, "font-size": true, "font-style": true, "font-weight": true, "height": true, "line-height": true, "list-style": true, "list-style-type": true, "margin": true, "margin-bottom": true, "margin-left": true, "margin-right": true, "margin-top": true, "max-height": true, "max-width": true, "object-fit": true, "padding": true, "padding-bottom": true, "padding-left": true, "padding-right": true, "padding-top": true, "page-break-after": true, "page-break-before": true, "page-break-inside": true, "text-align": true, "text-decoration": true, "vertical-align": true, "white-space": true, "width": true}
+var htmlSupportedCSSProperties = map[string]bool{"align-content": true, "align-items": true, "align-self": true, "background": true, "background-color": true, "border": true, "border-bottom": true, "border-bottom-color": true, "border-bottom-left-radius": true, "border-bottom-right-radius": true, "border-bottom-style": true, "border-bottom-width": true, "border-collapse": true, "border-color": true, "border-left": true, "border-left-color": true, "border-left-style": true, "border-left-width": true, "border-radius": true, "border-right": true, "border-right-color": true, "border-right-style": true, "border-right-width": true, "border-style": true, "border-top": true, "border-top-color": true, "border-top-left-radius": true, "border-top-right-radius": true, "border-top-style": true, "border-top-width": true, "border-width": true, "box-shadow": true, "break-after": true, "break-before": true, "break-inside": true, "color": true, "column-gap": true, "display": true, "flex": true, "flex-basis": true, "flex-direction": true, "flex-grow": true, "flex-shrink": true, "flex-wrap": true, "gap": true, "height": true, "justify-content": true, "font-family": true, "font-size": true, "font-style": true, "font-weight": true, "line-height": true, "list-style": true, "list-style-type": true, "margin": true, "margin-bottom": true, "margin-left": true, "margin-right": true, "margin-top": true, "max-height": true, "max-width": true, "min-height": true, "min-width": true, "object-fit": true, "order": true, "padding": true, "padding-bottom": true, "padding-left": true, "padding-right": true, "padding-top": true, "page-break-after": true, "page-break-before": true, "page-break-inside": true, "row-gap": true, "text-align": true, "text-decoration": true, "vertical-align": true, "white-space": true, "width": true}
 
 func (html *HTML) logUnsupportedHTML(tokens []HTMLSegmentType) {
 	if html.DebugLog == nil {
@@ -151,8 +151,16 @@ func (html *HTML) logUnsupportedStyleProperties(style string, seen map[string]bo
 	if html.DebugLog == nil {
 		return
 	}
-	for name := range parseStyleDeclarations(style) {
+	for name, value := range parseStyleDeclarations(style) {
 		if htmlSupportedCSSProperties[name] {
+			if name == "display" && !htmlSupportedDisplayValue(value) {
+				key := "css-display:" + value
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+				html.DebugLog(fmt.Sprintf("CSS display value %q in %s is not supported yet", value, source))
+			}
 			continue
 		}
 		key := "css-property:" + name
@@ -161,6 +169,19 @@ func (html *HTML) logUnsupportedStyleProperties(style string, seen map[string]bo
 		}
 		seen[key] = true
 		html.DebugLog(fmt.Sprintf("CSS property %q in %s is not supported yet", name, source))
+	}
+}
+
+func htmlSupportedDisplayValue(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return true
+	}
+	switch value {
+	case "block", "inline", "inline-block", "flex", "inline-flex":
+		return true
+	default:
+		return false
 	}
 }
 

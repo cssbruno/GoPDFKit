@@ -16,10 +16,11 @@ import (
 // inline SVG, alignment, font color, font size, and CSS declarations that map
 // directly to gopdfkit text and drawing operations.
 //
-// HTML is not a browser engine. It does not implement the full HTML
-// parsing algorithm, CSS cascade, layout model, flexbox, grid, floats,
-// positioning, paged media, or browser-grade typography. For predictable
-// output, generate simple content that stays within the documented subset.
+// HTML is not a browser engine. It does not implement the full HTML parsing
+// algorithm, CSS cascade, browser layout model, grid, floats, positioning,
+// paged media, or browser-grade typography. It supports a bounded flexbox
+// subset for direct child blocks. For predictable output, generate simple
+// content that stays within the documented subset.
 type HTML struct {
 	pdf *Document
 	// Link controls the style applied to rendered anchor text.
@@ -109,9 +110,10 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 	_ = html.WriteContext(context.Background(), lineHt, htmlStr)
 }
 
-// WriteContext renders an HTML fragment and checks ctx before compile and
-// render. Deeper cancellation within long table/image rendering remains best
-// effort until those internals accept context directly.
+// WriteContext gets or compiles an HTML fragment render plan, renders it, and
+// checks ctx before compile and render. Deeper cancellation within long
+// table/image rendering remains best effort until those internals accept
+// context directly.
 func (html *HTML) WriteContext(ctx context.Context, lineHt float64, htmlStr string) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -124,7 +126,7 @@ func (html *HTML) WriteContext(ctx context.Context, lineHt float64, htmlStr stri
 		html.pdf.SetError(ErrHTMLLimitExceeded)
 		return html.pdf.Error()
 	}
-	compiled, err := compileHTMLWithDataImageLimit(htmlStr, false, html.maxDataImageBytes())
+	compiled, err := compileHTMLForWriteContext(ctx, htmlStr, html.maxDataImageBytes())
 	if err != nil {
 		html.pdf.SetError(err)
 		return err
@@ -445,7 +447,10 @@ func (html *HTML) WriteCompiled(lineHt float64, compiled *CompiledHTML) {
 						}
 					}
 				}
-				if html.blockHasBoxStyle(el, cssRules, elementStack...) {
+				if html.elementDisplayFlex(el, cssRules, elementStack...) {
+					i = html.writeCompiledFlexBox(compiled, tokens, i, lineHt, st, defaultColor, cssRules, elementStack)
+					pushStyle = false
+				} else if html.blockHasBoxStyle(el, cssRules, elementStack...) {
 					i = html.writeCompiledBlockBox(compiled, tokens, i, lineHt, st, defaultColor, cssRules, elementStack)
 					pushStyle = false
 				} else {

@@ -995,6 +995,304 @@ func TestHTMLWritePageBreakControls(t *testing.T) {
 	}
 }
 
+func TestHTMLWriteSpanAndFlexBox(t *testing.T) {
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	_, lineHeight := pdf.GetFontSize()
+	html := pdf.HTMLNew()
+	fragment := `<style>
+		.row { display:flex; gap:4mm; justify-content:space-between; align-items:stretch; }
+		.card { flex:1; background-color:#f4f8fb; border:1px solid #8ca9c7; padding:3mm; }
+		.accent { color:#166944; font-weight:bold; }
+	</style>
+	<div class="row">
+		<div class="card">First <span class="accent">flex</span> card</div>
+		<div class="card">Second card</div>
+		<div class="card">Third card</div>
+	</div>`
+	if messages := html.ValidateHTML(fragment); len(messages) != 0 {
+		t.Fatalf("ValidateHTML messages = %#v, want none", messages)
+	}
+	html.Write(lineHeight, fragment)
+
+	var output bytes.Buffer
+	if err := pdf.Output(&output); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	pdfText := output.String()
+	for _, want := range []string{"First", "flex", "card", "Second", "Third"} {
+		if !strings.Contains(pdfText, want) {
+			t.Fatalf("generated PDF does not contain flex text %q", want)
+		}
+	}
+}
+
+func TestHTMLWriteAdvancedFlexSizingAndStructuredItems(t *testing.T) {
+	fragment := `<style>
+		.board { display:flex; flex-wrap:wrap; row-gap:2mm; column-gap:3mm; justify-content:space-between; align-items:flex-start; align-content:center; height:72mm; border:1px solid #9fb0bf; padding:3mm; }
+		.card { flex:1 1 48mm; min-width:42mm; max-width:66mm; background-color:#f5f8fb; border:1px solid #b6c6d5; padding:2mm; }
+		.first { order:-1; }
+		.third { order:3; }
+		.center { align-self:center; min-height:28mm; }
+		.fixed { flex:0 0 82mm; flex-shrink:0; }
+		.stack { display:flex; flex-direction:column; gap:1mm; align-items:center; justify-content:center; }
+		.pill { background-color:#e7f2eb; border:1px solid #9abea7; padding:1mm; max-width:35mm; }
+		table.nested { width:100%; border-collapse:collapse; margin:1mm 0 0 0; }
+		table.nested td { border:1px solid #c7d2dd; padding:1mm; font-size:8pt; }
+		.muted { color:#657282; font-size:8pt; }
+	</style>
+	<div class="board">
+		<div class="card third">Third visual card<br><span class="muted">source order first, flex order last</span></div>
+		<div class="card first">First visual card
+			<div class="stack"><span class="pill">Nested flex note A</span><span class="pill">Nested flex note B</span></div>
+		</div>
+		<div class="card center">Centered card with nested table
+			<table class="nested"><tr><td>Code</td><td>Meaning</td></tr><tr><td>OK</td><td>Structured table inside flex</td></tr></table>
+		</div>
+		<div class="card fixed">Fixed shrink card<br><span class="muted">flex-shrink:0 with flex basis</span></div>
+	</div>`
+
+	compiled, err := document.CompileHTML(fragment)
+	if err != nil {
+		t.Fatalf("CompileHTML() error = %v", err)
+	}
+	if stats := compiled.Stats(); stats.Tables != 1 || stats.CSSRules == 0 {
+		t.Fatalf("compiled stats = %#v, want nested table and CSS rules", stats)
+	}
+
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 10)
+	_, lineHeight := pdf.GetFontSize()
+	html := pdf.HTMLNew()
+	if messages := html.ValidateHTML(fragment); len(messages) != 0 {
+		t.Fatalf("ValidateHTML messages = %#v, want none", messages)
+	}
+	html.WriteCompiled(lineHeight, compiled)
+
+	var output bytes.Buffer
+	if err := pdf.Output(&output); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	pdfText := output.String()
+	for _, want := range []string{
+		"First visual card",
+		"note A",
+		"note B",
+		"Centered card with nested table",
+		"Structured table",
+		"inside flex",
+		"Fixed shrink card",
+		"Third visual card",
+	} {
+		if !strings.Contains(pdfText, want) {
+			t.Fatalf("generated PDF does not contain advanced flex text %q", want)
+		}
+	}
+	firstIndex := strings.Index(pdfText, "First visual card")
+	thirdIndex := strings.Index(pdfText, "Third visual card")
+	if firstIndex < 0 || thirdIndex < 0 || firstIndex > thirdIndex {
+		t.Fatalf("generated PDF order puts First visual card at %d and Third visual card at %d, want flex order applied", firstIndex, thirdIndex)
+	}
+}
+
+func TestHTMLWriteFlexEdgeCases(t *testing.T) {
+	fragment := `<style>
+		p { color:#344151; line-height:1.3; }
+		.empty { display:flex; gap:2mm; border:1px solid #d5dde6; padding:2mm; margin:1mm 0 3mm 0; }
+		.reverse { display:flex; flex-direction:row-reverse; gap:2mm; align-items:center; margin:2mm 0; }
+		.inline { display:inline-flex; flex-wrap:wrap; column-gap:2mm; row-gap:1mm; margin:2mm 0; }
+		.page-flex { display:flex; flex-direction:column; justify-content:space-evenly; align-items:center; gap:2mm; height:48mm; page-break-before:always; border:1px solid #9fb0bf; padding:3mm; }
+		.unit { flex:0 1 54mm; min-width:22mm; max-width:60mm; background-color:#f5f8fb; border:1px solid #b6c6d5; padding:2mm; }
+		.fixed { flex:none; width:45mm; }
+		.auto { flex:auto; min-width:30mm; max-width:64mm; }
+		.align-end { align-self:flex-end; }
+		.small { color:#657282; font-size:8pt; }
+	</style>
+	<p>Before edge cases</p>
+	<div class="empty"></div>
+	<div class="reverse">
+		<div class="unit">Reverse A</div>
+		<div class="unit fixed">Reverse B fixed</div>
+		<div class="unit auto">Reverse C auto</div>
+	</div>
+	<div class="inline">
+		Direct text flex item
+		<span class="unit">Inline span item</span>
+		<span class="unit">Wrapped span item with <span class="small">styled span child</span></span>
+	</div>
+	<div class="page-flex">
+		<div class="unit fixed">Column fixed item</div>
+		<div class="unit align-end">Column aligned end</div>
+		<div class="unit auto">Column auto item</div>
+	</div>
+	<p>After edge cases</p>`
+
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 10)
+	_, lineHeight := pdf.GetFontSize()
+	html := pdf.HTMLNew()
+	if messages := html.ValidateHTML(fragment); len(messages) != 0 {
+		t.Fatalf("ValidateHTML messages = %#v, want none", messages)
+	}
+	html.Write(lineHeight, fragment)
+	if got := pdf.PageCount(); got != 2 {
+		t.Fatalf("PageCount() = %d, want page-break-before flex block to create 2 pages", got)
+	}
+
+	var output bytes.Buffer
+	if err := pdf.Output(&output); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	pdfText := output.String()
+	for _, want := range []string{
+		"Before edge cases",
+		"Reverse A",
+		"Reverse B fixed",
+		"Reverse C auto",
+		"Direct",
+		"text",
+		"Inline span item",
+		"styled",
+		"span child",
+		"Column fixed item",
+		"Column aligned end",
+		"Column auto",
+		"After edge cases",
+	} {
+		if !strings.Contains(pdfText, want) {
+			t.Fatalf("generated PDF does not contain flex edge text %q", want)
+		}
+	}
+	reverseC := strings.Index(pdfText, "Reverse C auto")
+	reverseA := strings.Index(pdfText, "Reverse A")
+	if reverseC < 0 || reverseA < 0 || reverseC > reverseA {
+		t.Fatalf("row-reverse text order C=%d A=%d, want Reverse C before Reverse A", reverseC, reverseA)
+	}
+}
+
+func TestHTMLWriteRichFlexAndTableDesigns(t *testing.T) {
+	fragment := `<style>
+		h1 { color:#1f3652; font-size:18pt; margin:0 0 4mm 0; }
+		h2 { color:#1f3652; font-size:13pt; margin:5mm 0 2mm 0; }
+		p { color:#3f4b59; line-height:1.25; margin:0 0 2mm 0; }
+		.summary { display:flex; gap:3mm; align-items:stretch; margin:2mm 0 4mm 0; }
+		.card { flex:1; background-color:#f3f8fc; border:1px solid #9db8d2; border-radius:2mm; padding:3mm; }
+		.kpi { color:#166944; font-size:16pt; font-weight:bold; }
+		.muted { color:#687384; font-size:8pt; }
+		.callout { background-color:#fff8e7; border-left:3px solid #d69222; border-top:1px solid #ead8ad; border-right:1px solid #ead8ad; border-bottom:1px solid #ead8ad; padding:3mm; margin:3mm 0; }
+		table { width:100%; border-collapse:collapse; margin:2mm 0 4mm 0; }
+		caption { color:#687384; font-size:8pt; margin-bottom:2mm; }
+		th { background-color:#e8eef5; color:#1f3652; border:1px solid #aebcce; font-weight:bold; padding:2mm; text-align:left; }
+		td { border:1px solid #c8d2df; color:#394654; padding:2mm; vertical-align:top; }
+		td.money { text-align:right; }
+		td.status { color:#166944; font-weight:bold; }
+		tr.soft td { background-color:#f8fafc; }
+		tfoot td { background-color:#f4f7fb; font-weight:bold; }
+		table.compact td { padding:1mm; font-size:8pt; }
+		table.nested { margin:1mm 0; }
+		table.nested td { border:1px solid #d7e0ea; padding:1mm; font-size:7.5pt; }
+		.approval td { height:12mm; background-color:#fbfcfd; }
+	</style>
+	<h1>Rich HTML PDF Test</h1>
+	<div class="summary">
+		<div class="card"><span class="kpi">98.7%</span><br><strong>Fulfillment SLA</strong><br><span class="muted">styled span inside flex</span></div>
+		<div class="card"><span class="kpi">$18.4k</span><br><strong>Open invoices</strong><br><span class="muted">right-aligned table below</span></div>
+		<div class="card"><span class="kpi">42 min</span><br><strong>Median response</strong><br><span class="muted">support queue</span></div>
+	</div>
+	<p class="callout"><strong>Design note: </strong>the fragment mixes flex cards, spans, captions, footers, colspan, rowspan, nested tables, and automatic PDF drawing styles.</p>
+	<h2>Invoice Review</h2>
+	<table>
+		<caption>Styled billing table with right alignment and footer total</caption>
+		<thead><tr><th width="18%">Invoice</th><th width="34%">Customer</th><th width="18%">Status</th><th width="15%">Due</th><th width="15%" class="money">Amount</th></tr></thead>
+		<tbody>
+			<tr><td>INV-4101</td><td>Acme Logistics</td><td class="status"><span>Ready</span></td><td>Jul 01</td><td class="money">$4,120.00</td></tr>
+			<tr class="soft"><td>INV-4102</td><td>Northwind Trading</td><td>Review</td><td>Jul 03</td><td class="money">$2,950.00</td></tr>
+			<tr><td>INV-4103</td><td>Contoso Retail</td><td class="status">Ready</td><td>Jul 05</td><td class="money">$1,340.00</td></tr>
+		</tbody>
+		<tfoot><tr><td colspan="4">Total ready for approval</td><td class="money">$8,410.00</td></tr></tfoot>
+	</table>
+	<h2>Operations Matrix</h2>
+	<table class="compact">
+		<thead><tr><th width="18%">Area</th><th width="26%">Owner</th><th width="28%">Today</th><th width="28%">Tomorrow</th></tr></thead>
+		<tbody>
+			<tr><td rowspan="2">Warehouse</td><td>Fulfillment</td><td>Pick-list release</td><td>Barcode audit</td></tr>
+			<tr class="soft"><td>Inventory</td><td colspan="2">Cycle count exception review</td></tr>
+			<tr><td>Support</td><td>Queue lead</td><td>Carrier follow-up</td><td>Account sync</td></tr>
+		</tbody>
+	</table>
+	<div style="page-break-before:always"></div>
+	<h1>Nested and Approval Tables</h1>
+	<table>
+		<thead><tr><th width="25%">Workstream</th><th width="45%">Details</th><th width="30%">Risk</th></tr></thead>
+		<tbody>
+			<tr>
+				<td>Carrier mapping</td>
+				<td>Partner code reconciliation
+					<table class="nested">
+						<tr><td>HTTP 202</td><td>Accepted import</td></tr>
+						<tr><td>EXC-7</td><td>Manual address review</td></tr>
+					</table>
+				</td>
+				<td><span class="status">Medium</span><br><span class="muted">Watch daily sync</span></td>
+			</tr>
+			<tr class="soft"><td>Template release</td><td>PDF packet QA and customer approval</td><td>Low</td></tr>
+		</tbody>
+	</table>
+	<table class="approval">
+		<tr><td width="50%"><strong>Prepared by</strong><br><br>PDF Services Team</td><td width="50%"><strong>Approved by</strong><br><br>Account Owner</td></tr>
+	</table>`
+
+	compiled, err := document.CompileHTML(fragment)
+	if err != nil {
+		t.Fatalf("CompileHTML() error = %v", err)
+	}
+	if stats := compiled.Stats(); stats.Tables < 5 || stats.CSSRules == 0 || stats.CachedStyles == 0 {
+		t.Fatalf("compiled stats = %#v, want rich table and CSS coverage", stats)
+	}
+
+	pdf := document.New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 10)
+	_, lineHeight := pdf.GetFontSize()
+	html := pdf.HTMLNew()
+	if messages := html.ValidateHTML(fragment); len(messages) != 0 {
+		t.Fatalf("ValidateHTML messages = %#v, want none", messages)
+	}
+	html.WriteCompiled(lineHeight, compiled)
+	if got := pdf.PageCount(); got != 2 {
+		t.Fatalf("PageCount() = %d, want 2", got)
+	}
+
+	var output bytes.Buffer
+	if err := pdf.Output(&output); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	pdfText := output.String()
+	for _, want := range []string{
+		"Rich HTML PDF Test",
+		"Fulfillment SLA",
+		"Invoice Review",
+		"Total ready for approval",
+		"Operations Matrix",
+		"Cycle count exception review",
+		"Nested and Approval Tables",
+		"Accepted import",
+		"Manual address review",
+		"PDF Services Team",
+	} {
+		if !strings.Contains(pdfText, want) {
+			t.Fatalf("generated PDF does not contain rich table text %q", want)
+		}
+	}
+}
+
 func TestHTMLWriteHeadStyleScriptAreNotRendered(t *testing.T) {
 	pdf := document.New("P", "mm", "A4", "")
 	pdf.SetCompression(false)

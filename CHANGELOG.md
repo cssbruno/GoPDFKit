@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+## v0.11.0 - 2026-06-30
+
+Minor release for faster HTML rendering, compiled HTML templates, and a bounded
+flexbox subset.
+
+### Added
+
+- Added `CompileHTMLTemplate`, `CompileHTMLTemplateContext`,
+  `HTML.WriteTemplate`, and `HTML.WriteTemplateContext` for fixed HTML/CSS
+  templates with changing text and safe attribute values.
+- Added a bounded shared compiled-HTML cache used by `HTML.Write` by default.
+- Added a bounded flexbox subset for direct child blocks, including row and
+  column direction, wrapping, gaps, main/cross-axis alignment, order, flex
+  grow/shrink/basis, min/max sizing, and direct text flex items.
+- Added support for `<span>` in the HTML renderer validation path.
+- Added compiled-template benchmarks and focused tests for dynamic HTML values.
+- Added runnable report examples that exercise compiled HTML, flex layout,
+  styled spans, and richer table documents.
+
+### Changed
+
+- Repositioned compiled HTML templates as the preferred path for report-like
+  documents with fixed HTML/CSS and changing values.
+- Reframed the `layout` package documentation as optional typed block
+  infrastructure instead of the default template system.
+- Updated the HTML template example to use `CompileHTMLTemplate` and
+  `WriteTemplateContext`.
+- Kept README as the canonical documentation source and stopped regenerating it
+  from `doc/document.md`.
+
+### Fixed
+
+- Preserved leading whitespace correctly when collapsed HTML text begins with a
+  newline before visible text.
+- Updated HTML validation diagnostics so supported flex `display` values no
+  longer report as unsupported while unsupported values such as `grid` still do.
+
+### Removed
+
+- Removed the duplicate `doc/document.md` README source.
+
 ## v0.10.1 - 2026-06-29
 
 Patch release for UTF-8 generation benchmark budget stability.

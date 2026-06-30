@@ -335,6 +335,40 @@ func BenchmarkGenerationHTMLTextCompiled(b *testing.B) {
 	})
 }
 
+func BenchmarkGenerationHTMLTemplateDynamicValues(b *testing.B) {
+	templateHTML := benchmarkHTMLTemplateDynamicValues()
+	var seq int64
+	benchmarkGeneratedPDF(b, func(pdf *document.Document) {
+		n := atomic.AddInt64(&seq, 1)
+		fragment, err := document.RenderHTMLTemplate(templateHTML, benchmarkHTMLTemplateValues(n))
+		if err != nil {
+			b.Fatalf("RenderHTMLTemplate() error = %v", err)
+		}
+		pdf.AddPage()
+		pdf.SetFont("Helvetica", "", 10)
+		_, lineHeight := pdf.GetFontSize()
+		html := pdf.HTMLNew()
+		html.Write(lineHeight, fragment)
+	})
+}
+
+func BenchmarkGenerationHTMLCompiledTemplateDynamicValues(b *testing.B) {
+	templateHTML := benchmarkHTMLTemplateDynamicValues()
+	compiled, err := document.CompileHTMLTemplate(templateHTML)
+	if err != nil {
+		b.Fatalf("CompileHTMLTemplate() error = %v", err)
+	}
+	var seq int64
+	benchmarkGeneratedPDF(b, func(pdf *document.Document) {
+		n := atomic.AddInt64(&seq, 1)
+		pdf.AddPage()
+		pdf.SetFont("Helvetica", "", 10)
+		_, lineHeight := pdf.GetFontSize()
+		html := pdf.HTMLNew()
+		html.WriteTemplate(lineHeight, compiled, benchmarkHTMLTemplateValues(n))
+	})
+}
+
 func BenchmarkGenerationHTMLTable(b *testing.B) {
 	var rows strings.Builder
 	for i := 0; i < 80; i++ {
@@ -842,6 +876,47 @@ func benchmarkGenerationHTMLBuilder(htmlStr string) func(*document.Document) {
 		_, lineHeight := pdf.GetFontSize()
 		html := pdf.HTMLNew()
 		html.Write(lineHeight, htmlStr)
+	}
+}
+
+func benchmarkHTMLTemplateDynamicValues() string {
+	return `<style>
+		h1 { color:#123456; margin:0 0 4px 0; }
+		p { margin:0 0 4px 0; line-height:1.25; }
+		td, th { padding:3px; border:1px solid #555555; }
+		th { background-color:#eeeeee; font-weight:bold; }
+	</style>
+	<h1>{{title}}</h1>
+	<p>Customer: {{customer}}</p>
+	<p>Reference: <a href="{{link}}">{{reference}}</a></p>
+	<table border="1" cellpadding="3" width="100%">
+		<thead><tr><th width="35%">Item</th><th width="25%">Status</th><th width="20%">Qty</th><th width="20%">Amount</th></tr></thead>
+		<tbody>
+			<tr><td>{{item1}}</td><td>{{status1}}</td><td>{{qty1}}</td><td>{{amount1}}</td></tr>
+			<tr><td>{{item2}}</td><td>{{status2}}</td><td>{{qty2}}</td><td>{{amount2}}</td></tr>
+			<tr><td>{{item3}}</td><td>{{status3}}</td><td>{{qty3}}</td><td>{{amount3}}</td></tr>
+		</tbody>
+	</table>`
+}
+
+func benchmarkHTMLTemplateValues(n int64) document.HTMLTemplateValues {
+	return document.HTMLTemplateValues{
+		"title":     fmt.Sprintf("Invoice %06d", n),
+		"customer":  fmt.Sprintf("Customer Account %03d", n%997),
+		"link":      fmt.Sprintf("https://example.com/invoices/%06d", n),
+		"reference": fmt.Sprintf("INV-%06d", n),
+		"item1":     "Implementation",
+		"status1":   "Ready",
+		"qty1":      1 + n%3,
+		"amount1":   fmt.Sprintf("$%0.2f", float64(n%1000)*3.25),
+		"item2":     "Support",
+		"status2":   "Review",
+		"qty2":      2 + n%5,
+		"amount2":   fmt.Sprintf("$%0.2f", float64(n%500)*1.75),
+		"item3":     "Hosting",
+		"status3":   "Ready",
+		"qty3":      1,
+		"amount3":   fmt.Sprintf("$%0.2f", float64(n%250)*2.10),
 	}
 }
 

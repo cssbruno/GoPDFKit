@@ -46,6 +46,7 @@ func TestHTMLCollapseWhitespace(t *testing.T) {
 		{name: "leading-and-trailing", text: " alpha beta ", want: " alpha beta "},
 		{name: "internal-run", text: "alpha   beta", want: "alpha beta"},
 		{name: "tabs-and-newlines", text: "alpha\tbeta\n gamma", want: "alpha beta gamma"},
+		{name: "leading-newline-before-text", text: "\n\talpha beta", want: " alpha beta"},
 		{name: "unicode-space", text: "alpha\u00a0beta", want: "alpha beta"},
 	}
 	for _, tt := range tests {
@@ -72,6 +73,131 @@ func TestParseStyleDeclarations(t *testing.T) {
 	}
 	if got := parseStyleDeclarations("color"); got != nil {
 		t.Fatalf("parseStyleDeclarations(no colon) = %#v, want nil", got)
+	}
+}
+
+func TestHTMLFlexShorthandParsingAndConstraints(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+
+	basis, ok := htmlFlexBasis(map[string]string{"flex": "2 0 40mm"}, pdf, 120)
+	if !ok || !almostEqual(basis, 40) {
+		t.Fatalf("htmlFlexBasis(flex basis) = %.2f, %v; want 40mm, true", basis, ok)
+	}
+	if got := htmlFlexGrow(map[string]string{"flex": "2 0 40mm"}); got != 2 {
+		t.Fatalf("htmlFlexGrow(flex shorthand) = %.2f, want 2", got)
+	}
+	if got := htmlFlexShrink(map[string]string{"flex": "2 0 40mm"}); got != 0 {
+		t.Fatalf("htmlFlexShrink(flex shorthand) = %.2f, want 0", got)
+	}
+
+	basis, ok = htmlFlexBasis(map[string]string{"flex": "1 1 25%"}, pdf, 120)
+	if !ok || !almostEqual(basis, 30) {
+		t.Fatalf("htmlFlexBasis(percent basis) = %.2f, %v; want 30, true", basis, ok)
+	}
+	basis, ok = htmlFlexBasis(map[string]string{"flex": "1 1 25%", "flex-basis": "20mm", "width": "50mm"}, pdf, 120)
+	if !ok || !almostEqual(basis, 20) {
+		t.Fatalf("htmlFlexBasis(precedence) = %.2f, %v; want 20mm flex-basis, true", basis, ok)
+	}
+	basis, ok = htmlFlexBasis(map[string]string{"width": "33mm"}, pdf, 120)
+	if !ok || !almostEqual(basis, 33) {
+		t.Fatalf("htmlFlexBasis(width fallback) = %.2f, %v; want 33mm, true", basis, ok)
+	}
+
+	if got := htmlFlexGrow(map[string]string{"flex": "auto"}); got != 1 {
+		t.Fatalf("htmlFlexGrow(auto) = %.2f, want 1", got)
+	}
+	if got := htmlFlexShrink(map[string]string{"flex": "auto"}); got != 1 {
+		t.Fatalf("htmlFlexShrink(auto) = %.2f, want 1", got)
+	}
+	if got := htmlFlexGrow(map[string]string{"flex": "none"}); got != 0 {
+		t.Fatalf("htmlFlexGrow(none) = %.2f, want 0", got)
+	}
+	if got := htmlFlexShrink(map[string]string{"flex": "none"}); got != 0 {
+		t.Fatalf("htmlFlexShrink(none) = %.2f, want 0", got)
+	}
+	if got := htmlFlexOrder(map[string]string{"order": "-3"}); got != -3 {
+		t.Fatalf("htmlFlexOrder(-3) = %d, want -3", got)
+	}
+	if got := htmlFlexAlignValue("end"); got != "flex-end" {
+		t.Fatalf("htmlFlexAlignValue(end) = %q, want flex-end", got)
+	}
+	if got := htmlClampFlexSize(10, 20, 50, 40); got != 20 {
+		t.Fatalf("htmlClampFlexSize(min) = %.2f, want 20", got)
+	}
+	if got := htmlClampFlexSize(70, 20, 60, 40); got != 40 {
+		t.Fatalf("htmlClampFlexSize(limit) = %.2f, want 40", got)
+	}
+}
+
+func TestHTMLFlexShrinkRespectsMinWidth(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 10)
+	html := pdf.HTMLNew()
+	_, lineHeight := pdf.GetFontSize()
+	style := htmlTextStyle{fontFamily: "Helvetica", fontSize: 10, lineHeight: lineHeight, align: "L"}
+	items := []htmlFlexItem{
+		{text: "fixed item", outerWd: 70, shrink: 0, minWd: 70, style: style, lineHt: lineHeight},
+		{text: "shrink item", outerWd: 70, shrink: 1, minWd: 20, style: style, lineHt: lineHeight},
+	}
+
+	html.distributeFlexGrow(items, 100, 5, CSSColorType{}, nil, nil)
+
+	if !almostEqual(items[0].outerWd, 70) {
+		t.Fatalf("fixed outerWd = %.2f, want 70", items[0].outerWd)
+	}
+	if !almostEqual(items[1].outerWd, 25) {
+		t.Fatalf("shrunk outerWd = %.2f, want 25 to fit content width with gap", items[1].outerWd)
+	}
+	if used := htmlFlexItemsMainSize(items, 5); !almostEqual(used, 100) {
+		t.Fatalf("used flex width = %.2f, want 100", used)
+	}
+
+	items[1].outerWd = 70
+	items[1].minWd = 40
+	html.distributeFlexGrow(items, 90, 5, CSSColorType{}, nil, nil)
+	if items[1].outerWd < 40 {
+		t.Fatalf("shrunk outerWd = %.2f, should respect min-width 40", items[1].outerWd)
+	}
+}
+
+func TestHTMLCollectFlexItemsKeepsDirectTextNodes(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 10)
+	html := pdf.HTMLNew()
+	_, lineHeight := pdf.GetFontSize()
+	fragment := `<style>.inline{display:inline-flex;flex-wrap:wrap;column-gap:2mm}.unit{flex:0 1 54mm;min-width:22mm;max-width:60mm}</style><div class="inline">
+		Direct text flex item
+		<span class="unit">Inline child</span>
+	</div>`
+	compiled, err := compileHTMLWithDataImageLimit(fragment, false, htmlDefaultMaxDataImageBytes)
+	if err != nil {
+		t.Fatalf("compileHTMLWithDataImageLimit() error = %v", err)
+	}
+	start := -1
+	for i, token := range compiled.tokens {
+		if token.Cat == 'O' && token.Str == "div" {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		t.Fatal("compiled tokens did not contain flex div")
+	}
+	blockTokens, _ := compiled.collectElementTokens(start, "div")
+	if got := strings.TrimSpace(collapseHTMLWhitespace(blockTokens[1].Str)); got != "Direct text flex item" {
+		t.Fatalf("normalized direct text = %q, want %q", got, "Direct text flex item")
+	}
+	items := html.collectFlexItems(compiled, blockTokens, 0, htmlTextStyle{fontFamily: "Helvetica", fontSize: 10, lineHeight: lineHeight, align: "L"}, CSSColorType{}, compiled.cssRules, nil, 180, lineHeight)
+	if len(items) != 2 {
+		t.Fatalf("len(flex items) = %d, want direct text item and span item", len(items))
+	}
+	if got := items[0].text; got != "Direct text flex item" {
+		t.Fatalf("direct text flex item text = %q, want %q", got, "Direct text flex item")
+	}
+	if len(items[0].lines) == 0 || strings.TrimSpace(strings.Join(items[0].lines, " ")) == "" {
+		t.Fatalf("direct text flex item lines = %#v, want rendered text lines", items[0].lines)
 	}
 }
 
@@ -511,6 +637,35 @@ func TestHTMLBlockBreakBeforeAndAfter(t *testing.T) {
 	}
 }
 
+func TestHTMLWriteCachesCompiledFragmentsByDefault(t *testing.T) {
+	ClearSharedCaches()
+	t.Cleanup(ClearSharedCaches)
+
+	fragment := `<style>.note{color:#123456;font-weight:bold}</style><p class="note">cached fragment</p>`
+	render := func() {
+		pdf := New("P", "mm", "A4", "")
+		pdf.AddPage()
+		pdf.SetFont("Helvetica", "", 12)
+		_, lineHeight := pdf.GetFontSize()
+		html := pdf.HTMLNew()
+		html.Write(lineHeight, fragment)
+		if pdf.err != nil {
+			t.Fatalf("HTML.Write error = %v", pdf.err)
+		}
+	}
+
+	render()
+	first := sharedCompiledHTMLCacheStats()
+	if first.Entries != 1 || first.Bytes <= 0 {
+		t.Fatalf("compiled HTML cache after first render = %#v, want one retained entry", first)
+	}
+	render()
+	second := sharedCompiledHTMLCacheStats()
+	if second != first {
+		t.Fatalf("compiled HTML cache after second identical render = %#v, want %#v", second, first)
+	}
+}
+
 func TestHTMLWriteMaxGeneratedPages(t *testing.T) {
 	pdf := New("P", "mm", "A4", "")
 	pdf.AddPage()
@@ -853,7 +1008,6 @@ func TestHTMLDebugLogReportsUnsupportedRenderingFeatures(t *testing.T) {
 
 	for _, want := range []string{
 		`CSS selector ".card:hover" is not supported yet`,
-		`CSS property "display" in style rule is not supported yet`,
 		`HTML tag <video> is not supported yet`,
 		`CSS property "float" in inline style is not supported yet`,
 	} {
@@ -870,7 +1024,6 @@ func TestHTMLValidateHTMLReportsUnsupportedRenderingFeatures(t *testing.T) {
 
 	for _, want := range []string{
 		`CSS selector ".card:hover" is not supported yet`,
-		`CSS property "display" in style rule is not supported yet`,
 		`HTML tag <video> is not supported yet`,
 		`CSS property "float" in inline style is not supported yet`,
 	} {
@@ -886,6 +1039,28 @@ func TestHTMLValidateHTMLAllowsSupportedBorderLonghands(t *testing.T) {
 	messages := html.ValidateHTML(`<div style="border-width:1mm;border-style:solid;border-color:#123456;border-left:2mm solid orange;border-top-style:none;border-radius:4px;box-shadow:2px 3px 5px rgba(0,0,0,.2)">box</div><img src="" style="object-fit:cover;max-width:20mm;max-height:20mm"/>`)
 	if len(messages) != 0 {
 		t.Fatalf("validate messages = %#v, want none for supported border, shadow, and image CSS", messages)
+	}
+}
+
+func TestHTMLValidateHTMLAllowsSpanAndFlexProperties(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	html := pdf.HTMLNew()
+	messages := html.ValidateHTML(`<style>
+		.row { display:flex; flex-direction:row; flex-wrap:wrap; gap:3mm; row-gap:2mm; column-gap:4mm; justify-content:space-between; align-items:center; align-content:space-around; }
+		.card { flex:1 1 30mm; flex-basis:30mm; flex-grow:1; flex-shrink:1; order:2; align-self:flex-start; min-width:20mm; min-height:10mm; }
+	</style><div class="row"><span class="card">alpha</span><span class="card">beta</span></div>`)
+	if len(messages) != 0 {
+		t.Fatalf("validate messages = %#v, want none for span and supported flex CSS", messages)
+	}
+}
+
+func TestHTMLValidateHTMLReportsUnsupportedDisplayValues(t *testing.T) {
+	pdf := New("P", "mm", "A4", "")
+	html := pdf.HTMLNew()
+	messages := html.ValidateHTML(`<div style="display:grid">grid</div>`)
+	want := `CSS display value "grid" in inline style is not supported yet`
+	if !containsString(messages, want) {
+		t.Fatalf("validate messages = %#v, missing %q", messages, want)
 	}
 }
 

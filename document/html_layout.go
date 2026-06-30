@@ -577,7 +577,7 @@ func collapseHTMLWhitespace(text string) string {
 		textSeen = true
 		previousSpace = false
 	}
-	if !textSeen {
+	if !textSeen && !needsCollapse {
 		if text == " " {
 			return text
 		}

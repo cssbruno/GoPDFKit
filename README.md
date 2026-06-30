@@ -74,19 +74,11 @@ The latest local profiles used for the tokenizer and compiled HTML work are
 GoPDFKit is an MIT-licensed Go library for generating PDFs directly from Go
 code. It keeps an FPDF-style API for familiar page/text/drawing workflows, with
 additional helpers for HTML fragments, imported pages, signing, thumbnails, and
-structured document models.
+optional typed document models.
 
 The root `gopdfkit` package is intentionally small. It exposes the default
 constructor and public aliases. Import `github.com/cssbruno/gopdfkit/document`
 when you need the full API.
-
-Structured document model types also live in
-`github.com/cssbruno/gopdfkit/layout`; the `document` package re-exports them
-for compatibility and renders them with `WriteDocument`.
-
-These model types are domain-neutral building blocks. GoPDFKit does not own
-application document categories such as invoices, reports, certificates, or
-statements; callers should define those helpers in their own code.
 
 ## Install
 
@@ -131,6 +123,19 @@ pdf := document.NewWithOptions(document.Options{
 streams. It is not a full PDF optimizer for images, object streams, fonts, or
 arbitrary existing PDFs.
 
+## Choosing a Document Path
+
+| Need | Use |
+| --- | --- |
+| Precise drawing, custom pagination, or FPDF-style control | `Document` drawing/text/table methods |
+| Report-like documents with fixed HTML/CSS and changing values | `document.CompileHTMLTemplate` + `HTML.WriteTemplate` |
+| One-off HTML fragments or normal rich text sections | `HTMLNew().Write` |
+| Typed Go blocks without HTML strings, or existing model-based code | `document.NewDocumentModel` + `WriteDocument` |
+
+The `layout` package exists for the last case: an optional typed block model. It
+is not the default template system. Prefer compiled HTML templates when the
+document is naturally described as HTML/CSS with changing values.
+
 ## Large PDF Output
 
 Normal `Output` and `OutputFile` calls keep the final PDF bytes in the document
@@ -158,10 +163,13 @@ defaults.Compression = false
 pdf := document.NewWithDefaults(document.Options{SizeStr: "Letter"}, defaults)
 ```
 
-## Document Models
+## Optional Typed Document Models
 
-Use `document.NewDocumentModel` when your application wants to assemble a
-structured model from GoPDFKit blocks before rendering it with `WriteDocument`.
+Use `document.NewDocumentModel` only when your application wants typed Go
+blocks instead of HTML templates. The model types also live in
+`github.com/cssbruno/gopdfkit/layout`; the `document` package re-exports them
+for compatibility and renders them with `WriteDocument`.
+
 Keep product-specific document names in your application:
 
 ```go
@@ -193,16 +201,16 @@ GoPDFKit currently supports:
 * Standard PDF fonts and UTF-8 TrueType fonts
 * Text, cells, multicells, aligned writing, styled paragraphs, links, bookmarks,
   and aliases
-* Tables, reusable block-based layouts, static filled form documents, and shared
-  document model rendering through the `layout` model
+* Tables, static filled form documents, and optional typed block rendering
+  through `WriteDocument`
 * Drawing primitives: lines, rectangles, rounded rectangles, arcs, Bezier
   curves, polygons, paths, clipping, transforms, transparency, gradients, spot
   colors, and layers
 * JPEG, PNG, GIF, WebP, SVG, data-image, QR-code PNG generation, and thumbnail
   workflows
-* Controlled HTML/CSS fragment rendering through `HTMLNew`, including text
-  styles, spacing, borders, border radius, backgrounds, and simple box shadows
-* Templates and imported PDF pages
+* Controlled HTML/CSS fragment rendering through `HTMLNew`, including compiled
+  templates, text styles, spacing, borders, backgrounds, and simple box shadows
+* Reusable PDF templates and imported PDF pages
 * Page workflows built from imported pages: merge, split, reorder, rotate,
   4-up layout, template overlay, and watermark overlay
 * Attachments, metadata, XMP metadata, legacy PDF standard-security protection,
@@ -283,7 +291,7 @@ Runnable examples live under [`examples/`][examples]. They write PDFs to
 | HTML CSS styles | `go run ./examples/html-css-styles` | `html-css-styles.pdf` |
 | HTML images and SVG | `go run ./examples/html-images` | `html-images.pdf` |
 | HTML tables | `go run ./examples/html-tables` | `html-tables.pdf` |
-| HTML template values | `go run ./examples/html-template` | `html-template.pdf` |
+| Compiled HTML template values | `go run ./examples/html-template` | `html-template.pdf` |
 | Manual pagination | `go run ./examples/pagination-table` | `pagination-table.pdf` |
 | Document pagination | `go run ./examples/pagination-document` | `pagination-document.pdf` |
 | Images | `go run ./examples/add-images-to-pages` | `images-on-pages.pdf` |
@@ -313,6 +321,7 @@ Use `Document.RegisterQRCodePNG` for QR-code verification blocks.
 ```text
 gopdfkit   root package: default constructor and public aliases
 document   main PDF generation API
+layout     optional typed block model used by document.WriteDocument
 font       font parsing and JSON font definition generation
 importpdf  small wrappers around imported-page APIs
 inspect    lightweight PDF structure, stream, page, and text inspection
@@ -328,35 +337,60 @@ cmd/list               generated-reference listing utility
 examples/              runnable examples
 assets/static/         checked-in fonts, images, and text fixtures
 assets/generated/pdf/  generated PDFs
-doc/                   Markdown source for README.md
 tools/                 tool-only module for quality/security commands
 ```
 
 ## HTML Support
 
-`HTMLNew()` renders a controlled subset of HTML fragments into PDF drawing
-operations. It is useful for rich text, generated sections, reports, letters,
-and static forms. It is not a browser engine.
+`HTMLNew()` renders a bounded HTML/CSS subset, not browser layout. `Write` uses
+a shared compiled-plan cache; use `CompileHTML` and `WriteCompiled` when you
+want to own the plan.
 
-Supported content includes inline text tags, links, paragraphs, headings,
-blocks, lists, tables, horizontal rules, images, figures, captions, opt-in local
-images, data URLs, and inline SVG.
+Choose the HTML API by what changes:
 
-Supported CSS is deliberately small: text styling, line height, alignment,
-vertical alignment, whitespace handling, simple colors, backgrounds, borders,
-border radius, simple box shadows, padding, margins, table/image dimensions,
-image fit modes, list marker style, and basic page-break controls.
+| Use case | API |
+| --- | --- |
+| Normal fragment; default shared cache is enough | `html.Write(lineHt, fragment)` |
+| Explicit plan lifetime, diagnostics, or cross-document reuse | `document.CompileHTML` + `html.WriteCompiled` |
+| One-off template that inserts trusted raw HTML or builds an image tag | `document.RenderHTMLTemplate` + `html.Write` |
+| Same HTML shape with changing text, links, image sources, or dimensions | `document.CompileHTMLTemplate` + `html.WriteTemplate` |
 
-Use `document.RenderHTMLTemplate` when HTML fragments need `{{key}}`
-substitution. Plain values are escaped, `document.HTMLTemplateRaw` inserts
-trusted HTML, and `document.HTMLTemplateImage` inserts an `<img>` tag that can
-be sized and spaced with supported HTML/CSS.
+Compiled template slots are allowed in text and safe attributes such as `href`,
+`src`, `alt`, `width`, and `height`; they are rejected in tags, CSS, raw HTML,
+event attributes, and `class`/`style`/`id`.
 
-Use `document.CompileHTML` with `HTML.WriteCompiled` when the same fragment is
-rendered repeatedly. The compiled plan reuses tokenization, CSS selector
-matching, table parsing, inline SVG parsing, data URI image decoding, and cached
-block text. A `CompiledHTML` value is safe to reuse across documents and
-goroutines.
+```go
+template, err := document.CompileHTMLTemplate(`
+    <h1>{{title}}</h1>
+    <p>Customer: {{customer}}</p>
+    <p><a href="{{url}}">{{url_text}}</a></p>
+    <img src="{{logo}}" alt="{{logo_alt}}" width="55mm">
+`)
+if err != nil {
+    return err
+}
+
+html := pdf.HTMLNew()
+html.AllowLocalImages = true
+err = html.WriteTemplateContext(ctx, 6, template, document.HTMLTemplateValues{
+    "title":    "Invoice A-100",
+    "customer": "Northwind",
+    "url":      "https://example.com/invoices/A-100",
+    "url_text": "Open invoice",
+    "logo":     "/absolute/path/logo.png",
+    "logo_alt": "Company logo",
+})
+if err != nil {
+    return err
+}
+```
+
+Use `RenderHTMLTemplate` instead when a value must change the HTML structure,
+for example by inserting `HTMLTemplateRaw` or `HTMLTemplateImage`.
+
+Supported content includes text styling, links, paragraphs, headings, lists,
+tables, images, inline SVG, boxes, borders, spacing, colors, page breaks, and a
+bounded flexbox subset for direct child blocks.
 
 Compiled fragments expose lightweight diagnostics:
 

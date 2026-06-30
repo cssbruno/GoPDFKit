@@ -1,6 +1,6 @@
 all : documentation
 
-documentation : README.md
+documentation :
 
 GO_PACKAGES ?= ./...
 VERSION ?= $(shell sed -n '1p' VERSION 2>/dev/null)
@@ -88,9 +88,6 @@ release-push :
 	git push origin "$(VERSION)"
 
 release : release-tag
-
-README.md : doc/document.md
-	pandoc --read=markdown --write=gfm < $< > $@
 
 build :
 	go build -v $(GO_PACKAGES)
