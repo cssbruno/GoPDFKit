@@ -33,7 +33,7 @@ func TestOutputSignedIntegration(t *testing.T) {
 	truststore := x509.NewCertPool()
 	truststore.AddCert(cert)
 
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(40, 10, "Signed from document API")
@@ -102,7 +102,7 @@ func TestOutputSignedIgnoresStreamFinalPolicy(t *testing.T) {
 }
 
 func TestOutputSignedRejectsNilWriter(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 
 	if err := pdf.OutputSigned(nil, sign.Options{}); !errors.Is(err, ErrNilWriter) {
 		t.Fatalf("OutputSigned(nil) error = %v, want ErrNilWriter", err)
@@ -112,7 +112,7 @@ func TestOutputSignedRejectsNilWriter(t *testing.T) {
 func TestOutputSignedDetectsShortWrite(t *testing.T) {
 	cert, signer := rootTestSigner(t)
 
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(40, 10, "short write")
@@ -135,7 +135,7 @@ func TestOutputSignedFileDoesNotTruncateDestinationOnSigningError(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(40, 10, "signing failure")

@@ -9,7 +9,7 @@ import (
 )
 
 func TestAddTextWatermarkDrawsAndRestoresState(t *testing.T) {
-	pdf := New("P", "pt", "A4", "")
+	pdf := MustNew(WithUnit(UnitPoint))
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)

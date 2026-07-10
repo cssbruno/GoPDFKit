@@ -58,7 +58,6 @@ type OutputPolicy struct {
 // feature.
 type SecurityPolicy struct {
 	AllowLegacyRC4Protection bool
-	AllowJavaScript          bool // Deprecated: ignored because PDF JavaScript actions are unsupported.
 	AllowLocalHTMLImages     bool
 	AllowFileAttachments     bool
 	AllowRawWrites           bool
@@ -131,7 +130,6 @@ func ServerSafePolicy() ProductionPolicy {
 		Limits: ServerSafeLimits(),
 		Compression: CompressionPolicy{
 			Mode:                     CompressionEnabled,
-			Enabled:                  true,
 			Level:                    zlib.BestSpeed,
 			PageWorkers:              4,
 			AttachmentWorkers:        2,
@@ -155,7 +153,6 @@ func BatchPolicy() ProductionPolicy {
 		Limits: BatchLimits(),
 		Compression: CompressionPolicy{
 			Mode:                     CompressionEnabled,
-			Enabled:                  true,
 			Level:                    zlib.DefaultCompression,
 			PageWorkers:              workers,
 			AttachmentWorkers:        workers,

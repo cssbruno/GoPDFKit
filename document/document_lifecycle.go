@@ -53,15 +53,6 @@ func (f *Document) SetDisplayMode(zoomStr, layoutStr string) {
 	}
 }
 
-// SetDefaultCompression controls the default setting of the internal
-// compression flag. See SetCompression for more details. Compression is on by
-// default. Prefer NewWithDefaults for per-document configuration.
-func SetDefaultCompression(compress bool) {
-	_gl.Lock()
-	defer _gl.Unlock()
-	_gl.noCompress = !compress
-}
-
 // SetCompression activates or deactivates page compression with zlib. When
 // activated, the internal representation of each page is compressed, which
 // leads to a compression ratio of about 2 for the resulting document.
@@ -97,7 +88,6 @@ func defaultCompressionPolicy() CompressionPolicy {
 	}
 	return CompressionPolicy{
 		Mode:                     CompressionEnabled,
-		Enabled:                  true,
 		Level:                    zlib.BestSpeed,
 		PageWorkers:              pageWorkers,
 		AttachmentWorkers:        defaultAttachmentCompressionWorkers,
@@ -117,26 +107,27 @@ func normalizeCompressionPolicy(policy CompressionPolicy) (CompressionPolicy, er
 	if policy == (CompressionPolicy{}) {
 		return defaults, nil
 	}
+	enabled := true
 	switch policy.Mode {
 	case CompressionDefault:
-		policy.Enabled = policy.Enabled || compressionPolicyHasFields(policy)
+		enabled = compressionPolicyHasFields(policy)
 	case CompressionEnabled:
-		policy.Enabled = true
+		enabled = true
 	case CompressionDisabled:
-		policy.Enabled = false
+		enabled = false
 	default:
 		return CompressionPolicy{}, fmt.Errorf("invalid compression mode: %d", policy.Mode)
 	}
-	if policy.Level == 0 && policy.Enabled {
+	if policy.Level == 0 && enabled {
 		policy.Level = defaults.Level
 	}
-	if policy.Enabled && !validCompressionLevel(policy.Level) {
+	if enabled && !validCompressionLevel(policy.Level) {
 		return CompressionPolicy{}, fmt.Errorf("invalid compression level: %d", policy.Level)
 	}
-	if !policy.Enabled {
+	if !enabled {
 		policy.Level = zlib.NoCompression
 	} else if policy.Level == zlib.NoCompression {
-		policy.Enabled = false
+		enabled = false
 	}
 	if policy.PageWorkers < 0 {
 		if policy.PageWorkers != CompressionWorkersDisabled {
@@ -160,7 +151,7 @@ func normalizeCompressionPolicy(policy CompressionPolicy) (CompressionPolicy, er
 	if policy.TinyStreamThresholdBytes == 0 {
 		policy.TinyStreamThresholdBytes = defaults.TinyStreamThresholdBytes
 	}
-	if policy.Enabled {
+	if enabled {
 		policy.Mode = CompressionEnabled
 	} else {
 		policy.Mode = CompressionDisabled
@@ -176,7 +167,7 @@ func (f *Document) SetCompressionPolicy(policy CompressionPolicy) error {
 		f.SetError(err)
 		return err
 	}
-	f.compress = policy.Enabled
+	f.compress = policy.Mode == CompressionEnabled
 	f.compressLevel = policy.Level
 	f.pageCompressionWorkers = policy.PageWorkers
 	f.attachmentCompressionWorkers = policy.AttachmentWorkers
@@ -188,7 +179,6 @@ func (f *Document) SetCompressionPolicy(policy CompressionPolicy) error {
 func (f *Document) CompressionPolicy() CompressionPolicy {
 	return CompressionPolicy{
 		Mode:                     compressionModeForEnabled(f.compress),
-		Enabled:                  f.compress,
 		Level:                    f.compressLevel,
 		PageWorkers:              f.pageCompressionWorkers,
 		AttachmentWorkers:        f.attachmentCompressionWorkers,

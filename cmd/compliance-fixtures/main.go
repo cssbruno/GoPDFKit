@@ -240,7 +240,7 @@ func complianceTaggedHTMLFragment() string {
 }
 
 func baseDocument(fontPath, boldFontPath string) *document.Document {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.SetCatalogSort(true)
 	pdf.AddUTF8Font("DejaVu", "", fontPath)

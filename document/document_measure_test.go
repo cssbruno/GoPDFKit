@@ -3,15 +3,19 @@
 
 package document
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cssbruno/gopdfkit/layout"
+)
 
 func TestMeasureParagraphBlockUsesTextWrapping(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetFont("Helvetica", "", 12)
-	ctx := NewMeasureContext(pdf, 25)
+	ctx := newMeasureContext(pdf, 25)
 
-	short := MeasureBlock(ctx, ParagraphBlock{Segments: []TextSegment{{Text: "short"}}})
-	long := MeasureBlock(ctx, ParagraphBlock{Segments: []TextSegment{{Text: "this paragraph should wrap onto several lines in a narrow column"}}})
+	short := layout.MeasureBlock(ctx, layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "short"}}})
+	long := layout.MeasureBlock(ctx, layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "this paragraph should wrap onto several lines in a narrow column"}}})
 
 	if long.Height <= short.Height {
 		t.Fatalf("long paragraph height = %.2f, short = %.2f; want long > short", long.Height, short.Height)
@@ -25,14 +29,14 @@ func TestMeasureParagraphBlockUsesTextWrapping(t *testing.T) {
 }
 
 func TestMeasureParagraphScalesLineHeightWithFontSize(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetFont("Helvetica", "", 12)
-	ctx := NewMeasureContext(pdf, 120)
+	ctx := newMeasureContext(pdf, 120)
 
-	regular := MeasureBlock(ctx, ParagraphBlock{Segments: []TextSegment{{Text: "same text"}}})
-	large := MeasureBlock(ctx, ParagraphBlock{
-		Segments: []TextSegment{{Text: "same text"}},
-		Style:    TextStyle{FontSize: 24},
+	regular := layout.MeasureBlock(ctx, layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "same text"}}})
+	large := layout.MeasureBlock(ctx, layout.ParagraphBlock{
+		Segments: []layout.TextSegment{{Text: "same text"}},
+		Style:    layout.TextStyle{FontSize: 24},
 	})
 
 	if large.MinHeight <= regular.MinHeight*1.5 {
@@ -41,12 +45,12 @@ func TestMeasureParagraphScalesLineHeightWithFontSize(t *testing.T) {
 }
 
 func TestMeasureHeadingUsesDocumentHeadingSize(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetFont("Helvetica", "", 12)
-	ctx := NewMeasureContext(pdf, 120)
+	ctx := newMeasureContext(pdf, 120)
 
-	h1 := MeasureBlock(ctx, HeadingBlock{Level: 1, Segments: []TextSegment{{Text: "Title"}}})
-	h4 := MeasureBlock(ctx, HeadingBlock{Level: 4, Segments: []TextSegment{{Text: "Title"}}})
+	h1 := layout.MeasureBlock(ctx, layout.HeadingBlock{Level: 1, Segments: []layout.TextSegment{{Text: "Title"}}})
+	h4 := layout.MeasureBlock(ctx, layout.HeadingBlock{Level: 4, Segments: []layout.TextSegment{{Text: "Title"}}})
 
 	if h1.MinHeight <= h4.MinHeight {
 		t.Fatalf("h1 min height = %.2f, h4 = %.2f; want h1 > h4", h1.MinHeight, h4.MinHeight)
@@ -54,12 +58,12 @@ func TestMeasureHeadingUsesDocumentHeadingSize(t *testing.T) {
 }
 
 func TestDocumentRendererMeasuresTableRowsWithRenderedWidths(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetFont("Courier", "", 12)
 	pdf.AddPage()
 	renderer := documentRenderer{pdf: pdf}
-	row := TableRow{Cells: []TableCell{
-		{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "MMMMMMMMMMMMMMMMMMMM"}}}}},
+	row := layout.TableRow{Cells: []layout.TableCell{
+		{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "MMMMMMMMMMMMMMMMMMMM"}}}}},
 	}}
 
 	narrow := renderer.measureRenderedTableRow(row, []float64{18})
@@ -71,13 +75,13 @@ func TestDocumentRendererMeasuresTableRowsWithRenderedWidths(t *testing.T) {
 }
 
 func TestMeasureTextRestoresPDFFontState(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetFont("Courier", "I", 10)
-	ctx := NewMeasureContext(pdf, 25)
+	ctx := newMeasureContext(pdf, 25)
 
-	_ = MeasureBlock(ctx, ParagraphBlock{
-		Segments: []TextSegment{{Text: "styled"}},
-		Style:    TextStyle{FontFamily: "Helvetica", FontSize: 14, Bold: true},
+	_ = layout.MeasureBlock(ctx, layout.ParagraphBlock{
+		Segments: []layout.TextSegment{{Text: "styled"}},
+		Style:    layout.TextStyle{FontFamily: "Helvetica", FontSize: 14, Bold: true},
 	})
 
 	if pdf.fontFamily != "courier" || pdf.fontStyle != "I" || pdf.fontSizePt != 10 {
@@ -86,11 +90,11 @@ func TestMeasureTextRestoresPDFFontState(t *testing.T) {
 }
 
 func TestMeasureHeadingKeepsWithNext(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetFont("Helvetica", "", 12)
-	ctx := NewMeasureContext(pdf, 80)
+	ctx := newMeasureContext(pdf, 80)
 
-	measure := MeasureBlock(ctx, HeadingBlock{Level: 2, Segments: []TextSegment{{Text: "Heading"}}})
+	measure := layout.MeasureBlock(ctx, layout.HeadingBlock{Level: 2, Segments: []layout.TextSegment{{Text: "Heading"}}})
 	if measure.Splittable {
 		t.Fatal("heading should not be splittable")
 	}
@@ -100,10 +104,10 @@ func TestMeasureHeadingKeepsWithNext(t *testing.T) {
 }
 
 func TestMeasureAppliesParagraphAndHeadingSpacing(t *testing.T) {
-	ctx := NewMeasureContext(nil, 80)
+	ctx := newMeasureContext(nil, 80)
 
-	paragraph := MeasureBlock(ctx, ParagraphBlock{Segments: []TextSegment{{Text: "Paragraph"}}})
-	heading := MeasureBlock(ctx, HeadingBlock{Level: 2, Segments: []TextSegment{{Text: "Heading"}}})
+	paragraph := layout.MeasureBlock(ctx, layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Paragraph"}}})
+	heading := layout.MeasureBlock(ctx, layout.HeadingBlock{Level: 2, Segments: []layout.TextSegment{{Text: "Heading"}}})
 
 	if paragraph.Height <= paragraph.MinHeight {
 		t.Fatalf("paragraph height = %.2f min = %.2f, want spacing included", paragraph.Height, paragraph.MinHeight)
@@ -114,7 +118,7 @@ func TestMeasureAppliesParagraphAndHeadingSpacing(t *testing.T) {
 }
 
 func TestMeasurePageBreakBlock(t *testing.T) {
-	measure := MeasureBlock(NewMeasureContext(nil, 80), PageBreakBlock{Before: true})
+	measure := layout.MeasureBlock(newMeasureContext(nil, 80), layout.PageBreakBlock{Before: true})
 	if !measure.BreakBefore {
 		t.Fatal("page break should report BreakBefore")
 	}
@@ -124,18 +128,18 @@ func TestMeasurePageBreakBlock(t *testing.T) {
 }
 
 func TestMeasureTableRows(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetFont("Helvetica", "", 12)
-	ctx := NewMeasureContext(pdf, 80)
+	ctx := newMeasureContext(pdf, 80)
 
-	table := TableBlock{
-		Header: []TableRow{{Cells: []TableCell{{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Header"}}}}}}}},
-		Body: []TableRow{
-			{Cells: []TableCell{{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "A longer cell value that wraps"}}}}}}},
-			{Cells: []TableCell{{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Second row"}}}}}}},
+	table := layout.TableBlock{
+		Header: []layout.TableRow{{Cells: []layout.TableCell{{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Header"}}}}}}}},
+		Body: []layout.TableRow{
+			{Cells: []layout.TableCell{{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "A longer cell value that wraps"}}}}}}},
+			{Cells: []layout.TableCell{{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Second row"}}}}}}},
 		},
 	}
-	measure := MeasureBlock(ctx, table)
+	measure := layout.MeasureBlock(ctx, table)
 	if len(measure.ChildMeasures) != 3 {
 		t.Fatalf("row measures = %d, want 3", len(measure.ChildMeasures))
 	}
@@ -148,17 +152,17 @@ func TestMeasureTableRows(t *testing.T) {
 }
 
 func TestMeasureContainerIncludesChildren(t *testing.T) {
-	ctx := NewMeasureContext(nil, 80)
-	section := SectionBlock{
+	ctx := newMeasureContext(nil, 80)
+	section := layout.SectionBlock{
 		Title: "Section",
-		Blocks: []Block{
-			ParagraphBlock{Segments: []TextSegment{{Text: "First"}}},
-			ParagraphBlock{Segments: []TextSegment{{Text: "Second"}}},
+		Blocks: []layout.Block{
+			layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "First"}}},
+			layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Second"}}},
 		},
-		Box: BoxStyle{Padding: Spacing{Top: 2, Bottom: 2}},
+		Box: layout.BoxStyle{Padding: layout.Spacing{Top: 2, Bottom: 2}},
 	}
 
-	measure := MeasureBlock(ctx, section)
+	measure := layout.MeasureBlock(ctx, section)
 	if len(measure.ChildMeasures) != 2 {
 		t.Fatalf("child measures = %d, want 2", len(measure.ChildMeasures))
 	}
@@ -168,9 +172,9 @@ func TestMeasureContainerIncludesChildren(t *testing.T) {
 }
 
 func TestMeasureSignatureRowIsKeptTogether(t *testing.T) {
-	ctx := NewMeasureContext(nil, 100)
-	measure := MeasureBlock(ctx, SignatureRowBlock{
-		Columns: []SignatureColumn{
+	ctx := newMeasureContext(nil, 100)
+	measure := layout.MeasureBlock(ctx, layout.SignatureRowBlock{
+		Columns: []layout.SignatureColumn{
 			{Label: "Primary", Name: "A"},
 			{Label: "Secondary", Name: "B"},
 		},
@@ -188,10 +192,10 @@ func TestMeasureSignatureRowIsKeptTogether(t *testing.T) {
 }
 
 func TestMeasureQRVerificationBlockUsesQRSize(t *testing.T) {
-	ctx := NewMeasureContext(nil, 100)
-	measure := MeasureBlock(ctx, QRVerificationBlock{
-		QR:   QRBlock{Value: "https://example.test/verify", Size: 30},
-		Text: []TextSegment{{Text: "Verification"}},
+	ctx := newMeasureContext(nil, 100)
+	measure := layout.MeasureBlock(ctx, layout.QRVerificationBlock{
+		QR:   layout.QRBlock{Value: "https://example.test/verify", Size: 30},
+		Text: []layout.TextSegment{{Text: "Verification"}},
 	})
 
 	if measure.Height < 30 {

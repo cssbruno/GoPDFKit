@@ -113,24 +113,6 @@ func (p *protectType) setProtection(privFlag byte, userPassStr, ownerPassStr str
 	return nil
 }
 
-// SetProtection applies the legacy RC4-based PDF standard-security handler as
-// a compatibility wrapper.
-//
-// Deprecated: use SetLegacyProtection so new code names the compatibility and
-// advisory-security behavior explicitly. This is not modern document
-// encryption, secure storage, or a DRM guarantee.
-func (f *Document) SetProtection(actionFlag byte, userPassStr, ownerPassStr string) {
-	_ = f.SetLegacyProtection(actionFlag, userPassStr, ownerPassStr)
-}
-
-// SetProtectionError applies legacy PDF standard-security protection and
-// reports setup errors directly.
-//
-// Deprecated: use SetLegacyProtection.
-func (f *Document) SetProtectionError(actionFlag byte, userPassStr, ownerPassStr string) error {
-	return f.SetLegacyProtection(actionFlag, userPassStr, ownerPassStr)
-}
-
 // SetAESProtection reports that AES-based PDF standard-security encryption is
 // intentionally unsupported.
 //

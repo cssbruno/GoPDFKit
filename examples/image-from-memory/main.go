@@ -10,7 +10,6 @@ import (
 	"image/png"
 	"log"
 
-	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
@@ -33,7 +32,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	pdf := gopdfkit.New()
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "B", 16)
 	pdf.Cell(40, 10, "Image from memory")

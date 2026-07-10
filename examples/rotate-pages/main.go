@@ -19,7 +19,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	pdf := document.New("P", "pt", "A4", "")
+	pdf := document.MustNew(document.WithUnit(document.UnitPoint))
 	pdf.SetTitle("Rotated PDF Pages", false)
 	pdf.SetCreator("examples/rotate-pages", false)
 

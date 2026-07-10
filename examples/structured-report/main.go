@@ -6,12 +6,12 @@ package main
 import (
 	"log"
 
-	"github.com/cssbruno/gopdfkit"
+	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
 
 func main() {
-	pdf := gopdfkit.New()
+	pdf := document.MustNew()
 	pdf.SetTitle("Operations Report", false)
 	pdf.SetCreator("examples/structured-report", false)
 	pdf.AddPage()
@@ -70,7 +70,7 @@ func main() {
 	}
 }
 
-func drawField(pdf *gopdfkit.Document, x, y float64, label, value string) {
+func drawField(pdf *document.Document, x, y float64, label, value string) {
 	pdf.SetFillColor(245, 248, 251)
 	pdf.SetDrawColor(215, 222, 230)
 	pdf.RoundedRect(x, y, 54, 22, 2, "1234", "DF")
@@ -82,7 +82,7 @@ func drawField(pdf *gopdfkit.Document, x, y float64, label, value string) {
 	pdf.Text(x+4, y+16, value)
 }
 
-func drawMetric(pdf *gopdfkit.Document, x, y float64, label, value, note string) {
+func drawMetric(pdf *document.Document, x, y float64, label, value, note string) {
 	pdf.SetFillColor(232, 241, 250)
 	pdf.SetDrawColor(190, 210, 230)
 	pdf.RoundedRect(x, y, 54, 31, 3, "1234", "DF")
@@ -97,7 +97,7 @@ func drawMetric(pdf *gopdfkit.Document, x, y float64, label, value, note string)
 	pdf.Text(x+5, y+27, note)
 }
 
-func drawTableHeader(pdf *gopdfkit.Document, x, y float64, widths []float64, labels []string) {
+func drawTableHeader(pdf *document.Document, x, y float64, widths []float64, labels []string) {
 	pdf.SetFillColor(35, 70, 120)
 	pdf.SetTextColor(255, 255, 255)
 	pdf.SetFont("Helvetica", "B", 9)
@@ -109,7 +109,7 @@ func drawTableHeader(pdf *gopdfkit.Document, x, y float64, widths []float64, lab
 	pdf.SetTextColor(0, 0, 0)
 }
 
-func drawTableRow(pdf *gopdfkit.Document, x, y float64, widths []float64, values []string) {
+func drawTableRow(pdf *document.Document, x, y float64, widths []float64, values []string) {
 	pdf.SetFillColor(255, 255, 255)
 	pdf.SetDrawColor(220, 226, 232)
 	pdf.SetFont("Helvetica", "", 9)

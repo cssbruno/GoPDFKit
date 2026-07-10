@@ -59,7 +59,7 @@ func TestHTMLTokenizeQuotedTagEndAndComments(t *testing.T) {
 }
 
 func TestHTMLWriteStyledContent(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -79,7 +79,7 @@ func TestHTMLWriteStyledContent(t *testing.T) {
 }
 
 func TestHTMLWriteListMarkers(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -105,7 +105,7 @@ func TestHTMLWriteListMarkers(t *testing.T) {
 }
 
 func TestHTMLWriteDefinitionList(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -129,7 +129,7 @@ func TestHTMLWriteDefinitionList(t *testing.T) {
 }
 
 func TestHTMLWriteEmbeddedImage(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -154,7 +154,7 @@ func TestHTMLWriteEmbeddedImage(t *testing.T) {
 }
 
 func TestHTMLWriteFigureCaption(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -178,7 +178,7 @@ func TestHTMLWriteFigureCaption(t *testing.T) {
 }
 
 func TestHTMLWriteImageAltFallback(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -225,7 +225,7 @@ func TestHTMLWriteInvalidDataImageErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pdf := document.New("P", "mm", "A4", "")
+			pdf := document.MustNew()
 			pdf.SetCompression(false)
 			pdf.AddPage()
 			pdf.SetFont("Helvetica", "", 12)
@@ -258,7 +258,7 @@ func TestHTMLWriteRejectsUnsafeImageSources(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pdf := document.New("P", "mm", "A4", "")
+			pdf := document.MustNew()
 			pdf.SetCompression(false)
 			pdf.AddPage()
 			pdf.SetFont("Helvetica", "", 12)
@@ -279,7 +279,7 @@ func TestHTMLWriteRejectsUnsafeImageSources(t *testing.T) {
 }
 
 func TestHTMLWriteRejectsOversizedDataImage(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -300,7 +300,7 @@ func TestHTMLWriteRejectsOversizedDataImage(t *testing.T) {
 }
 
 func TestHTMLWriteRejectsUnsafeLinkScheme(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -319,7 +319,7 @@ func TestHTMLWriteRejectsUnsafeLinkScheme(t *testing.T) {
 }
 
 func TestHTMLWriteTable(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -347,7 +347,7 @@ func TestHTMLWriteTable(t *testing.T) {
 }
 
 func TestHTMLWriteTableRowspan(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -374,7 +374,7 @@ func TestHTMLWriteTableRowspan(t *testing.T) {
 }
 
 func TestHTMLWriteTableCellBorderAndBackground(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -398,10 +398,10 @@ func TestHTMLWriteTableCellBorderAndBackground(t *testing.T) {
 }
 
 func TestHTMLWriteTableRepeatsHeaderRowsAcrossPages(t *testing.T) {
-	pdf := document.NewWithOptions(document.Options{
-		UnitStr: "mm",
-		Size:    document.Size{Wd: 80, Ht: 70},
-	})
+	pdf := document.MustNew(
+		document.WithUnit(document.UnitMillimeter),
+		document.WithCustomPageSize(document.Size{Wd: 80, Ht: 70}),
+	)
 	pdf.SetCompression(false)
 	pdf.SetAutoPageBreak(true, 5)
 	pdf.AddPage()
@@ -432,7 +432,7 @@ func TestHTMLWriteTableRepeatsHeaderRowsAcrossPages(t *testing.T) {
 }
 
 func TestHTMLWriteTextSemantics(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -454,7 +454,7 @@ func TestHTMLWriteTextSemantics(t *testing.T) {
 }
 
 func TestHTMLWriteInlineSVG(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -505,7 +505,7 @@ func TestHTMLWriteCompiledRendersRepeatedFragment(t *testing.T) {
 	}
 
 	for i := 0; i < 2; i++ {
-		pdf := document.New("P", "mm", "A4", "")
+		pdf := document.MustNew()
 		pdf.SetCompression(false)
 		pdf.AddPage()
 		pdf.SetFont("Helvetica", "", 12)
@@ -542,7 +542,7 @@ func TestHTMLWriteCompiledConcurrentReuse(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			pdf := document.New("P", "mm", "A4", "")
+			pdf := document.MustNew()
 			pdf.SetCompression(false)
 			pdf.AddPage()
 			pdf.SetFont("Helvetica", "", 12)
@@ -589,7 +589,7 @@ func TestCompileHTMLHandlesDeeplyNestedFragment(t *testing.T) {
 		t.Fatalf("Stats() = %#v, want deep tree without recovery", stats)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -612,7 +612,7 @@ func TestCompileHTMLIgnoresDoctypeCommentsAndHeadContent(t *testing.T) {
 		t.Fatalf("CompileHTML() error = %v", err)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -641,7 +641,7 @@ func TestCompileHTMLSkipsHiddenInlineSVG(t *testing.T) {
 		t.Fatalf("CompileHTML() error = %v", err)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -694,7 +694,7 @@ func TestCompileHTMLHandlesMalformedAttributes(t *testing.T) {
 		t.Fatalf("Stats() = %#v, want tokenizer to preserve malformed input as recoverable content", stats)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -758,7 +758,7 @@ func TestCompileHTMLDataURIImages(t *testing.T) {
 			if stats := compiled.Stats(); stats.Images != 1 {
 				t.Fatalf("Stats().Images = %d, want 1", stats.Images)
 			}
-			pdf := document.New("P", "mm", "A4", "")
+			pdf := document.MustNew()
 			pdf.SetCompression(false)
 			pdf.AddPage()
 			pdf.SetFont("Helvetica", "", 12)
@@ -809,7 +809,7 @@ func TestWriteCompiledEnforcesCustomDataImageLimit(t *testing.T) {
 	if stats := compiled.Stats(); stats.Images != 1 {
 		t.Fatalf("compiled image count = %d, want 1", stats.Images)
 	}
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	_, lineHeight := pdf.GetFontSize()
@@ -832,7 +832,7 @@ func TestWriteCompiledDataImageReuseDoesNotMutateCachedBytes(t *testing.T) {
 	}
 
 	for i := 0; i < 3; i++ {
-		pdf := document.New("P", "mm", "A4", "")
+		pdf := document.MustNew()
 		pdf.SetCompression(false)
 		pdf.AddPage()
 		pdf.SetFont("Helvetica", "", 12)
@@ -851,7 +851,7 @@ func TestWriteCompiledDataImageReuseDoesNotMutateCachedBytes(t *testing.T) {
 }
 
 func TestHTMLWriteStyleRules(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -883,7 +883,7 @@ func TestHTMLWriteStyleRules(t *testing.T) {
 }
 
 func TestHTMLWriteBlockBoxStylesAndHorizontalRule(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -915,7 +915,7 @@ func TestHTMLWriteBlockBoxStylesAndHorizontalRule(t *testing.T) {
 }
 
 func TestHTMLWriteRoundedBoxShadowStyles(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -941,7 +941,7 @@ func TestHTMLWriteRoundedBoxShadowStyles(t *testing.T) {
 
 func TestHTMLWriteLineHeightAndBoxEdges(t *testing.T) {
 	render := func(fragment string) (float64, error) {
-		pdf := document.New("P", "mm", "A4", "")
+		pdf := document.MustNew()
 		pdf.SetCompression(false)
 		pdf.AddPage()
 		pdf.SetFont("Helvetica", "", 12)
@@ -970,7 +970,7 @@ func TestHTMLWriteLineHeightAndBoxEdges(t *testing.T) {
 }
 
 func TestHTMLWritePageBreakControls(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -996,7 +996,7 @@ func TestHTMLWritePageBreakControls(t *testing.T) {
 }
 
 func TestHTMLWriteSpanAndFlexBox(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -1062,7 +1062,7 @@ func TestHTMLWriteAdvancedFlexSizingAndStructuredItems(t *testing.T) {
 		t.Fatalf("compiled stats = %#v, want nested table and CSS rules", stats)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 10)
@@ -1131,7 +1131,7 @@ func TestHTMLWriteFlexEdgeCases(t *testing.T) {
 	</div>
 	<p>After edge cases</p>`
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 10)
@@ -1256,7 +1256,7 @@ func TestHTMLWriteRichFlexAndTableDesigns(t *testing.T) {
 		t.Fatalf("compiled stats = %#v, want rich table and CSS coverage", stats)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 10)
@@ -1294,7 +1294,7 @@ func TestHTMLWriteRichFlexAndTableDesigns(t *testing.T) {
 }
 
 func TestHTMLWriteHeadStyleScriptAreNotRendered(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -1319,7 +1319,7 @@ func TestHTMLWriteHeadStyleScriptAreNotRendered(t *testing.T) {
 }
 
 func TestHTMLWriteStyleSelectorVariants(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -1516,7 +1516,7 @@ func TestSVGWriteElementOrder(t *testing.T) {
 		t.Fatalf("SVGParse() error = %v", err)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SVGWrite(&svg, 1)
@@ -1548,7 +1548,7 @@ func TestSVGWriteEmbeddedImage(t *testing.T) {
 		t.Fatalf("SVGParse() error = %v", err)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SVGWrite(&svg, 1)
@@ -1576,7 +1576,7 @@ func TestSVGWriteStyledContent(t *testing.T) {
 		t.Fatalf("SVGParse() error = %v", err)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -1602,7 +1602,7 @@ func TestSVGWriteDoesNotMutateParsedSVG(t *testing.T) {
 	before := fmt.Sprintf("%#v", svg)
 
 	for i := 0; i < 2; i++ {
-		pdf := document.New("P", "mm", "A4", "")
+		pdf := document.MustNew()
 		pdf.SetCompression(false)
 		pdf.AddPage()
 		pdf.SetFont("Helvetica", "", 12)
@@ -1627,7 +1627,7 @@ func TestHTMLWriteCompiledInlineSVGTaggedRole(t *testing.T) {
 		t.Fatalf("CompileHTML() error = %v", err)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFUA2: true, Title: "Tagged SVG"})
 	pdf.AddPage()
@@ -1659,7 +1659,7 @@ func TestSVGWriteEvenOddFillRule(t *testing.T) {
 		t.Fatalf("fill rule style = %#v", svg.Paths)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SVGWrite(&svg, 1)
@@ -1781,7 +1781,7 @@ func TestSVGWritePatternFill(t *testing.T) {
 		t.Fatalf("SVGParse() error = %v", err)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SVGWrite(&svg, 1)
@@ -1823,7 +1823,7 @@ func TestSVGWriteClipPathAndGradients(t *testing.T) {
 		t.Fatalf("SVGParse() error = %v", err)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SVGWrite(&svg, 1)

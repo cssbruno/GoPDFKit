@@ -20,7 +20,7 @@ import (
 )
 
 func TestSecurityMalformedUTF8DoesNotPanic(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("Output panicked: %v", r)
@@ -38,7 +38,7 @@ func TestSecurityMalformedUTF8DoesNotPanic(t *testing.T) {
 }
 
 func TestSecurityPNGAlphaOverflowReturnsError(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("RegisterImageOptionsReader panicked: %v", r)
@@ -58,7 +58,7 @@ func TestSecurityPNGAlphaOverflowReturnsError(t *testing.T) {
 }
 
 func TestSecurityPNGAlphaDecodedLimitReturnsError(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("RegisterImageOptionsReader panicked: %v", r)
@@ -78,7 +78,7 @@ func TestSecurityPNGAlphaDecodedLimitReturnsError(t *testing.T) {
 }
 
 func TestSecurityPNGNonAlphaPixelLimitReturnsError(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("RegisterImageOptionsReader panicked: %v", r)
@@ -98,7 +98,7 @@ func TestSecurityPNGNonAlphaPixelLimitReturnsError(t *testing.T) {
 }
 
 func TestSecurityPNGDimensionLimitReturnsError(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("RegisterImageOptionsReader panicked: %v", r)
@@ -118,7 +118,7 @@ func TestSecurityPNGDimensionLimitReturnsError(t *testing.T) {
 }
 
 func TestSecurityOversizedGIFDimensionsRejected(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("RegisterImageOptionsReader panicked: %v", r)
@@ -145,7 +145,7 @@ func TestSecurityMaskImageFileSizeLimit(t *testing.T) {
 		t.Fatalf("Close() error = %v", err)
 	}
 
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.applyExternalImageMask(&ImageInfo{w: 1, h: 1}, maskPath, ImageOptions{ImageType: "png"})
 	if pdf.Error() == nil || !strings.Contains(pdf.Error().Error(), "image data exceeds maximum size") {
 		t.Fatalf("mask error = %v, want image data size limit", pdf.Error())
@@ -166,7 +166,7 @@ func TestSecurityPDFImportFileSizeLimit(t *testing.T) {
 		t.Fatalf("Close() error = %v", err)
 	}
 
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	if page := pdf.ImportPage(sourcePath, 1, "MediaBox"); page != 0 {
 		t.Fatalf("ImportPage() page = %d, want 0", page)
 	}
@@ -190,7 +190,7 @@ func TestSecurityThumbnailHugeDimensionsRejected(t *testing.T) {
 }
 
 func TestSecurityFontDefinitionReaderSizeLimit(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddFontFromReader("bad", "", strings.NewReader(strings.Repeat(" ", maxFontDefinitionBytes+1)))
 	if pdf.Error() == nil || !strings.Contains(pdf.Error().Error(), "font data exceeds maximum size") {
 		t.Fatalf("AddFontFromReader() error = %v, want font data size limit", pdf.Error())
@@ -218,7 +218,7 @@ func TestSecurityFontCacheFileSizeLimit(t *testing.T) {
 }
 
 func TestSecurityHTMLHugeColspanDoesNotAllocateUnbounded(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 
@@ -230,7 +230,7 @@ func TestSecurityHTMLHugeColspanDoesNotAllocateUnbounded(t *testing.T) {
 }
 
 func TestSecurityInvalidLinkIDReturnsError(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.Link(10, 10, 20, 20, 999)
 	if pdf.Error() == nil {
@@ -239,7 +239,7 @@ func TestSecurityInvalidLinkIDReturnsError(t *testing.T) {
 }
 
 func TestSecurityValidLinkIDStillWorks(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	link := pdf.AddLink()
 	pdf.SetLink(link, 10, 1)
@@ -250,7 +250,7 @@ func TestSecurityValidLinkIDStillWorks(t *testing.T) {
 }
 
 func TestSecurityInvalidLinkDestinationPageReturnsError(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	link := pdf.AddLink()
 	pdf.SetLink(link, 10, 99)
@@ -260,7 +260,7 @@ func TestSecurityInvalidLinkDestinationPageReturnsError(t *testing.T) {
 }
 
 func TestSecurityImportedObjectOffsetReturnsError(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	hash := strings.Repeat("a", 40)
 	pdf.ImportObjects(map[string][]byte{hash: []byte("short")})
@@ -278,7 +278,7 @@ func TestSecurityImportedObjectOffsetReturnsError(t *testing.T) {
 }
 
 func TestSecurityImportedTemplateNameRejected(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.UseImportedTemplate("/Tpl Q 1 0 0 1 0 0 cm", 1, 1, 0, 0)
 	if pdf.Error() == nil {
@@ -347,7 +347,7 @@ func TestSecurityInvalidTemplateImageRejected(t *testing.T) {
 }
 
 func TestSecurityMalformedFontJSONReturnsError(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddFontFromBytes("bad", "", []byte(`{"File":"x"}`), []byte("font"))
 	if pdf.Error() == nil {
 		t.Fatal("expected invalid font definition error")
@@ -355,7 +355,7 @@ func TestSecurityMalformedFontJSONReturnsError(t *testing.T) {
 }
 
 func TestSecurityMalformedFontReaderReturnsError(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddFontFromReader("bad", "", strings.NewReader(`{"File":"x"}`))
 	if pdf.Error() == nil {
 		t.Fatal("expected invalid font definition error")
@@ -402,7 +402,7 @@ func TestSecuritySVGRejectsExcessiveNesting(t *testing.T) {
 }
 
 func TestSecurityHTMLDataImageSizeLimit(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
@@ -414,7 +414,7 @@ func TestSecurityHTMLDataImageSizeLimit(t *testing.T) {
 }
 
 func TestSecurityHTMLInputSizeLimit(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
@@ -427,7 +427,7 @@ func TestSecurityHTMLInputSizeLimit(t *testing.T) {
 		t.Fatalf("HTML input size error = %v", pdf.Error())
 	}
 
-	validatorPDF := New("P", "mm", "A4", "")
+	validatorPDF := MustNew()
 	validator := validatorPDF.HTMLNew()
 	validator.MaxHTMLBytes = 8
 	messages := validator.ValidateHTML("<p>too large</p>")
@@ -437,7 +437,7 @@ func TestSecurityHTMLInputSizeLimit(t *testing.T) {
 }
 
 func TestSecurityHTMLTableRowLimit(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
@@ -454,7 +454,7 @@ func TestSecurityHTMLTableRowLimit(t *testing.T) {
 func TestSecurityHTMLElementDepthLimit(t *testing.T) {
 	fragment := `<div><section><p>too deep</p></section></div>`
 
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
@@ -467,7 +467,7 @@ func TestSecurityHTMLElementDepthLimit(t *testing.T) {
 		t.Fatalf("HTML element depth error = %v", pdf.Error())
 	}
 
-	validatorPDF := New("P", "mm", "A4", "")
+	validatorPDF := MustNew()
 	validator := validatorPDF.HTMLNew()
 	validator.MaxElementDepth = 2
 	messages := validator.ValidateHTML(fragment)
@@ -477,7 +477,7 @@ func TestSecurityHTMLElementDepthLimit(t *testing.T) {
 }
 
 func TestSecurityHTMLGeneratedPageLimit(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
@@ -492,7 +492,7 @@ func TestSecurityHTMLGeneratedPageLimit(t *testing.T) {
 }
 
 func TestSecurityHTMLLocalImageDisabledByDefault(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
@@ -503,7 +503,7 @@ func TestSecurityHTMLLocalImageDisabledByDefault(t *testing.T) {
 }
 
 func TestSecurityHTMLRejectsUnsafeLinkSchemes(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
@@ -540,7 +540,7 @@ func TestSecurityDirectLinksRejectUnsafeSchemes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pdf := New("P", "mm", "A4", "")
+			pdf := MustNew()
 			pdf.AddPage()
 			pdf.SetFont("Helvetica", "", 12)
 			tt.run(pdf)
@@ -581,7 +581,7 @@ func TestSecurityTemplateTypedNilChildReturnsError(t *testing.T) {
 }
 
 func TestSecurityAliasReplacementEscaped(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -598,7 +598,7 @@ func TestSecurityAliasReplacementEscaped(t *testing.T) {
 }
 
 func TestSecurityMalformedFontDiffRejected(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddFontFromBytes("bad", "", []byte(securityFontJSON(`0 /A] >> /Injected <<`)), []byte("font"))
 	if pdf.Error() == nil {
 		t.Fatal("expected invalid font diff error")
@@ -610,7 +610,7 @@ func TestSecurityUnsafeUTF8FontNameRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile font: %v", err)
 	}
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddUTF8FontFromBytes("Bad/Font", "", fontBytes)
 	if pdf.Error() == nil {
 		t.Fatal("expected invalid UTF-8 font name error")
@@ -628,7 +628,7 @@ func securityFixturePath(t *testing.T, elems ...string) string {
 }
 
 func TestSecurityNonFiniteDrawingInputsRejected(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SubWrite(math.NaN(), "x", 6, 0, 0, "")
 	if pdf.Error() == nil {

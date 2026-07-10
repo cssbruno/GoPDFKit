@@ -134,7 +134,7 @@ func TestMakeOpenTypeCFF(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read generated compressed font: %s", err)
 	}
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddFontFromBytes("Minimal", "", def, zBytes)
 	pdf.SetFont("Minimal", "", 12)
 	pdf.AddPage()
@@ -331,7 +331,7 @@ func hexStr(s string) string {
 }
 
 func ExampleDocument_GetStringWidth() {
-	pdf := document.New("", "", "", example.FontDir())
+	pdf := document.MustNew(document.WithFontDir(example.FontDir()))
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.AddPage()
 	for _, s := range []string{"Hello", "世界", "\xe7a va?"} {

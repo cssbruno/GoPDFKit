@@ -21,7 +21,7 @@ const (
 	OrientationLandscape = "landscape"
 )
 
-// String returns the orientation as accepted by the legacy constructor.
+// String returns the constructor representation of the orientation.
 func (orientation Orientation) String() string {
 	return string(orientation)
 }
@@ -40,7 +40,7 @@ const (
 	UnitInch = "inch"
 )
 
-// String returns the unit as accepted by the legacy constructor.
+// String returns the constructor representation of the unit.
 func (unit Unit) String() string {
 	return string(unit)
 }
@@ -69,7 +69,7 @@ const (
 	PageSizeTabloid = "Tabloid"
 )
 
-// String returns the page size name as accepted by the legacy constructor.
+// String returns the constructor representation of the page size name.
 func (pageSize PageSizeName) String() string {
 	return string(pageSize)
 }
@@ -174,7 +174,6 @@ const (
 // CompressionDisabled to disable compression.
 type CompressionPolicy struct {
 	Mode                     CompressionMode // Explicit compression mode; 0 infers from other fields.
-	Enabled                  bool            // Deprecated: use Mode. True enables compression.
 	Level                    int             // zlib compression level; 0 uses the default level.
 	PageWorkers              int             // Background page compression workers; 0 defaults, -1 disables.
 	AttachmentWorkers        int             // Background attachment compression workers; 0 defaults, -1 disables.
@@ -195,36 +194,6 @@ const (
 	// ResourceCacheDisabled parses file-backed resources without cache reuse.
 	ResourceCacheDisabled
 )
-
-// Options is used with NewWithOptions and NewDocumentWithOptions to customize a
-// Document instance. Prefer Orientation, Unit, PageSize, and FontDir for new
-// code. The *Str fields are kept for compatibility with the legacy New
-// constructor and are used only when the typed field is empty.
-type Options struct {
-	Orientation                  Orientation         // Default page orientation.
-	Unit                         Unit                // Document unit of measure.
-	PageSize                     PageSizeName        // Named page size.
-	Size                         Size                // Explicit page size override.
-	FontDir                      string              // Font resource directory.
-	Optimize                     bool                // Use best-compression generation defaults.
-	CompressionPolicy            *CompressionPolicy  // Optional explicit compression policy.
-	PageCompressionWorkers       *int                // Optional background page compression workers; 0 disables.
-	AttachmentCompressionWorkers *int                // Optional background attachment compression workers; 0 disables.
-	CachePolicy                  ResourceCachePolicy // File-backed image and UTF-8 font cache policy.
-	ImageCache                   *ImageCache         // Optional explicit image cache.
-	FontCache                    *FontCache          // Optional explicit UTF-8 font cache.
-	ResourceLoader               ResourceLoader      // Optional generalized loader for supported resource kinds.
-	Limits                       *Limits             // Optional resource and document limits.
-	SecurityPolicy               *SecurityPolicy     // Optional security feature gates.
-	OutputPolicy                 *OutputPolicy       // Optional output-time defaults.
-	Hooks                        *Hooks              // Optional observability hooks.
-	DeterministicOutput          bool                // Use fixed metadata dates and sorted catalogs.
-
-	OrientationStr string // Deprecated: use Orientation.
-	UnitStr        string // Deprecated: use Unit.
-	SizeStr        string // Deprecated: use PageSize.
-	FontDirStr     string // Deprecated: use FontDir.
-}
 
 // PageBox defines the coordinates and extent of a PDF page box.
 type PageBox struct {

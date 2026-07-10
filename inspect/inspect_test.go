@@ -106,7 +106,7 @@ func TestDecodedStreamsEnforcesAggregateLimits(t *testing.T) {
 func inspectTestPDF(t *testing.T) []byte {
 	t.Helper()
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(40, 10, "Inspect page one")

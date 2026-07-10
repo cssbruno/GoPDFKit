@@ -6,14 +6,13 @@ package main
 import (
 	"log"
 
-	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/assets"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
 
 func main() {
-	pdf := gopdfkit.New()
+	pdf := document.MustNew()
 	pdf.SetTitle("Images on Pages", false)
 	pdf.SetCreator("examples/add-images-to-pages", false)
 
@@ -41,7 +40,7 @@ func main() {
 	}
 }
 
-func drawImageCard(pdf *gopdfkit.Document, x, y float64, label, imagePath string, options document.ImageOptions) {
+func drawImageCard(pdf *document.Document, x, y float64, label, imagePath string, options document.ImageOptions) {
 	pdf.SetDrawColor(210, 218, 226)
 	pdf.SetFillColor(248, 250, 252)
 	pdf.RoundedRect(x, y, 80, 68, 3, "1234", "DF")

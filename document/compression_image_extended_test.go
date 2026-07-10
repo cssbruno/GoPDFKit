@@ -20,7 +20,7 @@ import (
 
 func TestCompressionLevelControlsPageCompression(t *testing.T) {
 	build := func(configure func(*document.Document)) []byte {
-		pdf := document.New("P", "mm", "A4", "")
+		pdf := document.MustNew()
 		configure(pdf)
 		pdf.AddPage()
 		pdf.SetFont("Helvetica", "", 10)
@@ -47,7 +47,7 @@ func TestCompressionLevelControlsPageCompression(t *testing.T) {
 		t.Fatalf("compressed PDF size = %d, want smaller than uncompressed %d", len(compressed), len(uncompressed))
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompressionLevel(zlib.BestCompression + 1)
 	if pdf.Ok() {
 		t.Fatal("SetCompressionLevel accepted invalid level")
@@ -56,7 +56,7 @@ func TestCompressionLevelControlsPageCompression(t *testing.T) {
 
 func TestImageOptionsExtendedCropRotateFlipAndMask(t *testing.T) {
 	maskPath := testMaskForImage(t, example.ImageFile("logo.png"))
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.ImageOptionsExtended(example.ImageFile("logo.png"), document.ExtendedImageOptions{

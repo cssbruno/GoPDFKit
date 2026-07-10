@@ -10,9 +10,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
-
-	"github.com/cssbruno/gopdfkit/document"
 )
 
 var (
@@ -24,10 +21,6 @@ const pdfDisplayDir = "assets/generated/pdf"
 
 func init() {
 	setRoot()
-	document.SetDefaultCompression(false)
-	document.SetDefaultCatalogSort(true)
-	document.SetDefaultCreationDate(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
-	document.SetDefaultModificationDate(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
 }
 
 // setRoot records the repository root from this source file instead of the

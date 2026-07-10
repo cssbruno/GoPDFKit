@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/cssbruno/gopdfkit"
+	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
 
 func main() {
-	pdf := gopdfkit.New()
+	pdf := document.MustNew()
 	pdf.AliasNbPages("{total}")
 
 	pdf.SetHeaderFunc(func() {

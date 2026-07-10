@@ -11,11 +11,6 @@ func (f *Document) PointConvert(pt float64) (u float64) {
 	return pt / f.k
 }
 
-// PointToUnitConvert is an alias for PointConvert.
-func (f *Document) PointToUnitConvert(pt float64) (u float64) {
-	return pt / f.k
-}
-
 // UnitToPointConvert returns the value of u, expressed in the unit of measure
 // specified in New(), as a value expressed in points (1/72 inch). Since font
 // management in Document uses points, this method can help with setting font sizes

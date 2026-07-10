@@ -13,7 +13,7 @@ import (
 )
 
 func TestDocumentStatsSummarizeResources(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(20, 5, "stats")
@@ -43,7 +43,7 @@ func TestDocumentStatsSummarizeResources(t *testing.T) {
 }
 
 func TestResourceStoreOwnsDocumentResources(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	resources := pdf.ensureResourceStore()
 	if resources == nil {
 		t.Fatal("resources store is nil")
@@ -67,7 +67,7 @@ func TestResourceStoreOwnsDocumentResources(t *testing.T) {
 }
 
 func TestResourceStoreReceivesRegisteredResourceWrites(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 
 	info, err := pdf.RegisterImageOptionsReaderContext(t.Context(), "pixel", ImageOptions{ImageType: "png"}, bytes.NewReader(decodeTinyPNG(t)))
 	if err != nil {
@@ -104,7 +104,7 @@ func TestResourceStoreReceivesRegisteredResourceWrites(t *testing.T) {
 }
 
 func TestResourceStoreReceivesAttachmentCacheWrites(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetAttachments([]Attachment{{
 		Content:     []byte("attachment payload"),
@@ -128,7 +128,7 @@ func TestResourceStoreReceivesAttachmentCacheWrites(t *testing.T) {
 }
 
 func TestResourceStoreReceivesFontWrites(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetFont("Helvetica", "", 12)
 	if _, ok := pdf.resources.font("helvetica"); !ok {
 		t.Fatal("core font was not stored in resourceStore")
@@ -139,7 +139,7 @@ func TestResourceStoreReceivesFontWrites(t *testing.T) {
 		def:  fontDefinition{Tp: "UTF8", Name: "cached", Cw: []int{0, 500}},
 		data: []byte("font-data"),
 	}
-	pdf = New("P", "mm", "A4", "")
+	pdf = MustNew()
 	if err := pdf.AddUTF8FontFromCacheError("cached", "", cache); err != nil {
 		t.Fatalf("AddUTF8FontFromCacheError() error = %v", err)
 	}
@@ -412,7 +412,7 @@ func TestResourceLoaderStableIDCachesSharedUTF8Fonts(t *testing.T) {
 }
 
 func TestResourceLoaderImportsPDFs(t *testing.T) {
-	source := New("P", "pt", "A4", "")
+	source := MustNew(WithUnit(UnitPoint))
 	source.AddPage()
 	source.SetFont("Helvetica", "", 12)
 	source.Text(72, 96, "resource-loaded import")

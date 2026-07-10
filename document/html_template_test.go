@@ -29,7 +29,7 @@ func ExampleCompileHTMLTemplate() {
 		panic(err)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -133,7 +133,7 @@ func TestRenderHTMLTemplateImageRendersWithHTMLNew(t *testing.T) {
 		t.Fatalf("RenderHTMLTemplate() error = %v", err)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -173,7 +173,7 @@ func TestCompiledHTMLTemplateRendersChangingValues(t *testing.T) {
 	}
 
 	render := func(values document.HTMLTemplateValues) string {
-		pdf := document.New("P", "mm", "A4", "")
+		pdf := document.MustNew()
 		pdf.SetCompression(false)
 		pdf.AddPage()
 		pdf.SetFont("Helvetica", "", 12)
@@ -231,7 +231,7 @@ func TestCompiledHTMLTemplateMissingValueErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompileHTMLTemplate() error = %v", err)
 	}
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
@@ -258,7 +258,7 @@ func TestCompiledHTMLTemplateRejectsRawHTMLValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompileHTMLTemplate() error = %v", err)
 	}
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()

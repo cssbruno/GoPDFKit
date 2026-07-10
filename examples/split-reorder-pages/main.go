@@ -15,7 +15,7 @@ import (
 func main() {
 	source := samplepdf.Build("Split Source", 4)
 
-	split := document.New("P", "pt", "A4", "")
+	split := document.MustNew(document.WithUnit(document.UnitPoint))
 	split.SetTitle("Split Page 2", false)
 	page2 := split.ImportPageStream(bytesReader(source), 2, "MediaBox")
 	split.AddPage()
@@ -24,7 +24,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	reordered := document.New("P", "pt", "A4", "")
+	reordered := document.MustNew(document.WithUnit(document.UnitPoint))
 	reordered.SetTitle("Reordered PDF Pages", false)
 	for _, pageNo := range []int{4, 2, 1, 3} {
 		id := reordered.ImportPageStream(bytesReader(source), pageNo, "MediaBox")

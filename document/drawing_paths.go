@@ -221,13 +221,6 @@ func (f *Document) Curve(x0, y0, cx, cy, x1, y1 float64, styleStr string) {
 	f.EndArtifact()
 }
 
-// CurveCubic draws a single-segment cubic Bézier curve. This routine performs
-// the same function as CurveBezierCubic() but has a nonstandard argument order.
-// It is retained to preserve backward compatibility.
-func (f *Document) CurveCubic(x0, y0, cx0, cy0, x1, y1, cx1, cy1 float64, styleStr string) {
-	f.CurveBezierCubic(x0, y0, cx0, cy0, cx1, cy1, x1, y1, styleStr)
-}
-
 // CurveBezierCubic draws a single-segment cubic Bézier curve. The curve starts at
 // the point (x0, y0) and ends at the point (x1, y1). The control points
 // (cx0, cy0) and (cx1, cy1) specify the curvature. At the start point, the
@@ -240,8 +233,7 @@ func (f *Document) CurveCubic(x0, y0, cx0, cy0, x1, y1, cx1, cy1 float64, styleS
 // the current draw color, line width, and cap style centered on the curve's
 // path. Filling uses the current fill color.
 //
-// This routine performs the same function as CurveCubic() but uses standard
-// argument order.
+// The arguments use the standard start point, control points, end point order.
 //
 // The Circle() example demonstrates this method.
 func (f *Document) CurveBezierCubic(x0, y0, cx0, cy0, cx1, cy1, x1, y1 float64, styleStr string) {

@@ -6,12 +6,12 @@ package main
 import (
 	"log"
 
-	"github.com/cssbruno/gopdfkit"
+	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
 
 func main() {
-	pdf := gopdfkit.New()
+	pdf := document.MustNew()
 	pdf.SetTitle("HTML CSS Styles", false)
 	pdf.SetCreator("examples/html-css-styles", false)
 	pdf.AddPage()

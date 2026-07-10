@@ -8,13 +8,12 @@ import (
 	"log"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
 
 func main() {
-	pdf := gopdfkit.New()
+	pdf := document.MustNew()
 	pdf.SetTitle("Project Status Report", false)
 	pdf.SetCreator("examples/project-status-report", false)
 	pdf.SetMargins(14, 24, 14)
@@ -41,7 +40,7 @@ func main() {
 	}
 }
 
-func setHeaderFooter(pdf *gopdfkit.Document) {
+func setHeaderFooter(pdf *document.Document) {
 	pdf.SetHeaderFunc(func() {
 		pdf.SetFillColor(31, 54, 82)
 		pdf.Rect(0, 0, 210, 18, "F")

@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/cssbruno/gopdfkit/layout"
 )
 
 func TestWriteDocumentGoldenPDFs(t *testing.T) {
 	cases := []struct {
 		name string
-		doc  *LayoutDocument
+		doc  *layout.LayoutDocument
 		want string
 	}{
 		{name: "structured-report", doc: goldenStructuredReportDocument(), want: "615dc1ab3bee7dd52213941e46ea6025f63accdd437da027493dd262c0d56bac"},
@@ -38,9 +40,9 @@ func TestWriteDocumentGoldenPDFs(t *testing.T) {
 	}
 }
 
-func goldenDocumentPDFSHA(t *testing.T, doc *LayoutDocument) string {
+func goldenDocumentPDFSHA(t *testing.T, doc *layout.LayoutDocument) string {
 	t.Helper()
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
 	pdf.SetCatalogSort(true)
 	fixed := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -56,80 +58,80 @@ func goldenDocumentPDFSHA(t *testing.T, doc *LayoutDocument) string {
 	return fmt.Sprintf("%x", sha256.Sum256(out.Bytes()))
 }
 
-func goldenStructuredReportDocument() *LayoutDocument {
-	doc := NewLayoutDocument()
+func goldenStructuredReportDocument() *layout.LayoutDocument {
+	doc := layout.NewLayoutDocument()
 	doc.Title = "Structured Report"
-	doc.PageTemplate.Header = &HeaderBlock{Height: 8, Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Structured Header"}}, Style: TextStyle{FontSize: 9}}}}
-	doc.PageTemplate.Footer = &FooterBlock{Height: 8, ReservePageArea: true}
-	doc.PageTemplate.PageNumbers = PageNumberOptions{Enabled: true, TotalPageAlias: "{total}"}
-	doc.Body = []Block{
-		HeadingBlock{Level: 1, Segments: []TextSegment{{Text: "Structured Report"}}},
-		MetadataGridBlock{Fields: []MetadataField{{Label: "ID", Value: "SR-001"}, {Label: "Status", Value: "Final"}}},
-		SectionBlock{Title: "Summary", Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "A deterministic structured report."}}}}},
+	doc.PageTemplate.Header = &layout.HeaderBlock{Height: 8, Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Structured Header"}}, Style: layout.TextStyle{FontSize: 9}}}}
+	doc.PageTemplate.Footer = &layout.FooterBlock{Height: 8, ReservePageArea: true}
+	doc.PageTemplate.PageNumbers = layout.PageNumberOptions{Enabled: true, TotalPageAlias: "{total}"}
+	doc.Body = []layout.Block{
+		layout.HeadingBlock{Level: 1, Segments: []layout.TextSegment{{Text: "Structured Report"}}},
+		layout.MetadataGridBlock{Fields: []layout.MetadataField{{Label: "ID", Value: "SR-001"}, {Label: "Status", Value: "Final"}}},
+		layout.SectionBlock{Title: "Summary", Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "A deterministic structured report."}}}}},
 	}
 	return doc
 }
 
-func goldenTabularReportDocument() *LayoutDocument {
-	doc := NewLayoutDocument()
+func goldenTabularReportDocument() *layout.LayoutDocument {
+	doc := layout.NewLayoutDocument()
 	doc.Title = "Tabular Report"
-	doc.Body = []Block{
-		HeadingBlock{Level: 1, Segments: []TextSegment{{Text: "Tabular Report"}}},
-		TableBlock{
+	doc.Body = []layout.Block{
+		layout.HeadingBlock{Level: 1, Segments: []layout.TextSegment{{Text: "Tabular Report"}}},
+		layout.TableBlock{
 			Caption: "Metrics",
-			Header:  []TableRow{{Cells: []TableCell{{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Metric"}}}}}, {Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Value"}}}}}}}},
-			Body: []TableRow{
-				{Cells: []TableCell{{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Alpha"}}}}}, {Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "10"}}}}}}},
-				{Cells: []TableCell{{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Beta"}}}}}, {Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "20"}}}}}}},
+			Header:  []layout.TableRow{{Cells: []layout.TableCell{{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Metric"}}}}}, {Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Value"}}}}}}}},
+			Body: []layout.TableRow{
+				{Cells: []layout.TableCell{{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Alpha"}}}}}, {Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "10"}}}}}}},
+				{Cells: []layout.TableCell{{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Beta"}}}}}, {Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "20"}}}}}}},
 			},
 		},
 	}
 	return doc
 }
 
-func goldenTransactionalDocument() *LayoutDocument {
-	doc := NewLayoutDocument()
+func goldenTransactionalDocument() *layout.LayoutDocument {
+	doc := layout.NewLayoutDocument()
 	doc.Title = "Transaction"
-	doc.Body = []Block{
-		HeadingBlock{Level: 1, Segments: []TextSegment{{Text: "Transaction Receipt"}}},
-		MetadataGridBlock{Fields: []MetadataField{{Label: "Reference", Value: "TX-001"}, {Label: "Amount", Value: "100.00"}}},
-		ParagraphBlock{Segments: []TextSegment{{Text: "Transaction completed."}}},
+	doc.Body = []layout.Block{
+		layout.HeadingBlock{Level: 1, Segments: []layout.TextSegment{{Text: "Transaction Receipt"}}},
+		layout.MetadataGridBlock{Fields: []layout.MetadataField{{Label: "Reference", Value: "TX-001"}, {Label: "Amount", Value: "100.00"}}},
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Transaction completed."}}},
 	}
 	return doc
 }
 
-func goldenAttestationDocument() *LayoutDocument {
-	doc := NewLayoutDocument()
+func goldenAttestationDocument() *layout.LayoutDocument {
+	doc := layout.NewLayoutDocument()
 	doc.Title = "Attestation"
-	doc.Body = []Block{
-		HeadingBlock{Level: 1, Segments: []TextSegment{{Text: "Attestation"}}},
-		ParagraphBlock{Segments: []TextSegment{{Text: "This attests that the described facts are recorded."}}},
+	doc.Body = []layout.Block{
+		layout.HeadingBlock{Level: 1, Segments: []layout.TextSegment{{Text: "Attestation"}}},
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "This attests that the described facts are recorded."}}},
 	}
-	doc.Signature = &SignatureBlock{Rows: []SignatureRowBlock{{Columns: []SignatureColumn{{Label: "Responsible", Name: "A. Example"}}}}}
+	doc.Signature = &layout.SignatureBlock{Rows: []layout.SignatureRowBlock{{Columns: []layout.SignatureColumn{{Label: "Responsible", Name: "A. Example"}}}}}
 	return doc
 }
 
-func goldenStatementDocument() *LayoutDocument {
-	doc := NewLayoutDocument()
+func goldenStatementDocument() *layout.LayoutDocument {
+	doc := layout.NewLayoutDocument()
 	doc.Title = "Statement"
-	doc.Body = []Block{
-		HeadingBlock{Level: 1, Segments: []TextSegment{{Text: "Statement"}}},
-		NoteBoxBlock{Title: "Notice", Body: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "This is a deterministic statement."}}}}},
+	doc.Body = []layout.Block{
+		layout.HeadingBlock{Level: 1, Segments: []layout.TextSegment{{Text: "Statement"}}},
+		layout.NoteBoxBlock{Title: "Notice", Body: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "This is a deterministic statement."}}}}},
 	}
 	return doc
 }
 
-func goldenGenericDocument() *LayoutDocument {
-	doc := NewLayoutDocument()
+func goldenGenericDocument() *layout.LayoutDocument {
+	doc := layout.NewLayoutDocument()
 	doc.Title = "Generic"
-	doc.Body = []Block{
-		HeadingBlock{Level: 1, Segments: []TextSegment{{Text: "Generic Document"}}},
-		ParagraphBlock{Segments: []TextSegment{{Text: "Free text content for generic rendering."}}},
+	doc.Body = []layout.Block{
+		layout.HeadingBlock{Level: 1, Segments: []layout.TextSegment{{Text: "Generic Document"}}},
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Free text content for generic rendering."}}},
 	}
 	return doc
 }
 
-func goldenLongFormDocument() *LayoutDocument {
+func goldenLongFormDocument() *layout.LayoutDocument {
 	doc, messages := LongFormHTMLDocumentModel("Long Form", `<h2>Clause</h2><p>Long-form text.</p><footer>Long footer</footer>`)
 	if len(messages) != 0 {
 		panic(fmt.Sprintf("unexpected long-form diagnostics: %#v", messages))
@@ -137,14 +139,14 @@ func goldenLongFormDocument() *LayoutDocument {
 	return doc
 }
 
-func goldenQRSignatureDocument() *LayoutDocument {
-	doc := NewLayoutDocument()
+func goldenQRSignatureDocument() *layout.LayoutDocument {
+	doc := layout.NewLayoutDocument()
 	doc.Title = "QR Signature"
-	doc.Body = []Block{
-		HeadingBlock{Level: 1, Segments: []TextSegment{{Text: "QR Signature"}}},
-		QRVerificationBlock{QR: QRBlock{Label: "Verify", URL: "https://example.test/verify/1", Size: 22}},
+	doc.Body = []layout.Block{
+		layout.HeadingBlock{Level: 1, Segments: []layout.TextSegment{{Text: "QR Signature"}}},
+		layout.QRVerificationBlock{QR: layout.QRBlock{Label: "Verify", URL: "https://example.test/verify/1", Size: 22}},
 	}
-	doc.Signature = &SignatureBlock{Rows: []SignatureRowBlock{{Columns: []SignatureColumn{
+	doc.Signature = &layout.SignatureBlock{Rows: []layout.SignatureRowBlock{{Columns: []layout.SignatureColumn{
 		{Label: "Primary", Name: "A. Example", Role: "Signer"},
 		{Label: "Secondary", Name: "B. Example", Role: "Reviewer"},
 	}}}}

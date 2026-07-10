@@ -9,39 +9,41 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/cssbruno/gopdfkit/layout"
 )
 
 func TestWriteDocumentRendersSharedBlocks(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
-	doc := NewLayoutDocument()
+	doc := layout.NewLayoutDocument()
 	doc.Title = "Shared renderer"
 	doc.Metadata.Subject = "Renderer test"
-	doc.PageTemplate.Header = &HeaderBlock{
+	doc.PageTemplate.Header = &layout.HeaderBlock{
 		Height: 8,
-		Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Header text"}}, Style: TextStyle{FontSize: 9}}},
+		Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Header text"}}, Style: layout.TextStyle{FontSize: 9}}},
 	}
-	doc.PageTemplate.Footer = &FooterBlock{
+	doc.PageTemplate.Footer = &layout.FooterBlock{
 		Height:          8,
 		ReservePageArea: true,
 	}
-	doc.PageTemplate.PageNumbers = PageNumberOptions{Enabled: true, TotalPageAlias: "{total}"}
-	doc.Body = []Block{
-		HeadingBlock{Level: 1, Segments: []TextSegment{{Text: "Shared Document"}}},
-		MetadataGridBlock{Fields: []MetadataField{{Label: "ID", Value: "ABC-123"}, {Label: "Status", Value: "Ready"}}},
-		ParagraphBlock{Segments: []TextSegment{{Text: "The shared renderer writes model blocks into PDF output."}}},
-		ListBlock{Items: []ListItem{
-			{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "First item"}}}}},
-			{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Second item"}}}}},
+	doc.PageTemplate.PageNumbers = layout.PageNumberOptions{Enabled: true, TotalPageAlias: "{total}"}
+	doc.Body = []layout.Block{
+		layout.HeadingBlock{Level: 1, Segments: []layout.TextSegment{{Text: "Shared Document"}}},
+		layout.MetadataGridBlock{Fields: []layout.MetadataField{{Label: "ID", Value: "ABC-123"}, {Label: "Status", Value: "Ready"}}},
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "The shared renderer writes model blocks into PDF output."}}},
+		layout.ListBlock{Items: []layout.ListItem{
+			{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "First item"}}}}},
+			{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Second item"}}}}},
 		}},
-		TableBlock{
+		layout.TableBlock{
 			Caption: "Sample table",
-			Header:  []TableRow{{Cells: []TableCell{{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Name"}}}}}, {Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Value"}}}}}}}},
-			Body:    []TableRow{{Cells: []TableCell{{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Alpha"}}}}}, {Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "42"}}}}}}}},
+			Header:  []layout.TableRow{{Cells: []layout.TableCell{{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Name"}}}}}, {Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Value"}}}}}}}},
+			Body:    []layout.TableRow{{Cells: []layout.TableCell{{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Alpha"}}}}}, {Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "42"}}}}}}}},
 		},
-		QRVerificationBlock{QR: QRBlock{Label: "Verify", URL: "https://example.test/verify", Size: 18}},
+		layout.QRVerificationBlock{QR: layout.QRBlock{Label: "Verify", URL: "https://example.test/verify", Size: 18}},
 	}
-	doc.Signature = &SignatureBlock{Rows: []SignatureRowBlock{{Columns: []SignatureColumn{{Label: "Primary"}, {Label: "Secondary"}}}}}
+	doc.Signature = &layout.SignatureBlock{Rows: []layout.SignatureRowBlock{{Columns: []layout.SignatureColumn{{Label: "Primary"}, {Label: "Secondary"}}}}}
 
 	pdf.WriteDocument(doc)
 	var out bytes.Buffer
@@ -66,17 +68,17 @@ func TestWriteDocumentRendersSharedBlocks(t *testing.T) {
 }
 
 func TestWriteDocumentEmitsTaggedRoles(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
 	pdf.SetComplianceMetadata(ComplianceMetadata{PDFUA2: true, Title: "Tagged document"})
-	doc := NewLayoutDocument()
-	doc.Body = []Block{
-		HeadingBlock{Level: 2, Segments: []TextSegment{{Text: "Tagged heading"}}},
-		ParagraphBlock{Segments: []TextSegment{{Text: "Tagged paragraph"}}},
-		ListBlock{Items: []ListItem{{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Tagged item"}}}}}}},
-		TableBlock{
-			Header: []TableRow{{Cells: []TableCell{{ColSpan: 2, Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Head"}}}}}}}},
-			Body:   []TableRow{{Cells: []TableCell{{RowSpan: 2, Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Body"}}}}}, {Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "More"}}}}}}}},
+	doc := layout.NewLayoutDocument()
+	doc.Body = []layout.Block{
+		layout.HeadingBlock{Level: 2, Segments: []layout.TextSegment{{Text: "Tagged heading"}}},
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Tagged paragraph"}}},
+		layout.ListBlock{Items: []layout.ListItem{{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Tagged item"}}}}}}},
+		layout.TableBlock{
+			Header: []layout.TableRow{{Cells: []layout.TableCell{{ColSpan: 2, Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Head"}}}}}}}},
+			Body:   []layout.TableRow{{Cells: []layout.TableCell{{RowSpan: 2, Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Body"}}}}}, {Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "More"}}}}}}}},
 		},
 	}
 
@@ -113,12 +115,12 @@ func TestWriteDocumentEmitsTaggedRoles(t *testing.T) {
 }
 
 func TestWriteDocumentPageBreakBlockAddsPage(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
-	doc := NewLayoutDocument()
-	doc.Body = []Block{
-		ParagraphBlock{Segments: []TextSegment{{Text: "before break"}}},
-		PageBreakBlock{After: true},
-		ParagraphBlock{Segments: []TextSegment{{Text: "after break"}}},
+	pdf := MustNew()
+	doc := layout.NewLayoutDocument()
+	doc.Body = []layout.Block{
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "before break"}}},
+		layout.PageBreakBlock{After: true},
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "after break"}}},
 	}
 
 	pdf.WriteDocument(doc)
@@ -128,12 +130,12 @@ func TestWriteDocumentPageBreakBlockAddsPage(t *testing.T) {
 }
 
 func TestWriteDocumentErrorsForUnknownFont(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
-	doc := NewLayoutDocument()
-	doc.Body = []Block{
-		ParagraphBlock{
-			Segments: []TextSegment{{Text: "font error text"}},
-			Style:    TextStyle{FontFamily: "MissingFont", Bold: true, Italic: true},
+	pdf := MustNew()
+	doc := layout.NewLayoutDocument()
+	doc.Body = []layout.Block{
+		layout.ParagraphBlock{
+			Segments: []layout.TextSegment{{Text: "font error text"}},
+			Style:    layout.TextStyle{FontFamily: "MissingFont", Bold: true, Italic: true},
 		},
 	}
 
@@ -144,13 +146,13 @@ func TestWriteDocumentErrorsForUnknownFont(t *testing.T) {
 }
 
 func TestWriteDocumentErrorsForUnavailableBoldItalicFace(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.ensureResourceStore().setFont("custom", fontDefinition{})
-	doc := NewLayoutDocument()
-	doc.Body = []Block{
-		ParagraphBlock{
-			Segments: []TextSegment{{Text: "font face error text"}},
-			Style:    TextStyle{FontFamily: "custom", Bold: true, Italic: true},
+	doc := layout.NewLayoutDocument()
+	doc.Body = []layout.Block{
+		layout.ParagraphBlock{
+			Segments: []layout.TextSegment{{Text: "font face error text"}},
+			Style:    layout.TextStyle{FontFamily: "custom", Bold: true, Italic: true},
 		},
 	}
 
@@ -161,9 +163,9 @@ func TestWriteDocumentErrorsForUnavailableBoldItalicFace(t *testing.T) {
 }
 
 func TestWriteDocumentErrorsForUnsupportedBlock(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
-	doc := NewLayoutDocument()
-	doc.Body = []Block{unsupportedTestBlock{}}
+	pdf := MustNew()
+	doc := layout.NewLayoutDocument()
+	doc.Body = []layout.Block{unsupportedTestBlock{}}
 
 	pdf.WriteDocument(doc)
 	if err := pdf.Error(); err == nil || !strings.Contains(err.Error(), "unsupported document block kind: test-unsupported") {
@@ -173,18 +175,18 @@ func TestWriteDocumentErrorsForUnsupportedBlock(t *testing.T) {
 
 type unsupportedTestBlock struct{}
 
-func (unsupportedTestBlock) DocumentBlockKind() BlockKind { return "test-unsupported" }
+func (unsupportedTestBlock) DocumentBlockKind() layout.BlockKind { return "test-unsupported" }
 
 func TestWriteDocumentRendersSignatureMetadata(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
-	doc := NewLayoutDocument()
-	doc.Signature = &SignatureBlock{Rows: []SignatureRowBlock{{
-		Columns: []SignatureColumn{{
+	doc := layout.NewLayoutDocument()
+	doc.Signature = &layout.SignatureBlock{Rows: []layout.SignatureRowBlock{{
+		Columns: []layout.SignatureColumn{{
 			Label: "Signed by",
 			Name:  "Alex Example",
 			Role:  "Reviewer",
-			Metadata: []MetadataField{
+			Metadata: []layout.MetadataField{
 				{Label: "ID", Value: "123"},
 			},
 		}},
@@ -204,9 +206,9 @@ func TestWriteDocumentRendersSignatureMetadata(t *testing.T) {
 }
 
 func TestWriteDocumentErrorsForEmptyQRVerificationBlock(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
-	doc := NewLayoutDocument()
-	doc.Body = []Block{QRVerificationBlock{QR: QRBlock{Label: "Verify"}}}
+	pdf := MustNew()
+	doc := layout.NewLayoutDocument()
+	doc.Body = []layout.Block{layout.QRVerificationBlock{QR: layout.QRBlock{Label: "Verify"}}}
 
 	pdf.WriteDocument(doc)
 	if err := pdf.Error(); err == nil || !strings.Contains(err.Error(), "QR verification block requires a value or URL") {
@@ -215,7 +217,7 @@ func TestWriteDocumentErrorsForEmptyQRVerificationBlock(t *testing.T) {
 }
 
 func TestCellFormatUTF8JustifiedSingleWordDoesNotWriteInvalidNumber(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
 	fontBytes, err := os.ReadFile("../assets/static/font/DejaVuSansCondensed.ttf")
 	if err != nil {
@@ -238,10 +240,10 @@ func TestCellFormatUTF8JustifiedSingleWordDoesNotWriteInvalidNumber(t *testing.T
 }
 
 func TestWriteDocumentAppliesPageTemplateMargins(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
-	doc := NewLayoutDocument()
-	doc.PageTemplate.Margins = Spacing{Left: 18, Top: 16, Right: 14, Bottom: 22}
-	doc.Body = []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Body"}}}}
+	pdf := MustNew()
+	doc := layout.NewLayoutDocument()
+	doc.PageTemplate.Margins = layout.Spacing{Left: 18, Top: 16, Right: 14, Bottom: 22}
+	doc.Body = []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Body"}}}}
 
 	pdf.WriteDocument(doc)
 
@@ -252,18 +254,18 @@ func TestWriteDocumentAppliesPageTemplateMargins(t *testing.T) {
 }
 
 func TestWriteDocumentRendersTemplateFooterOnEveryRendererPage(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
-	doc := NewLayoutDocument()
-	doc.PageTemplate.Footer = &FooterBlock{
+	doc := layout.NewLayoutDocument()
+	doc.PageTemplate.Footer = &layout.FooterBlock{
 		Height:          8,
 		ReservePageArea: true,
-		Blocks:          []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Repeated footer"}}}},
+		Blocks:          []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Repeated footer"}}}},
 	}
-	doc.Body = []Block{
-		ParagraphBlock{Segments: []TextSegment{{Text: "Page one"}}},
-		PageBreakBlock{After: true},
-		ParagraphBlock{Segments: []TextSegment{{Text: "Page two"}}},
+	doc.Body = []layout.Block{
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Page one"}}},
+		layout.PageBreakBlock{After: true},
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Page two"}}},
 	}
 
 	pdf.WriteDocument(doc)
@@ -277,38 +279,38 @@ func TestWriteDocumentRendersTemplateFooterOnEveryRendererPage(t *testing.T) {
 }
 
 func TestWriteDocumentSelectsTemplateHeadersAndFootersPerPage(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
-	doc := NewLayoutDocument()
-	doc.PageTemplate.Header = &HeaderBlock{
+	doc := layout.NewLayoutDocument()
+	doc.PageTemplate.Header = &layout.HeaderBlock{
 		Height: 6,
-		Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Default header"}}}},
+		Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Default header"}}}},
 	}
-	doc.PageTemplate.FirstPageHeader = &HeaderBlock{
+	doc.PageTemplate.FirstPageHeader = &layout.HeaderBlock{
 		Height: 6,
-		Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "First header"}}}},
+		Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "First header"}}}},
 	}
-	doc.PageTemplate.Footer = &FooterBlock{
+	doc.PageTemplate.Footer = &layout.FooterBlock{
 		Height:          6,
 		ReservePageArea: true,
-		Blocks:          []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Default footer"}}}},
+		Blocks:          []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Default footer"}}}},
 	}
-	doc.PageTemplate.FirstPageFooter = &FooterBlock{
+	doc.PageTemplate.FirstPageFooter = &layout.FooterBlock{
 		Height:          6,
 		ReservePageArea: true,
-		Blocks:          []Block{ParagraphBlock{Segments: []TextSegment{{Text: "First footer"}}}},
+		Blocks:          []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "First footer"}}}},
 	}
-	doc.PageTemplate.EvenPageFooter = &FooterBlock{
+	doc.PageTemplate.EvenPageFooter = &layout.FooterBlock{
 		Height:          6,
 		ReservePageArea: true,
-		Blocks:          []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Even footer"}}}},
+		Blocks:          []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Even footer"}}}},
 	}
-	doc.Body = []Block{
-		ParagraphBlock{Segments: []TextSegment{{Text: "Page one body"}}},
-		PageBreakBlock{After: true},
-		ParagraphBlock{Segments: []TextSegment{{Text: "Page two body"}}},
-		PageBreakBlock{After: true},
-		ParagraphBlock{Segments: []TextSegment{{Text: "Page three body"}}},
+	doc.Body = []layout.Block{
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Page one body"}}},
+		layout.PageBreakBlock{After: true},
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Page two body"}}},
+		layout.PageBreakBlock{After: true},
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Page three body"}}},
 	}
 
 	pdf.WriteDocument(doc)
@@ -328,9 +330,9 @@ func TestWriteDocumentSelectsTemplateHeadersAndFootersPerPage(t *testing.T) {
 }
 
 func TestWriteDocumentMapsLayoutAttachments(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
-	doc := NewLayoutDocument()
-	doc.Attachments = []AttachmentBlock{{
+	pdf := MustNew()
+	doc := layout.NewLayoutDocument()
+	doc.Attachments = []layout.AttachmentBlock{{
 		Name:        "evidence.txt",
 		Description: "Evidence",
 		Data:        []byte("attached"),
@@ -348,11 +350,11 @@ func TestWriteDocumentMapsLayoutAttachments(t *testing.T) {
 
 func TestWriteDocumentInlineImagesUseContentHashAndFit(t *testing.T) {
 	pixel := decodeDocumentRenderTestPNG(t)
-	pdf := New("P", "mm", "A4", "")
-	doc := NewLayoutDocument()
-	doc.Body = []Block{
-		ImageBlock{Data: pixel, Format: "png", Width: 16, Height: 8, Fit: ImageFitContain},
-		ImageBlock{Data: pixel, Format: "png", Width: 16, Height: 8, Fit: ImageFitCover},
+	pdf := MustNew()
+	doc := layout.NewLayoutDocument()
+	doc.Body = []layout.Block{
+		layout.ImageBlock{Data: pixel, Format: "png", Width: 16, Height: 8, Fit: layout.ImageFitContain},
+		layout.ImageBlock{Data: pixel, Format: "png", Width: 16, Height: 8, Fit: layout.ImageFitCover},
 	}
 
 	pdf.WriteDocument(doc)
@@ -382,12 +384,12 @@ func decodeDocumentRenderTestPNG(t *testing.T) []byte {
 }
 
 func TestDocumentListMarkerWidthUsesWidestMarker(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetFont("Helvetica", "", 12)
 	renderer := documentRenderer{pdf: pdf}
 
-	oneDigitWidth := renderer.listMarkerWidth(ListBlock{Ordered: true, Items: make([]ListItem, 9)})
-	twoDigitWidth := renderer.listMarkerWidth(ListBlock{Ordered: true, Items: make([]ListItem, 10)})
+	oneDigitWidth := renderer.listMarkerWidth(layout.ListBlock{Ordered: true, Items: make([]layout.ListItem, 9)})
+	twoDigitWidth := renderer.listMarkerWidth(layout.ListBlock{Ordered: true, Items: make([]layout.ListItem, 10)})
 	if twoDigitWidth <= oneDigitWidth {
 		t.Fatalf("two-digit marker width = %.2f, one-digit = %.2f, want two-digit wider", twoDigitWidth, oneDigitWidth)
 	}

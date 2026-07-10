@@ -26,12 +26,11 @@ func main() {
 }
 
 func buildReport(optimize bool) []byte {
-	pdf := document.NewWithOptions(document.Options{
-		OrientationStr: "P",
-		UnitStr:        "mm",
-		SizeStr:        "A4",
-		Optimize:       optimize,
-	})
+	options := []document.Option(nil)
+	if optimize {
+		options = append(options, document.WithBestCompression())
+	}
+	pdf := document.MustNew(options...)
 	pdf.SetTitle("Compression Example", false)
 	pdf.SetCreator("examples/compress-optimize-pdf", false)
 	if !optimize {

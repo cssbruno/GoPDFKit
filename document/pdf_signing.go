@@ -70,15 +70,15 @@ func (f *Document) OutputSignedFileContext(ctx context.Context, fileStr string, 
 }
 
 // OutputSignedFileWithOptions writes the current document as a signed PDF using
-// explicit file output options. A zero-value OutputFileOptions keeps the durable
+// explicit file output options. A zero-value OutputOptions keeps the durable
 // default.
-func (f *Document) OutputSignedFileWithOptions(fileStr string, signOptions sign.Options, fileOptions OutputFileOptions) error {
+func (f *Document) OutputSignedFileWithOptions(fileStr string, signOptions sign.Options, fileOptions OutputOptions) error {
 	return f.OutputSignedFileWithOptionsContext(context.Background(), fileStr, signOptions, fileOptions)
 }
 
 // OutputSignedFileWithOptionsContext writes the current document as a signed
 // PDF using output-wide options and context cancellation.
-func (f *Document) OutputSignedFileWithOptionsContext(ctx context.Context, fileStr string, signOptions sign.Options, fileOptions OutputFileOptions) error {
+func (f *Document) OutputSignedFileWithOptionsContext(ctx context.Context, fileStr string, signOptions sign.Options, fileOptions OutputOptions) error {
 	if fileStr == "" {
 		f.SetError(sign.ErrMissingOutput)
 		return sign.ErrMissingOutput

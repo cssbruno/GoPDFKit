@@ -24,3 +24,20 @@ func TestExceedsAvailableHeight(t *testing.T) {
 		t.Fatal("larger content must move to the next page")
 	}
 }
+
+func TestTrackSpanGeometryParity(t *testing.T) {
+	sizes := []float64{12, 18, 30}
+	offsets := TrackOffsets(sizes)
+	if got := SpanSize(offsets, 1, 2); got != 48 {
+		t.Fatalf("SpanSize() = %.2f, want 48", got)
+	}
+	if got := SumSpan(sizes, 1, 2); got != 48 {
+		t.Fatalf("SumSpan() = %.2f, want 48", got)
+	}
+	if got := SpanSize(offsets, 2, 8); got != 30 {
+		t.Fatalf("clipped SpanSize() = %.2f, want 30", got)
+	}
+	if got := SumSpan(sizes, -1, 2); got != 0 {
+		t.Fatalf("invalid SumSpan() = %.2f, want 0", got)
+	}
+}

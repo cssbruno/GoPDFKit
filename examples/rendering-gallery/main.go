@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/assets"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
@@ -61,15 +60,15 @@ func main() {
 	generateDeliveryManifest()
 }
 
-func newPDF(title string) *gopdfkit.Document {
-	pdf := gopdfkit.New()
+func newPDF(title string) *document.Document {
+	pdf := document.MustNew()
 	pdf.SetTitle(title, false)
 	pdf.SetCreator("examples/rendering-gallery", false)
 	pdf.SetAuthor("GoPDFKit", false)
 	return pdf
 }
 
-func save(pdf *gopdfkit.Document, name string) {
+func save(pdf *document.Document, name string) {
 	if err := pdf.OutputFileAndClose(outpath.File(name)); err != nil {
 		log.Fatal(err)
 	}
@@ -287,7 +286,7 @@ func generateLinksBookmarks() {
 }
 
 func generatePageSizes() {
-	pdf := gopdfkit.NewWithOptions(gopdfkit.Options{UnitStr: "mm", Size: document.Size{Wd: 100, Ht: 148}})
+	pdf := document.MustNew(document.WithUnit(document.UnitMillimeter), document.WithCustomPageSize(document.Size{Wd: 100, Ht: 148}))
 	pdf.SetTitle("Mixed Page Sizes", false)
 	pdf.SetCreator("examples/rendering-gallery", false)
 
@@ -730,7 +729,7 @@ func generateCompressionVariants() {
 	save(uncompressed, "compression-none.pdf")
 }
 
-func fillCompressionBody(pdf *gopdfkit.Document) {
+func fillCompressionBody(pdf *document.Document) {
 	pdf.SetFont("Helvetica", "", 9)
 	pdf.SetXY(16, 44)
 	for i := 1; i <= 36; i++ {
@@ -801,7 +800,7 @@ func generateCertificateAward() {
 }
 
 func generateShippingLabel() {
-	pdf := gopdfkit.NewWithOptions(gopdfkit.Options{UnitStr: "mm", Size: document.Size{Wd: 102, Ht: 152}})
+	pdf := document.MustNew(document.WithUnit(document.UnitMillimeter), document.WithCustomPageSize(document.Size{Wd: 102, Ht: 152}))
 	pdf.SetTitle("Shipping Label", false)
 	pdf.SetCreator("examples/rendering-gallery", false)
 	pdf.AddPage()
@@ -837,7 +836,7 @@ func generateShippingLabel() {
 }
 
 func generateReceiptRoll() {
-	pdf := gopdfkit.NewWithOptions(gopdfkit.Options{UnitStr: "mm", Size: document.Size{Wd: 80, Ht: 220}})
+	pdf := document.MustNew(document.WithUnit(document.UnitMillimeter), document.WithCustomPageSize(document.Size{Wd: 80, Ht: 220}))
 	pdf.SetTitle("Receipt Roll", false)
 	pdf.SetCreator("examples/rendering-gallery", false)
 	pdf.AddPage()
@@ -1014,7 +1013,7 @@ func generateCalendarMonth() {
 }
 
 func generateEventTicket() {
-	pdf := gopdfkit.NewWithOptions(gopdfkit.Options{UnitStr: "mm", Size: document.Size{Wd: 180, Ht: 80}})
+	pdf := document.MustNew(document.WithUnit(document.UnitMillimeter), document.WithCustomPageSize(document.Size{Wd: 180, Ht: 80}))
 	pdf.SetTitle("Event Ticket", false)
 	pdf.SetCreator("examples/rendering-gallery", false)
 	pdf.AddPage()
@@ -1385,7 +1384,7 @@ func generateDeliveryManifest() {
 	save(pdf, "delivery-manifest.pdf")
 }
 
-func title(pdf *gopdfkit.Document, heading, subheading string) {
+func title(pdf *document.Document, heading, subheading string) {
 	pdf.SetFillColor(35, 70, 120)
 	pdf.Rect(0, 0, 210, 28, "F")
 	pdf.SetFont("Helvetica", "B", 18)
@@ -1396,7 +1395,7 @@ func title(pdf *gopdfkit.Document, heading, subheading string) {
 	pdf.SetTextColor(0, 0, 0)
 }
 
-func metricCard(pdf *gopdfkit.Document, x, y float64, label, value, delta string) {
+func metricCard(pdf *document.Document, x, y float64, label, value, delta string) {
 	pdf.SetFillColor(245, 248, 251)
 	pdf.SetDrawColor(213, 223, 233)
 	pdf.RoundedRect(x, y, 48, 30, 3, "1234", "DF")
@@ -1412,7 +1411,7 @@ func metricCard(pdf *gopdfkit.Document, x, y float64, label, value, delta string
 	pdf.SetTextColor(0, 0, 0)
 }
 
-func drawField(pdf *gopdfkit.Document, x, y float64, label, value string) {
+func drawField(pdf *document.Document, x, y float64, label, value string) {
 	pdf.SetFillColor(245, 248, 251)
 	pdf.SetDrawColor(215, 222, 230)
 	pdf.RoundedRect(x, y, 62, 20, 2, "1234", "DF")
@@ -1425,7 +1424,7 @@ func drawField(pdf *gopdfkit.Document, x, y float64, label, value string) {
 	pdf.SetTextColor(0, 0, 0)
 }
 
-func drawHeaderRow(pdf *gopdfkit.Document, x, y float64, widths []float64, values []string) {
+func drawHeaderRow(pdf *document.Document, x, y float64, widths []float64, values []string) {
 	pdf.SetFillColor(45, 82, 130)
 	pdf.SetDrawColor(45, 82, 130)
 	pdf.SetTextColor(255, 255, 255)
@@ -1438,7 +1437,7 @@ func drawHeaderRow(pdf *gopdfkit.Document, x, y float64, widths []float64, value
 	pdf.SetTextColor(0, 0, 0)
 }
 
-func drawDataRow(pdf *gopdfkit.Document, x, y float64, widths []float64, values []string) {
+func drawDataRow(pdf *document.Document, x, y float64, widths []float64, values []string) {
 	pdf.SetFillColor(255, 255, 255)
 	pdf.SetDrawColor(220, 226, 232)
 	pdf.SetTextColor(30, 40, 50)
@@ -1450,7 +1449,7 @@ func drawDataRow(pdf *gopdfkit.Document, x, y float64, widths []float64, values 
 	}
 }
 
-func resumeSection(pdf *gopdfkit.Document, x, y float64, heading string, lines []string) {
+func resumeSection(pdf *document.Document, x, y float64, heading string, lines []string) {
 	pdf.SetFont("Helvetica", "B", 13)
 	pdf.SetTextColor(35, 70, 120)
 	pdf.Text(x, y, heading)
@@ -1464,7 +1463,7 @@ func resumeSection(pdf *gopdfkit.Document, x, y float64, heading string, lines [
 	pdf.MultiCell(116, 5, strings.Join(lines[1:], "\n"), "", "L", false)
 }
 
-func formLine(pdf *gopdfkit.Document, x, y, width float64, label string) {
+func formLine(pdf *document.Document, x, y, width float64, label string) {
 	pdf.SetDrawColor(120, 130, 140)
 	pdf.Line(x, y, x+width, y)
 	pdf.SetFont("Helvetica", "", 8)
@@ -1473,7 +1472,7 @@ func formLine(pdf *gopdfkit.Document, x, y, width float64, label string) {
 	pdf.SetTextColor(0, 0, 0)
 }
 
-func check(pdf *gopdfkit.Document, x, y float64, checked bool, label string) {
+func check(pdf *document.Document, x, y float64, checked bool, label string) {
 	pdf.SetDrawColor(70, 90, 110)
 	pdf.Rect(x, y-4, 5, 5, "D")
 	if checked {
@@ -1484,7 +1483,7 @@ func check(pdf *gopdfkit.Document, x, y float64, checked bool, label string) {
 	pdf.Text(x+8, y, label)
 }
 
-func centerLabel(pdf *gopdfkit.Document, label string) {
+func centerLabel(pdf *document.Document, label string) {
 	w, h := pdf.GetPageSize()
 	pdf.SetDrawColor(35, 70, 120)
 	pdf.Rect(8, 8, w-16, h-16, "D")
@@ -1540,7 +1539,7 @@ var code39Patterns = map[rune]string{
 	'*': "nwnnwnwnn",
 }
 
-func drawCode39Barcode(pdf *gopdfkit.Document, x, y, width, height float64, value string) {
+func drawCode39Barcode(pdf *document.Document, x, y, width, height float64, value string) {
 	value = strings.ToUpper(value)
 	encoded := "*" + value + "*"
 	const wideRatio = 3.0

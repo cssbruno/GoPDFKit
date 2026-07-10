@@ -12,7 +12,7 @@ import (
 )
 
 func TestHTMLParseLineHeight(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	tests := []struct {
 		value string
 		base  float64
@@ -77,7 +77,7 @@ func TestParseStyleDeclarations(t *testing.T) {
 }
 
 func TestHTMLFlexShorthandParsingAndConstraints(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 
 	basis, ok := htmlFlexBasis(map[string]string{"flex": "2 0 40mm"}, pdf, 120)
 	if !ok || !almostEqual(basis, 40) {
@@ -130,7 +130,7 @@ func TestHTMLFlexShorthandParsingAndConstraints(t *testing.T) {
 }
 
 func TestHTMLFlexShrinkRespectsMinWidth(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 10)
 	html := pdf.HTMLNew()
@@ -162,7 +162,7 @@ func TestHTMLFlexShrinkRespectsMinWidth(t *testing.T) {
 }
 
 func TestHTMLCollectFlexItemsKeepsDirectTextNodes(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 10)
 	html := pdf.HTMLNew()
@@ -262,7 +262,7 @@ func TestHTMLCSSIndexedDeclarationsMatchScan(t *testing.T) {
 }
 
 func TestHTMLTextStyleInheritanceAndOverrides(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	inherited := htmlTextStyle{
 		fontFamily: "Helvetica",
 		fontSize:   12,
@@ -293,7 +293,7 @@ func TestHTMLTextStyleInheritanceAndOverrides(t *testing.T) {
 }
 
 func TestHTMLSplitLinesWrapsLongWords(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	lines := htmlSplitLines(pdf, "Supercalifragilisticexpialidocious", 10)
@@ -311,7 +311,7 @@ func TestHTMLSplitLinesWrapsLongWords(t *testing.T) {
 }
 
 func TestHTMLTypographyStyleDeclarations(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	st := htmlTextStyle{fontFamily: "Helvetica", fontSize: 12, lineHeight: 5, align: "L"}
 	applyHTMLStyleDeclarations(&st, map[string]string{
 		"font-size":       "14pt",
@@ -337,7 +337,7 @@ func TestHTMLTypographyStyleDeclarations(t *testing.T) {
 }
 
 func TestHTMLBoxEdgesFromDeclarations(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	edges := htmlBoxEdgesFromDeclarations(map[string]string{
 		"padding":        "1mm 2mm 3mm 4mm",
 		"padding-left":   "5mm",
@@ -350,7 +350,7 @@ func TestHTMLBoxEdgesFromDeclarations(t *testing.T) {
 }
 
 func TestHTMLBorderRadiusFromDeclarations(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	radius := htmlBorderRadiusFromDeclarations(map[string]string{
 		"border-radius":              "2mm 3mm 4mm 5mm",
 		"border-top-right-radius":    "6mm",
@@ -364,7 +364,7 @@ func TestHTMLBorderRadiusFromDeclarations(t *testing.T) {
 }
 
 func TestHTMLBoxShadowFromDeclarations(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	shadow := htmlBoxShadowFromDeclarations(map[string]string{
 		"box-shadow": "2mm 3mm 4mm 1mm rgba(10, 20, 30, 0.35)",
 	}, pdf, 100)
@@ -381,7 +381,7 @@ func TestHTMLBoxShadowFromDeclarations(t *testing.T) {
 }
 
 func TestHTMLTableCellPadding(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	edges := htmlTableCellPadding(map[string]string{
 		"style": "padding: 1mm 2mm; padding-left: 4mm",
 	}, pdf, 3, 100)
@@ -402,7 +402,7 @@ func TestCompiledHTMLTableCellCSSRuleBoxStyles(t *testing.T) {
 		t.Fatalf("CSS table cell padding was not applied: compact height %.2f, default height %.2f", compactHeight, defaultHeight)
 	}
 
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -431,7 +431,7 @@ func TestCompiledHTMLTableCellCSSRuleBoxStyles(t *testing.T) {
 
 func renderedCompiledHTMLTableHeight(t *testing.T, fragment string) float64 {
 	t.Helper()
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	_, lineHeight := pdf.GetFontSize()
@@ -446,7 +446,7 @@ func renderedCompiledHTMLTableHeight(t *testing.T, fragment string) float64 {
 }
 
 func TestHTMLResolvedImageSize(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	info := &ImageInfo{w: 96, h: 48, scale: pdf.k, dpi: 72}
 
 	wd, ht := htmlResolvedImageSize(info, pdf, 0, 0)
@@ -478,7 +478,7 @@ func TestHTMLImageAlign(t *testing.T) {
 }
 
 func TestHTMLImageObjectFit(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	info := &ImageInfo{w: 96, h: 48, scale: pdf.k, dpi: 72}
 
 	drawX, drawY, drawWd, drawHt, flowWd, flowHt := htmlImageFitBox(info, pdf, 20, 20, 20, 20, "contain")
@@ -497,7 +497,7 @@ func TestHTMLImageObjectFit(t *testing.T) {
 }
 
 func TestHTMLImageSourceReadsDPI(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	html := pdf.HTMLNew()
 	_, options, err := html.htmlImageSource(`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ` +
 		`AAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`)
@@ -519,7 +519,7 @@ func TestHTMLImageSourceReadsDPI(t *testing.T) {
 }
 
 func TestHTMLFigureKeepsImageWithCaption(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -558,7 +558,7 @@ func TestHTMLCellBorderColor(t *testing.T) {
 }
 
 func TestHTMLBorderFromDeclarations(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	border := htmlBorderFromDeclarations(map[string]string{
 		"border": "2mm solid #123456",
 	}, pdf, 100)
@@ -584,7 +584,7 @@ func TestHTMLBorderFromDeclarations(t *testing.T) {
 }
 
 func TestHTMLBorderFromDeclarationsPerSide(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	border := htmlBorderFromDeclarations(map[string]string{
 		"border":              "1mm solid #111111",
 		"border-left":         "2mm solid #123456",
@@ -611,7 +611,7 @@ func TestHTMLBorderFromDeclarationsPerSide(t *testing.T) {
 }
 
 func TestHTMLBorderFromAttrs(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	border := htmlBorderFromAttrs(map[string]string{
 		"border":      "1",
 		"bordercolor": "#123456",
@@ -645,7 +645,7 @@ func TestHTMLBreakDeclarationParsing(t *testing.T) {
 }
 
 func TestHTMLTableVerticalAlignParsingAndOffset(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	st := htmlTextStyle{}
 	applyHTMLStyleDeclarations(&st, map[string]string{"vertical-align": "middle"}, 12, 5, pdf)
 	if st.verticalAlign != "middle" {
@@ -670,7 +670,7 @@ func TestHTMLTableVerticalAlignParsingAndOffset(t *testing.T) {
 }
 
 func TestHTMLBlockBreakBeforeAndAfter(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	_, lineHeight := pdf.GetFontSize()
@@ -693,7 +693,7 @@ func TestHTMLWriteCachesCompiledFragmentsByDefault(t *testing.T) {
 
 	fragment := `<style>.note{color:#123456;font-weight:bold}</style><p class="note">cached fragment</p>`
 	render := func() {
-		pdf := New("P", "mm", "A4", "")
+		pdf := MustNew()
 		pdf.AddPage()
 		pdf.SetFont("Helvetica", "", 12)
 		_, lineHeight := pdf.GetFontSize()
@@ -717,7 +717,7 @@ func TestHTMLWriteCachesCompiledFragmentsByDefault(t *testing.T) {
 }
 
 func TestHTMLWriteMaxGeneratedPages(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	_, lineHeight := pdf.GetFontSize()
@@ -735,7 +735,7 @@ func TestHTMLWriteMaxGeneratedPages(t *testing.T) {
 }
 
 func TestHTMLSafetyErrorsAreDeterministic(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	_, lineHeight := pdf.GetFontSize()
@@ -747,7 +747,7 @@ func TestHTMLSafetyErrorsAreDeterministic(t *testing.T) {
 		t.Fatalf("MaxHTMLBytes error = %q, want %q", got, want)
 	}
 
-	html = New("P", "mm", "A4", "").HTMLNew()
+	html = MustNew().HTMLNew()
 	html.MaxElementDepth = 1
 	if got, want := html.ValidateHTML(`<div><p>nested</p></div>`), []string{"HTML element depth exceeds maximum size"}; len(got) != 1 || got[0] != want[0] {
 		t.Fatalf("MaxElementDepth diagnostics = %#v, want %#v", got, want)
@@ -755,7 +755,7 @@ func TestHTMLSafetyErrorsAreDeterministic(t *testing.T) {
 }
 
 func TestHTMLHeadingKeepsWithNextBlock(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	_, lineHeight := pdf.GetFontSize()
@@ -785,7 +785,7 @@ func TestHTMLTableBreakInsideAvoidKeepsSmallTableTogether(t *testing.T) {
 }
 
 func TestHTMLTableMovesRowToNextPageWhenItDoesNotFit(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	_, lineHeight := pdf.GetFontSize()
@@ -800,7 +800,7 @@ func TestHTMLTableMovesRowToNextPageWhenItDoesNotFit(t *testing.T) {
 }
 
 func TestHTMLTableAvoidsSingleOrphanRowAtPageBottom(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	_, lineHeight := pdf.GetFontSize()
@@ -818,7 +818,7 @@ func TestHTMLTableAvoidsSingleOrphanRowAtPageBottom(t *testing.T) {
 }
 
 func TestHTMLTableSplitsLargeTablesAcrossPages(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	_, lineHeight := pdf.GetFontSize()
@@ -841,7 +841,7 @@ func TestHTMLTableSplitsLargeTablesAcrossPages(t *testing.T) {
 }
 
 func TestHTMLTableStreamingEligibility(t *testing.T) {
-	html := New("P", "mm", "A4", "").HTMLNew()
+	html := MustNew().HTMLNew()
 	rows := make([]htmlTableLayoutRow, htmlTableStreamingRowLimit)
 	for i := range rows {
 		rows[i] = htmlTableLayoutRow{
@@ -877,7 +877,7 @@ func TestHTMLTableStreamingEligibility(t *testing.T) {
 }
 
 func htmlTableNearPageEnd(tableAttrs string) *Document {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	_, lineHeight := pdf.GetFontSize()
@@ -929,7 +929,7 @@ func TestHTMLParseNestedTableStaysInsideParentCell(t *testing.T) {
 }
 
 func TestHTMLWriteTableCaptionAndFooter(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -954,7 +954,7 @@ func TestHTMLWriteTableCaptionAndFooter(t *testing.T) {
 }
 
 func TestHTMLTableColumnWidthsUseColspanWidthHints(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	widths := htmlTestTableColumnWidths(pdf, 120,
@@ -970,7 +970,7 @@ func TestHTMLTableColumnWidthsUseColspanWidthHints(t *testing.T) {
 }
 
 func TestHTMLTableColumnWidthsUseContentMinimums(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	widths := htmlTestTableColumnWidths(pdf, 100,
@@ -995,7 +995,7 @@ func htmlTestTableColumnWidths(pdf *Document, tableWd float64, fragment string) 
 }
 
 func TestHTMLWritePerSideBorder(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -1042,7 +1042,7 @@ func TestHTMLTableBorderCollapse(t *testing.T) {
 }
 
 func TestHTMLDebugLogReportsUnsupportedRenderingFeatures(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	_, lineHeight := pdf.GetFontSize()
@@ -1068,7 +1068,7 @@ func TestHTMLDebugLogReportsUnsupportedRenderingFeatures(t *testing.T) {
 }
 
 func TestHTMLValidateHTMLReportsUnsupportedRenderingFeatures(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	html := pdf.HTMLNew()
 	messages := html.ValidateHTML(`<style>.card:hover{display:flex}</style><video style="float:left">clip</video>`)
 
@@ -1084,7 +1084,7 @@ func TestHTMLValidateHTMLReportsUnsupportedRenderingFeatures(t *testing.T) {
 }
 
 func TestHTMLValidateHTMLAllowsSupportedBorderLonghands(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	html := pdf.HTMLNew()
 	messages := html.ValidateHTML(`<div style="border-width:1mm;border-style:solid;border-color:#123456;border-left:2mm solid orange;border-top-style:none;border-radius:4px;box-shadow:2px 3px 5px rgba(0,0,0,.2)">box</div><img src="" style="object-fit:cover;max-width:20mm;max-height:20mm"/>`)
 	if len(messages) != 0 {
@@ -1093,7 +1093,7 @@ func TestHTMLValidateHTMLAllowsSupportedBorderLonghands(t *testing.T) {
 }
 
 func TestHTMLValidateHTMLAllowsSpanAndFlexProperties(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	html := pdf.HTMLNew()
 	messages := html.ValidateHTML(`<style>
 		.row { display:flex; flex-direction:row; flex-wrap:wrap; gap:3mm; row-gap:2mm; column-gap:4mm; justify-content:space-between; align-items:center; align-content:space-around; }
@@ -1105,7 +1105,7 @@ func TestHTMLValidateHTMLAllowsSpanAndFlexProperties(t *testing.T) {
 }
 
 func TestHTMLValidateHTMLReportsUnsupportedDisplayValues(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	html := pdf.HTMLNew()
 	messages := html.ValidateHTML(`<div style="display:grid">grid</div>`)
 	want := `CSS display value "grid" in inline style is not supported yet`
@@ -1115,7 +1115,7 @@ func TestHTMLValidateHTMLReportsUnsupportedDisplayValues(t *testing.T) {
 }
 
 func TestHTMLDebugLogDeduplicatesUnsupportedFeatures(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	_, lineHeight := pdf.GetFontSize()
@@ -1136,7 +1136,7 @@ func TestHTMLDebugLogDeduplicatesUnsupportedFeatures(t *testing.T) {
 }
 
 func TestHTMLDebugLogAllowsSupportedBorderLonghands(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	_, lineHeight := pdf.GetFontSize()

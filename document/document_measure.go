@@ -5,14 +5,8 @@ package document
 
 import "github.com/cssbruno/gopdfkit/layout"
 
-// MeasureContext contains the renderer state needed to estimate block layout.
-type MeasureContext = layout.MeasureContext
-
-// BlockMeasurement is the estimated layout footprint of a block.
-type BlockMeasurement = layout.BlockMeasurement
-
-// NewMeasureContext creates a measurement context for the given content width.
-func NewMeasureContext(pdf *Document, width float64) MeasureContext {
+// newMeasureContext creates a measurement context for the given content width.
+func newMeasureContext(pdf *Document, width float64) layout.MeasureContext {
 	fontSize := 12.0
 	lineHeight := 5.0
 	fontFamily := "Helvetica"
@@ -29,7 +23,7 @@ func NewMeasureContext(pdf *Document, width float64) MeasureContext {
 			lineHeight = unitSize * 1.2
 		}
 	}
-	ctx := layout.NewMeasureContext(width, TextStyle{
+	ctx := layout.NewMeasureContext(width, layout.TextStyle{
 		FontFamily: fontFamily,
 		FontSize:   fontSize,
 		LineHeight: lineHeight,
@@ -40,21 +34,11 @@ func NewMeasureContext(pdf *Document, width float64) MeasureContext {
 	return ctx
 }
 
-// MeasureBlocks estimates a sequence of blocks.
-func MeasureBlocks(ctx MeasureContext, blocks []Block) []BlockMeasurement {
-	return layout.MeasureBlocks(ctx, blocks)
-}
-
-// MeasureBlock estimates the layout footprint for one block.
-func MeasureBlock(ctx MeasureContext, block Block) BlockMeasurement {
-	return layout.MeasureBlock(ctx, block)
-}
-
 type documentTextMeasurer struct {
 	pdf *Document
 }
 
-func (m documentTextMeasurer) TextLineCount(text string, style TextStyle, width float64) int {
+func (m documentTextMeasurer) TextLineCount(text string, style layout.TextStyle, width float64) int {
 	if m.pdf == nil {
 		return 0
 	}
@@ -71,7 +55,7 @@ type pdfTextStyleState struct {
 	strikeout bool
 }
 
-func applyPDFTextStyle(pdf *Document, style TextStyle) pdfTextStyleState {
+func applyPDFTextStyle(pdf *Document, style layout.TextStyle) pdfTextStyleState {
 	state := pdfTextStyleState{
 		family:    pdf.fontFamily,
 		style:     pdf.fontStyle,
@@ -123,15 +107,15 @@ func restorePDFTextStyle(pdf *Document, state pdfTextStyleState) {
 	pdf.strikeout = state.strikeout
 }
 
-func textSegmentsPlainText(segments []TextSegment) string {
+func textSegmentsPlainText(segments []layout.TextSegment) string {
 	return layout.TextSegmentsPlainText(segments)
 }
 
-func mergedTextStyle(base, override TextStyle) TextStyle {
+func mergedTextStyle(base, override layout.TextStyle) layout.TextStyle {
 	return layout.MergedTextStyle(base, override)
 }
 
-func resolvedLineHeight(style TextStyle) float64 {
+func resolvedLineHeight(style layout.TextStyle) float64 {
 	return layout.ResolvedLineHeight(style)
 }
 

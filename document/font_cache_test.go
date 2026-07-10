@@ -24,7 +24,7 @@ func TestFontCacheMatchesUTF8FontFromBytes(t *testing.T) {
 	}
 
 	build := func(addFont func(*document.Document)) []byte {
-		pdf := document.New("P", "mm", "A4", "")
+		pdf := document.MustNew()
 		pdf.SetCompression(false)
 		pdf.SetCatalogSort(true)
 		pdf.SetCreationDate(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
@@ -59,7 +59,7 @@ func TestAddUTF8FontUsesSharedCacheWithoutChangingOutput(t *testing.T) {
 	}
 
 	build := func(addFont func(*document.Document)) []byte {
-		pdf := document.New("P", "mm", "A4", "")
+		pdf := document.MustNew()
 		pdf.SetCompression(false)
 		pdf.SetCatalogSort(true)
 		pdf.SetCreationDate(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
