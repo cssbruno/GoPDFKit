@@ -11,9 +11,10 @@ import (
 // Line draws a line between points (x1, y1) and (x2, y2) using the current
 // draw color, line width, and cap style.
 func (f *Document) Line(x1, y1, x2, y2 float64) {
-	buf := make([]byte, 0, 64)
+	buf := f.contentCommandBuffer(64)
 	buf = appendPDFLine(buf, x1*f.k, (f.h-y1)*f.k, x2*f.k, (f.h-y2)*f.k, 2, false)
 	f.outTaggedContent(buf, taggedContentOptions{Artifact: true})
+	f.retainContentCommandBuffer(buf)
 }
 
 // fillDrawOp normalizes shorthand style values to PDF path-painting operators.
@@ -44,9 +45,10 @@ func fillDrawOp(styleStr string) (opStr string) {
 // draw color and line width centered on the rectangle's perimeter. Filling
 // uses the current fill color.
 func (f *Document) Rect(x, y, w, h float64, styleStr string) {
-	buf := make([]byte, 0, 64)
+	buf := f.contentCommandBuffer(64)
 	buf = appendPDFRectPaint(buf, x*f.k, (f.h-y)*f.k, w*f.k, -h*f.k, fillDrawOp(styleStr), false)
 	f.outTaggedContent(buf, taggedContentOptions{Artifact: true})
+	f.retainContentCommandBuffer(buf)
 }
 
 // RoundedRect outputs a rectangle of width w and height h with the upper-left

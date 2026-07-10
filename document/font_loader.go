@@ -11,6 +11,9 @@ import "io"
 // Open provides an io.Reader for the specified font file (.json or .z). The
 // file name never includes a path. Open returns an error if the specified file
 // cannot be opened.
+//
+// Deprecated: use ResourceLoader and SetResourceLoader for context-aware,
+// size-aware resource loading. FontLoader remains for source compatibility.
 type FontLoader interface {
 	Open(name string) (io.Reader, error)
 }

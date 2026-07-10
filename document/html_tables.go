@@ -93,9 +93,6 @@ type htmlTableMeasuredCellAppearanceCache struct {
 }
 
 func (cache *htmlTableMeasuredCellAppearanceCache) intern(value htmlTableMeasuredCellAppearance) *htmlTableMeasuredCellAppearance {
-	if cache == nil {
-		return &value
-	}
 	if cache.last != nil && cache.lastValue == value {
 		return cache.last
 	}

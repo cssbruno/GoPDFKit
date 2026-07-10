@@ -26,6 +26,10 @@
   bounded importer sources with a sentinel `ErrSourceTooLarge` error.
 - Made page-compression workers explicitly cancellable and bounded the string
   width cache with constant-time ring eviction.
+- Moved compiled HTML traversal stacks into a private render session, interned
+  repeated table-cell appearances, and reused bounded content-command buffers.
+- Reused one parsed SFNT directory and Unicode cmap when building cached UTF-8
+  font definitions and immutable subset tables.
 
 ### Removed
 

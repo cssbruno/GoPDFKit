@@ -81,8 +81,9 @@ go tool trace artifacts/profiles/trace.out
 ```
 
 Allocation profiles use a fixed 20-iteration run with full allocation sampling;
-use timing-only benchmark runs for performance comparisons. Benchmarks and
-`benchstat` comparisons are intentionally local-only and are not part of CI.
+use timing-only benchmark runs for performance comparisons. Benchmarks,
+`benchstat` comparisons, profiles, and broad generation budgets are
+intentionally local-only and do not run in CI.
 
 
 
