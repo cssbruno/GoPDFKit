@@ -52,14 +52,16 @@ make release-push
 
 - version and changelog validation,
 - `make check`,
+- nested-module dependency and build checks,
+- race detection and package coverage floors,
+- `make lint` and `make gosec`,
 - `make govulncheck`,
 - `make build`.
 
-`make quality` runs stricter analysis with `golangci-lint`, `nilaway`, and
-`gosec`. These tools are pinned in the separate `tools/` module so the library
-module keeps only runtime dependencies. The Makefile runs them with the Go
-toolchain declared by `tools/go.mod`. It is expected to fail until the current
-quality baseline is fixed.
+`make quality` runs the release-independent code, coverage, lint, security,
+and vulnerability gates. The analysis tools are pinned in the separate
+`tools/` module so the library module keeps only runtime dependencies. The
+Makefile runs them with the Go toolchain declared by `tools/go.mod`.
 
 ## GitHub Release
 

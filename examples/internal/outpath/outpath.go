@@ -27,6 +27,7 @@ func File(name string) string {
 		panic("could not resolve example output path")
 	}
 	dir := filepath.Clean(filepath.Join(filepath.Dir(caller), "..", "..", "..", "assets", "generated", "pdf", "examples"))
+	// #nosec G301 -- example PDFs are intentionally readable by the user who runs the example.
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		panic(err)
 	}

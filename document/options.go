@@ -229,34 +229,13 @@ func buildOptions(options ...Option) Options {
 }
 
 type normalizedOptions struct {
-	orientationStr                  string
-	unitStr                         string
-	sizeStr                         string
-	fontDirStr                      string
-	size                            Size
-	optimize                        bool
-	compressionPolicy               CompressionPolicy
-	compressionPolicySet            bool
-	pageCompressionWorkers          int
-	pageCompressionWorkersSet       bool
-	attachmentCompressionWorkers    int
-	attachmentCompressionWorkersSet bool
-	cachePolicy                     ResourceCachePolicy
-	imageCache                      *ImageCache
-	imageCacheSet                   bool
-	fontCache                       *FontCache
-	fontCacheSet                    bool
-	resourceLoader                  ResourceLoader
-	resourceLoaderSet               bool
-	limits                          Limits
-	limitsSet                       bool
-	securityPolicy                  SecurityPolicy
-	securityPolicySet               bool
-	outputPolicy                    OutputPolicy
-	outputPolicySet                 bool
-	hooks                           Hooks
-	hooksSet                        bool
-	deterministicOutput             bool
+	orientationStr string
+	unitStr        string
+	sizeStr        string
+	fontDirStr     string
+	size           Size
+	optimize       bool
+	runtimePolicy
 }
 
 type runtimePolicy struct {
@@ -286,20 +265,22 @@ type runtimePolicy struct {
 
 func (options Options) normalized() normalizedOptions {
 	cfg := normalizedOptions{
-		orientationStr:      options.Orientation.String(),
-		unitStr:             options.Unit.String(),
-		sizeStr:             options.PageSize.String(),
-		fontDirStr:          options.FontDir,
-		size:                options.Size,
-		optimize:            options.Optimize,
-		cachePolicy:         options.CachePolicy,
-		imageCache:          options.ImageCache,
-		imageCacheSet:       options.ImageCache != nil,
-		fontCache:           options.FontCache,
-		fontCacheSet:        options.FontCache != nil,
-		resourceLoader:      options.ResourceLoader,
-		resourceLoaderSet:   options.ResourceLoader != nil,
-		deterministicOutput: options.DeterministicOutput,
+		orientationStr: options.Orientation.String(),
+		unitStr:        options.Unit.String(),
+		sizeStr:        options.PageSize.String(),
+		fontDirStr:     options.FontDir,
+		size:           options.Size,
+		optimize:       options.Optimize,
+		runtimePolicy: runtimePolicy{
+			cachePolicy:         options.CachePolicy,
+			imageCache:          options.ImageCache,
+			imageCacheSet:       options.ImageCache != nil,
+			fontCache:           options.FontCache,
+			fontCacheSet:        options.FontCache != nil,
+			resourceLoader:      options.ResourceLoader,
+			resourceLoaderSet:   options.ResourceLoader != nil,
+			deterministicOutput: options.DeterministicOutput,
+		},
 	}
 	if options.CompressionPolicy != nil {
 		cfg.compressionPolicy = *options.CompressionPolicy
@@ -345,31 +326,4 @@ func (options Options) normalized() normalizedOptions {
 		cfg.fontDirStr = options.FontDirStr
 	}
 	return cfg
-}
-
-func (cfg normalizedOptions) runtimePolicy() runtimePolicy {
-	return runtimePolicy{
-		compressionPolicy:               cfg.compressionPolicy,
-		compressionPolicySet:            cfg.compressionPolicySet,
-		pageCompressionWorkers:          cfg.pageCompressionWorkers,
-		pageCompressionWorkersSet:       cfg.pageCompressionWorkersSet,
-		attachmentCompressionWorkers:    cfg.attachmentCompressionWorkers,
-		attachmentCompressionWorkersSet: cfg.attachmentCompressionWorkersSet,
-		cachePolicy:                     cfg.cachePolicy,
-		imageCache:                      cfg.imageCache,
-		imageCacheSet:                   cfg.imageCacheSet,
-		fontCache:                       cfg.fontCache,
-		fontCacheSet:                    cfg.fontCacheSet,
-		resourceLoader:                  cfg.resourceLoader,
-		resourceLoaderSet:               cfg.resourceLoaderSet,
-		limits:                          cfg.limits,
-		limitsSet:                       cfg.limitsSet,
-		securityPolicy:                  cfg.securityPolicy,
-		securityPolicySet:               cfg.securityPolicySet,
-		outputPolicy:                    cfg.outputPolicy,
-		outputPolicySet:                 cfg.outputPolicySet,
-		hooks:                           cfg.hooks,
-		hooksSet:                        cfg.hooksSet,
-		deterministicOutput:             cfg.deterministicOutput,
-	}
 }

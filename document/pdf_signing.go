@@ -99,15 +99,9 @@ func (f *Document) OutputSignedWithOptions(w io.Writer, signOptions sign.Options
 // OutputSignedWithOptionsContext writes the current document as a signed PDF
 // using output-wide options and context cancellation.
 func (f *Document) OutputSignedWithOptionsContext(ctx context.Context, w io.Writer, signOptions sign.Options, outputOptions OutputOptions) error {
-	snapshot := f.outputSettingsSnapshot()
-	if err := f.applyOutputOptions(outputOptions); err != nil {
-		return err
-	}
-	err := f.OutputSignedContext(ctx, w, signOptions)
-	if err != nil && f.state < 3 {
-		f.restoreOutputSettings(snapshot)
-	}
-	return err
+	return f.withOutputOptions(outputOptions, func() error {
+		return f.OutputSignedContext(ctx, w, signOptions)
+	})
 }
 
 func (f *Document) outputSignedBytes(options sign.Options) ([]byte, error) {

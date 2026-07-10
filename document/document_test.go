@@ -32,30 +32,6 @@ func (w *closeErrorWriter) Close() error {
 	return errors.New("close failed")
 }
 
-func init() {
-	cleanup()
-}
-
-func cleanup() {
-	_ = filepath.Walk(example.PdfDir(),
-		func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if info == nil {
-				return nil
-			}
-			if info.Mode().IsRegular() {
-				if len(path) > 3 {
-					if path[len(path)-4:] == ".pdf" {
-						_ = os.Remove(path)
-					}
-				}
-			}
-			return nil
-		})
-}
-
 // TestPagedTemplate ensures new paged templates work
 func TestPagedTemplate(t *testing.T) {
 	pdf := document.New("P", "mm", "A4", "")
@@ -3584,7 +3560,7 @@ func ExampleAttachmentFromFile() {
 		fmt.Println(err)
 		return
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	fileStr := filepath.Join(dir, "payload.txt")
 	if err := os.WriteFile(fileStr, []byte("file-backed attachment"), 0600); err != nil {

@@ -43,30 +43,11 @@ func setRoot() {
 		panic(fmt.Errorf("could not find GoPDFKit static assets from %s: %w", root, err))
 	}
 	gopdfkitDir = root
-	pdfDir = filepath.Join(gopdfkitDir, pdfDisplayDir)
-	if !ensureWritableDir(pdfDir) {
-		tmpDir, err := os.MkdirTemp("", "gopdfkit-generated-pdf-*")
-		if err != nil {
-			panic(err)
-		}
-		pdfDir = tmpDir
-	}
-}
-
-func ensureWritableDir(dir string) bool {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return false
-	}
-	file, err := os.CreateTemp(dir, ".write-test-*")
+	tmpDir, err := os.MkdirTemp("", "gopdfkit-generated-pdf-*")
 	if err != nil {
-		return false
+		panic(err)
 	}
-	name := file.Name()
-	if err := file.Close(); err != nil {
-		_ = os.Remove(name)
-		return false
-	}
-	return os.Remove(name) == nil
+	pdfDir = tmpDir
 }
 
 // ImageFile returns the path to a file in the static image directory.

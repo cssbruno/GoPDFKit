@@ -136,20 +136,10 @@ func OpenFileWithOptionsContext(ctx context.Context, path string, options Import
 	if info, err := file.Stat(); err == nil && info.Mode().IsRegular() && info.Size() > options.MaxSourceBytes {
 		return nil, errors.New("PDF import source exceeds maximum size")
 	}
-	info, err := file.Stat()
-	if err != nil {
-		return nil, err
-	}
-	source, err := OpenReaderAtWithOptionsContext(ctx, file, info.Size(), options)
-	if err != nil {
-		return nil, err
-	}
-	if err := importContextErr(ctx); err != nil {
-		return nil, err
-	}
-	source.path = path
-	source.readerAt = nil
-	return source, nil
+	// Keep one immutable snapshot for the Source lifetime. Reopening path during
+	// lazy reads could otherwise combine the xref from this file with objects
+	// from a later replacement at the same path.
+	return OpenReaderWithOptionsContext(ctx, file, options)
 }
 
 // OpenBytes parses PDF bytes.

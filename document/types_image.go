@@ -105,7 +105,7 @@ func hashImageString(h hash.Hash, tag byte, value string) {
 	scratch[0] = tag
 	binary.BigEndian.PutUint64(scratch[1:], uint64(len(value)))
 	h.Write(scratch[:])
-	io.WriteString(h, value)
+	_, _ = io.WriteString(h, value)
 }
 
 func hashImageInt(h hash.Hash, tag byte, value int) {

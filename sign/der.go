@@ -19,6 +19,8 @@ type derValue struct {
 	Full    []byte
 }
 
+const maxDERChildren = 10_000
+
 func der(tag byte, content []byte) []byte {
 	out := make([]byte, 0, 1+len(content)+8)
 	out = append(out, tag)
@@ -124,8 +126,11 @@ func readDER(input []byte) (derValue, []byte, error) {
 }
 
 func readDERChildren(input []byte) ([]derValue, error) {
-	var children []derValue
+	children := make([]derValue, 0)
 	for len(input) > 0 {
+		if len(children) >= maxDERChildren {
+			return nil, errors.New("pdfsigning: DER child count exceeds maximum size")
+		}
 		child, rest, err := readDER(input)
 		if err != nil {
 			return nil, err

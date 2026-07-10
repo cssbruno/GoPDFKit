@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cssbruno/gopdfkit/internal/testsupport/example"
@@ -55,6 +56,17 @@ func TestSummaryUsesStableGeneratedPDFPath(t *testing.T) {
 	want := "Successfully generated assets/generated/pdf/sample.pdf\n"
 	if output != want {
 		t.Fatalf("Summary() = %q, want %q", output, want)
+	}
+}
+
+func TestGeneratedPDFsStayOutsideRepository(t *testing.T) {
+	output := example.Filename("isolated")
+	rel, err := filepath.Rel(example.RepoFile(), output)
+	if err != nil {
+		t.Fatalf("relative output path: %v", err)
+	}
+	if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		t.Fatalf("example output %q is inside repository %q", output, example.RepoFile())
 	}
 }
 

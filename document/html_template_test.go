@@ -5,6 +5,7 @@ package document_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -177,7 +178,7 @@ func TestCompiledHTMLTemplateRendersChangingValues(t *testing.T) {
 		pdf.AddPage()
 		pdf.SetFont("Helvetica", "", 12)
 		html := pdf.HTMLNew()
-		if err := html.WriteTemplateContext(nil, 6, tmpl, values); err != nil {
+		if err := html.WriteTemplateContext(context.Background(), 6, tmpl, values); err != nil {
 			t.Fatalf("WriteTemplateContext() error = %v", err)
 		}
 		var out bytes.Buffer
@@ -234,7 +235,7 @@ func TestCompiledHTMLTemplateMissingValueErrors(t *testing.T) {
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
-	err = html.WriteTemplateContext(nil, 6, tmpl, nil)
+	err = html.WriteTemplateContext(context.Background(), 6, tmpl, nil)
 	if err == nil || !strings.Contains(err.Error(), "missing HTML template value: name") {
 		t.Fatalf("WriteTemplateContext() error = %v, want missing value", err)
 	}
@@ -261,7 +262,7 @@ func TestCompiledHTMLTemplateRejectsRawHTMLValues(t *testing.T) {
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
-	err = html.WriteTemplateContext(nil, 6, tmpl, document.HTMLTemplateValues{
+	err = html.WriteTemplateContext(context.Background(), 6, tmpl, document.HTMLTemplateValues{
 		"body": document.HTMLTemplateRaw(`<strong>trusted</strong>`),
 	})
 	if err == nil || !strings.Contains(err.Error(), "HTMLTemplateRaw is not supported") {

@@ -60,7 +60,7 @@ func GenerateThumbnail(r io.Reader, options ThumbnailOptions) ([]byte, string, e
 	if err != nil {
 		return nil, "", err
 	}
-	config, sourceFormat, err := image.DecodeConfig(bytes.NewReader(data.Bytes()))
+	config, _, err := image.DecodeConfig(bytes.NewReader(data.Bytes()))
 	if err != nil {
 		return nil, "", fmt.Errorf("decode thumbnail source config: %w", err)
 	}

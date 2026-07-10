@@ -13,15 +13,21 @@ GOSEC := $(TOOLS_BIN)/gosec
 GOVULNCHECK := $(TOOLS_BIN)/govulncheck
 GOSEC_EXCLUDES ?= G115,G304,G401,G405,G501,G503,G505,G703
 COMPLIANCE_OUT ?= artifacts/compliance
-GENERATION_CORE_BENCH ?= BenchmarkGeneration(BaselineNoCompliance.*Concurrent40|TextConcurrent40|LongTextConcurrent40|UTF8Text.*Concurrent40|TextCompressionLevelConcurrent40|Images.*Concurrent40|SVGConcurrent40|TemplatesConcurrent40|ImportedPDFPagesConcurrent40|ProtectionConcurrent40|AttachmentsConcurrent40)$
+GENERATION_CORE_BENCH ?= BenchmarkGeneration(BaselineNoCompliance.*Concurrent40|TextConcurrent40|LongTextConcurrent40|UTF8Text.*Concurrent40|TextCompressionLevelConcurrent40|Images.*Concurrent40|SVGConcurrent40|TemplatesConcurrent40|ImportedPDFPagesConcurrent40|ProtectionConcurrent40|AttachmentsConcurrent40|HTMLLargeTableCompiled|HTMLWideTableCompiled)$
 
-.PHONY: all documentation cov test vet fmt-check check tools tools-clean lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate clean
+.PHONY: all documentation cov coverage-check test race vet fmt-check check modules tools tools-clean lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate clean
 
 cov : all
 	go test $(GO_PACKAGES) -coverprofile=coverage && go tool cover -html=coverage -o=coverage.html
 
+coverage-check :
+	sh tools/check-coverage.sh
+
 test :
 	go test $(GO_PACKAGES)
+
+race :
+	go test -race $(GO_PACKAGES)
 
 vet :
 	go vet $(GO_PACKAGES)
@@ -30,6 +36,9 @@ fmt-check :
 	test -z "$$(gofmt -s -l .)"
 
 check : test vet fmt-check
+
+modules :
+	sh tools/test-go-modules.sh
 
 tools : $(GOLANGCI_LINT) $(NILAWAY) $(GOSEC) $(GOVULNCHECK)
 
@@ -67,14 +76,14 @@ gosev : gosec
 govulncheck : $(GOVULNCHECK)
 	GOTOOLCHAIN="$(TOOLCHAIN)" "$(GOVULNCHECK)" $(GO_PACKAGES)
 
-quality : check lin nilaway gosev govulncheck
+quality : check coverage-check lint gosec govulncheck
 
 release-version :
 	@test -n "$(VERSION)" || (echo "VERSION is required, for example VERSION=v0.1.0" && exit 1)
 	@case "$(VERSION)" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "VERSION must look like vMAJOR.MINOR.PATCH, got $(VERSION)" && exit 1 ;; esac
 	@grep -q "^## $(VERSION)" CHANGELOG.md || (echo "CHANGELOG.md is missing section $(VERSION)" && exit 1)
 
-release-check : release-version check govulncheck build
+release-check : release-version check modules race coverage-check lint gosec govulncheck build
 
 release-notes : release-version
 	@awk -v version="$(VERSION)" 'BEGIN { found = 0 } /^## / { if (found) exit; if ($$2 == version) found = 1 } found { print } END { if (!found) exit 1 }' CHANGELOG.md

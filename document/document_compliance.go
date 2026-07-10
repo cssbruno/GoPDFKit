@@ -44,7 +44,6 @@ type outputIntent struct {
 	iccProfile []byte
 	identifier string
 	info       string
-	registry   string
 }
 
 // ComplianceValidationSeverity classifies an external validator issue.
@@ -291,32 +290,32 @@ func (f *Document) buildComplianceXMP() []byte {
 	out.WriteString(`>` + "\n")
 	if title != "" {
 		out.WriteString(`<dc:title><rdf:Alt><rdf:li xml:lang="x-default">`)
-		xml.EscapeText(&out, []byte(title))
+		_ = xml.EscapeText(&out, []byte(title)) // bytes.Buffer writes cannot fail.
 		out.WriteString(`</rdf:li></rdf:Alt></dc:title>` + "\n")
 	}
 	if f.author != "" {
 		out.WriteString(`<dc:creator><rdf:Seq><rdf:li>`)
-		xml.EscapeText(&out, []byte(f.author))
+		_ = xml.EscapeText(&out, []byte(f.author)) // bytes.Buffer writes cannot fail.
 		out.WriteString(`</rdf:li></rdf:Seq></dc:creator>` + "\n")
 	}
 	if f.subject != "" {
 		out.WriteString(`<dc:description><rdf:Alt><rdf:li xml:lang="x-default">`)
-		xml.EscapeText(&out, []byte(f.subject))
+		_ = xml.EscapeText(&out, []byte(f.subject)) // bytes.Buffer writes cannot fail.
 		out.WriteString(`</rdf:li></rdf:Alt></dc:description>` + "\n")
 	}
 	if f.keywords != "" {
 		out.WriteString(`<pdf:Keywords>`)
-		xml.EscapeText(&out, []byte(f.keywords))
+		_ = xml.EscapeText(&out, []byte(f.keywords)) // bytes.Buffer writes cannot fail.
 		out.WriteString(`</pdf:Keywords>` + "\n")
 	}
 	if f.producer != "" {
 		out.WriteString(`<pdf:Producer>`)
-		xml.EscapeText(&out, []byte(f.producer))
+		_ = xml.EscapeText(&out, []byte(f.producer)) // bytes.Buffer writes cannot fail.
 		out.WriteString(`</pdf:Producer>` + "\n")
 	}
 	if f.creator != "" {
 		out.WriteString(`<xmp:CreatorTool>`)
-		xml.EscapeText(&out, []byte(f.creator))
+		_ = xml.EscapeText(&out, []byte(f.creator)) // bytes.Buffer writes cannot fail.
 		out.WriteString(`</xmp:CreatorTool>` + "\n")
 	}
 	out.WriteString(`<xmp:CreateDate>`)
@@ -327,7 +326,7 @@ func (f *Document) buildComplianceXMP() []byte {
 	out.WriteString(`</xmp:ModifyDate>` + "\n")
 	if f.compliance.Identifier != "" {
 		out.WriteString(`<xmp:Identifier><rdf:Bag><rdf:li>`)
-		xml.EscapeText(&out, []byte(f.compliance.Identifier))
+		_ = xml.EscapeText(&out, []byte(f.compliance.Identifier)) // bytes.Buffer writes cannot fail.
 		out.WriteString(`</rdf:li></rdf:Bag></xmp:Identifier>` + "\n")
 	}
 	if f.compliance.PDFA != PDFAModeNone {

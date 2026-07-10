@@ -236,5 +236,5 @@ func (f *Document) outputDashPattern() {
 	buf.WriteString("] ")
 	buf.WriteString(strconv.FormatFloat(f.dashPhase, 'f', 2, 64))
 	buf.WriteString(" d")
-	f.outbuf(&buf)
+	_ = f.outbuf(&buf)
 }

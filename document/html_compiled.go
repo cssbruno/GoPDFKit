@@ -601,9 +601,9 @@ func (compiled *CompiledHTML) debugDumpNode(out *strings.Builder, nodeIndex, dep
 	out.WriteString(strings.Repeat("  ", depth))
 	out.WriteString(token.Str)
 	out.WriteString(" token=")
-	out.WriteString(fmt.Sprint(node.Token))
+	_, _ = fmt.Fprint(out, node.Token)
 	out.WriteString(" end=")
-	out.WriteString(fmt.Sprint(node.EndToken))
+	_, _ = fmt.Fprint(out, node.EndToken)
 	out.WriteByte('\n')
 	for child := node.FirstChild; child >= 0; child = compiled.nodeIndexes[child].NextSibling {
 		compiled.debugDumpNode(out, child, depth+1)

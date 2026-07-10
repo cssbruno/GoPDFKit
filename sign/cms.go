@@ -683,16 +683,12 @@ func isDERNull(value derValue) bool {
 }
 
 func publicKeysEqual(a, b any) bool {
-	switch left := a.(type) {
-	case *rsa.PublicKey:
-		right, ok := b.(*rsa.PublicKey)
-		return ok && left.E == right.E && left.N.Cmp(right.N) == 0
-	case *ecdsa.PublicKey:
-		right, ok := b.(*ecdsa.PublicKey)
-		return ok && left.Curve == right.Curve && left.X.Cmp(right.X) == 0 && left.Y.Cmp(right.Y) == 0
-	default:
+	left, err := x509.MarshalPKIXPublicKey(a)
+	if err != nil {
 		return false
 	}
+	right, err := x509.MarshalPKIXPublicKey(b)
+	return err == nil && bytes.Equal(left, right)
 }
 
 func validateDocumentSignerCertificate(cert *x509.Certificate) error {

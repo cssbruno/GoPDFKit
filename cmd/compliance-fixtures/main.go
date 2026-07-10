@@ -29,6 +29,7 @@ func main() {
 	iccPath := flag.String("icc", "", "path to an sRGB ICC profile for PDF/A output intents")
 	flag.Parse()
 
+	// #nosec G301 -- compliance fixtures are deliberately readable by validator containers.
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
 		exitErr(err)
 	}
@@ -253,6 +254,7 @@ func exitErr(err error) {
 }
 
 func makeArtifactReadable(path string) error {
+	// #nosec G302 -- compliance artifacts must be readable by external validator containers.
 	if err := os.Chmod(path, 0o644); err != nil {
 		return fmt.Errorf("make artifact readable %s: %w", path, err)
 	}

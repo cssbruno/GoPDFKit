@@ -17,19 +17,21 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	"github.com/cssbruno/gopdfkit/document"
+	"github.com/cssbruno/gopdfkit/importpdf"
 	"golang.org/x/text/encoding/charmap"
 )
 
 const (
 	maxDecodedStreamBytes = 64 * 1024 * 1024
-	mediaBoxMatchCount    = 3
+	maxDecodedStreamCount = 4096
+	maxDecodedTotalBytes  = 128 * 1024 * 1024
+	mediaBoxMatchCount    = 5
 	textTokenCapacity     = 8
 	pdfOctalBase          = 8
 	utf16BOMBytes         = 2
 )
 
-var mediaBoxPattern = regexp.MustCompile(`/MediaBox\s*\[\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s+[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+))`)
+var mediaBoxPattern = regexp.MustCompile(`/MediaBox\s*\[\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+))`)
 
 // ValidateStructure checks that data can be parsed as an unencrypted classic
 // PDF with at least one importable page.
@@ -58,15 +60,11 @@ func PageCount(data []byte) (int, error) {
 // PageCountContext returns the number of pages GoPDFKit can import from data
 // and honors ctx while importing the page tree.
 func PageCountContext(ctx context.Context, data []byte) (int, error) {
-	pdf := document.New("", "", "", "")
-	ids, err := pdf.ImportPagesFromSourceContext(ctx, data, "MediaBox")
+	source, err := importpdf.OpenBytesWithOptionsContext(ctx, data, importpdf.ImportOptions{})
 	if err != nil {
 		return 0, fmt.Errorf("parse pdf: %w", err)
 	}
-	if err := pdf.Error(); err != nil {
-		return 0, fmt.Errorf("parse pdf: %w", err)
-	}
-	return len(ids), nil
+	return source.PageCount(), nil
 }
 
 // FirstPageSizePoints returns the first MediaBox dimensions in PDF points.
@@ -76,15 +74,23 @@ func FirstPageSizePoints(data []byte) (float64, float64, error) {
 		return 0, 0, errors.New("pdf MediaBox not found")
 	}
 
-	width, err := strconv.ParseFloat(string(match[1]), 64)
+	llx, err := strconv.ParseFloat(string(match[1]), 64)
 	if err != nil {
-		return 0, 0, fmt.Errorf("parse MediaBox width: %w", err)
+		return 0, 0, fmt.Errorf("parse MediaBox lower-left x: %w", err)
 	}
-	height, err := strconv.ParseFloat(string(match[2]), 64)
+	lly, err := strconv.ParseFloat(string(match[2]), 64)
 	if err != nil {
-		return 0, 0, fmt.Errorf("parse MediaBox height: %w", err)
+		return 0, 0, fmt.Errorf("parse MediaBox lower-left y: %w", err)
 	}
-	return width, height, nil
+	urx, err := strconv.ParseFloat(string(match[3]), 64)
+	if err != nil {
+		return 0, 0, fmt.Errorf("parse MediaBox upper-right x: %w", err)
+	}
+	ury, err := strconv.ParseFloat(string(match[4]), 64)
+	if err != nil {
+		return 0, 0, fmt.Errorf("parse MediaBox upper-right y: %w", err)
+	}
+	return urx - llx, ury - lly, nil
 }
 
 // Text extracts literal text operators from PDF content streams.
@@ -117,14 +123,13 @@ func TextContext(ctx context.Context, data []byte) (string, error) {
 	return text.String(), nil
 }
 
-// PageText imports one PDF page through GoPDFKit and extracts text from the
-// resulting single-page PDF.
+// PageText extracts text from one importable PDF page.
 func PageText(data []byte, pageNum int) (string, error) {
 	return PageTextContext(context.Background(), data, pageNum)
 }
 
-// PageTextContext imports one PDF page through GoPDFKit and extracts text from
-// the resulting single-page PDF while honoring ctx.
+// PageTextContext extracts text from one importable PDF page while honoring
+// ctx.
 func PageTextContext(ctx context.Context, data []byte, pageNum int) (string, error) {
 	if err := inspectContextErr(ctx); err != nil {
 		return "", err
@@ -133,26 +138,22 @@ func PageTextContext(ctx context.Context, data []byte, pageNum int) (string, err
 		return "", errors.New("pdf page number must be positive")
 	}
 
-	pdf := document.New("", "", "", "")
-	pageID, err := pdf.ImportPageStreamContext(ctx, bytes.NewReader(data), pageNum, "MediaBox")
+	source, err := importpdf.OpenBytesWithOptionsContext(ctx, data, importpdf.ImportOptions{})
 	if err != nil {
 		return "", fmt.Errorf("parse pdf page: %w", err)
 	}
-	if err := pdf.Error(); err != nil {
+	page, err := source.PageContext(ctx, pageNum, "MediaBox")
+	if err != nil {
 		return "", fmt.Errorf("parse pdf page: %w", err)
 	}
-	if pageID == 0 {
+	if page == nil {
 		return "", fmt.Errorf("pdf page %d not found", pageNum)
 	}
-
-	pdf.AddPage()
-	pdf.UseImportedPage(pageID, 0, 0, 0, 0)
-
-	var buf bytes.Buffer
-	if err := pdf.OutputContext(ctx, &buf); err != nil {
-		return "", fmt.Errorf("render imported pdf page: %w", err)
+	content, err := page.ContentWithContext(ctx)
+	if err != nil {
+		return "", fmt.Errorf("parse pdf page: %w", err)
 	}
-	return TextContext(ctx, buf.Bytes())
+	return textFromContentStreamContext(ctx, content)
 }
 
 // DecodedStreams returns raw or Flate-decoded PDF streams in file order.
@@ -163,10 +164,18 @@ func DecodedStreams(data []byte) ([][]byte, error) {
 // DecodedStreamsContext returns raw or Flate-decoded PDF streams in file order
 // and honors ctx while scanning and decoding streams.
 func DecodedStreamsContext(ctx context.Context, data []byte) ([][]byte, error) {
+	return decodedStreamsContext(ctx, data, maxDecodedStreamBytes, maxDecodedTotalBytes, maxDecodedStreamCount)
+}
+
+func decodedStreamsContext(ctx context.Context, data []byte, maxStreamBytes, maxTotalBytes, maxStreams int) ([][]byte, error) {
 	if err := inspectContextErr(ctx); err != nil {
 		return nil, err
 	}
+	if maxStreamBytes < 0 || maxTotalBytes < 0 || maxStreams < 0 {
+		return nil, errors.New("pdf stream limits are invalid")
+	}
 	streams := make([][]byte, 0)
+	totalBytes := 0
 	searchFrom := 0
 
 	for {
@@ -193,12 +202,19 @@ func DecodedStreamsContext(ctx context.Context, data []byte) ([][]byte, error) {
 
 		streamEnd := streamStart + endRel
 		stream := bytes.TrimRight(data[streamStart:streamEnd], "\r\n")
-		decoded, err := decodeStreamContext(ctx, streamDictionaryBytes(data[:streamIdx]), stream)
+		if len(streams) >= maxStreams {
+			return nil, errors.New("pdf stream count exceeds maximum size")
+		}
+		decoded, err := decodeStreamWithLimitContext(ctx, streamDictionaryBytes(data[:streamIdx]), stream, maxStreamBytes)
 		if err != nil {
 			return nil, err
 		}
+		if len(decoded) > maxTotalBytes-totalBytes {
+			return nil, errors.New("decoded pdf streams exceed maximum size")
+		}
 
 		streams = append(streams, decoded)
+		totalBytes += len(decoded)
 		searchFrom = streamEnd + len("endstream")
 	}
 }
@@ -218,18 +234,18 @@ func streamDictionaryBytes(beforeStream []byte) []byte {
 	return beforeStream[start:]
 }
 
-func decodeStream(dict []byte, stream []byte) ([]byte, error) {
-	return decodeStreamContext(context.Background(), dict, stream)
+func decodeStreamContext(ctx context.Context, dict []byte, stream []byte) ([]byte, error) {
+	return decodeStreamWithLimitContext(ctx, dict, stream, maxDecodedStreamBytes)
 }
 
-func decodeStreamContext(ctx context.Context, dict []byte, stream []byte) ([]byte, error) {
+func decodeStreamWithLimitContext(ctx context.Context, dict []byte, stream []byte, maxBytes int) ([]byte, error) {
 	if err := inspectContextErr(ctx); err != nil {
 		return nil, err
 	}
 	if hasFlateFilter(dict) {
-		return inflateStreamContext(ctx, stream)
+		return inflateStreamWithLimitContext(ctx, stream, maxBytes)
 	}
-	if len(stream) > maxDecodedStreamBytes {
+	if len(stream) > maxBytes {
 		return nil, errors.New("pdf stream exceeds maximum size")
 	}
 	return append([]byte(nil), stream...), nil
@@ -259,11 +275,11 @@ func containsPDFName(data []byte, name string) bool {
 	return false
 }
 
-func inflateStream(stream []byte) ([]byte, error) {
-	return inflateStreamContext(context.Background(), stream)
+func inflateStreamContext(ctx context.Context, stream []byte) ([]byte, error) {
+	return inflateStreamWithLimitContext(ctx, stream, maxDecodedStreamBytes)
 }
 
-func inflateStreamContext(ctx context.Context, stream []byte) ([]byte, error) {
+func inflateStreamWithLimitContext(ctx context.Context, stream []byte, maxBytes int) ([]byte, error) {
 	if err := inspectContextErr(ctx); err != nil {
 		return nil, err
 	}
@@ -275,11 +291,11 @@ func inflateStreamContext(ctx context.Context, stream []byte) ([]byte, error) {
 		_ = reader.Close()
 	}()
 
-	decoded, err := io.ReadAll(io.LimitReader(inspectContextReader{ctx: ctx, r: reader}, maxDecodedStreamBytes+1))
+	decoded, err := io.ReadAll(io.LimitReader(inspectContextReader{ctx: ctx, r: reader}, int64(maxBytes)+1))
 	if err != nil {
 		return nil, fmt.Errorf("read flate stream: %w", err)
 	}
-	if len(decoded) > maxDecodedStreamBytes {
+	if len(decoded) > maxBytes {
 		return nil, errors.New("decoded pdf stream exceeds maximum size")
 	}
 	return decoded, nil
@@ -307,11 +323,6 @@ func (r inspectContextReader) Read(p []byte) (int, error) {
 type pdfTextToken struct {
 	text   string
 	isText bool
-}
-
-func textFromContentStream(stream []byte) string {
-	text, _ := textFromContentStreamContext(context.Background(), stream)
-	return text
 }
 
 func textFromContentStreamContext(ctx context.Context, stream []byte) (string, error) {

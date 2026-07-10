@@ -176,11 +176,6 @@ func File(inputPath, outputPath string, options Options) error {
 	return nil
 }
 
-func (options Options) validate() error {
-	_, err := prepareSigningOptions(options)
-	return err
-}
-
 func prepareSigningOptions(options Options) (preparedOptions, error) {
 	if options.Signer == nil {
 		return preparedOptions{}, ErrMissingSigner
@@ -315,10 +310,6 @@ type signatureDictionaryData struct {
 	contentsEnd     int
 }
 
-func buildIncrement(ctx pdfContext, options preparedOptions, byteRangePlaceholder string, contentsPlaceholder []byte) (signingIncrement, error) {
-	return buildIncrementContext(context.Background(), ctx, options, byteRangePlaceholder, contentsPlaceholder)
-}
-
 func buildIncrementContext(cancelCtx context.Context, ctx pdfContext, options preparedOptions, byteRangePlaceholder string, contentsPlaceholder []byte) (signingIncrement, error) {
 	if err := signContextErr(cancelCtx); err != nil {
 		return signingIncrement{}, err
@@ -423,14 +414,6 @@ func buildIncrementContext(cancelCtx context.Context, ctx pdfContext, options pr
 	writeBufferInt(&buf, xrefOffset)
 	buf.WriteString("\n%%EOF\n")
 	return signingIncrement{data: buf.Bytes(), byteRangeOffset: byteRangeOffset, contentsStart: contentsStart, contentsEnd: contentsEnd}, nil
-}
-
-func addPAdESExtension(rootDict []byte) ([]byte, error) {
-	return addDictEntries(rootDict, pdfDictEntry{
-		key:          "/Extensions",
-		value:        "<< /ESIC << /BaseVersion /1.7 /ExtensionLevel 1 >> >>",
-		skipExisting: true,
-	})
 }
 
 func signatureDictionaryBytes(options preparedOptions, byteRangePlaceholder string, contentsPlaceholder []byte) signatureDictionaryData {

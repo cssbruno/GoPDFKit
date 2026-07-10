@@ -166,7 +166,7 @@ func (f *Document) putImportedPages() {
 		rewrittenObjects, resources := page.rewrittenImportData(baseID, refs, refMap)
 		for _, body := range rewrittenObjects {
 			f.newobj()
-			f.outbuf(bytes.NewReader(body))
+			_ = f.outbuf(bytes.NewReader(body))
 			f.endPDFObject()
 		}
 		filter := ""

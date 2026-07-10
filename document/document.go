@@ -197,7 +197,7 @@ func (f *Document) applyNormalizedOptions(cfg normalizedOptions, allowOptimize b
 	if f.err != nil {
 		return
 	}
-	f.applyRuntimePolicy(cfg.runtimePolicy())
+	f.applyRuntimePolicy(cfg.runtimePolicy)
 	if f.err != nil {
 		return
 	}

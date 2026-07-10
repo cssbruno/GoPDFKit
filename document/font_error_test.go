@@ -4,6 +4,7 @@
 package document_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -17,7 +18,7 @@ func TestAddFontErrorReturnsLatchedError(t *testing.T) {
 	if err == nil {
 		t.Fatal("AddFontError() error = nil")
 	}
-	if pdf.Error() != err {
+	if !errors.Is(pdf.Error(), err) {
 		t.Fatal("AddFontError() did not return the latched document error")
 	}
 }
@@ -29,7 +30,7 @@ func TestAddUTF8FontErrorReturnsLatchedError(t *testing.T) {
 	if err == nil {
 		t.Fatal("AddUTF8FontError() error = nil")
 	}
-	if pdf.Error() != err {
+	if !errors.Is(pdf.Error(), err) {
 		t.Fatal("AddUTF8FontError() did not return the latched document error")
 	}
 }
@@ -41,7 +42,7 @@ func TestAddUTF8FontFromBytesErrorReturnsLatchedError(t *testing.T) {
 	if err == nil {
 		t.Fatal("AddUTF8FontFromBytesError() error = nil")
 	}
-	if pdf.Error() != err {
+	if !errors.Is(pdf.Error(), err) {
 		t.Fatal("AddUTF8FontFromBytesError() did not return the latched document error")
 	}
 }
@@ -53,7 +54,7 @@ func TestAddFontFromReaderErrorReturnsLatchedError(t *testing.T) {
 	if err == nil {
 		t.Fatal("AddFontFromReaderError() error = nil")
 	}
-	if pdf.Error() != err {
+	if !errors.Is(pdf.Error(), err) {
 		t.Fatal("AddFontFromReaderError() did not return the latched document error")
 	}
 }
@@ -65,7 +66,7 @@ func TestAddUTF8FontFromCacheErrorReturnsLatchedError(t *testing.T) {
 	if err == nil {
 		t.Fatal("AddUTF8FontFromCacheError() error = nil")
 	}
-	if pdf.Error() != err {
+	if !errors.Is(pdf.Error(), err) {
 		t.Fatal("AddUTF8FontFromCacheError() did not return the latched document error")
 	}
 }
