@@ -78,6 +78,7 @@ func checkCommon(path, text string) error {
 	})
 }
 
+// #nosec G101 -- These are PDF syntax markers checked in generated fixtures, not credentials.
 func checkPDFA4(path, text string) error {
 	checks := []tokenCheck{
 		{token: "%PDF-2.0", why: "PDF 2.0 header"},
@@ -89,6 +90,7 @@ func checkPDFA4(path, text string) error {
 	return requireTokens(path, text, checks)
 }
 
+// #nosec G101 -- These are PDF syntax markers checked in generated fixtures, not credentials.
 func checkPDFUA2(path, text string) error {
 	checks := []tokenCheck{
 		{token: "%PDF-2.0", why: "PDF 2.0 header"},

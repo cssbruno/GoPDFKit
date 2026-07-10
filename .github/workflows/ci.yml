@@ -22,8 +22,20 @@ jobs:
       - name: Check
         run: make check
 
+      - name: Check nested Go modules
+        run: make modules
+
+      - name: Check coverage floors
+        run: make coverage-check
+
+      - name: Static analysis
+        run: make lint
+
+      - name: Security analysis
+        run: make gosec
+
       - name: Race test
-        run: go test -race ./...
+        run: make race
 
       - name: Vulnerability check
         run: make govulncheck

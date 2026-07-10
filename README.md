@@ -528,8 +528,8 @@ make bench-generation-core-ci
 text, UTF-8 text, images, SVG, templates, imported pages, protection, and
 attachments.
 
-Some test examples generate or refresh PDFs under `assets/generated/pdf`. The
-`document` test package also clears generated PDFs before its example tests run.
+Test examples generate PDFs in a unique temporary directory, so running the
+test suite never removes or overwrites repository assets.
 
 ## Background
 

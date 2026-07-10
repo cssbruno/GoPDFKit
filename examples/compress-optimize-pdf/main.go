@@ -62,6 +62,7 @@ func buildReport(optimize bool) []byte {
 }
 
 func mustWrite(path string, data []byte) {
+	// #nosec G306 -- the generated example PDF is intentionally readable by the user.
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		log.Fatal(err)
 	}

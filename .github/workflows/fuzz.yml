@@ -1,0 +1,63 @@
+name: Fuzz
+
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+jobs:
+  fuzz:
+    name: ${{ matrix.package }} ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: ./document
+            target: FuzzCompileHTML
+          - package: ./document
+            target: FuzzCompileHTMLRecovery
+          - package: ./document
+            target: FuzzCompileHTMLDataImageSource
+          - package: ./document
+            target: FuzzHTMLTokenize
+          - package: ./document
+            target: FuzzSVGParse
+          - package: ./document
+            target: FuzzDeserializeTemplate
+          - package: ./document
+            target: FuzzParseImageOptionsReader
+          - package: ./document
+            target: FuzzAppendEscapedPDFCellText
+          - package: ./importpdf
+            target: FuzzOpenBytes
+          - package: ./inspect
+            target: FuzzDecodedStreamsAndText
+          - package: ./sign
+            target: FuzzReadDER
+          - package: ./sign
+            target: FuzzInspectCMS
+          - package: ./sign
+            target: FuzzVerifyCMS
+          - package: ./sign
+            target: FuzzPDFString
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: tools/go.mod
+          cache: true
+
+      - name: Fuzz
+        run: go test ${{ matrix.package }} -run '^$' -fuzz '^${{ matrix.target }}$' -fuzztime=30s
+
+      - name: Upload fuzz crashers
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-${{ matrix.target }}
+          path: ${{ matrix.package }}/testdata/fuzz
+          if-no-files-found: ignore
