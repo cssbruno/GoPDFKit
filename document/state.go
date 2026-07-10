@@ -9,22 +9,37 @@ import (
 	"time"
 )
 
+// pdfSerializationState owns data that exists only to assemble final PDF
+// objects. It is embedded so the public Document facade and its long-standing
+// internal call sites remain source-compatible while serialization has a
+// concrete home of its own.
+type pdfSerializationState struct {
+	n                 int             // current object number
+	offsets           []int           // object offsets
+	buffer            fmtBuffer       // in-memory final PDF buffer
+	outputSink        *pdfOutputSink  // optional final PDF serialization sink
+	streamedOutput    bool            // final bytes were streamed without retaining buffer
+	fileIDHash        hash.Hash       // incremental hash for file identifiers
+	pages             []*bytes.Buffer // page content; 1-based
+	pageObjectNumbers []int           // PDF page object numbers; 1-based
+}
+
+// resourceOwnershipState owns the resource registry and identifiers allocated
+// for imported pages. Keeping it separate makes resource lifetime explicit
+// without changing the Document facade.
+type resourceOwnershipState struct {
+	resources       *resourceStore
+	importedPageSeq int
+}
+
 // Document represents a single PDF document under construction.
 type Document struct {
-	isCurrentUTF8   bool            // whether the current font uses UTF-8 mode
-	isRTL           bool            // whether right-to-left mode is enabled
-	page            int             // current page number
-	n               int             // current object number
-	offsets         []int           // array of object offsets
-	resources       *resourceStore  // document resource registry
-	importedPageSeq int             // next native imported PDF page ID
-	buffer          fmtBuffer       // buffer holding in-memory PDF
-	outputSink      *pdfOutputSink  // final PDF serialization sink
-	streamedOutput  bool            // final PDF bytes were streamed without retaining buffer
-	fileIDHash      hash.Hash       // incremental hash of final buffer for file identifiers
-	pages           []*bytes.Buffer // slice[page] of page content; 1-based
+	pdfSerializationState
+	resourceOwnershipState
 
-	pageObjectNumbers []int // PDF page object numbers by page; 1-based, populated at output
+	isCurrentUTF8 bool // whether the current font uses UTF-8 mode
+	isRTL         bool // whether right-to-left mode is enabled
+	page          int  // current page number
 
 	state         int  // current document state
 	compress      bool // compression flag

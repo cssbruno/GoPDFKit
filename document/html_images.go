@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/cssbruno/gopdfkit/layout"
 )
 
 func htmlLinkTarget(href string) (string, error) {
@@ -202,16 +204,13 @@ func htmlImageFitBox(info *ImageInfo, pdf *Document, wd, ht, boxWd, boxHt float6
 	if naturalWd <= 0 || naturalHt <= 0 {
 		return 0, 0, wd, ht, flowWd, flowHt
 	}
-	scaleX := flowWd / naturalWd
-	scaleY := flowHt / naturalHt
-	scale := minFloat(scaleX, scaleY)
+	mode := layout.ImageFitContain
 	if fit == "cover" {
-		scale = htmlMaxFloat(scaleX, scaleY)
+		mode = layout.ImageFitCover
 	}
-	drawWd = naturalWd * scale
-	drawHt = naturalHt * scale
-	drawX = (flowWd - drawWd) / 2
-	drawY = (flowHt - drawHt) / 2
+	fitted := layout.FitImage(naturalWd, naturalHt, flowWd, flowHt, mode)
+	drawX, drawY = fitted.OffsetX, fitted.OffsetY
+	drawWd, drawHt = fitted.Width, fitted.Height
 	return drawX, drawY, drawWd, drawHt, flowWd, flowHt
 }
 

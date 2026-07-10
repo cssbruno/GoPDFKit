@@ -2,11 +2,12 @@
 // Copyright (c) 2026 cssBruno
 
 /*
-Package gopdfkit is a small facade over GoPDFKit's PDF generation API.
+Package gopdfkit is a compatibility facade over GoPDFKit's PDF generation API.
 
-GoPDFKit generates PDFs directly from Go code. The root package exposes the
-default constructor and public aliases. Import github.com/cssbruno/gopdfkit/document
-for the full API.
+GoPDFKit generates PDFs directly from Go code. New applications should import
+github.com/cssbruno/gopdfkit/document, the canonical public API. The root
+package keeps the default constructor and aliases for compatibility; new aliases
+are not added here, and removals are deferred to a major release.
 
 # Quick Start
 
@@ -75,8 +76,8 @@ reported as unsupported.
 
 The main packages are:
 
-  - gopdfkit: root facade with the default constructor and public aliases.
-  - document: main PDF generation API.
+  - document: canonical PDF generation API.
+  - gopdfkit: compatibility facade with the default constructor and existing aliases.
   - layout: optional typed block model used by document.WriteDocument.
   - font: font parsing and JSON font definition generation.
   - importpdf: small wrappers around imported-page APIs.
