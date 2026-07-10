@@ -43,9 +43,9 @@ The 40-worker rows use a fixed explicit worker count, so they measure concurrent
 PDF generation throughput with the same workload pressure across machines.
 Signed rows include PDF output plus detached CMS signing; the benchmark
 certificate and key are prepared outside the timed loop. Compliance rows measure
-generation only; external veraPDF and Arlington validation are separate CI
-steps. The raw Go benchmark output also includes the per-operation `pdf/s` and
-`pdf_bytes` metrics.
+generation only; external veraPDF and Arlington validation run locally and in
+the release workflow, not on every push or pull request. The raw Go benchmark
+output also includes the per-operation `pdf/s` and `pdf_bytes` metrics.
 
 Additional compiled HTML/parser medians from:
 

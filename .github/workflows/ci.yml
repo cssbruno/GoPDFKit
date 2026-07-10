@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -39,89 +40,3 @@ jobs:
 
       - name: Vulnerability check
         run: make govulncheck
-
-  compliance-smoke:
-    name: Compliance Smoke
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: tools/go.mod
-          cache: true
-
-      - name: Compliance fixture smoke test
-        run: make compliance-validate
-
-      - name: Upload compliance smoke artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: compliance-smoke-artifacts
-          path: artifacts/compliance
-
-  compliance-strict:
-    name: Compliance Strict
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: tools/go.mod
-          cache: true
-
-      - name: Install compliance dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y colord-data
-
-      - name: Start Arlington checker
-        env:
-          ARLINGTON_DOCKER_IMAGE: verapdf/arlington:v1.30.1
-        run: |
-          docker run -d --rm --name gopdfkit-arlington -p 8080:8080 "$ARLINGTON_DOCKER_IMAGE"
-          for attempt in $(seq 1 60); do
-            if curl -fsS http://localhost:8080/api/profiles/ids >/dev/null; then
-              exit 0
-            fi
-            sleep 2
-          done
-          docker logs gopdfkit-arlington
-          exit 1
-
-      - name: External compliance validation
-        env:
-          REQUIRE_COMPLIANCE_TOOLS: "1"
-          SRGB_ICC: /usr/share/color/icc/colord/sRGB.icc
-          VERAPDF_DOCKER_IMAGE: verapdf/cli:v1.30.2
-          VERAPDF: tools/verapdf-docker.sh 0
-          PDFUA_CHECKER: tools/verapdf-docker.sh ua2
-          ARLINGTON_CHECKER: tools/arlington-validate.sh
-          ARLINGTON_URL: http://localhost:8080
-          ARLINGTON_PROFILE: arlington2.0
-          ARLINGTON_REPORT_DIR: artifacts/compliance
-        run: make compliance-validate
-
-      - name: Compare compliance baselines
-        env:
-          COMPLIANCE_OUT: artifacts/compliance
-          VERAPDF_DOCKER_IMAGE: verapdf/cli:v1.30.2
-        run: make compliance-baseline-check
-
-      - name: Stop Arlington checker
-        if: always()
-        run: docker rm -f gopdfkit-arlington || true
-
-      - name: Upload compliance artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: compliance-artifacts
-          path: artifacts/compliance
-
