@@ -107,7 +107,7 @@ func normalizeCompressionPolicy(policy CompressionPolicy) (CompressionPolicy, er
 	if policy == (CompressionPolicy{}) {
 		return defaults, nil
 	}
-	enabled := true
+	var enabled bool
 	switch policy.Mode {
 	case CompressionDefault:
 		enabled = compressionPolicyHasFields(policy)
