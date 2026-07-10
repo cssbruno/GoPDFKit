@@ -506,6 +506,13 @@ Applications can transfer their own failures into the PDF object with
 
 ## Development
 
+## API Surface
+
+For new applications, import `github.com/cssbruno/gopdfkit/document`. It is the
+canonical public API. The root `gopdfkit` package and `document` layout aliases
+remain compatibility facades until the next major release; no new aliases are
+added to either surface.
+
 Common commands:
 
 ```shell

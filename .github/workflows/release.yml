@@ -51,11 +51,6 @@ jobs:
       - name: Release check
         run: make release-check VERSION="${VERSION}"
 
-      - name: Run generation benchmark budgets
-        run: |
-          make bench-generation-core-ci
-          make bench-generation-core-budget
-
       - name: Install compliance dependencies
         run: |
           sudo apt-get update

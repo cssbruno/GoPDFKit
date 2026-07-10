@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
-// Package document contains the high-level PDF document implementation.
+// Package document contains GoPDFKit's canonical high-level PDF API.
 //
-// Most applications can start with the root gopdfkit package. Import document
-// directly when you need explicit constructor options, document model types,
-// measurement helpers, or lower-level PDF drawing APIs. Renderer-independent
-// document model types live in the layout package and are re-exported here for
-// compatibility.
+// New applications should import document directly. The root gopdfkit package
+// remains a compatibility facade, and the layout aliases below remain for
+// existing callers; neither surface accepts new aliases before a major release.
+// Renderer-independent document model types live in the layout package.
 package document

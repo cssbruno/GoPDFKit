@@ -5,6 +5,9 @@ package document
 
 import "github.com/cssbruno/gopdfkit/layout"
 
+// These aliases preserve the pre-v1 document surface. New layout primitives
+// belong in layout and are consumed directly by document internals.
+
 // LayoutDocument is the shared model that document assembly helpers and HTML
 // parsers can produce before PDF layout and drawing.
 type LayoutDocument = layout.LayoutDocument

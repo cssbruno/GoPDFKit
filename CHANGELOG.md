@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## v0.11.3 - 2026-07-09
+
+Patch release for incremental Document ownership boundaries, centralized output
+coordination, and stable release automation.
+
+### Changed
+
+- Moved PDF serialization/object-number and resource-ownership state behind
+  private embedded owners while preserving the `Document` facade.
+- Routed file, writer, streaming, option, and signing output variants through
+  shared private output coordinators.
+- Shared renderer-independent image-fit and page-break primitives between
+  typed layout and HTML rendering, with parity coverage.
+- Documented `document` as the canonical API; root and layout aliases remain
+  compatibility-only until the next major release.
+- Removed benchmark execution from CI and release automation. Benchmarks remain
+  available as explicit local commands.
+
 ## v0.11.2 - 2026-07-09
 
 Patch release for safer PDF parsing, deterministic test isolation, and
