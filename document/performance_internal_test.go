@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/cssbruno/gopdfkit/layout"
 )
 
 func BenchmarkPerfUTF8ToUTF16(b *testing.B) {
@@ -124,7 +126,7 @@ func BenchmarkPerfReplaceAliasesNoMatchesManyPages(b *testing.B) {
 }
 
 func benchmarkAliasPDF(pages, aliases int) *Document {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
 	pdf.SetFont("Helvetica", "", 10)
 	for i := 0; i < aliases; i++ {
@@ -143,7 +145,7 @@ func benchmarkAliasPDF(pages, aliases int) *Document {
 }
 
 func benchmarkNoMatchAliasPDF(pages, aliases int) *Document {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
 	pdf.SetFont("Helvetica", "", 10)
 	for i := 0; i < aliases; i++ {
@@ -166,7 +168,7 @@ func BenchmarkPerfRegisterImageOptionsReaderPNGAlpha(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		pdf := New("P", "mm", "A4", "")
+		pdf := MustNew()
 		pdf.RegisterImageOptionsReader("alpha.png", options, bytes.NewReader(data))
 		if !pdf.Ok() {
 			b.Fatalf("RegisterImageOptionsReader() error = %v", pdf.Error())
@@ -176,11 +178,11 @@ func BenchmarkPerfRegisterImageOptionsReaderPNGAlpha(b *testing.B) {
 
 func TestHTMLTablePrefixSpanWidthMatchesScan(t *testing.T) {
 	widths := []float64{1.25, 2.5, 3.75, 4, 5.5}
-	offsets := htmlTableSpanPrefix(widths)
+	offsets := layout.TrackOffsets(widths)
 	for start := 0; start <= len(widths)+1; start++ {
 		for span := 0; span <= len(widths)+2; span++ {
-			want := htmlTableSpanWidth(widths, start, span)
-			got := htmlTablePrefixSpanWidth(offsets, start, span)
+			want := layout.SumSpan(widths, start, span)
+			got := layout.SpanSize(offsets, start, span)
 			if got != want {
 				t.Fatalf("span width start=%d span=%d got %v, want %v", start, span, got, want)
 			}
@@ -197,7 +199,7 @@ func BenchmarkHTMLTableSpanWidthWideRows(b *testing.B) {
 	for i := range widths {
 		widths[i] = 1 + float64(i%7)*0.25
 	}
-	offsets := htmlTableSpanPrefix(widths)
+	offsets := layout.TrackOffsets(widths)
 
 	b.Run("Scan", func(b *testing.B) {
 		b.ReportAllocs()
@@ -205,8 +207,8 @@ func BenchmarkHTMLTableSpanWidthWideRows(b *testing.B) {
 			total := 0.0
 			for row := 0; row < rows; row++ {
 				for col := 0; col < cols; col++ {
-					total += htmlTableSpanWidth(widths, 0, col)
-					total += htmlTableSpanWidth(widths, col, 1)
+					total += layout.SumSpan(widths, 0, col)
+					total += layout.SumSpan(widths, col, 1)
 				}
 			}
 			if total == 0 {
@@ -221,8 +223,8 @@ func BenchmarkHTMLTableSpanWidthWideRows(b *testing.B) {
 			total := 0.0
 			for row := 0; row < rows; row++ {
 				for col := 0; col < cols; col++ {
-					total += htmlTablePrefixSpanWidth(offsets, 0, col)
-					total += htmlTablePrefixSpanWidth(offsets, col, 1)
+					total += layout.SpanSize(offsets, 0, col)
+					total += layout.SpanSize(offsets, col, 1)
 				}
 			}
 			if total == 0 {
@@ -259,7 +261,7 @@ func BenchmarkHTMLTableColumnWidthsRepeatedText(b *testing.B) {
 		tableRows[row] = htmlTableRow{cells: cells}
 	}
 	layoutRows := htmlTableLayoutRows(tableRows)
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetFont("Helvetica", "", 9)
 
 	b.ReportAllocs()
@@ -305,7 +307,7 @@ func BenchmarkGenerationHTMLBlockBoxesCompiled(b *testing.B) {
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		pdf := New("P", "mm", "A4", "")
+		pdf := MustNew()
 		pdf.SetCompression(false)
 		pdf.AddPage()
 		pdf.SetFont("Helvetica", "", 9)
@@ -324,7 +326,7 @@ func BenchmarkGenerationHTMLBlockBoxesCompiled(b *testing.B) {
 }
 
 func BenchmarkHTMLWrappedLineCountLongUnbrokenASCII(b *testing.B) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetFont("Helvetica", "", 9)
 	text := strings.Repeat("A", 4096)
 
@@ -346,7 +348,7 @@ func BenchmarkHTMLWrappedLineCountLongUnbrokenUTF8(b *testing.B) {
 	if err := cache.AddUTF8FontFromBytes("DejaVu", "", fontBytes); err != nil {
 		b.Fatalf("AddUTF8FontFromBytes() error = %v", err)
 	}
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddUTF8FontFromCache("DejaVu", "", cache)
 	pdf.SetFont("DejaVu", "", 9)
 	text := strings.Repeat("界", 2048)
@@ -394,7 +396,7 @@ func BenchmarkPerfAddUTF8FontFromCache(b *testing.B) {
 	b.SetBytes(int64(len(fontBytes)))
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		pdf := New("P", "mm", "A4", "")
+		pdf := MustNew()
 		pdf.AddUTF8FontFromCache("DejaVu", "", cache)
 		if !pdf.Ok() {
 			b.Fatalf("AddUTF8FontFromCache() error = %v", pdf.Error())

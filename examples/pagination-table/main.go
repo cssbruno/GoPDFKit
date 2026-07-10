@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetTitle("Manual Table Pagination", false)
 	pdf.SetCreator("examples/pagination-table", false)
 	pdf.AliasNbPages("{total}")

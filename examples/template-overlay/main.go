@@ -15,7 +15,7 @@ import (
 func main() {
 	template := samplepdf.Build("Template", 1)
 
-	pdf := document.New("P", "pt", "A4", "")
+	pdf := document.MustNew(document.WithUnit(document.UnitPoint))
 	pdf.SetTitle("Template Overlay", false)
 	pdf.SetCreator("examples/template-overlay", false)
 

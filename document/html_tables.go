@@ -170,7 +170,7 @@ func (html *HTML) writeParsedTable(compiled *CompiledHTML, table htmlTableType, 
 		return end
 	}
 	colWidths := html.tableColumnWidths(layoutRows, colCount, tableWd, pdf)
-	colOffsets := htmlTableSpanPrefix(colWidths)
+	colOffsets := layout.TrackOffsets(colWidths)
 	textR, textG, textB := pdf.GetTextColor()
 	fillR, fillG, fillB := pdf.GetFillColor()
 	drawR, drawG, drawB := pdf.GetDrawColor()
@@ -242,11 +242,11 @@ func (html *HTML) writeParsedTable(compiled *CompiledHTML, table htmlTableType, 
 				RowSpan: placement.rowspan,
 				ColSpan: placement.colspan,
 			})
-			x := startX + htmlTablePrefixSpanWidth(colOffsets, 0, placement.col)
-			wd := htmlTablePrefixSpanWidth(colOffsets, placement.col, placement.colspan)
+			x := startX + layout.SpanSize(colOffsets, 0, placement.col)
+			wd := layout.SpanSize(colOffsets, placement.col, placement.colspan)
 			cellHt := rowHt
 			if placement.rowspan > 1 {
-				cellHt = htmlTableSpanHeight(rowHeights, placement.row, placement.rowspan)
+				cellHt = layout.SumSpan(rowHeights, placement.row, placement.rowspan)
 			}
 			cellBorder := measuredCell.border
 			if tableBorderCollapse {
@@ -1036,7 +1036,7 @@ func htmlApplyTableSpanMinimum(widths []float64, start, span int, target float64
 	if target <= 0 || span <= 0 {
 		return
 	}
-	current := htmlTableSpanWidth(widths, start, span)
+	current := layout.SumSpan(widths, start, span)
 	if current >= target {
 		return
 	}
@@ -1050,7 +1050,7 @@ func htmlApplyTableSpanWidth(widths []float64, specified []bool, start, span int
 	if target <= 0 || span <= 0 {
 		return
 	}
-	current := htmlTableSpanWidth(widths, start, span)
+	current := layout.SumSpan(widths, start, span)
 	if current >= target {
 		for j := start; j < start+span && j < len(specified); j++ {
 			specified[j] = true
@@ -1100,7 +1100,7 @@ func (html *HTML) measureTableRows(compiled *CompiledHTML, rows []htmlTableLayou
 				}
 				continue
 			}
-			current := htmlTableSpanHeight(heights, rowIndex, span)
+			current := layout.SumSpan(heights, rowIndex, span)
 			if required > current {
 				extra := (required - current) / float64(span)
 				for i := rowIndex; i < rowIndex+span; i++ {
@@ -1152,7 +1152,7 @@ func (html *HTML) measureTableRowHeights(compiled *CompiledHTML, rows []htmlTabl
 				}
 				continue
 			}
-			current := htmlTableSpanHeight(heights, rowIndex, span)
+			current := layout.SumSpan(heights, rowIndex, span)
 			if required > current {
 				extra := (required - current) / float64(span)
 				for i := rowIndex; i < rowIndex+span; i++ {
@@ -1177,7 +1177,7 @@ func (html *HTML) measureTableCellRequiredHeight(compiled *CompiledHTML, row htm
 	html.applyCompiledElementStyle(compiled, cell.start, &style, cellEl, cssRules, inherited.fontSize, inherited.lineHeight, rowAncestors...)
 	html.applyTextStyle(style, fallback)
 	cellDecl := html.tableElementDeclarations(compiled, cell.start, cellEl, cssRules, rowAncestors)
-	wd := htmlTablePrefixSpanWidth(colOffsets, placement.col, placement.colspan)
+	wd := layout.SpanSize(colOffsets, placement.col, placement.colspan)
 	cellStyle := html.cachedTableCellStyle(cell.attrs, row.row.attrs, cellDecl, rowDecl, style.align, padding, wd, tableBorder, rowFill, tableFill, cellStyleCache)
 	contentWd := htmlMaxFloat(wd-cellStyle.padding.left-cellStyle.padding.right, 0)
 	text := htmlTableCellText(cell, style.preserveWhitespace)
@@ -1197,7 +1197,7 @@ func (html *HTML) measureTableCell(compiled *CompiledHTML, row htmlTableLayoutRo
 	html.applyCompiledElementStyle(compiled, cell.start, &style, cellEl, cssRules, inherited.fontSize, inherited.lineHeight, rowAncestors...)
 	html.applyTextStyle(style, fallback)
 	cellDecl := html.tableElementDeclarations(compiled, cell.start, cellEl, cssRules, rowAncestors)
-	wd := htmlTablePrefixSpanWidth(colOffsets, placement.col, placement.colspan)
+	wd := layout.SpanSize(colOffsets, placement.col, placement.colspan)
 	cellStyle := html.cachedTableCellStyle(cell.attrs, row.row.attrs, cellDecl, rowDecl, style.align, padding, wd, tableBorder, rowFill, tableFill, cellStyleCache)
 	contentWd := htmlMaxFloat(wd-cellStyle.padding.left-cellStyle.padding.right, 0)
 	text := htmlTableCellText(cell, style.preserveWhitespace)
@@ -1602,41 +1602,6 @@ func htmlTableRowspan(attrs map[string]string) int {
 		return htmlMaxTableColumns
 	}
 	return n
-}
-
-func htmlTableSpanWidth(widths []float64, start, span int) float64 {
-	wd := 0.0
-	for j := start; j < start+span && j < len(widths); j++ {
-		wd += widths[j]
-	}
-	return wd
-}
-
-func htmlTableSpanPrefix(widths []float64) []float64 {
-	offsets := make([]float64, len(widths)+1)
-	for i, wd := range widths {
-		offsets[i+1] = offsets[i] + wd
-	}
-	return offsets
-}
-
-func htmlTablePrefixSpanWidth(offsets []float64, start, span int) float64 {
-	if span <= 0 || start < 0 || start >= len(offsets)-1 {
-		return 0
-	}
-	end := start + span
-	if end > len(offsets)-1 {
-		end = len(offsets) - 1
-	}
-	return offsets[end] - offsets[start]
-}
-
-func htmlTableSpanHeight(heights []float64, start, span int) float64 {
-	ht := 0.0
-	for j := start; j < start+span && j < len(heights); j++ {
-		ht += heights[j]
-	}
-	return ht
 }
 
 func sumFloat64(values []float64) float64 {

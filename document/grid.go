@@ -338,7 +338,7 @@ func (g GridType) Grid(pdf *Document) {
 			pdf.Line(x1, y1, x2, y2)
 		}
 
-		textSz = pdf.PointToUnitConvert(g.TextSize)
+		textSz = pdf.PointConvert(g.TextSize)
 		halfTextSz = textSz / 2
 
 		pdf.SetAutoPageBreak(false, 0)

@@ -7,13 +7,12 @@ import (
 	"log"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
 
 func main() {
-	pdf := gopdfkit.New()
+	pdf := document.MustNew()
 	pdf.SetTitle("HTML Flex Edge Cases", false)
 	pdf.SetCreator("examples/html-flex-edge-cases", false)
 	pdf.SetMargins(14, 16, 14)

@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"log"
 
-	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
@@ -15,7 +14,7 @@ import (
 func main() {
 	source := buildSourcePDF()
 
-	pdf := gopdfkit.New()
+	pdf := document.MustNew()
 	pageID := pdf.ImportPageStream(bytes.NewReader(source), 1, "MediaBox")
 	if pdf.Err() {
 		log.Fatal(pdf.Error())
@@ -32,7 +31,7 @@ func main() {
 }
 
 func buildSourcePDF() []byte {
-	pdf := document.New("P", "pt", "A4", "")
+	pdf := document.MustNew(document.WithUnit(document.UnitPoint))
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "B", 18)
 	pdf.Text(72, 96, "Source PDF page")

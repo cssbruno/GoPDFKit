@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/cssbruno/gopdfkit/layout"
 )
 
 func testFormDocument() FormDocument {
@@ -61,12 +63,12 @@ func TestFormDocumentBlocks(t *testing.T) {
 	if len(blocks) != 3 {
 		t.Fatalf("blocks = %d, want title plus two sections", len(blocks))
 	}
-	if got := blocks[0].DocumentBlockKind(); got != BlockKindHeading {
+	if got := blocks[0].DocumentBlockKind(); got != layout.BlockKindHeading {
 		t.Fatalf("first block kind = %q, want heading", got)
 	}
-	section, ok := blocks[1].(SectionBlock)
+	section, ok := blocks[1].(layout.SectionBlock)
 	if !ok {
-		t.Fatalf("second block = %T, want SectionBlock", blocks[1])
+		t.Fatalf("second block = %T, want layout.SectionBlock", blocks[1])
 	}
 	if !section.Box.KeepTogether {
 		t.Fatal("first section should keep grouped questions together")
@@ -74,7 +76,7 @@ func TestFormDocumentBlocks(t *testing.T) {
 }
 
 func TestWriteDocumentRendersFormDocumentModel(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
 	doc := FormDocumentModel(testFormDocument())
 

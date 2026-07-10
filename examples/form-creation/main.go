@@ -41,7 +41,7 @@ func main() {
 		},
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCreator("examples/form-creation", false)
 	pdf.WriteDocument(document.FormDocumentModel(form))
 

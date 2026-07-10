@@ -10,7 +10,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/assets"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
@@ -54,7 +53,7 @@ type plateletRow struct {
 }
 
 func main() {
-	pdf := gopdfkit.New()
+	pdf := document.MustNew()
 	pdf.SetTitle("Hemograma HTML Modelo Brasileiro", false)
 	pdf.SetCreator("examples/lab-hemograma-html", false)
 	addUTF8Fonts(pdf)
@@ -87,7 +86,7 @@ func main() {
 	}
 }
 
-func addUTF8Fonts(pdf *gopdfkit.Document) {
+func addUTF8Fonts(pdf *document.Document) {
 	fonts := map[string]string{
 		"":   "DejaVuSansCondensed.ttf",
 		"B":  "DejaVuSansCondensed-Bold.ttf",
@@ -185,7 +184,7 @@ func esc(s string) string {
 	return stdhtml.EscapeString(s)
 }
 
-func drawLabHeader(pdf *gopdfkit.Document, data reportData) {
+func drawLabHeader(pdf *document.Document, data reportData) {
 	blue := color{0, 166, 216}
 	set(pdf, "B", 18, blue)
 	pdf.Text(7, 16, "VOLPI")
@@ -237,7 +236,7 @@ func drawLabHeader(pdf *gopdfkit.Document, data reportData) {
 	set(pdf, "", 6.8, black)
 }
 
-func drawFixedFooter(pdf *gopdfkit.Document) {
+func drawFixedFooter(pdf *document.Document) {
 	pdf.SetPage(1)
 	pdf.SetTextColor(0, 0, 0)
 	pdf.SetFont("dejavu", "", 5.2)
@@ -273,7 +272,7 @@ func drawFixedFooter(pdf *gopdfkit.Document) {
 	pdf.SetTextColor(0, 0, 0)
 }
 
-func drawBarcode(pdf *gopdfkit.Document, x, y, w, h float64, label string) {
+func drawBarcode(pdf *document.Document, x, y, w, h float64, label string) {
 	pattern := []float64{0.45, 0.25, 0.8, 0.25, 0.35, 0.6, 0.25, 0.25, 1.0, 0.35, 0.25, 0.7, 0.25, 0.45, 0.25, 0.9, 0.25, 0.35, 0.6, 0.25}
 	pdf.SetFillColor(0, 0, 0)
 	cursor := x
@@ -290,19 +289,19 @@ func drawBarcode(pdf *gopdfkit.Document, x, y, w, h float64, label string) {
 	centerText(pdf, x, y+h+3, w, 3, label)
 }
 
-func meta(pdf *gopdfkit.Document, x, y float64, label, text string) {
+func meta(pdf *document.Document, x, y float64, label, text string) {
 	set(pdf, "", 5.6, black)
 	pdf.Text(x, y, label)
 	set(pdf, "B", 5.6, black)
 	pdf.Text(x+18, y, text)
 }
 
-func rightText(pdf *gopdfkit.Document, x, y, w, h float64, text string) {
+func rightText(pdf *document.Document, x, y, w, h float64, text string) {
 	pdf.SetXY(x, y)
 	pdf.CellFormat(w, h, text, "", 0, "R", false, 0, "")
 }
 
-func centerText(pdf *gopdfkit.Document, x, y, w, h float64, text string) {
+func centerText(pdf *document.Document, x, y, w, h float64, text string) {
 	pdf.SetXY(x, y)
 	pdf.CellFormat(w, h, text, "", 0, "C", false, 0, "")
 }
@@ -315,7 +314,7 @@ type color struct {
 
 var black = color{0, 0, 0}
 
-func set(pdf *gopdfkit.Document, style string, size float64, c color) {
+func set(pdf *document.Document, style string, size float64, c color) {
 	pdf.SetFont("dejavu", style, size)
 	pdf.SetTextColor(c.r, c.g, c.b)
 }

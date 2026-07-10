@@ -15,7 +15,7 @@ import (
 func main() {
 	source := samplepdf.Build("Four Up Source", 8)
 
-	pdf := document.New("P", "pt", "A4", "")
+	pdf := document.MustNew(document.WithUnit(document.UnitPoint))
 	pdf.SetTitle("Four Up Pages", false)
 	pdf.SetCreator("examples/four-up-pages", false)
 

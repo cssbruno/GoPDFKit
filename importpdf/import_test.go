@@ -263,7 +263,7 @@ func (r byteReaderAt) ReadAt(p []byte, off int64) (int, error) {
 
 func importSourcePDF(t *testing.T) []byte {
 	t.Helper()
-	pdf := document.New("P", "pt", "A4", "")
+	pdf := document.MustNew(document.WithUnit(document.UnitPoint))
 	pdf.SetCompression(true)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 16)

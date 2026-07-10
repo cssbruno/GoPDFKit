@@ -8,12 +8,12 @@ import (
 	"log"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit"
+	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
 
 func main() {
-	pdf := gopdfkit.New()
+	pdf := document.MustNew()
 	pdf.SetTitle("HTML Tables", false)
 	pdf.SetCreator("examples/html-tables", false)
 	pdf.SetMargins(16, 16, 16)

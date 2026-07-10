@@ -6,7 +6,7 @@ package document
 import "testing"
 
 func TestAddSpotColorClampsComponents(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddSpotColor("Brand", 120, 20, 101, 40)
 	pdf.SetDrawSpotColor("Brand", 100)
 
@@ -20,7 +20,7 @@ func TestAddSpotColorClampsComponents(t *testing.T) {
 }
 
 func TestAddSpotColorRejectsDuplicateName(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddSpotColor("Brand", 0, 0, 0, 0)
 	pdf.AddSpotColor("Brand", 1, 2, 3, 4)
 	if pdf.Error() == nil {
@@ -29,7 +29,7 @@ func TestAddSpotColorRejectsDuplicateName(t *testing.T) {
 }
 
 func TestSetSpotColorRejectsUnknownName(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetFillSpotColor("Missing", 50)
 	if pdf.Error() == nil {
 		t.Fatal("expected unregistered spot color error")
@@ -37,7 +37,7 @@ func TestSetSpotColorRejectsUnknownName(t *testing.T) {
 }
 
 func TestSetTextSpotColorMarksColorStateDirty(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddSpotColor("Fill", 0, 0, 0, 0)
 	pdf.AddSpotColor("Text", 0, 0, 0, 100)
 	pdf.SetFillSpotColor("Fill", 100)

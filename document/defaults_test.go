@@ -19,7 +19,7 @@ func TestNewWithDefaultsUsesExplicitSettings(t *testing.T) {
 	defaults.CreationDate = time.Date(2001, 2, 3, 4, 5, 6, 0, time.UTC)
 	defaults.ModificationDate = time.Date(2007, 8, 9, 10, 11, 12, 0, time.UTC)
 
-	out, err := outputWithDefaults(document.Options{}, defaults)
+	out, err := outputWithDefaults(defaults)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,23 +34,13 @@ func TestNewWithDefaultsUsesExplicitSettings(t *testing.T) {
 	}
 }
 
-func TestNewWithDefaultsIgnoresPackageCompressionDefault(t *testing.T) {
-	restore := document.DefaultSettings()
-	t.Cleanup(func() {
-		document.SetDefaultCatalogSort(restore.CatalogSort)
-		document.SetDefaultCompression(restore.Compression)
-		document.SetDefaultCreationDate(restore.CreationDate)
-		document.SetDefaultModificationDate(restore.ModificationDate)
-	})
-
-	document.SetDefaultCompression(false)
-
+func TestNewDocumentWithDefaultsEnablesExplicitCompression(t *testing.T) {
 	defaults := document.Defaults{
 		Compression:      true,
 		CreationDate:     time.Date(2001, 2, 3, 4, 5, 6, 0, time.UTC),
 		ModificationDate: time.Date(2007, 8, 9, 10, 11, 12, 0, time.UTC),
 	}
-	out, err := outputWithDefaults(document.Options{}, defaults)
+	out, err := outputWithDefaults(defaults)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,23 +49,26 @@ func TestNewWithDefaultsIgnoresPackageCompressionDefault(t *testing.T) {
 	}
 }
 
-func TestNewWithDefaultsHonorsExplicitNoCompressionWithOptimize(t *testing.T) {
+func TestNewDocumentWithDefaultsAllowsExplicitCompressionOverride(t *testing.T) {
 	defaults := document.DefaultSettings()
 	defaults.Compression = false
 	defaults.CreationDate = time.Date(2001, 2, 3, 4, 5, 6, 0, time.UTC)
 	defaults.ModificationDate = time.Date(2007, 8, 9, 10, 11, 12, 0, time.UTC)
 
-	out, err := outputWithDefaults(document.Options{Optimize: true}, defaults)
+	out, err := outputWithDefaults(defaults, document.WithBestCompression())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(out, "/Filter /FlateDecode") {
-		t.Fatal("expected explicit no-compression default to override Optimize")
+	if !strings.Contains(out, "/Filter /FlateDecode") {
+		t.Fatal("expected WithBestCompression to override the no-compression default")
 	}
 }
 
-func outputWithDefaults(options document.Options, defaults document.Defaults) (string, error) {
-	pdf := document.NewWithDefaults(options, defaults)
+func outputWithDefaults(defaults document.Defaults, options ...document.Option) (string, error) {
+	pdf, err := document.NewDocumentWithDefaults(defaults, options...)
+	if err != nil {
+		return "", err
+	}
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(40, 10, "explicit defaults")

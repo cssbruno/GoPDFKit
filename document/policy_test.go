@@ -59,7 +59,7 @@ func TestWithServerSafeDefaultsAppliesServerPolicy(t *testing.T) {
 }
 
 func TestSetProductionPolicyAppliesToLegacyDocument(t *testing.T) {
-	pdf := New("", "", "", "")
+	pdf := MustNew()
 	policy := ServerSafePolicy()
 	policy.Limits.MaxPages = 1
 	if err := pdf.SetProductionPolicy(policy); err != nil {
@@ -91,7 +91,7 @@ func TestSecurityPolicyGatesFeatures(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewDocument() error = %v", err)
 		}
-		pdf.SetJavascript("app.alert('blocked')")
+		_ = pdf.SetJavascriptError("app.alert('blocked')")
 		if !errors.Is(pdf.Error(), ErrJavaScriptUnsupported) {
 			t.Fatalf("SetJavascript() error = %v, want ErrJavaScriptUnsupported", pdf.Error())
 		}
@@ -261,7 +261,7 @@ func TestOutputOptionsApplyCompression(t *testing.T) {
 		t.Fatalf("OutputWithOptions() error = %v", err)
 	}
 	got := pdf.CompressionPolicy()
-	if got.Level != zlib.BestCompression || !got.Enabled {
+	if got.Level != zlib.BestCompression || got.Mode != CompressionEnabled {
 		t.Fatalf("CompressionPolicy() = %#v, want best compression enabled", got)
 	}
 }
@@ -309,7 +309,7 @@ func TestOutputContextCanceledDuringPageCompression(t *testing.T) {
 	defer cancel()
 	pdf, err := NewDocument(
 		WithCompressionPolicy(CompressionPolicy{
-			Enabled:                  true,
+			Mode:                     CompressionEnabled,
 			Level:                    zlib.BestSpeed,
 			PageWorkers:              2,
 			TinyStreamThresholdBytes: 1,
@@ -366,9 +366,9 @@ func TestHooksObserveAttachmentLoad(t *testing.T) {
 	}
 }
 
-type validationFunc func([]byte) (ValidationReport, error)
+type validationFunc func([]byte) (ComplianceValidationReport, error)
 
-func (fn validationFunc) ValidatePDF(data []byte) (ValidationReport, error) {
+func (fn validationFunc) ValidatePDF(data []byte) (ComplianceValidationReport, error) {
 	return fn(data)
 }
 
@@ -380,8 +380,8 @@ func TestPublicProductionContracts(t *testing.T) {
 		t.Fatalf("TemplateFingerprintVersion() = %q, want GPKTPL2", got)
 	}
 
-	var validator Validator = validationFunc(func([]byte) (ValidationReport, error) {
-		return ValidationReport{}, nil
+	var validator Validator = validationFunc(func([]byte) (ComplianceValidationReport, error) {
+		return ComplianceValidationReport{}, nil
 	})
 	report, err := validator.ValidatePDF([]byte("%PDF-2.0"))
 	if err != nil {

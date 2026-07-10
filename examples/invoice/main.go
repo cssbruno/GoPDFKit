@@ -6,12 +6,12 @@ package main
 import (
 	"log"
 
-	"github.com/cssbruno/gopdfkit"
+	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
 
 func main() {
-	pdf := gopdfkit.New()
+	pdf := document.MustNew()
 	pdf.SetTitle("Invoice", false)
 	pdf.SetCreator("examples/invoice", false)
 	pdf.AddPage()
@@ -66,7 +66,7 @@ func main() {
 	}
 }
 
-func field(pdf *gopdfkit.Document, x, y float64, label, value string) {
+func field(pdf *document.Document, x, y float64, label, value string) {
 	pdf.SetFillColor(245, 248, 251)
 	pdf.SetDrawColor(215, 222, 230)
 	pdf.Rect(x, y, 60, 18, "DF")
@@ -78,7 +78,7 @@ func field(pdf *gopdfkit.Document, x, y float64, label, value string) {
 	pdf.Text(x+4, y+14, value)
 }
 
-func headerRow(pdf *gopdfkit.Document, x, y float64, widths []float64, values []string) {
+func headerRow(pdf *document.Document, x, y float64, widths []float64, values []string) {
 	pdf.SetFont("Helvetica", "B", 9)
 	pdf.SetFillColor(35, 70, 120)
 	pdf.SetTextColor(255, 255, 255)
@@ -90,7 +90,7 @@ func headerRow(pdf *gopdfkit.Document, x, y float64, widths []float64, values []
 	pdf.SetTextColor(0, 0, 0)
 }
 
-func dataRow(pdf *gopdfkit.Document, x, y float64, widths []float64, values []string) {
+func dataRow(pdf *document.Document, x, y float64, widths []float64, values []string) {
 	pdf.SetFont("Helvetica", "", 9)
 	pdf.SetFillColor(255, 255, 255)
 	pdf.SetDrawColor(220, 226, 232)

@@ -12,7 +12,7 @@ import (
 )
 
 func TestAddFontErrorReturnsLatchedError(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 
 	err := pdf.AddFontError("bad", "", "../bad.json")
 	if err == nil {
@@ -24,7 +24,7 @@ func TestAddFontErrorReturnsLatchedError(t *testing.T) {
 }
 
 func TestAddUTF8FontErrorReturnsLatchedError(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 
 	err := pdf.AddUTF8FontError("bad", "", "../bad.ttf")
 	if err == nil {
@@ -36,7 +36,7 @@ func TestAddUTF8FontErrorReturnsLatchedError(t *testing.T) {
 }
 
 func TestAddUTF8FontFromBytesErrorReturnsLatchedError(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 
 	err := pdf.AddUTF8FontFromBytesError("bad", "", []byte{0, 1})
 	if err == nil {
@@ -48,7 +48,7 @@ func TestAddUTF8FontFromBytesErrorReturnsLatchedError(t *testing.T) {
 }
 
 func TestAddFontFromReaderErrorReturnsLatchedError(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 
 	err := pdf.AddFontFromReaderError("bad", "", strings.NewReader("{"))
 	if err == nil {
@@ -60,7 +60,7 @@ func TestAddFontFromReaderErrorReturnsLatchedError(t *testing.T) {
 }
 
 func TestAddUTF8FontFromCacheErrorReturnsLatchedError(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 
 	err := pdf.AddUTF8FontFromCacheError("missing", "", nil)
 	if err == nil {

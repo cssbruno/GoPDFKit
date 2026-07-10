@@ -31,7 +31,7 @@ func (failingOutputWriter) Write([]byte) (int, error) {
 }
 
 func TestOutputRejectsNilWriter(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 
 	if err := pdf.Output(nil); !errors.Is(err, document.ErrNilWriter) {
 		t.Fatalf("Output(nil) error = %v, want ErrNilWriter", err)
@@ -39,7 +39,7 @@ func TestOutputRejectsNilWriter(t *testing.T) {
 }
 
 func TestOutputRejectsTypedNilWriter(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	var w *nilOutputWriter
 
 	if err := pdf.Output(w); !errors.Is(err, document.ErrNilWriter) {
@@ -48,7 +48,7 @@ func TestOutputRejectsTypedNilWriter(t *testing.T) {
 }
 
 func TestOutputAndCloseRejectsNilWriter(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 
 	if err := pdf.OutputAndClose(nil); !errors.Is(err, document.ErrNilWriter) {
 		t.Fatalf("OutputAndClose(nil) error = %v, want ErrNilWriter", err)
@@ -56,7 +56,7 @@ func TestOutputAndCloseRejectsNilWriter(t *testing.T) {
 }
 
 func TestOutputIsIdempotent(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(20, 10, "hello")
@@ -78,7 +78,7 @@ func TestOutputIsIdempotent(t *testing.T) {
 }
 
 func TestOutputWriterFailureDoesNotPoisonDocument(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(20, 10, "hello")
@@ -96,7 +96,7 @@ func TestOutputWriterFailureDoesNotPoisonDocument(t *testing.T) {
 }
 
 func TestOutputDefaultTrailerOmitsFileID(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(20, 10, "hello")
@@ -111,7 +111,7 @@ func TestOutputDefaultTrailerOmitsFileID(t *testing.T) {
 }
 
 func TestOutputEncryptedTrailerKeepsEmptyFileID(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	if err := pdf.SetLegacyProtection(document.CnProtectPrint, "reader", "owner"); err != nil {
 		t.Fatalf("SetLegacyProtection() error = %v", err)
 	}
@@ -129,7 +129,7 @@ func TestOutputEncryptedTrailerKeepsEmptyFileID(t *testing.T) {
 }
 
 func TestOutputArlingtonTrailerKeepsHashFileID(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetComplianceMetadata(document.ComplianceMetadata{Arlington: true})
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -147,7 +147,7 @@ func TestOutputArlingtonTrailerKeepsHashFileID(t *testing.T) {
 func TestOutputFileAndCloseNoSyncWritesPDF(t *testing.T) {
 	fileStr := filepath.Join(t.TempDir(), "out.pdf")
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(20, 10, "hello")
@@ -167,7 +167,7 @@ func TestOutputFileAndCloseNoSyncWritesPDF(t *testing.T) {
 func TestOutputFileWritesPDF(t *testing.T) {
 	fileStr := filepath.Join(t.TempDir(), "out.pdf")
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(20, 10, "hello")
@@ -187,12 +187,12 @@ func TestOutputFileWritesPDF(t *testing.T) {
 func TestOutputFileAndCloseWithOptionsZeroValueWritesPDF(t *testing.T) {
 	fileStr := filepath.Join(t.TempDir(), "out.pdf")
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(20, 10, "hello")
 
-	if err := pdf.OutputFileAndCloseWithOptions(fileStr, document.OutputFileOptions{}); err != nil {
+	if err := pdf.OutputFileAndCloseWithOptions(fileStr, document.OutputOptions{}); err != nil {
 		t.Fatalf("OutputFileAndCloseWithOptions() error = %v", err)
 	}
 	if info, err := os.Stat(fileStr); err != nil {
@@ -209,7 +209,7 @@ func TestOutputFileAndCloseDoesNotTruncateOnCloseValidationError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.ClipRect(10, 10, 20, 20, false)
 
@@ -229,7 +229,7 @@ func TestOutputFileAndCloseDoesNotTruncateOnCloseValidationError(t *testing.T) {
 func TestOutputFileAndCloseNewFileIsReadableByGroupAndOthers(t *testing.T) {
 	fileStr := filepath.Join(t.TempDir(), "out.pdf")
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(20, 10, "hello")
@@ -252,7 +252,7 @@ func TestOutputFileAndClosePreservesExistingFileMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(20, 10, "hello")

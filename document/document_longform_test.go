@@ -48,7 +48,7 @@ func TestWriteDocumentRendersLongFormHTMLDocumentModel(t *testing.T) {
 	if len(messages) != 0 {
 		t.Fatalf("messages = %#v, want none", messages)
 	}
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
 	pdf.WriteDocument(doc)
 	var out bytes.Buffer

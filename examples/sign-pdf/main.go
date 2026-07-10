@@ -14,7 +14,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/cssbruno/gopdfkit"
+	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 	"github.com/cssbruno/gopdfkit/sign"
 )
@@ -23,7 +23,7 @@ func main() {
 	cert, signer := selfSignedSigner()
 	signingTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
-	pdf := gopdfkit.New()
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.Cell(40, 10, "Signed PDF example")

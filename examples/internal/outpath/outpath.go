@@ -8,17 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"time"
-
-	"github.com/cssbruno/gopdfkit/document"
 )
-
-func init() {
-	fixed := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	document.SetDefaultCatalogSort(true)
-	document.SetDefaultCreationDate(fixed)
-	document.SetDefaultModificationDate(fixed)
-}
 
 // File returns name under assets/generated/pdf/examples.
 func File(name string) string {

@@ -5,20 +5,9 @@ package document
 
 import (
 	"bytes"
-	"compress/zlib"
 	"fmt"
 	"strings"
-	"sync"
-	"time"
 )
-
-var _gl struct {
-	sync.RWMutex
-	catalogSort  bool
-	noCompress   bool // Initial zero value indicates compression
-	creationDate time.Time
-	modDate      time.Time
-}
 
 type fmtBuffer struct {
 	bytes.Buffer
@@ -186,23 +175,19 @@ func documentNewWithDefaults(orientationStr, unitStr, sizeStr, fontDirStr string
 	return
 }
 
-func newWithOptions(options Options) (f *Document) {
-	cfg := options.normalized()
+func newWithOptions(cfg normalizedOptions) (f *Document) {
 	f = documentNewWithDefaults(cfg.orientationStr, cfg.unitStr, cfg.sizeStr, cfg.fontDirStr, cfg.size, DefaultSettings())
-	f.applyNormalizedOptions(cfg, true)
+	f.applyNormalizedOptions(cfg)
 	return f
 }
 
-func (f *Document) applyNormalizedOptions(cfg normalizedOptions, allowOptimize bool) {
+func (f *Document) applyNormalizedOptions(cfg normalizedOptions) {
 	if f.err != nil {
 		return
 	}
 	f.applyRuntimePolicy(cfg.runtimePolicy)
 	if f.err != nil {
 		return
-	}
-	if cfg.optimize && allowOptimize {
-		f.SetCompressionLevel(zlib.BestCompression)
 	}
 }
 
@@ -287,28 +272,14 @@ func (f *Document) applyOperationalPolicy(policy runtimePolicy) {
 	}
 }
 
-// NewWithOptions returns a new Document instance using explicit construction
-// options. It preserves the legacy error-latching behavior: constructor errors
-// are stored on the returned document and can be read with Error(). New code that
-// prefers normal Go error handling should use NewDocumentWithOptions.
-func NewWithOptions(options Options) (f *Document) {
-	return newWithOptions(options)
-}
-
-// NewDocumentWithOptions returns a new Document instance and reports constructor
-// failures directly instead of returning a Document with a latched error.
-func NewDocumentWithOptions(options Options) (*Document, error) {
-	f := newWithOptions(options)
+// NewDocument returns a new Document instance using functional options and
+// normal Go error handling.
+func NewDocument(options ...Option) (*Document, error) {
+	f := newWithOptions(buildOptions(options...))
 	if f.err != nil {
 		return nil, f.err
 	}
 	return f, nil
-}
-
-// NewDocument returns a new Document instance using functional options and
-// normal Go error handling.
-func NewDocument(options ...Option) (*Document, error) {
-	return NewDocumentWithOptions(buildOptions(options...))
 }
 
 // MustNew returns a new Document instance using functional options and panics if
@@ -321,48 +292,16 @@ func MustNew(options ...Option) *Document {
 	return f
 }
 
-// NewWithDefaults returns a new Document instance using explicit per-document
-// defaults instead of package-wide default state. These defaults affect only the
-// returned document.
-func NewWithDefaults(options Options, defaults Defaults) (f *Document) {
-	cfg := options.normalized()
-	f = documentNewWithDefaults(cfg.orientationStr, cfg.unitStr, cfg.sizeStr, cfg.fontDirStr, cfg.size, defaults)
-	f.applyNormalizedOptions(cfg, defaults.Compression)
-	return f
-}
-
 // NewDocumentWithDefaults returns a new Document instance using explicit
 // per-document defaults and reports constructor failures directly.
-func NewDocumentWithDefaults(options Options, defaults Defaults) (*Document, error) {
-	f := NewWithDefaults(options, defaults)
+func NewDocumentWithDefaults(defaults Defaults, options ...Option) (*Document, error) {
+	cfg := buildOptions(options...)
+	f := documentNewWithDefaults(cfg.orientationStr, cfg.unitStr, cfg.sizeStr, cfg.fontDirStr, cfg.size, defaults)
+	f.applyNormalizedOptions(cfg)
 	if f.err != nil {
 		return nil, f.err
 	}
 	return f, nil
-}
-
-// New returns a new Document instance. Its methods are subsequently called to
-// produce a single PDF document.
-//
-// orientationStr specifies the default page orientation. For portrait mode,
-// specify "P" or "Portrait". For landscape mode, specify "L" or "Landscape".
-// An empty string will be replaced with "P".
-//
-// unitStr specifies the unit of length used in size parameters for elements
-// other than fonts, which are always measured in points. Specify "pt" for
-// point, "mm" for millimeter, "cm" for centimeter, or "in" for inch. An empty
-// string will be replaced with "mm".
-//
-// sizeStr specifies the page size. Acceptable values are "A3", "A4", "A5",
-// "Letter", "Legal", or "Tabloid". An empty string will be replaced with "A4".
-//
-// fontDirStr specifies the file system location in which font resources will
-// be found. An empty string is replaced with ".". This argument only needs to
-// reference an actual directory if a font other than one of the core fonts is
-// used. The core fonts are "courier", "helvetica" (also called "arial"),
-// "times", and "zapfdingbats" (also called "symbol").
-func New(orientationStr, unitStr, sizeStr, fontDirStr string) (f *Document) {
-	return documentNew(orientationStr, unitStr, sizeStr, fontDirStr, Size{0, 0})
 }
 
 // Ok returns true if no processing errors have occurred.

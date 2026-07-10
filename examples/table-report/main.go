@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetTitle("Table PDF Report", false)
 	pdf.SetCreator("examples/table-report", false)
 	pdf.AliasNbPages("{total}")

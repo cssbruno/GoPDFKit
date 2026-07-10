@@ -6,13 +6,12 @@ package main
 import (
 	"log"
 
-	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
 
 func main() {
-	pdf := gopdfkit.New()
+	pdf := document.MustNew()
 	pdf.SetTitle("Legacy Protected PDF", false)
 	pdf.SetCreator("examples/protect-pdf", false)
 	if err := pdf.SetLegacyProtection(document.CnProtectPrint, "reader", "owner"); err != nil {

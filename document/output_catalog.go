@@ -12,39 +12,11 @@ import (
 	"time"
 )
 
-// SetDefaultCatalogSort sets the default value of the catalog sort flag that
-// will be used when initializing a new Document instance. See SetCatalogSort() for
-// more details. Prefer NewWithDefaults for per-document configuration.
-func SetDefaultCatalogSort(flag bool) {
-	_gl.Lock()
-	defer _gl.Unlock()
-	_gl.catalogSort = flag
-}
-
 // SetCatalogSort sets a flag that will be used, if true, to consistently order
 // the document's internal resource catalogs. This method is typically only
 // used for test purposes to facilitate PDF comparison.
 func (f *Document) SetCatalogSort(flag bool) {
 	f.catalogSort = flag
-}
-
-// SetDefaultCreationDate sets the default value of the document creation date
-// that will be used when initializing a new Document instance. See
-// SetCreationDate() for more details. Prefer NewWithDefaults for per-document
-// configuration.
-func SetDefaultCreationDate(tm time.Time) {
-	_gl.Lock()
-	defer _gl.Unlock()
-	_gl.creationDate = tm
-}
-
-// SetDefaultModificationDate sets the default document modification date used
-// when initializing a new Document instance. See SetCreationDate() for more
-// details. Prefer NewWithDefaults for per-document configuration.
-func SetDefaultModificationDate(tm time.Time) {
-	_gl.Lock()
-	defer _gl.Unlock()
-	_gl.modDate = tm
 }
 
 // SetCreationDate fixes the document's internal CreationDate value. By
@@ -59,14 +31,6 @@ func (f *Document) SetCreationDate(tm time.Time) {
 // See SetCreationDate() for more details.
 func (f *Document) SetModificationDate(tm time.Time) {
 	f.modDate = tm
-}
-
-// SetJavascript rejects embedded PDF JavaScript actions.
-//
-// Deprecated: GoPDFKit no longer emits PDF JavaScript actions. This method is
-// kept only as a compatibility shim that latches ErrJavaScriptUnsupported.
-func (f *Document) SetJavascript(script string) {
-	_ = f.SetJavascriptError(script)
 }
 
 // SetJavascriptError rejects embedded PDF JavaScript actions and reports the

@@ -10,12 +10,24 @@ import (
 
 func TestDocumentKeepsSerializationAndResourcesInPrivateOwners(t *testing.T) {
 	typ := reflect.TypeOf(Document{})
-	for _, name := range []string{"pdfSerializationState", "resourceOwnershipState"} {
+	for _, name := range []string{
+		"pdfSerializationState",
+		"resourceOwnershipState",
+		"pageGeometryState",
+		"documentMetadataState",
+		"documentPolicyState",
+	} {
 		if _, ok := typ.FieldByName(name); !ok {
 			t.Fatalf("Document is missing private %s", name)
 		}
 	}
-	for _, field := range []string{"n", "offsets", "buffer", "resources", "importedPageSeq"} {
+	for _, field := range []string{
+		"n", "offsets", "buffer",
+		"resources", "importedPageSeq", "fontCache", "imageCache", "attachments",
+		"page", "k", "pageSizes", "pageBoxes",
+		"xmp", "compliance", "producer", "creationDate",
+		"limits", "securityPolicy", "outputPolicy", "protect",
+	} {
 		for i := 0; i < typ.NumField(); i++ {
 			if typ.Field(i).Name == field {
 				t.Fatalf("Document still owns %s directly", field)

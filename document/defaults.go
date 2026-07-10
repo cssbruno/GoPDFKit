@@ -3,19 +3,11 @@
 
 package document
 
-// DefaultSettings returns the package-wide defaults used by New and
-// NewWithOptions when creating a Document.
-//
-// Prefer NewWithDefaults for request-scoped or tenant-scoped configuration so
-// callers do not have to mutate package-wide state.
+// DefaultSettings returns the immutable defaults used by NewDocument and
+// MustNew. Use NewDocumentWithDefaults for request-scoped customization.
 func DefaultSettings() Defaults {
-	_gl.RLock()
-	defer _gl.RUnlock()
 	return Defaults{
-		CatalogSort:      _gl.catalogSort,
-		Compression:      !_gl.noCompress,
-		CreationDate:     _gl.creationDate,
-		ModificationDate: _gl.modDate,
+		Compression: true,
 	}
 }
 

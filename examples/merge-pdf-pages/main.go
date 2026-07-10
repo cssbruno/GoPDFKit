@@ -15,7 +15,7 @@ func main() {
 	first := samplepdf.Build("First Source", 2)
 	second := samplepdf.Build("Second Source", 2)
 
-	pdf := document.New("P", "pt", "A4", "")
+	pdf := document.MustNew(document.WithUnit(document.UnitPoint))
 	pdf.SetTitle("Merged PDF Pages", false)
 	pdf.SetCreator("examples/merge-pdf-pages", false)
 

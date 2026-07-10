@@ -11,12 +11,7 @@ import (
 )
 
 func main() {
-	pdf := document.NewWithOptions(document.Options{
-		OrientationStr: "P",
-		UnitStr:        "mm",
-		SizeStr:        "A4",
-		Optimize:       true,
-	})
+	pdf := document.MustNew(document.WithBestCompression())
 	pdf.SetTitle("GoPDFKit Operations Report", false)
 	pdf.SetCreator("examples/report", false)
 

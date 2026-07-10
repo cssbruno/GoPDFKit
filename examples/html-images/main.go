@@ -8,20 +8,20 @@ import (
 	"log"
 	"path/filepath"
 
-	"github.com/cssbruno/gopdfkit"
+	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/assets"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
 
 func main() {
-	pdf := gopdfkit.New()
+	pdf := document.MustNew()
 	pdf.SetTitle("HTML Images", false)
 	pdf.SetCreator("examples/html-images", false)
 	pdf.SetMargins(16, 16, 16)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 10)
 
-	imagePath := filepath.ToSlash(assets.File("image", "gopdfkit.png"))
+	imagePath := filepath.ToSlash(assets.File("image", "document.png"))
 	html := pdf.HTMLNew()
 	html.AllowLocalImages = true
 	html.Write(5.5, fmt.Sprintf(`

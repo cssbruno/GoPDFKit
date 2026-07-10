@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/cssbruno/gopdfkit"
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/assets"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
@@ -30,7 +29,7 @@ type diffRow struct {
 }
 
 func main() {
-	pdf := gopdfkit.New()
+	pdf := document.MustNew()
 	pdf.SetTitle("Hemograma Modelo Brasileiro", false)
 	pdf.SetCreator("examples/lab-hemograma-report", false)
 	addUTF8Fonts(pdf)
@@ -45,7 +44,7 @@ func main() {
 	}
 }
 
-func addUTF8Fonts(pdf *gopdfkit.Document) {
+func addUTF8Fonts(pdf *document.Document) {
 	fonts := map[string]string{
 		"":   "DejaVuSansCondensed.ttf",
 		"B":  "DejaVuSansCondensed-Bold.ttf",
@@ -61,14 +60,14 @@ func addUTF8Fonts(pdf *gopdfkit.Document) {
 	}
 }
 
-func drawHemograma(pdf *gopdfkit.Document) {
+func drawHemograma(pdf *document.Document) {
 	drawHeader(pdf)
 	drawPatientBand(pdf)
 	drawExamBody(pdf)
 	drawFooter(pdf)
 }
 
-func drawHeader(pdf *gopdfkit.Document) {
+func drawHeader(pdf *document.Document) {
 	blue := color{0, 166, 216}
 	set(pdf, "B", 18, blue)
 	pdf.Text(7, 16, "LAB")
@@ -99,7 +98,7 @@ func drawHeader(pdf *gopdfkit.Document) {
 	rightText(pdf, 151, 36, 47, 3.5, "www.laboratorioexemplo.test")
 }
 
-func drawPatientBand(pdf *gopdfkit.Document) {
+func drawPatientBand(pdf *document.Document) {
 	pdf.SetDrawColor(30, 30, 30)
 	pdf.SetLineWidth(0.22)
 	pdf.Line(4, 43, 206, 43)
@@ -120,7 +119,7 @@ func drawPatientBand(pdf *gopdfkit.Document) {
 	centerText(pdf, 4, 66.3, 202, 3.5, "MODELO FICTÍCIO - SEM VALIDADE CLÍNICA OU DIAGNÓSTICA")
 }
 
-func drawExamBody(pdf *gopdfkit.Document) {
+func drawExamBody(pdf *document.Document) {
 	y := 72.0
 	set(pdf, "B", 9, black)
 	pdf.Text(7, y, "Hemograma")
@@ -135,7 +134,7 @@ func drawExamBody(pdf *gopdfkit.Document) {
 	drawPlaquetas(pdf, y+4)
 }
 
-func drawEritrograma(pdf *gopdfkit.Document, y float64) float64 {
+func drawEritrograma(pdf *document.Document, y float64) float64 {
 	set(pdf, "BI", 8, black)
 	pdf.Text(7, y, "Eritrograma")
 	set(pdf, "BI", 5.7, black)
@@ -163,7 +162,7 @@ func drawEritrograma(pdf *gopdfkit.Document, y float64) float64 {
 	return y + 4.8
 }
 
-func drawLeucograma(pdf *gopdfkit.Document, y float64) float64 {
+func drawLeucograma(pdf *document.Document, y float64) float64 {
 	set(pdf, "BI", 8, black)
 	pdf.Text(7, y, "Leucograma")
 	set(pdf, "BI", 6, black)
@@ -196,7 +195,7 @@ func drawLeucograma(pdf *gopdfkit.Document, y float64) float64 {
 	return y + 5
 }
 
-func drawPlaquetas(pdf *gopdfkit.Document, y float64) {
+func drawPlaquetas(pdf *document.Document, y float64) {
 	set(pdf, "BI", 8, black)
 	pdf.Text(7, y, "Plaquetas")
 	pdf.Text(42, y, ":")
@@ -210,7 +209,7 @@ func drawPlaquetas(pdf *gopdfkit.Document, y float64) {
 	pdf.Text(28, y, "- Confirmado por microscopia.")
 }
 
-func drawFooter(pdf *gopdfkit.Document) {
+func drawFooter(pdf *document.Document) {
 	set(pdf, "", 5.2, black)
 	pdf.Text(12, 272.5, "* O valor preditivo dos testes laboratoriais depende da análise dos seus resultados e dos dados clínicos-epidemiológicos do paciente.")
 	pdf.Text(12, 277, "Unidade Matriz 4136-42-40 | Rua Exemplo, 158 - Centro | Unidade Lapa 4136-2534 | Rua Modelo, 229")
@@ -237,7 +236,7 @@ func drawFooter(pdf *gopdfkit.Document) {
 	centerText(pdf, 193.5, 282, 9, 2.5, "ISO")
 }
 
-func drawExamRow(pdf *gopdfkit.Document, y float64, row examRow) {
+func drawExamRow(pdf *document.Document, y float64, row examRow) {
 	set(pdf, "", 7.2, black)
 	pdf.Text(8, y, row.name)
 	pdf.Text(42, y, ":")
@@ -249,7 +248,7 @@ func drawExamRow(pdf *gopdfkit.Document, y float64, row examRow) {
 	pdf.Text(154, y, row.women)
 }
 
-func drawDiffRow(pdf *gopdfkit.Document, y float64, row diffRow) {
+func drawDiffRow(pdf *document.Document, y float64, row diffRow) {
 	set(pdf, "", 7.2, black)
 	pdf.Text(8, y, row.name)
 	pdf.Text(42, y, ":")
@@ -263,7 +262,7 @@ func drawDiffRow(pdf *gopdfkit.Document, y float64, row diffRow) {
 	centerText(pdf, 112, y-3, 38, 4, row.ref)
 }
 
-func drawBarcode(pdf *gopdfkit.Document, x, y, w, h float64, label string) {
+func drawBarcode(pdf *document.Document, x, y, w, h float64, label string) {
 	pattern := []float64{0.45, 0.25, 0.8, 0.25, 0.35, 0.6, 0.25, 0.25, 1.0, 0.35, 0.25, 0.7, 0.25, 0.45, 0.25, 0.9, 0.25, 0.35, 0.6, 0.25}
 	pdf.SetFillColor(0, 0, 0)
 	cursor := x
@@ -280,25 +279,25 @@ func drawBarcode(pdf *gopdfkit.Document, x, y, w, h float64, label string) {
 	centerText(pdf, x, y+h+3, w, 3, label)
 }
 
-func meta(pdf *gopdfkit.Document, x, y float64, label, text string) {
+func meta(pdf *document.Document, x, y float64, label, text string) {
 	set(pdf, "", 5.6, black)
 	pdf.Text(x, y, label)
 	set(pdf, "B", 5.6, black)
 	pdf.Text(x+18, y, text)
 }
 
-func value(pdf *gopdfkit.Document, x, y, w, h float64, text, style string, size float64) {
+func value(pdf *document.Document, x, y, w, h float64, text, style string, size float64) {
 	set(pdf, style, size, black)
 	pdf.SetXY(x, y)
 	pdf.CellFormat(w, h, text, "", 0, "R", false, 0, "")
 }
 
-func rightText(pdf *gopdfkit.Document, x, y, w, h float64, text string) {
+func rightText(pdf *document.Document, x, y, w, h float64, text string) {
 	pdf.SetXY(x, y)
 	pdf.CellFormat(w, h, text, "", 0, "R", false, 0, "")
 }
 
-func centerText(pdf *gopdfkit.Document, x, y, w, h float64, text string) {
+func centerText(pdf *document.Document, x, y, w, h float64, text string) {
 	pdf.SetXY(x, y)
 	pdf.CellFormat(w, h, text, "", 0, "C", false, 0, "")
 }
@@ -311,7 +310,7 @@ type color struct {
 
 var black = color{0, 0, 0}
 
-func set(pdf *gopdfkit.Document, style string, size float64, c color) {
+func set(pdf *document.Document, style string, size float64, c color) {
 	pdf.SetFont("dejavu", style, size)
 	pdf.SetTextColor(c.r, c.g, c.b)
 }

@@ -71,7 +71,7 @@ func benchmarkGeneratedPDFOutput(b *testing.B, build func(*document.Document), o
 	var totalBytes int64
 
 	for i := 0; i < b.N; i++ {
-		pdf := document.New("P", "mm", "A4", "")
+		pdf := document.MustNew()
 		pdf.SetCompression(false)
 		build(pdf)
 
@@ -143,7 +143,7 @@ func benchmarkGeneratedPDFOutputConcurrent(b *testing.B, workers int, build func
 		go func() {
 			defer wg.Done()
 			for range jobs {
-				pdf := document.New("P", "mm", "A4", "")
+				pdf := document.MustNew()
 				pdf.SetCompression(false)
 				build(pdf)
 
@@ -1207,7 +1207,7 @@ func BenchmarkGenerationTextCompressionLevel(b *testing.B) {
 			runtime.ReadMemStats(&before)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				pdf := document.New("P", "mm", "A4", "")
+				pdf := document.MustNew()
 				pdf.SetCompressionLevel(tc.level)
 				pdf.AddPage()
 				pdf.SetFont("Arial", "", 10)
@@ -1433,7 +1433,7 @@ func BenchmarkGenerationTemplatesConcurrent40(b *testing.B) {
 
 func BenchmarkGenerationImportedPDFPages(b *testing.B) {
 	source := func() []byte {
-		pdf := document.New("P", "pt", "A4", "")
+		pdf := document.MustNew(document.WithUnit(document.UnitPoint))
 		pdf.AddPage()
 		pdf.SetFont("Helvetica", "", 16)
 		pdf.Text(72, 96, "Imported benchmark page")
@@ -1458,7 +1458,7 @@ func BenchmarkGenerationImportedPDFPages(b *testing.B) {
 
 func BenchmarkGenerationImportedPDFPagesConcurrent40(b *testing.B) {
 	source := func() []byte {
-		pdf := document.New("P", "pt", "A4", "")
+		pdf := document.MustNew(document.WithUnit(document.UnitPoint))
 		pdf.AddPage()
 		pdf.SetFont("Helvetica", "", 16)
 		pdf.Text(72, 96, "Imported benchmark page")

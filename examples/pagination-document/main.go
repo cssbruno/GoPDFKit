@@ -9,25 +9,26 @@ import (
 
 	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
+	"github.com/cssbruno/gopdfkit/layout"
 )
 
 func main() {
 	doc := paginationModel("Document Pagination")
 	doc.Body = append(doc.Body,
 		paragraph("The document model paginates long content, reserves footer space, repeats table headers, and accepts explicit page breaks."),
-		document.PageBreakBlock{After: true},
-		document.HeadingBlock{Level: 2, Segments: []document.TextSegment{{Text: "Automatic Pages"}}},
+		layout.PageBreakBlock{After: true},
+		layout.HeadingBlock{Level: 2, Segments: []layout.TextSegment{{Text: "Automatic Pages"}}},
 	)
 	for i := 1; i <= 28; i++ {
 		doc.Body = append(doc.Body, paragraph(fmt.Sprintf("Paragraph %02d: generated report content that flows across pages while keeping normal margins and footer space.", i)))
 	}
 	doc.Body = append(doc.Body,
-		document.PageBreakBlock{After: true},
-		document.HeadingBlock{Level: 2, Segments: []document.TextSegment{{Text: "Paginated Table"}}},
+		layout.PageBreakBlock{After: true},
+		layout.HeadingBlock{Level: 2, Segments: []layout.TextSegment{{Text: "Paginated Table"}}},
 		paginatedTable(),
 	)
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetTitle("Document Pagination", false)
 	pdf.SetCreator("examples/pagination-document", false)
 	pdf.WriteDocument(doc)
@@ -37,37 +38,37 @@ func main() {
 	}
 }
 
-func paginationModel(title string) *document.LayoutDocument {
-	doc := document.NewDocumentModel(title)
-	doc.PageTemplate.Footer = &document.FooterBlock{
+func paginationModel(title string) *layout.LayoutDocument {
+	doc := layout.NewDocumentModel(title)
+	doc.PageTemplate.Footer = &layout.FooterBlock{
 		Height:          8,
 		ReservePageArea: true,
 	}
-	doc.PageTemplate.PageNumbers = document.PageNumberOptions{Enabled: true, TotalPageAlias: "{total}"}
+	doc.PageTemplate.PageNumbers = layout.PageNumberOptions{Enabled: true, TotalPageAlias: "{total}"}
 	return doc
 }
 
-func paragraph(text string) document.ParagraphBlock {
-	return document.ParagraphBlock{Segments: []document.TextSegment{{Text: text}}}
+func paragraph(text string) layout.ParagraphBlock {
+	return layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: text}}}
 }
 
-func paginatedTable() document.TableBlock {
-	body := make([]document.TableRow, 0, 90)
+func paginatedTable() layout.TableBlock {
+	body := make([]layout.TableRow, 0, 90)
 	for i := 1; i <= 90; i++ {
-		body = append(body, document.TableRow{Cells: []document.TableCell{
+		body = append(body, layout.TableRow{Cells: []layout.TableCell{
 			cell(fmt.Sprintf("%03d", i), "C"),
 			cell(fmt.Sprintf("Line item %03d", i), "L"),
 			cell(fmt.Sprintf("$%0.2f", float64(i)*19.95), "R"),
 		}})
 	}
-	return document.TableBlock{
-		Header: []document.TableRow{{Cells: []document.TableCell{
+	return layout.TableBlock{
+		Header: []layout.TableRow{{Cells: []layout.TableCell{
 			cell("#", "C"),
 			cell("Description", "L"),
 			cell("Amount", "R"),
 		}}},
 		Body: body,
-		Style: document.TableStyle{
+		Style: layout.TableStyle{
 			BorderCollapse: true,
 			RepeatHeader:   true,
 			KeepRows:       true,
@@ -75,13 +76,13 @@ func paginatedTable() document.TableBlock {
 	}
 }
 
-func cell(text, align string) document.TableCell {
-	return document.TableCell{
+func cell(text, align string) layout.TableCell {
+	return layout.TableCell{
 		Align: align,
-		Blocks: []document.Block{
-			document.ParagraphBlock{
-				Segments: []document.TextSegment{{Text: text}},
-				Style:    document.TextStyle{FontSize: 8},
+		Blocks: []layout.Block{
+			layout.ParagraphBlock{
+				Segments: []layout.TextSegment{{Text: text}},
+				Style:    layout.TextStyle{FontSize: 8},
 			},
 		},
 	}

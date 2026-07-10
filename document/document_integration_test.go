@@ -12,7 +12,7 @@ import (
 )
 
 func TestDocumentDocumentFlowSmoke(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
 	pdf.SetCatalogSort(true)
 	pdf.SetTitle("Document flow", false)
@@ -70,7 +70,7 @@ func TestDocumentDocumentFlowSmoke(t *testing.T) {
 }
 
 func TestDocumentPageStateRestoredAcrossPages(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "B", 14)

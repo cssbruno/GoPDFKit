@@ -34,7 +34,7 @@ func (w *closeErrorWriter) Close() error {
 
 // TestPagedTemplate ensures new paged templates work
 func TestPagedTemplate(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	tpl := pdf.CreateTemplate(func(t *document.Tpl) {
 		// this will be the second page, as a page is already
 		// created by default
@@ -73,7 +73,7 @@ func TestPagedTemplate(t *testing.T) {
 func TestIssue0116(t *testing.T) {
 	var pdf *document.Document
 
-	pdf = document.New("P", "mm", "A4", "")
+	pdf = document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Arial", "B", 16)
 	pdf.Cell(40, 10, "OK")
@@ -81,7 +81,7 @@ func TestIssue0116(t *testing.T) {
 		t.Fatalf("not expecting error when rendering text")
 	}
 
-	pdf = document.New("P", "mm", "A4", "")
+	pdf = document.MustNew()
 	pdf.AddPage()
 	pdf.Cell(40, 10, "Not OK") // Font not set
 	if pdf.Error() == nil {
@@ -100,7 +100,7 @@ func TestIssue0193(t *testing.T) {
 	png, err = os.ReadFile(example.ImageFile("sweden.png"))
 	if err == nil {
 		rdr = bytes.NewReader(png)
-		pdf = document.New("P", "mm", "A4", "")
+		pdf = document.MustNew()
 		pdf.AddPage()
 		_ = pdf.RegisterImageOptionsReader("sweden", document.ImageOptions{ImageType: "png", ReadDpi: true}, rdr)
 		err = pdf.Error()
@@ -111,7 +111,7 @@ func TestIssue0193(t *testing.T) {
 }
 
 func TestOutputAndCloseReturnsCloseError(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 
 	err := pdf.OutputAndClose(&closeErrorWriter{})
@@ -121,7 +121,7 @@ func TestOutputAndCloseReturnsCloseError(t *testing.T) {
 }
 
 func TestPNGMalformedTransparencyDoesNotPanic(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("RegisterImageOptionsReader panicked: %v", r)
@@ -139,7 +139,7 @@ func TestPNGMalformedTransparencyDoesNotPanic(t *testing.T) {
 }
 
 func TestPNGMalformedAlphaDataDoesNotPanic(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("RegisterImageOptionsReader panicked: %v", r)
@@ -157,7 +157,7 @@ func TestPNGMalformedAlphaDataDoesNotPanic(t *testing.T) {
 }
 
 func TestAddUTF8FontFromBytesTruncatedFontDoesNotPanic(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("AddUTF8FontFromBytes panicked: %v", r)
@@ -171,7 +171,7 @@ func TestAddUTF8FontFromBytesTruncatedFontDoesNotPanic(t *testing.T) {
 }
 
 func TestAddFontRejectsPathTraversal(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", example.FontDir())
+	pdf := document.MustNew(document.WithFontDir(example.FontDir()))
 	pdf.AddFont("bad", "", "../calligra.json")
 	if pdf.Error() == nil {
 		t.Fatal("expected font traversal error")
@@ -179,7 +179,7 @@ func TestAddFontRejectsPathTraversal(t *testing.T) {
 }
 
 func TestAddUTF8FontRejectsPathTraversal(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", example.FontDir())
+	pdf := document.MustNew(document.WithFontDir(example.FontDir()))
 	pdf.AddUTF8Font("bad", "", "../DejaVuSansCondensed.ttf")
 	if pdf.Error() == nil {
 		t.Fatal("expected UTF-8 font traversal error")
@@ -459,7 +459,7 @@ func TestSVGParseUseSymbolViewBox(t *testing.T) {
 // TestIssue0209SplitLinesEqualMultiCell addresses issue 209
 // make SplitLines and MultiCell split at the same place
 func TestIssue0209SplitLinesEqualMultiCell(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Arial", "", 8)
 	// This sentence should not be split.
@@ -517,7 +517,7 @@ func TestSplitLinesWrapEdgeFixturePreservesParagraphBreaks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Arial", "", 10)
 
@@ -547,7 +547,7 @@ func TestSplitLineCountMatchesSplitLines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Arial", "", 10)
 
@@ -564,7 +564,7 @@ func TestSplitTextUnicodeFixturePreservesParagraphBreaks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.AddUTF8Font("dejavu", "", example.FontFile("DejaVuSansCondensed.ttf"))
 	pdf.SetFont("dejavu", "", 12)
@@ -595,7 +595,7 @@ func TestSplitTextCountMatchesSplitText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.AddUTF8Font("dejavu", "", example.FontFile("DejaVuSansCondensed.ttf"))
 	pdf.SetFont("dejavu", "", 12)
@@ -613,7 +613,7 @@ func TestSplitTextUnicodeEdgeCaseFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.AddUTF8Font("dejavu", "", example.FontFile("DejaVuSansCondensed.ttf"))
 	pdf.SetFont("dejavu", "", 12)
@@ -632,7 +632,7 @@ func TestSplitTextUnicodeEdgeCaseFixture(t *testing.T) {
 }
 
 func TestGetStringWidthSupplementaryRuneDoesNotPanic(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.AddUTF8Font("dejavu", "", example.FontFile("DejaVuSansCondensed.ttf"))
 	pdf.SetFont("dejavu", "", 12)
@@ -678,7 +678,7 @@ func TestAddUTF8FontNotoScriptFixturesRender(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			pdf := document.New("P", "mm", "A4", "")
+			pdf := document.MustNew()
 			pdf.AddPage()
 			pdf.AddUTF8Font(test.family, "", example.FontFile(test.fontFile))
 			pdf.SetFont(test.family, "", 14)
@@ -700,7 +700,8 @@ func TestAddUTF8FontNotoScriptFixturesRender(t *testing.T) {
 // TestFooterFuncLpi tests to make sure the footer is not call twice and SetFooterFuncLpi can work
 // without SetFooterFunc.
 func TestFooterFuncLpi(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
+	pdf.SetCompression(false)
 	var (
 		oldFooterFnc  = "oldFooterFnc"
 		bothPages     = "bothPages"
@@ -811,7 +812,7 @@ func lorem() string {
 // finally retrieved with the output call where it can be handled by the
 // application.
 func Example() {
-	pdf := document.New(document.OrientationPortrait, "mm", "A4", "")
+	pdf := document.MustNew(document.WithOrientation(document.OrientationPortrait))
 	pdf.AddPage()
 	pdf.SetFont("Arial", "B", 16)
 	pdf.Cell(40, 10, "Hello World!")
@@ -824,7 +825,7 @@ func Example() {
 
 // ExampleDocument_AddPage demonsrates the generation of headers, footers and page breaks.
 func ExampleDocument_AddPage() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetTopMargin(30)
 	pdf.SetHeaderFuncMode(func() {
 		pdf.ImageOptions(example.ImageFile("logo.png"), 10, 6, 30, 0, false, document.ImageOptions{}, 0, "")
@@ -857,7 +858,7 @@ func ExampleDocument_AddPage() {
 // ExampleDocument_MultiCell demonstrates word-wrapping, line justification and
 // page-breaking.
 func ExampleDocument_MultiCell() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	titleStr := "20000 Leagues Under the Seas"
 	pdf.SetTitle(titleStr, false)
 	pdf.SetAuthor("Jules Verne", false)
@@ -935,7 +936,7 @@ func ExampleDocument_MultiCell() {
 func ExampleDocument_SetLeftMargin() {
 	var y0 float64
 	var crrntCol int
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetDisplayMode("fullpage", "TwoColumnLeft")
 	titleStr := "20000 Leagues Under the Seas"
 	pdf.SetTitle(titleStr, false)
@@ -1056,7 +1057,7 @@ func ExampleDocument_SplitLines_tables() {
 		cell     cellType
 	)
 
-	pdf := document.New("P", "mm", "A4", "") // 210 x 297
+	pdf := document.MustNew() // 210 x 297
 	header := [colCount]string{"Column A", "Column B", "Column C"}
 	alignList := [colCount]string{"L", "C", "R"}
 	strList := loremList()
@@ -1119,7 +1120,7 @@ func ExampleDocument_SplitLines_tables() {
 
 // ExampleDocument_CellFormat_tables demonstrates various table styles.
 func ExampleDocument_CellFormat_tables() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	type countryType struct {
 		nameStr, capitalStr, areaStr, popStr string
 	}
@@ -1256,7 +1257,7 @@ func ExampleDocument_CellFormat_tables() {
 
 // ExampleDocument_HTMLNew demonstrates internal and external links with HTML.
 func ExampleDocument_HTMLNew() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	// First page: manual local link
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 20)
@@ -1290,7 +1291,7 @@ func ExampleDocument_HTMLNew() {
 
 // ExampleDocument_AddFont demonstrates the use of a non-standard font.
 func ExampleDocument_AddFont() {
-	pdf := document.New("P", "mm", "A4", example.FontDir())
+	pdf := document.MustNew(document.WithFontDir(example.FontDir()))
 	pdf.AddFont("Calligrapher", "", "calligra.json")
 	pdf.AddPage()
 	pdf.SetFont("Calligrapher", "", 35)
@@ -1304,7 +1305,7 @@ func ExampleDocument_AddFont() {
 
 // ExampleDocument_WriteAligned demonstrates how to align text with the Write function.
 func ExampleDocument_WriteAligned() {
-	pdf := document.New("P", "mm", "A4", example.FontDir())
+	pdf := document.MustNew(document.WithFontDir(example.FontDir()))
 	pdf.SetLeftMargin(50.0)
 	pdf.SetRightMargin(50.0)
 	pdf.AddPage()
@@ -1336,7 +1337,7 @@ func ExampleDocument_MultiCell_textAlignments() {
 	fileStr := example.Filename("Document_TextAlignments")
 	txt, err := os.ReadFile(example.TextFile("paragraph-alignments.txt"))
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetMargins(18, 18, 18)
 	pdf.AddPage()
 	if err == nil {
@@ -1369,7 +1370,7 @@ func ExampleDocument_WriteLinkString_textFixture() {
 	fileStr := example.Filename("Document_TextInlineLinks")
 	txt, err := os.ReadFile(example.TextFile("inline-links.txt"))
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetMargins(20, 20, 20)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 12)
@@ -1404,7 +1405,7 @@ func ExampleDocument_RTL_unicodeTextFixture() {
 	fileStr := example.Filename("Document_TextUnicodeRTL")
 	txt, err := os.ReadFile(example.TextFile("unicode-rtl.txt"))
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetMargins(20, 20, 20)
 	pdf.AddPage()
 	pdf.AddUTF8Font("dejavu", "", example.FontFile("DejaVuSansCondensed.ttf"))
@@ -1447,7 +1448,7 @@ func ExampleDocument_SplitLines_textNotesTable() {
 	fileStr := example.Filename("Document_TextNotesTable")
 	txt, err := os.ReadFile(example.TextFile("text-table-notes.txt"))
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetMargins(18, 18, 18)
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", 10)
@@ -1490,7 +1491,7 @@ func ExampleDocument_SplitLines_textNotesTable() {
 
 // ExampleDocument_ImageOptions_formats demonstrates how images are included in documents.
 func ExampleDocument_ImageOptions_formats() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Arial", "", 11)
 	pdf.ImageOptions(example.ImageFile("logo.png"), 10, 10, 30, 0, false, document.ImageOptions{}, 0, "")
@@ -1515,7 +1516,7 @@ func ExampleDocument_ImageOptions_formats() {
 func ExampleDocument_ImageOptions() {
 	var opt document.ImageOptions
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Arial", "", 11)
 	pdf.SetX(60)
@@ -1541,7 +1542,7 @@ func ExampleDocument_RegisterImageOptionsReader() {
 	)
 
 	pdfStr = example.Filename("Document_RegisterImageOptionsReader")
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Arial", "", 11)
 	fl, err = os.Open(example.ImageFile("logo.png"))
@@ -1565,7 +1566,7 @@ func ExampleDocument_SetAcceptPageBreakFunc() {
 	var y0 float64
 	var crrntCol int
 	loremStr := lorem()
-	pdf := document.New("L", "mm", "A4", "")
+	pdf := document.MustNew(document.WithOrientation(document.OrientationLandscape))
 	const (
 		pageWd = 297.0 // A4 210.0 x 297.0
 		margin = 10.0
@@ -1628,7 +1629,7 @@ func ExampleDocument_SetKeywords() {
 	err = font.Make(example.FontFile("CalligrapherRegular.pfb"),
 		example.FontFile("cp1252.map"), example.FontDir(), nil, true)
 	if err == nil {
-		pdf := document.New("", "", "", "")
+		pdf := document.MustNew()
 		pdf.SetFontLocation(example.FontDir())
 		pdf.SetTitle("世界", true)
 		pdf.SetAuthor("世界", true)
@@ -1652,7 +1653,7 @@ func ExampleDocument_Circle() {
 		thin  = 0.2
 		thick = 3.0
 	)
-	pdf := document.New("", "", "", "")
+	pdf := document.MustNew()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.SetFillColor(200, 200, 220)
 	pdf.AddPage()
@@ -1742,7 +1743,7 @@ func ExampleDocument_SetAlpha() {
 	modeList := []string{"Normal", "Multiply", "Screen", "Overlay",
 		"Darken", "Lighten", "ColorDodge", "ColorBurn", "HardLight", "SoftLight",
 		"Difference", "Exclusion", "Hue", "Saturation", "Color", "Luminosity"}
-	pdf := document.New("", "", "", "")
+	pdf := document.MustNew()
 	pdf.SetLineWidth(2)
 	pdf.SetAutoPageBreak(false, 0)
 	pdf.AddPage()
@@ -1783,7 +1784,7 @@ func ExampleDocument_SetAlpha() {
 
 // ExampleDocument_LinearGradient deomstrates various gradients.
 func ExampleDocument_LinearGradient() {
-	pdf := document.New("", "", "", "")
+	pdf := document.MustNew()
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.AddPage()
 	pdf.LinearGradient(0, 0, 210, 100, 250, 250, 255, 220, 220, 225, 0, 0, 0, .5)
@@ -1806,7 +1807,7 @@ func ExampleDocument_LinearGradient() {
 
 // ExampleDocument_ClipText demonstrates clipping.
 func ExampleDocument_ClipText() {
-	pdf := document.New("", "", "", "")
+	pdf := document.MustNew()
 	y := 10.0
 	pdf.AddPage()
 
@@ -1886,17 +1887,17 @@ func ExampleDocument_ClipText() {
 
 // ExampleDocument_PageSize generates a PDF document with various page sizes.
 func ExampleDocument_PageSize() {
-	pdf := document.NewWithOptions(document.Options{
-		UnitStr:    "in",
-		Size:       document.Size{Wd: 6, Ht: 6},
-		FontDirStr: example.FontDir(),
-	})
+	pdf := document.MustNew(
+		document.WithUnit(document.UnitInch),
+		document.WithCustomPageSize(document.Size{Wd: 6, Ht: 6}),
+		document.WithFontDir(example.FontDir()),
+	)
 	pdf.SetMargins(0.5, 1, 0.5)
 	pdf.SetFont("Times", "", 14)
 	pdf.AddPageFormat("L", document.Size{Wd: 3, Ht: 12})
 	pdf.SetXY(0.5, 1.5)
 	pdf.CellFormat(11, 0.2, "12 in x 3 in", "", 0, "C", false, 0, "")
-	pdf.AddPage() // Default size established in NewWithOptions()
+	pdf.AddPage() // Default size established during construction.
 	pdf.SetXY(0.5, 3)
 	pdf.CellFormat(5, 0.2, "6 in x 6 in", "", 0, "C", false, 0, "")
 	pdf.AddPageFormat("P", document.Size{Wd: 3, Ht: 12})
@@ -1910,16 +1911,16 @@ func ExampleDocument_PageSize() {
 	err := pdf.OutputFileAndClose(fileStr)
 	example.Summary(err, fileStr)
 	// Output:
-	// 0:   6.00 in,   6.00 in
-	// 1:  12.00 in,   3.00 in
-	// 2:   6.00 in,   6.00 in
-	// 3:   3.00 in,  12.00 in
+	// 0:   6.00 inch,   6.00 inch
+	// 1:  12.00 inch,   3.00 inch
+	// 2:   6.00 inch,   6.00 inch
+	// 3:   3.00 inch,  12.00 inch
 	// Successfully generated assets/generated/pdf/Document_PageSize.pdf
 }
 
 // ExampleDocument_Bookmark demonstrates the Bookmark method.
 func ExampleDocument_Bookmark() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Arial", "", 15)
 	pdf.Bookmark("Page 1", 0, 0)
@@ -1948,7 +1949,7 @@ func ExampleDocument_TransformBegin() {
 	)
 	var refX, refY float64
 	var refStr string
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	color := func(val int) {
 		pdf.SetDrawColor(val, val, val)
@@ -2078,7 +2079,7 @@ func ExampleDocument_RegisterImageOptions() {
 	var infoPtr *document.ImageInfo
 	var imageFileStr string
 	var imgWd, imgHt, lf, tp float64
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetMargins(10, 10, 10)
 	pdf.SetFont("Helvetica", "", 15)
@@ -2136,7 +2137,7 @@ func ExampleDocument_SplitLines() {
 		fontPtSize = 18.0
 		wd         = 100.0
 	)
-	pdf := document.New("P", "mm", "A4", "") // A4 210.0 x 297.0
+	pdf := document.MustNew() // A4 210.0 x 297.0
 	pdf.SetFont("Times", "", fontPtSize)
 	_, lineHt := pdf.GetFontSize()
 	pdf.AddPage()
@@ -2170,7 +2171,7 @@ func ExampleDocument_SVGWrite() {
 		sig document.SVG
 		err error
 	)
-	pdf := document.New("P", "mm", "A4", "") // A4 210.0 x 297.0
+	pdf := document.MustNew() // A4 210.0 x 297.0
 	pdf.SetFont("Times", "", fontPtSize)
 	lineHt := pdf.PointConvert(fontPtSize)
 	pdf.AddPage()
@@ -2245,7 +2246,7 @@ func ExampleDocument_CellFormat_align() {
 			linkStr = "https://github.com/cssbruno/gopdfkit"
 		}
 	}
-	pdf := document.New("P", "mm", "A4", "") // A4 210.0 x 297.0
+	pdf := document.MustNew() // A4 210.0 x 297.0
 	pdf.SetFont("Helvetica", "", 16)
 	formatRect(pdf, recList)
 	formatRect(pdf, recListBaseline)
@@ -2267,7 +2268,7 @@ func ExampleDocument_CellFormat_align() {
 // Windows-1252 code page (gofdpf default). See the example for CellFormat (4)
 // for a way to do this automatically.
 func ExampleDocument_CellFormat_codepageescape() {
-	pdf := document.New("P", "mm", "A4", "") // A4 210.0 x 297.0
+	pdf := document.MustNew() // A4 210.0 x 297.0
 	fontSize := 16.0
 	pdf.SetFont("Helvetica", "", fontSize)
 	ht := pdf.PointConvert(fontSize)
@@ -2298,7 +2299,7 @@ func ExampleDocument_CellFormat_codepageescape() {
 // ExampleDocument_CellFormat_codepage demonstrates the automatic conversion of UTF-8 strings to an
 // 8-bit font encoding.
 func ExampleDocument_CellFormat_codepage() {
-	pdf := document.New("P", "mm", "A4", example.FontDir()) // A4 210.0 x 297.0
+	pdf := document.MustNew(document.WithFontDir(example.FontDir())) // A4 210.0 x 297.0
 	// See documentation for details on how to generate fonts
 	pdf.AddFont("Helvetica-1251", "", "helvetica_1251.json")
 	pdf.AddFont("Helvetica-1253", "", "helvetica_1253.json")
@@ -2340,7 +2341,7 @@ func ExampleDocument_CellFormat_codepage() {
 // ExampleDocument_SetLegacyProtection demonstrates legacy PDF standard-security
 // password and permission settings.
 func ExampleDocument_SetLegacyProtection() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	if err := pdf.SetLegacyProtection(document.CnProtectPrint, "123", "abc"); err != nil {
 		panic(err)
 	}
@@ -2375,7 +2376,7 @@ func ExampleDocument_Polygon() {
 		}
 		return
 	}
-	pdf := document.New("P", "mm", "A4", "") // A4 210.0 x 297.0
+	pdf := document.MustNew() // A4 210.0 x 297.0
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", ptSize)
 	pdf.SetDrawColor(0, 80, 180)
@@ -2409,7 +2410,7 @@ func ExampleDocument_Polygon() {
 // displayed by the document reader allows layer visibility to be controlled
 // interactively.
 func ExampleDocument_AddLayer() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Arial", "", 15)
 	pdf.Write(8, "This line doesn't belong to any layer.\n")
@@ -2460,7 +2461,7 @@ func ExampleDocument_RegisterImageOptionsReader_flow() {
 		err error
 	)
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", fontSize)
 	ln := pdf.PointConvert(fontSize)
@@ -2530,7 +2531,7 @@ func ExampleDocument_Beziergon() {
 		{X: -1, Y: -1},
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "", fontSize)
 	for j, src := range srcList {
@@ -2576,7 +2577,7 @@ func ExampleDocument_Beziergon() {
 // defined locally in the test source code.
 func ExampleDocument_SetFontLoader() {
 	var fr fontResourceType
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetFontLoader(fr)
 	pdf.AddFont("Calligrapher", "", "calligra.json")
 	pdf.AddPage()
@@ -2594,7 +2595,7 @@ func ExampleDocument_SetFontLoader() {
 // ExampleDocument_MoveTo demonstrates the Path Drawing functions, such as: MoveTo,
 // LineTo, CurveTo, ..., ClosePath and DrawPath.
 func ExampleDocument_MoveTo() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.MoveTo(20, 20)
 	pdf.LineTo(170, 20)
@@ -2615,7 +2616,7 @@ func ExampleDocument_MoveTo() {
 // ExampleDocument_SetLineJoinStyle demonstrates various line cap and line join styles.
 func ExampleDocument_SetLineJoinStyle() {
 	const offset = 75.0
-	pdf := document.New("L", "mm", "A4", "")
+	pdf := document.MustNew(document.WithOrientation(document.OrientationLandscape))
 	pdf.AddPage()
 	var draw = func(cap, join string, x0, y0, x1, y1 float64) {
 		// transform begin & end needed to isolate caps and joins
@@ -2654,7 +2655,7 @@ func ExampleDocument_SetLineJoinStyle() {
 
 // ExampleDocument_DrawPath demonstrates various fill modes.
 func ExampleDocument_DrawPath() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetDrawColor(0xff, 0x00, 0x00)
 	pdf.SetFillColor(0x99, 0x99, 0x99)
 	pdf.SetFont("Helvetica", "", 15)
@@ -2730,7 +2731,7 @@ func ExampleDocument_DrawPath() {
 
 // ExampleDocument_CreateTemplate demonstrates creating and using templates
 func ExampleDocument_CreateTemplate() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetCompression(false)
 	// pdf.SetFont("Times", "", 12)
 	template := pdf.CreateTemplate(func(tpl *document.Tpl) {
@@ -2787,7 +2788,7 @@ func ExampleDocument_CreateTemplate() {
 
 // ExampleDocument_AddFontFromBytes demonstrate how to use embedded fonts from byte array
 func ExampleDocument_AddFontFromBytes() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	jsonBytes, err := os.ReadFile(example.FontFile("calligra.json"))
 	var zBytes []byte
@@ -2811,7 +2812,7 @@ func ExampleDocument_AddFontFromBytes() {
 // This example demonstrate Clipped table cells
 func ExampleDocument_ClipRect() {
 	marginCell := 2. // margin of top/bottom of cell
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetFont("Arial", "", 12)
 	pdf.AddPage()
 	pagew, pageh := pdf.GetPageSize()
@@ -2854,7 +2855,7 @@ func ExampleDocument_ClipRect() {
 // This example demonstrate wrapped table cells
 func ExampleDocument_Rect() {
 	marginCell := 2. // margin of top/bottom of cell
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetFont("Arial", "", 12)
 	pdf.AddPage()
 	pagew, pageh := pdf.GetPageSize()
@@ -2902,10 +2903,10 @@ func ExampleDocument_Rect() {
 	// Successfully generated assets/generated/pdf/Document_WrappedTableCells.pdf
 }
 
-// ExampleDocument_SetJavascript demonstrates that PDF JavaScript actions are
+// ExampleDocument_SetJavascriptError demonstrates that PDF JavaScript actions are
 // rejected.
-func ExampleDocument_SetJavascript() {
-	pdf := document.New("P", "mm", "A4", "")
+func ExampleDocument_SetJavascriptError() {
+	pdf := document.MustNew()
 	err := pdf.SetJavascriptError("print(true);")
 	fmt.Println(err)
 	// Output:
@@ -2914,7 +2915,7 @@ func ExampleDocument_SetJavascript() {
 
 // ExampleDocument_AddSpotColor demonstrates spot color use
 func ExampleDocument_AddSpotColor() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddSpotColor("PANTONE 145 CVC", 0, 42, 100, 25)
 	pdf.AddPage()
 	pdf.SetFillSpotColor("PANTONE 145 CVC", 90)
@@ -2929,7 +2930,7 @@ func ExampleDocument_AddSpotColor() {
 // ExampleDocument_RegisterAlias demonstrates how to use `RegisterAlias` to create a table of
 // contents.
 func ExampleDocument_RegisterAlias() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetFont("Arial", "", 12)
 	pdf.AliasNbPages("")
 	pdf.AddPage()
@@ -2962,7 +2963,7 @@ func ExampleDocument_RegisterAlias() {
 // create a table of contents. This particular example demonstrates the use of
 // UTF-8 aliases.
 func ExampleDocument_RegisterAlias_utf8() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddUTF8Font("dejavu", "", example.FontFile("DejaVuSansCondensed.ttf"))
 	pdf.SetFont("dejavu", "", 12)
 	pdf.AliasNbPages("{entute}")
@@ -2994,7 +2995,7 @@ func ExampleDocument_RegisterAlias_utf8() {
 
 // ExampleNewGrid demonstrates the generation of graph grids.
 func ExampleNewGrid() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetFont("Arial", "", 12)
 	pdf.AddPage()
 
@@ -3072,7 +3073,7 @@ func ExampleDocument_SetPageBox() {
 		fontsize  = 6
 		boxmargin = 3 * fontsize
 	)
-	pdf := document.New("P", "mm", "A4", "") // 210mm x 297mm
+	pdf := document.MustNew() // 210mm x 297mm
 	pdf.SetPageBox("crop", boxmargin, boxmargin, wd-2*boxmargin, ht-2*boxmargin)
 	pdf.SetFont("Arial", "", pdf.UnitToPointConvert(fontsize))
 	pdf.AddPage()
@@ -3095,7 +3096,7 @@ func ExampleDocument_SubWrite() {
 		halfX    = 105
 	)
 
-	pdf := document.New("P", "mm", "A4", "") // 210mm x 297mm
+	pdf := document.MustNew() // 210mm x 297mm
 	pdf.AddPage()
 	pdf.SetFont("Arial", "", fontSize)
 	_, lineHt := pdf.GetFontSize()
@@ -3140,7 +3141,7 @@ func ExampleDocument_SubWrite() {
 // generation to be deferred until all pages have been added.
 func ExampleDocument_SetPage() {
 	rnd := rand.New(rand.NewSource(0)) // Make reproducible documents
-	pdf := document.New("L", "cm", "A4", "")
+	pdf := document.MustNew(document.WithOrientation(document.OrientationLandscape), document.WithUnit(document.UnitCentimeter))
 	pdf.SetFont("Times", "", 12)
 
 	time := []float64{}
@@ -3197,7 +3198,7 @@ func ExampleDocument_SetPage() {
 // ExampleDocument_SetFillColor demonstrates how graphic attributes are properly
 // assigned within multiple transformations. See issue #234.
 func ExampleDocument_SetFillColor() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 
 	pdf.AddPage()
 	pdf.SetFont("Arial", "", 8)
@@ -3233,14 +3234,14 @@ func ExampleDocument_SetFillColor() {
 // to make a watermark that appears on each page.
 func ExampleDocument_TransformRotate() {
 	loremStr := lorem() + "\n\n"
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	margin := 25.0
 	pdf.SetMargins(margin, margin, margin)
 
 	fontHt := 13.0
-	lineHt := pdf.PointToUnitConvert(fontHt)
+	lineHt := pdf.PointConvert(fontHt)
 	markFontHt := 50.0
-	markLineHt := pdf.PointToUnitConvert(markFontHt)
+	markLineHt := pdf.PointConvert(markFontHt)
 	markY := (297.0 - markLineHt) / 2.0
 	ctrX := 210.0 / 2.0
 	ctrY := 297.0 / 2.0
@@ -3276,7 +3277,7 @@ func ExampleDocument_AddUTF8Font() {
 	var txtStr []byte
 	var err error
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 
 	pdf.AddPage()
 
@@ -3323,7 +3324,7 @@ func ExampleUTF8CutFont() {
 		err = os.WriteFile(subFontFileStr, subFont, 0600)
 		if err == nil {
 			y := 24.0
-			pdf := document.New("P", "mm", "A4", "")
+			pdf := document.MustNew()
 			fontHt := 17.0
 			lineHt := pdf.PointConvert(fontHt)
 			write := func(format string, args ...any) {
@@ -3379,7 +3380,7 @@ func ExampleDocument_RoundedRect() {
 		}
 		return
 	}
-	pdf := document.New("P", "mm", "A4", "") // 210 x 297
+	pdf := document.MustNew() // 210 x 297
 	pdf.AddPage()
 	pdf.SetLineWidth(0.5)
 	y := vgap
@@ -3411,7 +3412,7 @@ func ExampleDocument_RoundedRect() {
 // ExampleDocument_SetUnderlineThickness demonstrates how to adjust the text
 // underline thickness.
 func ExampleDocument_SetUnderlineThickness() {
-	pdf := document.New("P", "mm", "A4", "") // 210mm x 297mm
+	pdf := document.MustNew() // 210mm x 297mm
 	pdf.AddPage()
 	pdf.SetFont("Arial", "U", 12)
 
@@ -3433,7 +3434,7 @@ func ExampleDocument_SetUnderlineThickness() {
 
 // ExampleDocument_Cell_strikeout demonstrates striked-out text
 func ExampleDocument_Cell_strikeout() {
-	pdf := document.New("P", "mm", "A4", "") // 210mm x 297mm
+	pdf := document.MustNew() // 210mm x 297mm
 	pdf.AddPage()
 
 	for fontSize := 4; fontSize < 40; fontSize += 10 {
@@ -3451,17 +3452,17 @@ func ExampleDocument_Cell_strikeout() {
 
 // ExampleDocument_SetTextRenderingMode demonstrates rendering modes in PDFs.
 func ExampleDocument_SetTextRenderingMode() {
-	pdf := document.New("P", "mm", "A4", "") // 210mm x 297mm
+	pdf := document.MustNew() // 210mm x 297mm
 	pdf.AddPage()
 	fontSz := float64(16)
-	lineSz := pdf.PointToUnitConvert(fontSz)
+	lineSz := pdf.PointConvert(fontSz)
 	pdf.SetFont("Times", "", fontSz)
 	pdf.Write(lineSz, "This document demonstrates various modes of text rendering. Search for \"Mode 3\" "+
 		"to locate text that has been rendered invisibly. This selection can be copied "+
 		"into the clipboard as usual and is useful for overlaying onto non-textual elements such "+
 		"as images to make them searchable.\n\n")
 	fontSz = float64(125)
-	lineSz = pdf.PointToUnitConvert(fontSz)
+	lineSz = pdf.PointConvert(fontSz)
 	pdf.SetFontSize(fontSz)
 	pdf.SetTextColor(170, 170, 190)
 	pdf.SetDrawColor(50, 60, 90)
@@ -3486,7 +3487,7 @@ func ExampleDocument_SetTextRenderingMode() {
 // TestIssue0316 addresses issue 316 in which AddUTF8FromBytes modifies its argument
 // utf8bytes resulting in a panic if you generate two PDFs with the "same" font bytes.
 func TestIssue0316(t *testing.T) {
-	pdf := document.New(document.OrientationPortrait, "mm", "A4", "")
+	pdf := document.MustNew(document.WithOrientation(document.OrientationPortrait))
 	pdf.AddPage()
 	fontBytes, _ := os.ReadFile(example.FontFile("DejaVuSansCondensed.ttf"))
 	ofontBytes := append([]byte{}, fontBytes...)
@@ -3503,7 +3504,7 @@ func TestIssue0316(t *testing.T) {
 }
 
 func TestMultiCellSupplementaryRuneUsesFallbackWidth(t *testing.T) {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	fontBytes, _ := os.ReadFile(example.FontFile("DejaVuSansCondensed.ttf"))
 	pdf.AddUTF8FontFromBytes("dejavu", "", fontBytes)
@@ -3532,7 +3533,7 @@ func TestMultiCellSupplementaryRuneUsesFallbackWidth(t *testing.T) {
 // ExampleDocument_SetTextRenderingMode demonstrates embedding files in PDFs,
 // at the top-level.
 func ExampleDocument_SetAttachments() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 
 	// Global attachments
 	file, err := os.ReadFile(example.RepoFile("document", "grid.go"))
@@ -3568,7 +3569,7 @@ func ExampleAttachmentFromFile() {
 		return
 	}
 
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetAttachmentsImmutable([]document.Attachment{document.AttachmentFromFile(fileStr)})
 
 	var out bytes.Buffer
@@ -3578,7 +3579,7 @@ func ExampleAttachmentFromFile() {
 }
 
 func ExampleDocument_AddAttachmentAnnotation() {
-	pdf := document.New("P", "mm", "A4", "")
+	pdf := document.MustNew()
 	pdf.SetFont("Arial", "", 12)
 	pdf.AddPage()
 
@@ -3612,7 +3613,7 @@ func ExampleDocument_SetModificationDate() {
 	// Producer:       Document 1.9
 	// CreationDate:   Sat Jan  1 00:00:00 2000
 	// ModDate:        Sun Jan  2 10:22:30 2000
-	pdf := document.New("", "", "", "")
+	pdf := document.MustNew()
 	pdf.AddPage()
 	pdf.SetModificationDate(time.Date(2000, 1, 2, 10, 22, 30, 0, time.UTC))
 	fileStr := example.Filename("Document_SetModificationDate")

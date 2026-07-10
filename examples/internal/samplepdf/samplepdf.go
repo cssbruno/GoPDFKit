@@ -14,7 +14,7 @@ import (
 
 // Build returns a deterministic multi-page source PDF in points.
 func Build(title string, pages int) []byte {
-	pdf := document.New("P", "pt", "A4", "")
+	pdf := document.MustNew(document.WithUnit(document.UnitPoint))
 	pdf.SetTitle(title, false)
 	pdf.SetCreator("examples/internal/samplepdf", false)
 	pdf.SetCatalogSort(true)

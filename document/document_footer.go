@@ -3,11 +3,15 @@
 
 package document
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/cssbruno/gopdfkit/layout"
+)
 
 // ExtractHTMLFooterBlock removes the first HTML footer element from an HTML
-// fragment and returns it as a shared FooterBlock.
-func ExtractHTMLFooterBlock(htmlStr string) (bodyHTML string, footer *FooterBlock) {
+// fragment and returns it as a shared layout.FooterBlock.
+func ExtractHTMLFooterBlock(htmlStr string) (bodyHTML string, footer *layout.FooterBlock) {
 	tokens := HTMLTokenize(htmlStr)
 	bodyTokens, footerTokens, found := splitHTMLFooterTokens(tokens)
 	if !found {
@@ -16,13 +20,13 @@ func ExtractHTMLFooterBlock(htmlStr string) (bodyHTML string, footer *FooterBloc
 	text := strings.TrimSpace(htmlPlainText(footerTokens))
 	bodyHTML = strings.TrimSpace(htmlSerializeTokens(bodyTokens))
 	if text == "" {
-		return bodyHTML, &FooterBlock{ReservePageArea: true}
+		return bodyHTML, &layout.FooterBlock{ReservePageArea: true}
 	}
-	return bodyHTML, &FooterBlock{
-		Blocks: []Block{
-			ParagraphBlock{
-				Segments: []TextSegment{{Text: text}},
-				Style:    TextStyle{FontFamily: "Helvetica", FontSize: 9, Align: "C"},
+	return bodyHTML, &layout.FooterBlock{
+		Blocks: []layout.Block{
+			layout.ParagraphBlock{
+				Segments: []layout.TextSegment{{Text: text}},
+				Style:    layout.TextStyle{FontFamily: "Helvetica", FontSize: 9, Align: "C"},
 			},
 		},
 		Height:          8,

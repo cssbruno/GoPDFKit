@@ -14,7 +14,7 @@ import (
 func main() {
 	source := samplepdf.Build("Watermark Source", 3)
 
-	pdf := document.New("P", "pt", "A4", "")
+	pdf := document.MustNew(document.WithUnit(document.UnitPoint))
 	pdf.SetTitle("Watermarked PDF", false)
 	pdf.SetCreator("examples/watermark-pdf", false)
 

@@ -10,7 +10,7 @@ import (
 )
 
 func TestAddPageFormatRotationWritesRotateEntry(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.SetCompression(false)
 	pdf.AddPageFormatRotation("P", Size{Wd: 210, Ht: 297}, 90)
 	pdf.SetFont("Helvetica", "", 12)
@@ -26,7 +26,7 @@ func TestAddPageFormatRotationWritesRotateEntry(t *testing.T) {
 }
 
 func TestAddPageFormatRotationRejectsInvalidRotation(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPageFormatRotation("P", Size{Wd: 210, Ht: 297}, 45)
 	if pdf.Ok() {
 		t.Fatal("invalid page rotation did not set an error")
@@ -34,7 +34,7 @@ func TestAddPageFormatRotationRejectsInvalidRotation(t *testing.T) {
 }
 
 func TestSetYWithResetXCanPreserveX(t *testing.T) {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	pdf.AddPage()
 	pdf.SetX(42)
 	pdf.SetYWithResetX(30, false)
@@ -46,7 +46,7 @@ func TestSetYWithResetXCanPreserveX(t *testing.T) {
 }
 
 func TestGetPageWidthAndHeight(t *testing.T) {
-	pdf := New("L", "mm", "A4", "")
+	pdf := MustNew(WithOrientation(OrientationLandscape))
 	pdf.AddPage()
 	if got, want := pdf.GetPageWidth(), 297.0000833333333; !floatEquals(got, want) {
 		t.Fatalf("GetPageWidth() = %.8f, want %.8f", got, want)

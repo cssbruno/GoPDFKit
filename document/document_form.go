@@ -6,6 +6,8 @@ package document
 import (
 	stdhtml "html"
 	"strings"
+
+	"github.com/cssbruno/gopdfkit/layout"
 )
 
 // FormDocument describes a generic form that can be rendered as supported HTML
@@ -54,31 +56,31 @@ func FormDocumentHTML(form FormDocument) string {
 // ValidateFormDocumentHTML validates the canonical form HTML against the
 // supported HTML subset.
 func ValidateFormDocumentHTML(form FormDocument) []string {
-	pdf := New("P", "mm", "A4", "")
+	pdf := MustNew()
 	html := pdf.HTMLNew()
 	return html.ValidateHTML(FormDocumentHTML(form))
 }
 
 // FormDocumentBlocks converts a form into shared document blocks.
-func FormDocumentBlocks(form FormDocument) []Block {
-	blocks := make([]Block, 0, 1+len(form.Sections))
+func FormDocumentBlocks(form FormDocument) []layout.Block {
+	blocks := make([]layout.Block, 0, 1+len(form.Sections))
 	if strings.TrimSpace(form.Title) != "" {
-		blocks = append(blocks, HeadingBlock{Level: 1, Segments: []TextSegment{{Text: form.Title}}})
+		blocks = append(blocks, layout.HeadingBlock{Level: 1, Segments: []layout.TextSegment{{Text: form.Title}}})
 	}
 	for _, section := range form.Sections {
-		sectionBlock := SectionBlock{
+		sectionBlock := layout.SectionBlock{
 			Title:             section.Title,
 			KeepTitleWithBody: true,
-			Box:               BoxStyle{KeepTogether: section.KeepTogether},
+			Box:               layout.BoxStyle{KeepTogether: section.KeepTogether},
 		}
 		if section.BreakBefore || section.BreakAfter {
-			sectionBlock.Blocks = append(sectionBlock.Blocks, PageBreakBlock{Before: section.BreakBefore})
+			sectionBlock.Blocks = append(sectionBlock.Blocks, layout.PageBreakBlock{Before: section.BreakBefore})
 		}
 		for _, question := range section.Questions {
 			sectionBlock.Blocks = append(sectionBlock.Blocks, formQuestionBlocks(question)...)
 		}
 		if section.BreakAfter {
-			sectionBlock.Blocks = append(sectionBlock.Blocks, PageBreakBlock{After: true})
+			sectionBlock.Blocks = append(sectionBlock.Blocks, layout.PageBreakBlock{After: true})
 		}
 		blocks = append(blocks, sectionBlock)
 	}
@@ -86,8 +88,8 @@ func FormDocumentBlocks(form FormDocument) []Block {
 }
 
 // FormDocumentModel converts a form into a shared Document.
-func FormDocumentModel(form FormDocument) *LayoutDocument {
-	doc := NewLayoutDocument()
+func FormDocumentModel(form FormDocument) *layout.LayoutDocument {
+	doc := layout.NewLayoutDocument()
 	doc.Title = form.Title
 	doc.Body = FormDocumentBlocks(form)
 	return doc
@@ -200,44 +202,44 @@ func estimateFormHTMLSize(form FormDocument) int {
 	return size
 }
 
-func formQuestionBlocks(question FormQuestion) []Block {
+func formQuestionBlocks(question FormQuestion) []layout.Block {
 	label := question.Label
 	if question.Required {
 		label += " *"
 	}
-	blocks := []Block{
-		ParagraphBlock{
-			Segments: []TextSegment{{Text: label}},
-			Style:    TextStyle{Bold: true},
-			Box:      BoxStyle{KeepWithNext: true},
+	blocks := []layout.Block{
+		layout.ParagraphBlock{
+			Segments: []layout.TextSegment{{Text: label}},
+			Style:    layout.TextStyle{Bold: true},
+			Box:      layout.BoxStyle{KeepWithNext: true},
 		},
 	}
 	blocks = append(blocks, formAnswerBlocks(question.Answer)...)
 	return blocks
 }
 
-func formAnswerBlocks(answer FormAnswer) []Block {
+func formAnswerBlocks(answer FormAnswer) []layout.Block {
 	switch {
 	case len(answer.Table) > 0:
-		rows := make([]TableRow, 0, len(answer.Table))
+		rows := make([]layout.TableRow, 0, len(answer.Table))
 		for _, inputRow := range answer.Table {
-			row := TableRow{KeepTogether: true}
+			row := layout.TableRow{KeepTogether: true}
 			for _, cell := range inputRow {
-				row.Cells = append(row.Cells, TableCell{
-					Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: cell}}}},
+				row.Cells = append(row.Cells, layout.TableCell{
+					Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: cell}}}},
 				})
 			}
 			rows = append(rows, row)
 		}
-		return []Block{TableBlock{Body: rows}}
+		return []layout.Block{layout.TableBlock{Body: rows}}
 	case len(answer.Items) > 0:
-		items := make([]ListItem, 0, len(answer.Items))
+		items := make([]layout.ListItem, 0, len(answer.Items))
 		for _, item := range answer.Items {
-			items = append(items, ListItem{Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: item}}}}})
+			items = append(items, layout.ListItem{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: item}}}}})
 		}
-		return []Block{ListBlock{Items: items}}
+		return []layout.Block{layout.ListBlock{Items: items}}
 	default:
-		return []Block{ParagraphBlock{Segments: []TextSegment{{Text: answer.Text}}}}
+		return []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: answer.Text}}}}
 	}
 }
 

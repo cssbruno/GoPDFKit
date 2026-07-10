@@ -130,10 +130,6 @@ type OutputOptions struct {
 	StreamFinal bool
 }
 
-// OutputFileOptions is kept for source compatibility. Prefer OutputOptions for
-// new code.
-type OutputFileOptions = OutputOptions
-
 type outputRequest struct {
 	options OutputOptions
 	write   func(context.Context, io.Writer) error
@@ -176,8 +172,8 @@ func (f *Document) OutputFile(fileStr string) error {
 }
 
 // OutputFileAndCloseWithOptions creates or truncates fileStr using explicit
-// file output options. A zero-value OutputFileOptions keeps the durable default.
-func (f *Document) OutputFileAndCloseWithOptions(fileStr string, options OutputFileOptions) error {
+// file output options. A zero-value OutputOptions keeps the durable default.
+func (f *Document) OutputFileAndCloseWithOptions(fileStr string, options OutputOptions) error {
 	return f.OutputFileWithOptions(fileStr, options)
 }
 
