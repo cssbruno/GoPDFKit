@@ -9,6 +9,15 @@ import (
 	"time"
 )
 
+type documentState uint8
+
+const (
+	documentStateUnopened documentState = iota
+	documentStateOpen
+	documentStatePageOpen
+	documentStateClosed
+)
+
 // pdfSerializationState owns data that exists only to assemble final PDF
 // objects. It is embedded so the public Document facade and its long-standing
 // internal call sites remain source-compatible while serialization has a
@@ -22,6 +31,19 @@ type pdfSerializationState struct {
 	fileIDHash        hash.Hash       // incremental hash for file identifiers
 	pages             []*bytes.Buffer // page content; 1-based
 	pageObjectNumbers []int           // PDF page object numbers; 1-based
+}
+
+func (state *pdfSerializationState) allocateObject(offset int) int {
+	state.n++
+	state.recordObject(state.n, offset)
+	return state.n
+}
+
+func (state *pdfSerializationState) recordObject(objectNumber, offset int) {
+	for len(state.offsets) <= objectNumber {
+		state.offsets = append(state.offsets, 0)
+	}
+	state.offsets[objectNumber] = offset
 }
 
 // resourceOwnershipState owns the resource registry and identifiers allocated
@@ -39,8 +61,9 @@ type resourceOwnershipState struct {
 	resourceCachePolicy ResourceCachePolicy
 	coreFonts           map[string]bool
 	diffs               []string
-	stringWidthCache    map[string]int
-	stringWidthKeys     []string
+	stringWidthCache    map[stringWidthCacheKey]int
+	stringWidthKeys     []stringWidthCacheKey
+	stringWidthKeyNext  int
 	imageCache          *ImageCache
 	attachments         []Attachment
 	maxAttachmentBytes  int64
@@ -71,24 +94,25 @@ type pageGeometryState struct {
 // documentMetadataState owns catalog presentation, standards metadata, and
 // descriptive information serialized into the PDF.
 type documentMetadataState struct {
-	zoomMode         string
-	layoutMode       string
-	xmp              []byte
-	nXmp             int
-	compliance       ComplianceMetadata
-	outputIntent     outputIntent
-	nOutputIntentICC int
-	tagged           taggedPDFState
-	producer         string
-	title            string
-	subject          string
-	author           string
-	keywords         string
-	creator          string
-	creationDate     time.Time
-	modDate          time.Time
-	pdfVersion       string
-	catalogSort      bool
+	zoomMode           string
+	layoutMode         string
+	xmp                []byte
+	nXmp               int
+	compliance         ComplianceMetadata
+	outputIntent       outputIntent
+	nOutputIntentICC   int
+	tagged             taggedPDFState
+	producer           string
+	title              string
+	subject            string
+	author             string
+	keywords           string
+	creator            string
+	creationDate       time.Time
+	modDate            time.Time
+	pdfVersion         string
+	catalogSort        bool
+	signatureFieldName string
 }
 
 // documentPolicyState owns production limits, security gates, output defaults,
@@ -104,6 +128,11 @@ type documentPolicyState struct {
 }
 
 // Document represents a single PDF document under construction.
+//
+// A Document is not safe for concurrent use. Serialize calls that mutate or
+// render it, and create a separate Document for each independently generated
+// PDF. Reusable inputs such as CompiledHTML, ImageCache, and FontCache may be
+// shared across documents according to their own concurrency contracts.
 type Document struct {
 	pdfSerializationState
 	resourceOwnershipState
@@ -114,9 +143,9 @@ type Document struct {
 	isCurrentUTF8 bool // whether the current font uses UTF-8 mode
 	isRTL         bool // whether right-to-left mode is enabled
 
-	state         int  // current document state
-	compress      bool // compression flag
-	compressLevel int  // zlib level for compressed streams
+	state         documentState // current document lifecycle state
+	compress      bool          // compression flag
+	compressLevel int           // zlib level for compressed streams
 
 	pageCompressionWorkers         int // async page compression workers; 0 disables
 	attachmentCompressionWorkers   int // async attachment compression workers; 0 disables

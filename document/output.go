@@ -223,9 +223,9 @@ func (f *Document) documentOutputRequest(options OutputOptions, forceStream bool
 		options: options,
 		write: func(ctx context.Context, w io.Writer) error {
 			if forceStream || f.streamFinalForOptions(options) {
-				return f.OutputStreamContext(ctx, w)
+				return f.writeStreamOutputContext(ctx, w)
 			}
-			return f.OutputContext(ctx, w)
+			return f.writeBufferedOutputContext(ctx, w)
 		},
 	}
 }
@@ -344,10 +344,11 @@ func (f *Document) coordinateOutput(ctx context.Context, w io.Writer, request ou
 func (f *Document) withOutputOptions(options OutputOptions, output func() error) error {
 	snapshot := f.outputSettingsSnapshot()
 	if err := f.applyOutputOptions(options); err != nil {
+		f.restoreOutputSettings(snapshot)
 		return err
 	}
 	err := output()
-	if err != nil && f.state < 3 {
+	if err != nil && f.state < documentStateClosed {
 		f.restoreOutputSettings(snapshot)
 	}
 	return err
@@ -357,6 +358,10 @@ func (f *Document) withOutputOptions(options OutputOptions, output func() error)
 // closing and before the final writer call. Cancellation during arbitrary writer
 // implementations still depends on the writer honoring the context.
 func (f *Document) OutputContext(ctx context.Context, w io.Writer) error {
+	return f.writeBufferedOutputContext(ctx, w)
+}
+
+func (f *Document) writeBufferedOutputContext(ctx context.Context, w io.Writer) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -367,8 +372,8 @@ func (f *Document) OutputContext(ctx context.Context, w io.Writer) error {
 		f.SetError(ErrStreamingOutputConsumed)
 		return f.err
 	}
-	if f.outputPolicy.StreamFinal && f.state < 3 {
-		return f.OutputStreamContext(ctx, w)
+	if f.outputPolicy.StreamFinal && f.state < documentStateClosed {
+		return f.writeStreamOutputContext(ctx, w)
 	}
 	if err := outputCanceledError(ctx); err != nil {
 		f.SetError(err)
@@ -378,7 +383,7 @@ func (f *Document) OutputContext(ctx context.Context, w io.Writer) error {
 		f.SetError(ErrNilWriter)
 		return f.err
 	}
-	if f.state < 3 {
+	if f.state < documentStateClosed {
 		f.closeContext(ctx)
 	}
 	if f.err != nil {
@@ -407,6 +412,10 @@ func (f *Document) OutputContext(ctx context.Context, w io.Writer) error {
 // trades repeatability for lower peak memory. Signed output still buffers
 // because PDF signing needs the complete byte range.
 func (f *Document) OutputStreamContext(ctx context.Context, w io.Writer) error {
+	return f.writeStreamOutputContext(ctx, w)
+}
+
+func (f *Document) writeStreamOutputContext(ctx context.Context, w io.Writer) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -425,8 +434,8 @@ func (f *Document) OutputStreamContext(ctx context.Context, w io.Writer) error {
 		f.SetError(ErrNilWriter)
 		return f.err
 	}
-	if f.state == 3 {
-		return f.OutputContext(ctx, w)
+	if f.state == documentStateClosed {
+		return f.writeBufferedOutputContext(ctx, w)
 	}
 
 	sink := newPDFOutputSink(w, 0, nil)
@@ -456,15 +465,37 @@ func (f *Document) OutputStreamContext(ctx context.Context, w io.Writer) error {
 }
 
 func (f *Document) applyOutputOptions(options OutputOptions) error {
+	if f.err != nil {
+		return f.err
+	}
+	var compression *CompressionPolicy
 	if options.Compression != (CompressionPolicy{}) {
-		if err := f.SetCompressionPolicy(options.Compression); err != nil {
+		normalized, err := normalizeCompressionPolicy(options.Compression)
+		if err != nil {
+			f.SetError(err)
+			return err
+		}
+		compression = &normalized
+	}
+	if options.Limits != (Limits{}) {
+		if err := validateLimits(options.Limits); err != nil {
+			f.SetError(err)
 			return err
 		}
 	}
+	if compression != nil {
+		f.compress = compression.Mode == CompressionEnabled
+		f.compressLevel = compression.Level
+		f.pageCompressionWorkers = compression.PageWorkers
+		f.attachmentCompressionWorkers = compression.AttachmentWorkers
+		f.compressionTinyStreamThreshold = compression.TinyStreamThresholdBytes
+	}
 	if options.Limits != (Limits{}) {
-		if err := f.applyLimits(options.Limits); err != nil {
-			return err
+		if options.Limits.MaxAttachmentBytes > 0 {
+			f.maxAttachmentBytes = options.Limits.MaxAttachmentBytes
 		}
+		f.limits = options.Limits
+		f.limitsSet = true
 	}
 	if options.Deterministic {
 		f.applyDeterministicOutput()
@@ -539,7 +570,7 @@ func isNilWriter(w io.Writer) bool {
 
 // out adds a line to the document.
 func (f *Document) out(s string) {
-	if f.state == 2 {
+	if f.state == documentStatePageOpen {
 		f.markAliasPageString(s)
 		_, _ = f.pages[f.page].WriteString(s)
 		_, _ = f.pages[f.page].WriteString("\n")
@@ -556,7 +587,7 @@ func (f *Document) outbuf(r io.Reader) error {
 		f.SetError(err)
 		return err
 	}
-	if f.state == 2 {
+	if f.state == documentStatePageOpen {
 		f.markAliasPageConservative()
 		if _, err := f.pages[f.page].ReadFrom(r); err != nil {
 			f.SetError(err)
@@ -574,7 +605,7 @@ func (f *Document) outbuf(r io.Reader) error {
 }
 
 func (f *Document) outbytes(b []byte) {
-	if f.state == 2 {
+	if f.state == documentStatePageOpen {
 		f.markAliasPageBytes(b)
 		_, _ = f.pages[f.page].Write(b)
 		_ = f.pages[f.page].WriteByte('\n')
@@ -585,7 +616,7 @@ func (f *Document) outbytes(b []byte) {
 }
 
 func (f *Document) writeRawBytes(b []byte) {
-	if f.state == 2 {
+	if f.state == documentStatePageOpen {
 		f.markAliasPageBytes(b)
 		_, _ = f.pages[f.page].Write(b)
 	} else {
@@ -594,7 +625,7 @@ func (f *Document) writeRawBytes(b []byte) {
 }
 
 func (f *Document) writeRawByte(b byte) {
-	if f.state == 2 {
+	if f.state == documentStatePageOpen {
 		_ = f.pages[f.page].WriteByte(b)
 	} else {
 		f.writeFinalByte(b)

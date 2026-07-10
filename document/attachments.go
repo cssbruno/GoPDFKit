@@ -436,7 +436,7 @@ func (f *Document) embedContext(ctx context.Context, a *Attachment) {
 		return
 	}
 	oldState := f.state
-	f.state = 1 // Write file content to the main buffer.
+	f.state = documentStateOpen // Write file content to the main buffer.
 	streamID := resources.attachmentStreamObject(streamKey)
 	if streamID == 0 {
 		f.writeCompressedFileObject(streamKey, a.Content)
@@ -917,10 +917,6 @@ func cloneAttachmentImmutable(a Attachment) Attachment {
 	normalizeAttachment(&a)
 	a.objectNumber = 0
 	return a
-}
-
-func (f *Document) cleanupAttachmentCompressedFiles() {
-	f.ensureResourceStore().cleanupAttachmentCompressedFiles()
 }
 
 func (f *Document) putAnnotationsAttachmentsContext(ctx context.Context) {

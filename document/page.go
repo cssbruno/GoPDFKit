@@ -240,7 +240,7 @@ func (f *Document) addPageFormatRotation(orientationStr string, size Size, rotat
 	if f.page != len(f.pages)-1 {
 		f.page = len(f.pages) - 1
 	}
-	if f.state == 0 {
+	if f.state == documentStateUnopened {
 		f.open()
 	}
 	familyStr := f.fontFamily
@@ -500,7 +500,7 @@ func (f *Document) beginpage(orientationStr string, size Size, rotation int) {
 	f.aliasPages = append(f.aliasPages, false)
 	f.pageLinks = append(f.pageLinks, make([]pageLink, 0))
 	f.pageAttachments = append(f.pageAttachments, []annotationAttach{})
-	f.state = 2
+	f.state = documentStatePageOpen
 	f.taggedBeginPage(f.page)
 	f.x = f.lMargin
 	f.y = f.tMargin
@@ -530,5 +530,5 @@ func (f *Document) beginpage(orientationStr string, size Size, rotation int) {
 
 func (f *Document) endpage() {
 	f.EndLayer()
-	f.state = 1
+	f.state = documentStateOpen
 }

@@ -304,6 +304,26 @@ func TestOutputWithOptionsContextCanceledRestoresOutputSettings(t *testing.T) {
 	}
 }
 
+func TestOutputOptionsValidationIsAtomic(t *testing.T) {
+	pdf, err := NewDocument(WithNoCompression())
+	if err != nil {
+		t.Fatalf("NewDocument() error = %v", err)
+	}
+	before := pdf.CompressionPolicy()
+	var out bytes.Buffer
+	err = pdf.OutputWithOptions(&out, OutputOptions{
+		Compression: CompressionPolicy{Level: zlib.BestCompression},
+		Limits:      Limits{MaxPages: -1},
+	})
+	if err == nil {
+		t.Fatal("OutputWithOptions() error = nil, want invalid limits error")
+	}
+	pdf.ClearError()
+	if after := pdf.CompressionPolicy(); after != before {
+		t.Fatalf("CompressionPolicy after invalid options = %#v, want %#v", after, before)
+	}
+}
+
 func TestOutputContextCanceledDuringPageCompression(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

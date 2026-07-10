@@ -24,6 +24,7 @@ type CompiledHTML struct {
 	tokenNode         []int
 	elementEnd        []int
 	elementDecl       []map[string]string
+	tableStyleKeys    []string
 	elementText       []compiledHTMLText
 	elementMeta       []htmlElementMetadata
 	maxDepth          int
@@ -138,6 +139,7 @@ func compileHTMLTokens(tokens []HTMLSegmentType, cacheReusableData bool) *Compil
 	if cacheReusableData {
 		compiled.styleDeclarations = make(map[string]map[string]string)
 		compiled.elementDecl = make([]map[string]string, len(tokens))
+		compiled.tableStyleKeys = make([]string, len(tokens))
 		compiled.elementText = make([]compiledHTMLText, len(tokens))
 		compiled.elementMeta = make([]htmlElementMetadata, len(tokens))
 	}
@@ -162,8 +164,18 @@ func compileHTMLTokens(tokens []HTMLSegmentType, cacheReusableData bool) *Compil
 	}
 	if cacheReusableData {
 		compiled.compileElementDeclarations()
+		compiled.compileTableStyleKeys()
 	}
 	return compiled
+}
+
+func (compiled *CompiledHTML) compileTableStyleKeys() {
+	for tokenIndex, token := range compiled.tokens {
+		if token.Cat != 'O' || (token.Str != "tr" && token.Str != "td" && token.Str != "th") {
+			continue
+		}
+		compiled.tableStyleKeys[tokenIndex] = htmlTableCellStyleDeclarationKey(compiled.elementDecl[tokenIndex])
+	}
 }
 
 func (compiled *CompiledHTML) buildNodeIndexes() {
@@ -518,6 +530,17 @@ func (compiled *CompiledHTML) declarations(start int) (map[string]string, bool) 
 	}
 	decl := compiled.elementDecl[start]
 	return decl, decl != nil
+}
+
+func (compiled *CompiledHTML) tableStyleKey(start int) (string, bool) {
+	if compiled == nil || start < 0 || start >= len(compiled.tableStyleKeys) {
+		return "", false
+	}
+	token := compiled.tokens[start]
+	if token.Cat != 'O' || (token.Str != "tr" && token.Str != "td" && token.Str != "th") {
+		return "", false
+	}
+	return compiled.tableStyleKeys[start], true
 }
 
 func (compiled *CompiledHTML) text(start int, preserveWhitespace bool) (string, bool) {

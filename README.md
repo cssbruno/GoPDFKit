@@ -18,34 +18,34 @@ For a focused generation suite that includes compiled HTML table cases:
 make bench-generation-core-ci
 ```
 
-| Workload | Mode | ns/PDF | PDF/sec | Memory/PDF | Allocs/PDF | Output size | Total allocated |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Text table | 40 workers | 85,868 | 11,646 | 369,284 B | 1,479 | 43,543 B | 5,033 MB |
-| Long text | 40 workers | 35,729 | 27,989 | 75,519 B | 235 | 8,233 B | 2,284 MB |
-| Baseline no-compliance, uncached image | 40 workers | 151,452 | 6,603 | 632,074 B | 1,391 | 59,498 B | 4,619 MB |
-| Baseline no-compliance, no image | 40 workers | 87,335 | 11,450 | 436,097 B | 1,207 | 50,260 B | 7,090 MB |
-| Baseline no-compliance, cached image | 40 workers | 69,819 | 14,323 | 455,848 B | 1,268 | 59,330 B | 7,497 MB |
-| Baseline no-compliance, signed uncached image | 40 workers | 422,288 | 2,368 | 1,023,959 B | 1,581 | 93,290 B | 3,161 MB |
-| Baseline no-compliance, signed cached image | 40 workers | 339,404 | 2,946 | 848,000 B | 1,457 | 93,066 B | 2,911 MB |
-| UTF-8 text | 40 workers | 699,661 | 1,429 | 5,646,683 B | 12,464 | 44,322 B | 8,385 MB |
-| UTF-8 text, cached font | 40 workers | 200,822 | 4,980 | 636,136 B | 2,052 | 44,322 B | 3,568 MB |
-| Text compression, best speed | 40 workers | 79,007 | 12,657 | 360,635 B | 959 | 8,139 B | 4,990 MB |
-| Text compression, best compression | 40 workers | 153,613 | 6,510 | 369,508 B | 959 | 7,678 B | 2,608 MB |
-| Four uncached images | 40 workers | 202,576 | 4,936 | 1,346,954 B | 1,293 | 15,025 B | 8,028 MB |
-| Four cached images | 40 workers | 5,399 | 185,214 | 63,357 B | 175 | 14,969 B | 13,958 MB |
-| SVG | 40 workers | 8,579 | 116,558 | 45,922 B | 118 | 7,613 B | 6,282 MB |
-| Templates | 40 workers | 66,614 | 15,012 | 229,002 B | 402 | 9,862 B | 3,840 MB |
-| Imported PDF pages | 40 workers | 5,423 | 184,402 | 40,338 B | 267 | 1,890 B | 8,296 MB |
-| Protection | 40 workers | 8,198 | 121,980 | 54,476 B | 328 | 4,999 B | 7,727 MB |
-| Attachments | 40 workers | 67,375 | 14,842 | 118,438 B | 173 | 13,684 B | 2,088 MB |
+| Workload | Mode | ns/PDF | PDF/sec | Memory/PDF | Allocs/PDF | Output size |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Text table | 40 workers | 85,868 | 11,646 | 369,284 B | 1,479 | 43,543 B |
+| Long text | 40 workers | 35,729 | 27,989 | 75,519 B | 235 | 8,233 B |
+| Baseline no-compliance, uncached image | 40 workers | 151,452 | 6,603 | 632,074 B | 1,391 | 59,498 B |
+| Baseline no-compliance, no image | 40 workers | 87,335 | 11,450 | 436,097 B | 1,207 | 50,260 B |
+| Baseline no-compliance, cached image | 40 workers | 69,819 | 14,323 | 455,848 B | 1,268 | 59,330 B |
+| Baseline no-compliance, signed uncached image | 40 workers | 422,288 | 2,368 | 1,023,959 B | 1,581 | 93,290 B |
+| Baseline no-compliance, signed cached image | 40 workers | 339,404 | 2,946 | 848,000 B | 1,457 | 93,066 B |
+| UTF-8 text | 40 workers | 699,661 | 1,429 | 5,646,683 B | 12,464 | 44,322 B |
+| UTF-8 text, cached font | 40 workers | 200,822 | 4,980 | 636,136 B | 2,052 | 44,322 B |
+| Text compression, best speed | 40 workers | 79,007 | 12,657 | 360,635 B | 959 | 8,139 B |
+| Text compression, best compression | 40 workers | 153,613 | 6,510 | 369,508 B | 959 | 7,678 B |
+| Four uncached images | 40 workers | 202,576 | 4,936 | 1,346,954 B | 1,293 | 15,025 B |
+| Four cached images | 40 workers | 5,399 | 185,214 | 63,357 B | 175 | 14,969 B |
+| SVG | 40 workers | 8,579 | 116,558 | 45,922 B | 118 | 7,613 B |
+| Templates | 40 workers | 66,614 | 15,012 | 229,002 B | 402 | 9,862 B |
+| Imported PDF pages | 40 workers | 5,423 | 184,402 | 40,338 B | 267 | 1,890 B |
+| Protection | 40 workers | 8,198 | 121,980 | 54,476 B | 328 | 4,999 B |
+| Attachments | 40 workers | 67,375 | 14,842 | 118,438 B | 173 | 13,684 B |
 
 The 40-worker rows use a fixed explicit worker count, so they measure concurrent
 PDF generation throughput with the same workload pressure across machines.
 Signed rows include PDF output plus detached CMS signing; the benchmark
 certificate and key are prepared outside the timed loop. Compliance rows measure
-generation only; external veraPDF and Arlington validation are separate CI
-steps. The raw Go benchmark output also includes `pdf/s`, `pdf_bytes`, and
-`total_MB` metrics from the timed loop.
+generation only; external veraPDF and Arlington validation run locally and in
+the release workflow, not on every push or pull request. The raw Go benchmark
+output also includes the per-operation `pdf/s` and `pdf_bytes` metrics.
 
 Additional compiled HTML/parser medians from:
 
@@ -65,9 +65,24 @@ go test ./document -run '^$' -bench 'BenchmarkHTMLTokenize|BenchmarkCompileHTMLL
 | Wide table compiled HTML render | 1,461,651 | 684 | 1,584,045 B | 3,538 |
 | SVG-heavy compiled HTML render | 452,602 | 2,209 | 391,676 B | 1,762 |
 
-The latest local profiles used for the tokenizer and compiled HTML work are
-`/tmp/gopdfkit-tokenizer.cpu`, `/tmp/gopdfkit-selector-heavy.cpu`, and
-`/tmp/gopdfkit-data-image-heavy.mem`.
+Generate reproducible profiles under `artifacts/profiles` by selecting a single
+benchmark with `BENCH`:
+
+```shell
+make profile-cpu BENCH='BenchmarkGenerationHTMLLargeTableCompiled$'
+make profile-alloc BENCH='BenchmarkGenerationHTMLLargeTableCompiled$'
+make profile-block BENCH='BenchmarkGenerationTextConcurrent40$'
+make profile-mutex BENCH='BenchmarkGenerationTextConcurrent40$'
+make profile-trace BENCH='BenchmarkGenerationTextConcurrent40$'
+
+go tool pprof -top artifacts/profiles/document.test artifacts/profiles/cpu.pprof
+go tool pprof -top -sample_index=alloc_objects artifacts/profiles/document.test artifacts/profiles/alloc.pprof
+go tool trace artifacts/profiles/trace.out
+```
+
+Allocation profiles use a fixed 20-iteration run with full allocation sampling;
+use timing-only benchmark runs for performance comparisons. Benchmarks and
+`benchstat` comparisons are intentionally local-only and are not part of CI.
 
 
 
@@ -79,6 +94,8 @@ optional typed document models.
 The canonical API is `github.com/cssbruno/gopdfkit/document`. The module root
 no longer contains a facade package as of v0.12.0. Renderer-independent typed
 models and measurement primitives live in `github.com/cssbruno/gopdfkit/layout`.
+Ownership rules and the public-surface policy are documented in
+[`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Install
 
@@ -526,11 +543,17 @@ make bench
 make bench-ci
 make bench-generation-core
 make bench-generation-core-ci
+make bench-generation-core-budget
+make profile-cpu BENCH='BenchmarkGenerationHTMLLargeTableCompiled$'
+make benchstat
 ```
 
-`make bench-generation-core` runs non-HTML generation benchmarks only: baseline,
-text, UTF-8 text, images, SVG, templates, imported pages, protection, and
-attachments.
+`make bench-generation-core` runs representative generation benchmarks:
+baseline, text, UTF-8 text, images, SVG, templates, imported pages, protection,
+attachments, and compiled HTML tables. The budget target always captures a new
+three-sample result before applying its broad regression ceilings. Use
+`tools/bin/benchstat baseline.txt current.txt` for local statistical A/B
+comparisons after `make benchstat`.
 
 Test examples generate PDFs in a unique temporary directory, so running the
 test suite never removes or overwrites repository assets.

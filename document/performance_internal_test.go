@@ -17,6 +17,31 @@ import (
 	"github.com/cssbruno/gopdfkit/layout"
 )
 
+func TestStringWidthCacheUsesBoundedRing(t *testing.T) {
+	pdf := MustNew()
+	pdf.SetFont("Helvetica", "", 12)
+	for i := 0; i < stringWidthCacheLimit+16; i++ {
+		pdf.GetStringSymbolWidth(fmt.Sprintf("cache-key-%03d", i))
+	}
+	if got := len(pdf.stringWidthCache); got != stringWidthCacheLimit {
+		t.Fatalf("string width cache size = %d, want %d", got, stringWidthCacheLimit)
+	}
+	if got := len(pdf.stringWidthKeys); got != stringWidthCacheLimit {
+		t.Fatalf("string width key ring size = %d, want %d", got, stringWidthCacheLimit)
+	}
+	if got := pdf.stringWidthKeyNext; got != 16 {
+		t.Fatalf("string width key ring next = %d, want 16", got)
+	}
+	first, _ := pdf.stringWidthCacheKey("cache-key-000")
+	if _, ok := pdf.stringWidthCache[first]; ok {
+		t.Fatal("oldest string width entry was not evicted")
+	}
+	recent, _ := pdf.stringWidthCacheKey(fmt.Sprintf("cache-key-%03d", stringWidthCacheLimit+15))
+	if _, ok := pdf.stringWidthCache[recent]; !ok {
+		t.Fatal("most recent string width entry is missing")
+	}
+}
+
 func BenchmarkPerfUTF8ToUTF16(b *testing.B) {
 	text := strings.Repeat("ASCII Ελληνικά こんにちは 😀 ", 64)
 	b.SetBytes(int64(len(text)))

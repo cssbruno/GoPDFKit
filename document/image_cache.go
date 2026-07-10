@@ -16,7 +16,8 @@ import (
 //
 // A Document already deduplicates images registered more than once inside that
 // same document. ImageCache is for server-style workloads that create many
-// documents with the same logos or other repeated assets.
+// documents with the same logos or other repeated assets. Its methods are safe
+// for concurrent use.
 type ImageCache struct {
 	mu                sync.RWMutex
 	images            map[string]*ImageInfo

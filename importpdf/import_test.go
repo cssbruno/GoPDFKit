@@ -65,6 +65,31 @@ func TestOpenBytesImmutablePageAndSizes(t *testing.T) {
 	}
 }
 
+func TestOpenWithOptionsCopiesByteSource(t *testing.T) {
+	data := importPDFWithContent("BT (original) Tj ET")
+	source, err := importpdf.OpenWithOptions(data, importpdf.ImportOptions{})
+	if err != nil {
+		t.Fatalf("OpenWithOptions() error = %v", err)
+	}
+	original := bytes.Index(data, []byte("original"))
+	if original < 0 {
+		t.Fatal("test PDF is missing original content")
+	}
+	copy(data[original:], []byte("mutated!"))
+
+	page, err := source.Page(1, "MediaBox")
+	if err != nil {
+		t.Fatalf("Page() error = %v", err)
+	}
+	content, err := page.ContentWithError()
+	if err != nil {
+		t.Fatalf("ContentWithError() error = %v", err)
+	}
+	if !bytes.Contains(content, []byte("original")) || bytes.Contains(content, []byte("mutated!")) {
+		t.Fatalf("page content = %q, want immutable source snapshot", content)
+	}
+}
+
 func TestOpenReaderAtPageAndSizes(t *testing.T) {
 	source := importSourcePDF(t)
 

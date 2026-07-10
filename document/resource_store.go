@@ -9,48 +9,60 @@ import (
 )
 
 type resourceStore struct {
-	fonts                map[string]fontDefinition
-	fontFiles            map[string]fontFile
-	templates            map[string]TemplateView
-	templateObjects      map[string]int
-	importedObjs         map[string][]byte
-	importedObjPos       map[string]map[int]string
-	importedTplObjs      map[string]string
-	importedTplIDs       map[string]int
-	importedPages        map[int]*importedPDFPage
-	images               map[string]*ImageInfo
-	attachmentStreams    map[attachmentStreamKey]int
-	attachmentFiles      map[attachmentFileKey]int
-	attachmentCompressed map[attachmentStreamKey]attachmentStream
+	fonts           map[string]fontDefinition
+	fontFiles       map[string]fontFile
+	templates       map[string]TemplateView
+	importedObjs    map[string][]byte
+	importedObjPos  map[string]map[int]string
+	importedTplObjs map[string]string
+	importedPages   map[int]*importedPDFPage
+	images          map[string]*ImageInfo
+	objects         resourceObjectNumbers
+	attachments     attachmentResourceStore
+}
+
+type resourceObjectNumbers struct {
+	templates         map[string]int
+	importedTemplates map[string]int
+}
+
+type attachmentResourceStore struct {
+	streams    map[attachmentStreamKey]int
+	files      map[attachmentFileKey]int
+	compressed map[attachmentStreamKey]attachmentStream
 }
 
 func newResourceStore() *resourceStore {
 	return &resourceStore{
-		fonts:                make(map[string]fontDefinition),
-		fontFiles:            make(map[string]fontFile),
-		templates:            make(map[string]TemplateView),
-		templateObjects:      make(map[string]int),
-		importedObjs:         make(map[string][]byte, 0),
-		importedObjPos:       make(map[string]map[int]string, 0),
-		importedTplObjs:      make(map[string]string),
-		importedTplIDs:       make(map[string]int, 0),
-		importedPages:        make(map[int]*importedPDFPage),
-		images:               make(map[string]*ImageInfo),
-		attachmentStreams:    make(map[attachmentStreamKey]int),
-		attachmentFiles:      make(map[attachmentFileKey]int),
-		attachmentCompressed: make(map[attachmentStreamKey]attachmentStream),
+		fonts:           make(map[string]fontDefinition),
+		fontFiles:       make(map[string]fontFile),
+		templates:       make(map[string]TemplateView),
+		importedObjs:    make(map[string][]byte),
+		importedObjPos:  make(map[string]map[int]string),
+		importedTplObjs: make(map[string]string),
+		importedPages:   make(map[int]*importedPDFPage),
+		images:          make(map[string]*ImageInfo),
+		objects: resourceObjectNumbers{
+			templates:         make(map[string]int),
+			importedTemplates: make(map[string]int),
+		},
+		attachments: attachmentResourceStore{
+			streams:    make(map[attachmentStreamKey]int),
+			files:      make(map[attachmentFileKey]int),
+			compressed: make(map[attachmentStreamKey]attachmentStream),
+		},
 	}
 }
 
-func (f *Document) initResourceStore() {
-	f.resources = newResourceStore()
+func (state *resourceOwnershipState) initResourceStore() {
+	state.resources = newResourceStore()
 }
 
-func (f *Document) ensureResourceStore() *resourceStore {
-	if f.resources == nil {
-		f.resources = newResourceStore()
+func (state *resourceOwnershipState) ensureResourceStore() *resourceStore {
+	if state.resources == nil {
+		state.resources = newResourceStore()
 	}
-	return f.resources
+	return state.resources
 }
 
 func (s *resourceStore) image(name string) (*ImageInfo, bool) {
@@ -202,12 +214,12 @@ func (s *resourceStore) template(id string) (TemplateView, bool) {
 }
 
 func (s *resourceStore) templateObject(id string) (int, bool) {
-	objID, ok := s.templateObjects[id]
+	objID, ok := s.objects.templates[id]
 	return objID, ok
 }
 
 func (s *resourceStore) setTemplateObject(id string, objID int) {
-	s.templateObjects[id] = objID
+	s.objects.templates[id] = objID
 }
 
 func (s *resourceStore) templateOutputImage(tplID, name string, image *ImageInfo) *ImageInfo {
@@ -269,7 +281,7 @@ func (s *resourceStore) importedTemplateNames(sorted bool) []string {
 }
 
 func (s *resourceStore) setImportedTemplateObjectID(hash string, objID int) {
-	s.importedTplIDs[hash] = objID
+	s.objects.importedTemplates[hash] = objID
 }
 
 func (s *resourceStore) importedTemplateResourceRefs(sorted bool) []pdfResourceRef {
@@ -279,7 +291,7 @@ func (s *resourceStore) importedTemplateResourceRefs(sorted bool) []pdfResourceR
 		hash := s.importedTplObjs[name]
 		refs = append(refs, pdfResourceRef{
 			name:         pdfResourceName(name),
-			objectNumber: s.importedTplIDs[hash],
+			objectNumber: s.objects.importedTemplates[hash],
 		})
 	}
 	return refs
@@ -299,39 +311,39 @@ func (s *resourceStore) importedPage(id int) (*importedPDFPage, bool) {
 }
 
 func (s *resourceStore) compressedAttachment(key attachmentStreamKey) (attachmentStream, bool) {
-	stream, ok := s.attachmentCompressed[key]
+	stream, ok := s.attachments.compressed[key]
 	return stream, ok
 }
 
 func (s *resourceStore) addCompressedAttachment(key attachmentStreamKey, stream attachmentStream) bool {
-	if _, ok := s.attachmentCompressed[key]; ok {
+	if _, ok := s.attachments.compressed[key]; ok {
 		return false
 	}
-	s.attachmentCompressed[key] = stream
+	s.attachments.compressed[key] = stream
 	return true
 }
 
 func (s *resourceStore) attachmentStreamObject(key attachmentStreamKey) int {
-	return s.attachmentStreams[key]
+	return s.attachments.streams[key]
 }
 
 func (s *resourceStore) setAttachmentStreamObject(key attachmentStreamKey, objectNumber int) {
-	s.attachmentStreams[key] = objectNumber
+	s.attachments.streams[key] = objectNumber
 }
 
 func (s *resourceStore) attachmentFileObject(key attachmentFileKey) int {
-	return s.attachmentFiles[key]
+	return s.attachments.files[key]
 }
 
 func (s *resourceStore) setAttachmentFileObject(key attachmentFileKey, objectNumber int) {
-	s.attachmentFiles[key] = objectNumber
+	s.attachments.files[key] = objectNumber
 }
 
 func (s *resourceStore) cleanupAttachmentCompressedFiles() {
-	for key, stream := range s.attachmentCompressed {
+	for key, stream := range s.attachments.compressed {
 		stream.cleanup()
 		if stream.tempFile != "" {
-			delete(s.attachmentCompressed, key)
+			delete(s.attachments.compressed, key)
 		}
 	}
 }

@@ -15,6 +15,10 @@ import (
 // MaxSourceBytes is the largest PDF source accepted by the built-in importer.
 const MaxSourceBytes = 128 * 1024 * 1024
 
+// ErrSourceTooLarge reports that a PDF source exceeded the configured byte
+// limit.
+var ErrSourceTooLarge = errors.New("PDF import source exceeds maximum size")
+
 // ImportOptions controls parser limits for the built-in PDF importer. Zero
 // fields use package defaults.
 type ImportOptions struct {
@@ -39,39 +43,6 @@ func normalizeImportOptions(options ImportOptions) (ImportOptions, error) {
 		return ImportOptions{}, errors.New("PDF import source size limit is too large")
 	}
 	return options, nil
-}
-
-// PageImporter is implemented by document types that can import a page from a file.
-type PageImporter interface {
-	ImportPage(sourceFile string, pageNo int, box string) int
-}
-
-// PageImporterError is implemented by document types that can import a page
-// from a file and report errors directly.
-type PageImporterError interface {
-	ImportPageError(sourceFile string, pageNo int, box string) (int, error)
-}
-
-// StreamPageImporter is implemented by document types that can import a page from a stream.
-type StreamPageImporter interface {
-	ImportPageStream(source io.Reader, pageNo int, box string) int
-}
-
-// StreamPageImporterError is implemented by document types that can import a
-// page from a stream and report errors directly.
-type StreamPageImporterError interface {
-	ImportPageStreamError(source io.Reader, pageNo int, box string) (int, error)
-}
-
-// PageUser is implemented by document types that can draw an imported page.
-type PageUser interface {
-	UseImportedPage(pageID int, x, y, w, h float64)
-}
-
-// PageUserError is implemented by document types that can draw an imported
-// page and report errors directly.
-type PageUserError interface {
-	UseImportedPageError(pageID int, x, y, w, h float64) error
 }
 
 // Open parses a PDF source. source may be a file path string, []byte, or io.Reader.
@@ -134,7 +105,7 @@ func OpenFileWithOptionsContext(ctx context.Context, path string, options Import
 	}
 	defer func() { _ = file.Close() }()
 	if info, err := file.Stat(); err == nil && info.Mode().IsRegular() && info.Size() > options.MaxSourceBytes {
-		return nil, errors.New("PDF import source exceeds maximum size")
+		return nil, ErrSourceTooLarge
 	}
 	// Keep one immutable snapshot for the Source lifetime. Reopening path during
 	// lazy reads could otherwise combine the xref from this file with objects
@@ -163,7 +134,7 @@ func OpenBytesWithOptionsContext(ctx context.Context, data []byte, options Impor
 		return nil, err
 	}
 	if int64(len(data)) > options.MaxSourceBytes {
-		return nil, errors.New("PDF import source exceeds maximum size")
+		return nil, ErrSourceTooLarge
 	}
 	return OpenBytesImmutableWithOptionsContext(ctx, append([]byte(nil), data...), options)
 }
@@ -193,7 +164,7 @@ func OpenBytesImmutableWithOptionsContext(ctx context.Context, data []byte, opti
 		return nil, err
 	}
 	if int64(len(data)) > options.MaxSourceBytes {
-		return nil, errors.New("PDF import source exceeds maximum size")
+		return nil, ErrSourceTooLarge
 	}
 	source, err := parseSourceWithOptionsContext(ctx, data, options)
 	if err != nil {
@@ -235,7 +206,7 @@ func OpenReaderAtWithOptionsContext(ctx context.Context, r io.ReaderAt, size int
 		return nil, errors.New("PDF import source size is invalid")
 	}
 	if size > options.MaxSourceBytes {
-		return nil, errors.New("PDF import source exceeds maximum size")
+		return nil, ErrSourceTooLarge
 	}
 	source, err := parseSourceReaderAtWithOptionsContext(ctx, r, size, options)
 	if err != nil {
@@ -273,7 +244,7 @@ func OpenReaderWithOptionsContext(ctx context.Context, r io.Reader, options Impo
 	}
 	data, err := io.ReadAll(io.LimitReader(importContextReader{ctx: ctx, r: r}, options.MaxSourceBytes+1))
 	if err == nil && int64(len(data)) > options.MaxSourceBytes {
-		err = errors.New("PDF import source exceeds maximum size")
+		err = ErrSourceTooLarge
 	}
 	if err != nil {
 		return nil, err
@@ -315,36 +286,4 @@ func (r importContextReader) Read(p []byte) (int, error) {
 		return n, importContextErr(r.ctx)
 	}
 	return n, nil
-}
-
-// Page imports a page from sourceFile into pdf and returns its page ID.
-func Page(pdf PageImporter, sourceFile string, pageNo int, box string) int {
-	return pdf.ImportPage(sourceFile, pageNo, box)
-}
-
-// PageError imports a page from sourceFile into pdf and returns its page ID or
-// an error.
-func PageError(pdf PageImporterError, sourceFile string, pageNo int, box string) (int, error) {
-	return pdf.ImportPageError(sourceFile, pageNo, box)
-}
-
-// PageStream imports a page from source into pdf and returns its page ID.
-func PageStream(pdf StreamPageImporter, source io.Reader, pageNo int, box string) int {
-	return pdf.ImportPageStream(source, pageNo, box)
-}
-
-// PageStreamError imports a page from source into pdf and returns its page ID
-// or an error.
-func PageStreamError(pdf StreamPageImporterError, source io.Reader, pageNo int, box string) (int, error) {
-	return pdf.ImportPageStreamError(source, pageNo, box)
-}
-
-// UsePage draws an imported page on pdf.
-func UsePage(pdf PageUser, pageID int, x, y, w, h float64) {
-	pdf.UseImportedPage(pageID, x, y, w, h)
-}
-
-// UsePageError draws an imported page on pdf and reports errors directly.
-func UsePageError(pdf PageUserError, pageID int, x, y, w, h float64) error {
-	return pdf.UseImportedPageError(pageID, x, y, w, h)
 }

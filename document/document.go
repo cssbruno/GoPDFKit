@@ -45,7 +45,7 @@ func documentNewWithDefaults(orientationStr, unitStr, sizeStr, fontDirStr string
 	f.pageRotations = make(map[int]int)
 	f.pageBoxes = make(map[int]map[string]PageBox)
 	f.defPageBoxes = make(map[string]PageBox)
-	f.state = 0
+	f.state = documentStateUnopened
 	f.initResourceStore()
 	f.utf8FontPathCache = make(map[string]utf8FontPathInfo)
 	f.resourceCachePolicy = ResourceCacheShared

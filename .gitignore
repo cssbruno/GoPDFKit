@@ -28,3 +28,4 @@ coverage.html
 PDF_HTML_RENDERING_GAPS.md
 .claude/
 .gocache/
+.golangci-cache/

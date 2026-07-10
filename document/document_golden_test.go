@@ -20,14 +20,14 @@ func TestWriteDocumentGoldenPDFs(t *testing.T) {
 		want string
 	}{
 		{name: "structured-report", doc: goldenStructuredReportDocument(), want: "615dc1ab3bee7dd52213941e46ea6025f63accdd437da027493dd262c0d56bac"},
-		{name: "tabular-report", doc: goldenTabularReportDocument(), want: "f623d6d05d7215ea51c4af070eff6f2837597efe257fc38aac4153a6db6d32cc"},
+		{name: "tabular-report", doc: goldenTabularReportDocument(), want: "4daf4f241bb7994259dd32d3dcb427ac1db2e11f3e65eeb37d4b189a80935647"},
 		{name: "transactional", doc: goldenTransactionalDocument(), want: "7470283a444191dac3b142e3cc3ef491f6c6dff5fb1c71cb51062494c761bc70"},
 		{name: "attestation", doc: goldenAttestationDocument(), want: "4eb5e2a22d28dc24e8a3729eb564c74f3bc99af57440b1ac9368de06915881fb"},
 		{name: "statement", doc: goldenStatementDocument(), want: "0ef4047cd108eea7fb4a0d09d8481e670ff301d3ac59a32414410c088b176b9a"},
 		{name: "generic-free-text", doc: goldenGenericDocument(), want: "5dea1e2e71dcefb6d43af3d7fe40af1064b2320359715029931e61a5aca61e6d"},
 		{name: "long-form", doc: goldenLongFormDocument(), want: "e2a299fb4d988378625d6cd7f8a2d3fd8bc8ce18b353801e58a253bd2ee23fb1"},
-		{name: "form", doc: FormDocumentModel(testFormDocument()), want: "a84758aa1336b6465602b38a2b60063adb2fa29b01b903b733f616354998968b"},
-		{name: "qr-signature", doc: goldenQRSignatureDocument(), want: "b778cd93543d0cd78ab101fc72b2051e31bdc38c0d11bae22367164a0b34feba"},
+		{name: "form", doc: FormDocumentModel(testFormDocument()), want: "9b798cf3801e896ddcbb48f9aab01b09d403f38a871db494d75668f3fde8466e"},
+		{name: "qr-signature", doc: goldenQRSignatureDocument(), want: "f974e850bc5ca0721e860d0225bb39be0c2647c6dcb399be2b56d2347f87d813"},
 	}
 
 	for _, tc := range cases {

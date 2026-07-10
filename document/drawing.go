@@ -14,6 +14,12 @@ const (
 	stringWidthCacheMaxLen = 256
 )
 
+type stringWidthCacheKey struct {
+	text   string
+	fontID string
+	utf8   bool
+}
+
 // GetStringWidth returns the length of a string in user units. A font must be
 // currently selected.
 func (f *Document) GetStringWidth(s string) float64 {
@@ -81,33 +87,34 @@ func isASCIIString(s string) bool {
 	return true
 }
 
-func (f *Document) stringWidthCacheKey(s string) (string, bool) {
+func (f *Document) stringWidthCacheKey(s string) (stringWidthCacheKey, bool) {
 	if s == "" || len(s) > stringWidthCacheMaxLen || f.currentFont.i == "" {
-		return "", false
+		return stringWidthCacheKey{}, false
 	}
-	mode := "8"
-	if f.isCurrentUTF8 {
-		mode = "u"
-	}
-	return mode + "\x00" + f.currentFont.i + "\x00" + s, true
+	return stringWidthCacheKey{text: s, fontID: f.currentFont.i, utf8: f.isCurrentUTF8}, true
 }
 
-func (f *Document) cacheStringSymbolWidth(key string, width int) {
+func (f *Document) cacheStringSymbolWidth(key stringWidthCacheKey, width int) {
 	if f.stringWidthCache == nil {
-		f.stringWidthCache = make(map[string]int, stringWidthCacheLimit)
+		f.stringWidthCache = make(map[stringWidthCacheKey]int, stringWidthCacheLimit)
+		f.stringWidthKeys = make([]stringWidthCacheKey, 0, stringWidthCacheLimit)
 	}
 	if _, exists := f.stringWidthCache[key]; exists {
 		f.stringWidthCache[key] = width
 		return
 	}
 	if len(f.stringWidthCache) >= stringWidthCacheLimit {
-		evict := f.stringWidthKeys[0]
+		evict := f.stringWidthKeys[f.stringWidthKeyNext]
 		delete(f.stringWidthCache, evict)
-		copy(f.stringWidthKeys, f.stringWidthKeys[1:])
-		f.stringWidthKeys = f.stringWidthKeys[:len(f.stringWidthKeys)-1]
+		f.stringWidthKeys[f.stringWidthKeyNext] = key
+		f.stringWidthKeyNext++
+		if f.stringWidthKeyNext == stringWidthCacheLimit {
+			f.stringWidthKeyNext = 0
+		}
+	} else {
+		f.stringWidthKeys = append(f.stringWidthKeys, key)
 	}
 	f.stringWidthCache[key] = width
-	f.stringWidthKeys = append(f.stringWidthKeys, key)
 }
 
 func (f *Document) currentFontRuneWidth(char rune) int {

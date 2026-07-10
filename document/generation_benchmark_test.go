@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"math/big"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -64,8 +63,6 @@ func benchmarkGeneratedSignedPDF(b *testing.B, build func(*document.Document), o
 func benchmarkGeneratedPDFOutput(b *testing.B, build func(*document.Document), outputPDF benchmarkPDFOutput) {
 	b.Helper()
 	b.ReportAllocs()
-	var before runtime.MemStats
-	runtime.ReadMemStats(&before)
 	b.ResetTimer()
 	start := time.Now()
 	var totalBytes int64
@@ -87,7 +84,6 @@ func benchmarkGeneratedPDFOutput(b *testing.B, build func(*document.Document), o
 	elapsed := time.Since(start)
 	b.StopTimer()
 	reportBenchmarkThroughput(b, totalBytes, elapsed)
-	reportBenchmarkTotalAllocMB(b, before.TotalAlloc)
 }
 
 func benchmarkGeneratedPDFConcurrent(b *testing.B, workers int, build func(*document.Document)) {
@@ -161,8 +157,6 @@ func benchmarkGeneratedPDFOutputConcurrent(b *testing.B, workers int, build func
 		}()
 	}
 
-	var before runtime.MemStats
-	runtime.ReadMemStats(&before)
 	b.ResetTimer()
 	start := time.Now()
 	for i := 0; i < b.N; i++ {
@@ -173,7 +167,6 @@ func benchmarkGeneratedPDFOutputConcurrent(b *testing.B, workers int, build func
 	elapsed := time.Since(start)
 	b.StopTimer()
 	reportBenchmarkThroughput(b, totalBytes.Load(), elapsed)
-	reportBenchmarkTotalAllocMB(b, before.TotalAlloc)
 
 	if firstErr != nil {
 		b.Fatal(firstErr)
@@ -187,16 +180,6 @@ func reportBenchmarkThroughput(b *testing.B, totalBytes int64, elapsed time.Dura
 	}
 	b.ReportMetric(float64(totalBytes)/float64(b.N), "pdf_bytes")
 	b.ReportMetric(float64(b.N)/elapsed.Seconds(), "pdf/s")
-}
-
-func reportBenchmarkTotalAllocMB(b *testing.B, beforeTotalAlloc uint64) {
-	b.Helper()
-	var after runtime.MemStats
-	runtime.ReadMemStats(&after)
-	if after.TotalAlloc < beforeTotalAlloc {
-		return
-	}
-	b.ReportMetric(float64(after.TotalAlloc-beforeTotalAlloc)/(1024*1024), "total_MB")
 }
 
 func benchmarkSignOptions(b *testing.B) sign.Options {
@@ -1203,8 +1186,6 @@ func BenchmarkGenerationTextCompressionLevel(b *testing.B) {
 	} {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
-			var before runtime.MemStats
-			runtime.ReadMemStats(&before)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				pdf := document.MustNew()
@@ -1225,7 +1206,6 @@ func BenchmarkGenerationTextCompressionLevel(b *testing.B) {
 				}
 			}
 			b.StopTimer()
-			reportBenchmarkTotalAllocMB(b, before.TotalAlloc)
 		})
 	}
 }

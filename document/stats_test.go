@@ -116,13 +116,13 @@ func TestResourceStoreReceivesAttachmentCacheWrites(t *testing.T) {
 	if err := pdf.Output(&out); err != nil {
 		t.Fatalf("Output() error = %v", err)
 	}
-	if len(pdf.resources.attachmentStreams) == 0 {
+	if len(pdf.resources.attachments.streams) == 0 {
 		t.Fatal("attachment stream object cache was not stored in resourceStore")
 	}
-	if len(pdf.resources.attachmentFiles) == 0 {
+	if len(pdf.resources.attachments.files) == 0 {
 		t.Fatal("attachment filespec object cache was not stored in resourceStore")
 	}
-	if len(pdf.resources.attachmentCompressed) == 0 {
+	if len(pdf.resources.attachments.compressed) == 0 {
 		t.Fatal("compressed attachment cache was not stored in resourceStore")
 	}
 }

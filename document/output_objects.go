@@ -4,22 +4,15 @@
 package document
 
 func (f *Document) newobj() {
-	f.n++
-	for j := len(f.offsets); j <= f.n; j++ {
-		f.offsets = append(f.offsets, 0)
-	}
-	f.offsets[f.n] = f.finalOutputOffset()
+	objectNumber := f.allocateObject(f.finalOutputOffset())
 	if f.hooks.OnOutputObject != nil {
-		f.hooks.OnOutputObject(f.n, "object")
+		f.hooks.OnOutputObject(objectNumber, "object")
 	}
-	f.outPDFObjHeader(f.n)
+	f.outPDFObjHeader(objectNumber)
 }
 
 func (f *Document) beginPDFObject(objNum int) {
-	for j := len(f.offsets); j <= objNum; j++ {
-		f.offsets = append(f.offsets, 0)
-	}
-	f.offsets[objNum] = f.finalOutputOffset()
+	f.recordObject(objNum, f.finalOutputOffset())
 	f.outPDFObjHeader(objNum)
 }
 
