@@ -49,7 +49,7 @@ func TestNewDocumentWithDefaultsEnablesExplicitCompression(t *testing.T) {
 	}
 }
 
-func TestNewWithDefaultsHonorsExplicitNoCompressionWithOptimize(t *testing.T) {
+func TestNewDocumentWithDefaultsAllowsExplicitCompressionOverride(t *testing.T) {
 	defaults := document.DefaultSettings()
 	defaults.Compression = false
 	defaults.CreationDate = time.Date(2001, 2, 3, 4, 5, 6, 0, time.UTC)
@@ -59,8 +59,8 @@ func TestNewWithDefaultsHonorsExplicitNoCompressionWithOptimize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(out, "/Filter /FlateDecode") {
-		t.Fatal("expected explicit no-compression default to override Optimize")
+	if !strings.Contains(out, "/Filter /FlateDecode") {
+		t.Fatal("expected WithBestCompression to override the no-compression default")
 	}
 }
 

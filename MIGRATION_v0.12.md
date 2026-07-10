@@ -32,9 +32,33 @@ Use `document.NewDocument(options...)` when construction can fail, or
 | `document.NewWithDefaults(options, defaults)` | `document.NewDocumentWithDefaults(defaults, options...)` |
 | `document.NewWithDefaults(document.Options{SizeStr: "Letter"}, d)` | `document.NewDocumentWithDefaults(d, document.WithPageSize(document.PageSizeLetter))` |
 
-The exported `document.Options` struct was removed. Use functional options such
-as `WithOrientation`, `WithUnit`, `WithPageSize`, `WithCustomPageSize`,
-`WithFontDir`, `WithCompressionPolicy`, and `WithProductionPolicy`.
+The exported `document.Options` struct was removed. Map its fields as follows:
+
+| Removed `Options` field | Functional option |
+| --- | --- |
+| `Orientation` | `WithOrientation` |
+| `Unit` | `WithUnit` |
+| `PageSize` | `WithPageSize` |
+| `Size` | `WithCustomPageSize` |
+| `FontDir` | `WithFontDir` |
+| `Optimize` | `WithOptimize` or `WithBestCompression` |
+| `CompressionPolicy` | `WithCompressionPolicy` |
+| `PageCompressionWorkers` | `WithPageCompressionWorkers` |
+| `AttachmentCompressionWorkers` | `WithAttachmentCompressionWorkers` |
+| `CachePolicy` | `WithResourceCachePolicy` |
+| `ImageCache` | `WithImageCache` |
+| `FontCache` | `WithFontCache` |
+| `ResourceLoader` | `WithResourceLoader` |
+| `Limits` | `WithLimits` |
+| `SecurityPolicy` | `WithSecurityPolicy` |
+| `OutputPolicy` | `WithOutputPolicy` |
+| `Hooks` | `WithHooks` |
+| `DeterministicOutput` | `WithDeterministicOutput` |
+
+`WithUTF8FontCache` becomes `WithFontCache`. Replace
+`WithLegacyConstructorArgs` with the typed orientation, unit, page-size, custom
+size, and font-directory options above. Options are applied left to right; a
+later option wins when two options configure the same behavior.
 
 ## Layout
 
@@ -54,6 +78,12 @@ Move `LayoutDocument`, all block and style types, `PageTemplate`,
 `PageNumberOptions`, `MeasureContext`, `BlockMeasurement`, `MeasureBlock`, and
 `MeasureBlocks` references to `layout`.
 
+Replace `document.NewMeasureContext(pdf, width)` with
+`layout.NewMeasureContext(width, defaultStyle)`. The old helper installed a
+document-specific text measurer that is intentionally private in v0.12. For
+renderer-specific wrapping, implement `layout.TextMeasurer` and assign it to
+the returned context's `TextMeasurer` field.
+
 ## Defaults and renamed APIs
 
 Package-wide default setters were removed. Copy `document.DefaultSettings()`,
@@ -70,7 +100,17 @@ modify the copy, and pass it to `NewDocumentWithDefaults`.
 | `ValidationReport`, `ValidationIssue`, `ValidationSeverity` | `ComplianceValidationReport`, `ComplianceValidationIssue`, `ComplianceValidationSeverity` |
 | `CompressionPolicy.Enabled` | `CompressionPolicy.Mode` |
 | `Document.CurveCubic` | `Document.CurveBezierCubic` |
-| `sign/pkcs7` wrappers | CMS-first names in `sign` |
+| `sign/pkcs7.Options` | `sign.CMSOptions` |
+| `sign/pkcs7.VerifyResult` | `sign.CMSVerifyResult` |
+| `sign/pkcs7.Info` | `sign.CMSInfo` |
+| `sign/pkcs7.Create` | `sign.CreateCMS` |
+| `sign/pkcs7.Verify` | `sign.VerifyCMS` |
+| `sign/pkcs7.VerifyDetached` | `sign.VerifyDetachedCMS` |
+| `sign/pkcs7.Inspect` | `sign.InspectCMS` |
+| `sign/pkcs7.EmbedDetached` | `sign.EmbedDetachedCMS` |
+
+The revocation and signed-attribute helper names already exist unchanged in
+`sign`; update only their import path.
 
 Set `CompressionPolicy.Mode` to `CompressionEnabled` or
 `CompressionDisabled`; a zero mode keeps the normal enabled default when the

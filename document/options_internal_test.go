@@ -120,6 +120,47 @@ func TestCompressionPolicyOptionConfiguresAllFields(t *testing.T) {
 	}
 }
 
+func TestCompressionOptionsRespectCallOrder(t *testing.T) {
+	bestSpeed := CompressionPolicy{Mode: CompressionEnabled, Level: zlib.BestSpeed}
+
+	pdf := MustNew(WithBestCompression(), WithCompressionPolicy(bestSpeed))
+	if got := pdf.CompressionPolicy().Level; got != zlib.BestSpeed {
+		t.Fatalf("later WithCompressionPolicy level = %d, want BestSpeed", got)
+	}
+
+	pdf = MustNew(WithCompressionPolicy(bestSpeed), WithBestCompression())
+	if got := pdf.CompressionPolicy().Level; got != zlib.BestCompression {
+		t.Fatalf("later WithBestCompression level = %d, want BestCompression", got)
+	}
+
+	pdf = MustNew(WithBestCompression(), WithProductionPolicy(ServerSafePolicy()))
+	if got := pdf.CompressionPolicy().Level; got != zlib.BestSpeed {
+		t.Fatalf("later server policy level = %d, want BestSpeed", got)
+	}
+
+	pdf = MustNew(WithProductionPolicy(ServerSafePolicy()), WithBestCompression())
+	if got := pdf.CompressionPolicy().Level; got != zlib.BestCompression {
+		t.Fatalf("later WithBestCompression after server policy level = %d, want BestCompression", got)
+	}
+}
+
+func TestDeterministicOutputOptionsRespectCallOrder(t *testing.T) {
+	pdf := MustNew(WithDeterministicOutput(), WithOutputPolicy(OutputPolicy{}))
+	if !pdf.creationDate.IsZero() {
+		t.Fatalf("later non-deterministic output policy kept creation date %v", pdf.creationDate)
+	}
+
+	pdf = MustNew(WithOutputPolicy(OutputPolicy{}), WithDeterministicOutput())
+	if pdf.creationDate.IsZero() {
+		t.Fatal("later WithDeterministicOutput did not install a fixed creation date")
+	}
+
+	pdf = MustNew(WithProductionPolicy(DeterministicPolicy()), WithOutputPolicy(OutputPolicy{}))
+	if !pdf.creationDate.IsZero() {
+		t.Fatalf("later output policy did not disable production determinism: %v", pdf.creationDate)
+	}
+}
+
 func TestCompressionPolicyPartialStructsDoNotDisableCompression(t *testing.T) {
 	pdf, err := NewDocument(WithCompressionPolicy(CompressionPolicy{PageWorkers: 2}))
 	if err != nil {

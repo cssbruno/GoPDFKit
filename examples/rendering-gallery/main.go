@@ -270,7 +270,7 @@ func generateLinksBookmarks() {
 	pdf.SetTextColor(0, 0, 0)
 	pdf.SetDrawColor(30, 90, 170)
 	pdf.RoundedRect(16, 94, 82, 18, 3, "1234", "D")
-	pdf.LinkString(16, 94, 82, 18, "https://pkg.go.dev/github.com/cssbruno/gopdfkit")
+	pdf.LinkString(16, 94, 82, 18, "https://pkg.go.dev/github.com/cssbruno/gopdfkit/document")
 	pdf.SetFont("Helvetica", "", 10)
 	pdf.Text(22, 106, "Open Go package docs")
 

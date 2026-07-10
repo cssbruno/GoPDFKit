@@ -12,7 +12,7 @@ Local benchmark run on `Apple M2` with 8 logical CPUs. Results below are from:
 make bench-generation-core
 ```
 
-For a generation-only suite without HTML examples:
+For a focused generation suite that includes compiled HTML table cases:
 
 ```shell
 make bench-generation-core-ci

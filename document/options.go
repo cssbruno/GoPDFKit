@@ -40,7 +40,14 @@ func WithFontDir(fontDir string) Option {
 // WithOptimize switches generated page and template streams to best zlib
 // compression. It is not a whole-PDF optimizer.
 func WithOptimize(optimize bool) Option {
-	return func(options *normalizedOptions) { options.optimize = optimize }
+	return func(options *normalizedOptions) {
+		policy := defaultCompressionPolicy()
+		if optimize {
+			policy.Level = zlib.BestCompression
+		}
+		options.compressionPolicy = policy
+		options.compressionPolicySet = true
+	}
 }
 
 // WithBestCompression switches generated page and template streams to best zlib
@@ -79,7 +86,7 @@ func WithOutputPolicy(policy OutputPolicy) Option {
 	return func(options *normalizedOptions) {
 		options.outputPolicy = policy
 		options.outputPolicySet = true
-		options.deterministicOutput = options.deterministicOutput || policy.Deterministic
+		options.deterministicOutput = policy.Deterministic
 	}
 }
 
@@ -117,7 +124,6 @@ func WithNoCompression() Option {
 		policy.Level = zlib.NoCompression
 		options.compressionPolicy = policy
 		options.compressionPolicySet = true
-		options.optimize = false
 	}
 }
 
@@ -196,7 +202,6 @@ type normalizedOptions struct {
 	sizeStr        string
 	fontDirStr     string
 	size           Size
-	optimize       bool
 	runtimePolicy
 }
 

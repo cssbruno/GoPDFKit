@@ -5,7 +5,6 @@ package document
 
 import (
 	"bytes"
-	"compress/zlib"
 	"fmt"
 	"strings"
 )
@@ -178,20 +177,17 @@ func documentNewWithDefaults(orientationStr, unitStr, sizeStr, fontDirStr string
 
 func newWithOptions(cfg normalizedOptions) (f *Document) {
 	f = documentNewWithDefaults(cfg.orientationStr, cfg.unitStr, cfg.sizeStr, cfg.fontDirStr, cfg.size, DefaultSettings())
-	f.applyNormalizedOptions(cfg, true)
+	f.applyNormalizedOptions(cfg)
 	return f
 }
 
-func (f *Document) applyNormalizedOptions(cfg normalizedOptions, allowOptimize bool) {
+func (f *Document) applyNormalizedOptions(cfg normalizedOptions) {
 	if f.err != nil {
 		return
 	}
 	f.applyRuntimePolicy(cfg.runtimePolicy)
 	if f.err != nil {
 		return
-	}
-	if cfg.optimize && allowOptimize {
-		f.SetCompressionLevel(zlib.BestCompression)
 	}
 }
 
@@ -301,7 +297,7 @@ func MustNew(options ...Option) *Document {
 func NewDocumentWithDefaults(defaults Defaults, options ...Option) (*Document, error) {
 	cfg := buildOptions(options...)
 	f := documentNewWithDefaults(cfg.orientationStr, cfg.unitStr, cfg.sizeStr, cfg.fontDirStr, cfg.size, defaults)
-	f.applyNormalizedOptions(cfg, defaults.Compression)
+	f.applyNormalizedOptions(cfg)
 	if f.err != nil {
 		return nil, f.err
 	}
