@@ -134,6 +134,11 @@ type OutputOptions struct {
 // new code.
 type OutputFileOptions = OutputOptions
 
+type outputRequest struct {
+	options OutputOptions
+	write   func(context.Context, io.Writer) error
+}
+
 // OutputAndClose sends the PDF document to the writer specified by w. This
 // method will close both f and w, even if an error is detected and no document
 // is produced.
@@ -155,14 +160,14 @@ func (f *Document) OutputAndClose(w io.WriteCloser) error {
 //
 // Most examples demonstrate the use of this method.
 func (f *Document) OutputFileAndClose(fileStr string) error {
-	return f.outputFileAndClose(fileStr, !f.outputPolicy.DisableSync)
+	return f.coordinateFileOutput(context.Background(), fileStr, f.documentOutputRequest(OutputOptions{}, false), !f.outputPolicy.DisableSync)
 }
 
 // OutputFileAndCloseNoSync creates or truncates fileStr without fsyncing the
 // temporary file before rename. It is intended for high-throughput batch
 // generation where the caller accepts weaker crash-durability guarantees.
 func (f *Document) OutputFileAndCloseNoSync(fileStr string) error {
-	return f.outputFileAndClose(fileStr, false)
+	return f.coordinateFileOutput(context.Background(), fileStr, f.documentOutputRequest(OutputOptions{}, false), false)
 }
 
 // OutputFile creates or truncates fileStr and writes the PDF document to it.
@@ -176,17 +181,6 @@ func (f *Document) OutputFileAndCloseWithOptions(fileStr string, options OutputF
 	return f.OutputFileWithOptions(fileStr, options)
 }
 
-func (f *Document) outputFileAndClose(fileStr string, syncOutput bool) error {
-	if f.err != nil {
-		return f.err
-	}
-	write := f.Output
-	if f.outputPolicy.StreamFinal {
-		write = f.OutputStream
-	}
-	return writeFileAtomically(fileStr, syncOutput, write)
-}
-
 // OutputFileWithOptions creates or truncates fileStr using output-wide options.
 func (f *Document) OutputFileWithOptions(fileStr string, options OutputOptions) error {
 	return f.OutputFileWithOptionsContext(context.Background(), fileStr, options)
@@ -195,15 +189,7 @@ func (f *Document) OutputFileWithOptions(fileStr string, options OutputOptions) 
 // OutputFileWithOptionsContext creates or truncates fileStr using output-wide
 // options and context cancellation.
 func (f *Document) OutputFileWithOptionsContext(ctx context.Context, fileStr string, options OutputOptions) error {
-	if f.err != nil {
-		return f.err
-	}
-	return writeFileAtomically(fileStr, f.syncOutputForOptions(options), func(w io.Writer) error {
-		if f.streamFinalForOptions(options) {
-			return f.OutputStreamWithOptionsContext(ctx, w, options)
-		}
-		return f.OutputWithOptionsContext(ctx, w, options)
-	})
+	return f.coordinateFileOutput(ctx, fileStr, f.documentOutputRequest(options, false), f.syncOutputForOptions(options))
 }
 
 // OutputFileStream creates or truncates fileStr and streams final PDF
@@ -215,12 +201,7 @@ func (f *Document) OutputFileStream(fileStr string) error {
 // OutputFileStreamContext creates or truncates fileStr and streams final PDF
 // serialization directly to the temporary file used for atomic output.
 func (f *Document) OutputFileStreamContext(ctx context.Context, fileStr string) error {
-	if f.err != nil {
-		return f.err
-	}
-	return writeFileAtomically(fileStr, !f.outputPolicy.DisableSync, func(w io.Writer) error {
-		return f.OutputStreamContext(ctx, w)
-	})
+	return f.coordinateFileOutput(ctx, fileStr, f.documentOutputRequest(OutputOptions{}, true), !f.outputPolicy.DisableSync)
 }
 
 // OutputFileStreamWithOptions creates or truncates fileStr and streams final
@@ -232,25 +213,33 @@ func (f *Document) OutputFileStreamWithOptions(fileStr string, options OutputOpt
 // OutputFileStreamWithOptionsContext creates or truncates fileStr and streams
 // final PDF serialization using output-wide options and context cancellation.
 func (f *Document) OutputFileStreamWithOptionsContext(ctx context.Context, fileStr string, options OutputOptions) error {
-	if f.err != nil {
-		return f.err
-	}
-	return writeFileAtomically(fileStr, f.syncOutputForOptions(options), func(w io.Writer) error {
-		return f.OutputStreamWithOptionsContext(ctx, w, options)
-	})
+	return f.coordinateFileOutput(ctx, fileStr, f.documentOutputRequest(options, true), f.syncOutputForOptions(options))
 }
 
 // OutputFileContext creates or truncates fileStr and stops before writing if
 // ctx is canceled. The atomic output path removes the temporary file on error.
 func (f *Document) OutputFileContext(ctx context.Context, fileStr string) error {
+	return f.coordinateFileOutput(ctx, fileStr, f.documentOutputRequest(OutputOptions{}, false), !f.outputPolicy.DisableSync)
+}
+
+func (f *Document) documentOutputRequest(options OutputOptions, forceStream bool) outputRequest {
+	return outputRequest{
+		options: options,
+		write: func(ctx context.Context, w io.Writer) error {
+			if forceStream || f.streamFinalForOptions(options) {
+				return f.OutputStreamContext(ctx, w)
+			}
+			return f.OutputContext(ctx, w)
+		},
+	}
+}
+
+func (f *Document) coordinateFileOutput(ctx context.Context, fileStr string, request outputRequest, syncOutput bool) error {
 	if f.err != nil {
 		return f.err
 	}
-	return writeFileAtomically(fileStr, !f.outputPolicy.DisableSync, func(w io.Writer) error {
-		if f.outputPolicy.StreamFinal {
-			return f.OutputStreamContext(ctx, w)
-		}
-		return f.OutputContext(ctx, w)
+	return writeFileAtomically(fileStr, syncOutput, func(w io.Writer) error {
+		return f.coordinateOutput(ctx, w, request)
 	})
 }
 
@@ -319,12 +308,7 @@ func (f *Document) OutputWithOptions(w io.Writer, options OutputOptions) error {
 // if output fails before the document closes, the previous output settings are
 // restored while the output error remains latched.
 func (f *Document) OutputWithOptionsContext(ctx context.Context, w io.Writer, options OutputOptions) error {
-	return f.withOutputOptions(options, func() error {
-		if f.streamFinalForOptions(options) {
-			return f.OutputStreamContext(ctx, w)
-		}
-		return f.OutputContext(ctx, w)
-	})
+	return f.coordinateOutput(ctx, w, f.documentOutputRequest(options, false))
 }
 
 // OutputStream sends the PDF document to w while streaming final PDF
@@ -346,8 +330,18 @@ func (f *Document) OutputStreamWithOptions(w io.Writer, options OutputOptions) e
 // OutputStreamWithOptionsContext streams final PDF serialization to w using
 // output-wide options and context cancellation.
 func (f *Document) OutputStreamWithOptionsContext(ctx context.Context, w io.Writer, options OutputOptions) error {
-	return f.withOutputOptions(options, func() error {
-		return f.OutputStreamContext(ctx, w)
+	return f.coordinateOutput(ctx, w, f.documentOutputRequest(options, true))
+}
+
+// coordinateOutput is the one path for public option-bearing output methods.
+// Writer and file variants supply only their destination; unsigned and signed
+// variants supply only their final serialization callback.
+func (f *Document) coordinateOutput(ctx context.Context, w io.Writer, request outputRequest) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return f.withOutputOptions(request.options, func() error {
+		return request.write(ctx, w)
 	})
 }
 

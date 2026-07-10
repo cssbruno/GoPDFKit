@@ -66,9 +66,7 @@ func (f *Document) OutputSignedFileContext(ctx context.Context, fileStr string, 
 		f.SetError(sign.ErrMissingOutput)
 		return sign.ErrMissingOutput
 	}
-	return writeFileAtomically(fileStr, !f.outputPolicy.DisableSync, func(w io.Writer) error {
-		return f.OutputSignedContext(ctx, w, options)
-	})
+	return f.coordinateFileOutput(ctx, fileStr, f.signedOutputRequest(options, OutputOptions{}), !f.outputPolicy.DisableSync)
 }
 
 // OutputSignedFileWithOptions writes the current document as a signed PDF using
@@ -85,9 +83,7 @@ func (f *Document) OutputSignedFileWithOptionsContext(ctx context.Context, fileS
 		f.SetError(sign.ErrMissingOutput)
 		return sign.ErrMissingOutput
 	}
-	return writeFileAtomically(fileStr, f.syncOutputForOptions(fileOptions), func(w io.Writer) error {
-		return f.OutputSignedWithOptionsContext(ctx, w, signOptions, fileOptions)
-	})
+	return f.coordinateFileOutput(ctx, fileStr, f.signedOutputRequest(signOptions, fileOptions), f.syncOutputForOptions(fileOptions))
 }
 
 // OutputSignedWithOptions writes the current document as a signed PDF using
@@ -99,9 +95,16 @@ func (f *Document) OutputSignedWithOptions(w io.Writer, signOptions sign.Options
 // OutputSignedWithOptionsContext writes the current document as a signed PDF
 // using output-wide options and context cancellation.
 func (f *Document) OutputSignedWithOptionsContext(ctx context.Context, w io.Writer, signOptions sign.Options, outputOptions OutputOptions) error {
-	return f.withOutputOptions(outputOptions, func() error {
-		return f.OutputSignedContext(ctx, w, signOptions)
-	})
+	return f.coordinateOutput(ctx, w, f.signedOutputRequest(signOptions, outputOptions))
+}
+
+func (f *Document) signedOutputRequest(signOptions sign.Options, outputOptions OutputOptions) outputRequest {
+	return outputRequest{
+		options: outputOptions,
+		write: func(ctx context.Context, w io.Writer) error {
+			return f.OutputSignedContext(ctx, w, signOptions)
+		},
+	}
 }
 
 func (f *Document) outputSignedBytes(options sign.Options) ([]byte, error) {

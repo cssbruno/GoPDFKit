@@ -235,7 +235,7 @@ type normalizedOptions struct {
 	fontDirStr     string
 	size           Size
 	optimize       bool
-	runtimePolicy
+	runtimePolicy  // one concrete owner for operational configuration
 }
 
 type runtimePolicy struct {
