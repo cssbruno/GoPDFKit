@@ -208,10 +208,6 @@ type Template interface {
 	Templates() []Template
 }
 
-type templateLegacyChildrenView interface {
-	Templates() []Template
-}
-
 func (f *Document) templateFontCatalog() {
 	f.out("/Font")
 	f.beginPDFDict()
@@ -398,7 +394,7 @@ func templateChildren(t TemplateView) []TemplateView {
 	if withChildren, ok := t.(TemplateChildrenView); ok && withChildren != nil {
 		return withChildren.TemplateViews()
 	}
-	withChildren, ok := t.(templateLegacyChildrenView)
+	withChildren, ok := t.(interface{ Templates() []Template })
 	if !ok || withChildren == nil {
 		return nil
 	}

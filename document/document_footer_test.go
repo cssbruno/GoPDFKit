@@ -26,7 +26,7 @@ func TestExtractHTMLFooterBlock(t *testing.T) {
 	if !ok {
 		t.Fatalf("footer block type = %T, want layout.ParagraphBlock", footer.Blocks[0])
 	}
-	if got := textSegmentsPlainText(block.Segments); got != "Page footer" {
+	if got := layout.TextSegmentsPlainText(block.Segments); got != "Page footer" {
 		t.Fatalf("footer text = %q, want Page footer", got)
 	}
 	if !footer.ReservePageArea {

@@ -11,11 +11,21 @@ GOLANGCI_LINT := $(TOOLS_BIN)/golangci-lint
 NILAWAY := $(TOOLS_BIN)/nilaway
 GOSEC := $(TOOLS_BIN)/gosec
 GOVULNCHECK := $(TOOLS_BIN)/govulncheck
+BENCHSTAT := $(TOOLS_BIN)/benchstat
 GOSEC_EXCLUDES ?= G115,G304,G401,G405,G501,G503,G505,G703
 COMPLIANCE_OUT ?= artifacts/compliance
 GENERATION_CORE_BENCH ?= BenchmarkGeneration(BaselineNoCompliance.*Concurrent40|TextConcurrent40|LongTextConcurrent40|UTF8Text.*Concurrent40|TextCompressionLevelConcurrent40|Images.*Concurrent40|SVGConcurrent40|TemplatesConcurrent40|ImportedPDFPagesConcurrent40|ProtectionConcurrent40|AttachmentsConcurrent40|HTMLLargeTableCompiled|HTMLWideTableCompiled)$
+BENCH ?= BenchmarkGenerationHTMLLargeTableCompiled$
+BENCH_PACKAGE ?= ./document
+BENCH_COUNT ?= 3
+BENCH_OUT ?= artifacts/benchmarks.txt
+GENERATION_CORE_BENCH_OUT ?= artifacts/generation-core-benchmarks.txt
+PROFILE_DIR ?= artifacts/profiles
+PROFILE_BENCHTIME ?= 10s
+ALLOC_PROFILE_BENCHTIME ?= 20x
+TRACE_BENCHTIME ?= 1s
 
-.PHONY: all documentation cov coverage-check test race vet fmt-check check modules tools tools-clean lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate clean
+.PHONY: all documentation cov coverage-check test race vet fmt-check check modules tools tools-clean benchstat lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget profile profile-cpu profile-alloc profile-block profile-mutex profile-trace compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate clean
 
 cov : all
 	go test $(GO_PACKAGES) -coverprofile=coverage && go tool cover -html=coverage -o=coverage.html
@@ -40,7 +50,7 @@ check : test vet fmt-check
 modules :
 	sh tools/test-go-modules.sh
 
-tools : $(GOLANGCI_LINT) $(NILAWAY) $(GOSEC) $(GOVULNCHECK)
+tools : $(GOLANGCI_LINT) $(NILAWAY) $(GOSEC) $(GOVULNCHECK) $(BENCHSTAT)
 
 $(TOOLS_BIN) :
 	mkdir -p "$(TOOLS_BIN)"
@@ -56,6 +66,11 @@ $(GOSEC) : tools/go.mod tools/go.sum | $(TOOLS_BIN)
 
 $(GOVULNCHECK) : tools/go.mod tools/go.sum | $(TOOLS_BIN)
 	cd $(TOOLS_DIR) && GOBIN="$(TOOLS_BIN)" go install golang.org/x/vuln/cmd/govulncheck
+
+$(BENCHSTAT) : tools/go.mod tools/go.sum | $(TOOLS_BIN)
+	cd $(TOOLS_DIR) && GOBIN="$(TOOLS_BIN)" go install golang.org/x/perf/cmd/benchstat
+
+benchstat : $(BENCHSTAT)
 
 tools-clean :
 	rm -rf "$(TOOLS_BIN)"
@@ -105,18 +120,38 @@ bench :
 	go test $(GO_PACKAGES) -run '^$$' -bench . -benchmem
 
 bench-ci :
-	mkdir -p artifacts
-	go test $(GO_PACKAGES) -run '^$$' -bench . -benchmem -count=3 | tee artifacts/benchmarks.txt
+	sh tools/run-benchmark.sh "$(BENCH_OUT)" go test $(GO_PACKAGES) -run '^$$' -bench . -benchmem -count="$(BENCH_COUNT)"
 
 bench-generation-core :
-	go test ./document -run '^$$' -bench '$(GENERATION_CORE_BENCH)' -benchmem
+	go test ./document -run '^$$' -bench '$(value GENERATION_CORE_BENCH)' -benchmem
 
 bench-generation-core-ci :
-	mkdir -p artifacts
-	go test ./document -run '^$$' -bench '$(GENERATION_CORE_BENCH)' -benchmem -count=3 | tee artifacts/generation-core-benchmarks.txt
+	sh tools/run-benchmark.sh "$(GENERATION_CORE_BENCH_OUT)" go test ./document -run '^$$' -bench '$(value GENERATION_CORE_BENCH)' -benchmem -count="$(BENCH_COUNT)"
 
-bench-generation-core-budget :
-	sh tools/benchmark-budget-check.sh artifacts/generation-core-benchmarks.txt
+bench-generation-core-budget : bench-generation-core-ci
+	sh tools/benchmark-budget-check.sh "$(GENERATION_CORE_BENCH_OUT)"
+
+profile : profile-cpu profile-alloc profile-block profile-mutex profile-trace
+
+profile-cpu :
+	mkdir -p "$(PROFILE_DIR)"
+	go test "$(BENCH_PACKAGE)" -run '^$$' -bench '$(value BENCH)' -benchtime="$(PROFILE_BENCHTIME)" -count=1 -o="$(abspath $(PROFILE_DIR))/" -outputdir="$(abspath $(PROFILE_DIR))" -cpuprofile=cpu.pprof
+
+profile-alloc :
+	mkdir -p "$(PROFILE_DIR)"
+	go test "$(BENCH_PACKAGE)" -run '^$$' -bench '$(value BENCH)' -benchtime="$(ALLOC_PROFILE_BENCHTIME)" -count=1 -o="$(abspath $(PROFILE_DIR))/" -outputdir="$(abspath $(PROFILE_DIR))" -memprofile=alloc.pprof -memprofilerate=1
+
+profile-block :
+	mkdir -p "$(PROFILE_DIR)"
+	go test "$(BENCH_PACKAGE)" -run '^$$' -bench '$(value BENCH)' -benchtime="$(PROFILE_BENCHTIME)" -count=1 -o="$(abspath $(PROFILE_DIR))/" -outputdir="$(abspath $(PROFILE_DIR))" -blockprofile=block.pprof -blockprofilerate=1
+
+profile-mutex :
+	mkdir -p "$(PROFILE_DIR)"
+	go test "$(BENCH_PACKAGE)" -run '^$$' -bench '$(value BENCH)' -benchtime="$(PROFILE_BENCHTIME)" -count=1 -o="$(abspath $(PROFILE_DIR))/" -outputdir="$(abspath $(PROFILE_DIR))" -mutexprofile=mutex.pprof -mutexprofilefraction=1
+
+profile-trace :
+	mkdir -p "$(PROFILE_DIR)"
+	go test "$(BENCH_PACKAGE)" -run '^$$' -bench '$(value BENCH)' -benchtime="$(TRACE_BENCHTIME)" -count=1 -o="$(abspath $(PROFILE_DIR))/" -outputdir="$(abspath $(PROFILE_DIR))" -trace=trace.out
 
 compliance-fixtures :
 	go run ./cmd/compliance-fixtures -out "$(COMPLIANCE_OUT)" $(if $(SRGB_ICC),-icc "$(SRGB_ICC)")

@@ -277,7 +277,7 @@ func (f *Document) LTR() {
 
 // open starts a PDF document.
 func (f *Document) open() {
-	f.state = 1
+	f.state = documentStateOpen
 }
 
 // Close terminates the PDF document. It is not necessary to call this method
@@ -306,7 +306,7 @@ func (f *Document) closeContext(ctx context.Context) {
 	if f.err != nil {
 		return
 	}
-	if f.state == 3 {
+	if f.state == documentStateClosed {
 		return
 	}
 	if f.page == 0 {

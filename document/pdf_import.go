@@ -5,9 +5,9 @@ package document
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/cssbruno/gopdfkit/importpdf"
 )
@@ -46,7 +46,7 @@ func (f *Document) ImportPageError(sourceFile string, pageNo int, box string) (i
 	if err := f.requireSecurityFeature("PDF import", f.securityPolicy.AllowPDFImport); err != nil {
 		return 0, err
 	}
-	source, err := f.openImportFile(sourceFile)
+	source, err := f.openImportSourceContext(context.Background(), sourceFile)
 	if err != nil {
 		f.SetError(err)
 		return 0, err
@@ -77,7 +77,7 @@ func (f *Document) ImportPageStreamContext(ctx context.Context, source io.Reader
 		f.SetError(err)
 		return 0, err
 	}
-	sourcePDF, err := f.openImportReaderContext(ctx, source)
+	sourcePDF, err := f.openImportSourceContext(ctx, source)
 	if err != nil {
 		f.SetError(err)
 		return 0, err
@@ -157,20 +157,12 @@ func GetPageSizes(source any) (map[int]map[string]Size, error) {
 // GetPageSizes returns the available page box sizes for a PDF source and stores
 // any import error on the document. Sizes are reported in PDF points.
 func (f *Document) GetPageSizes(source any) map[int]map[string]Size {
-	if _, ok := source.(string); ok && f.resourceLoader != nil {
-		sourcePDF, err := f.openImportSourceContext(context.Background(), source)
-		if err != nil {
-			f.SetError(err)
-			return nil
-		}
-		return documentPageSizes(sourcePDF.PageSizes())
-	}
-	sizes, err := GetPageSizes(source)
+	sourcePDF, err := f.openImportSourceContext(context.Background(), source)
 	if err != nil {
 		f.SetError(err)
 		return nil
 	}
-	return sizes
+	return documentPageSizes(sourcePDF.PageSizes())
 }
 
 func (f *Document) importPageFromSource(source *importpdf.Source, pageNo int, box string) int {
@@ -202,41 +194,11 @@ func (f *Document) importPageFromSourceErrorContext(ctx context.Context, source 
 	return f.addImportedPDFPage(page), nil
 }
 
-func (f *Document) openImportSource(source any) (*importpdf.Source, error) {
-	return f.openImportSourceContext(context.Background(), source)
-}
-
 func (f *Document) openImportSourceContext(ctx context.Context, source any) (*importpdf.Source, error) {
-	switch src := source.(type) {
-	case *importpdf.Source:
-		if src == nil {
-			return nil, fmt.Errorf("%w: source is nil", ErrUnsupportedPDFImport)
-		}
-		return src, nil
-	case string:
-		return f.openImportFileContext(ctx, src)
-	case []byte:
-		if err := f.checkImportedPDFBytes(int64(len(src))); err != nil {
-			return nil, err
-		}
-		source, err := importpdf.OpenBytesWithOptionsContext(ctx, src, f.importOptions())
-		if err != nil {
-			return nil, importContextOutputError(ctx, err)
-		}
-		return source, nil
-	case io.Reader:
-		return f.openImportReaderContext(ctx, src)
-	default:
-		return nil, fmt.Errorf("%w: unsupported source type %T", ErrUnsupportedPDFImport, source)
+	if source == nil {
+		return nil, fmt.Errorf("%w: source is nil", ErrUnsupportedPDFImport)
 	}
-}
-
-func (f *Document) openImportFile(path string) (*importpdf.Source, error) {
-	return f.openImportFileContext(context.Background(), path)
-}
-
-func (f *Document) openImportFileContext(ctx context.Context, path string) (*importpdf.Source, error) {
-	if f.resourceLoader != nil {
+	if path, ok := source.(string); ok && f.resourceLoader != nil {
 		reader, info, err := f.resourceLoader.OpenResource(ctx, ResourcePDFImport, path)
 		if err != nil {
 			return nil, err
@@ -248,39 +210,26 @@ func (f *Document) openImportFileContext(ctx context.Context, path string) (*imp
 		if err := f.checkImportedPDFBytes(info.Size); err != nil {
 			return nil, err
 		}
-		return f.openImportReaderContext(ctx, reader)
+		source = reader
 	}
-	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
-		if err := f.checkImportedPDFBytes(info.Size()); err != nil {
-			return nil, err
+
+	switch src := source.(type) {
+	case *importpdf.Source:
+		if src == nil {
+			return nil, fmt.Errorf("%w: source is nil", ErrUnsupportedPDFImport)
 		}
+	case string, []byte, io.Reader:
+	default:
+		return nil, fmt.Errorf("%w: unsupported source type %T", ErrUnsupportedPDFImport, source)
 	}
-	source, err := importpdf.OpenFileWithOptionsContext(ctx, path, f.importOptions())
-	if err != nil {
-		return nil, importContextOutputError(ctx, err)
-	}
-	return source, nil
-}
 
-func (f *Document) openImportReader(source io.Reader) (*importpdf.Source, error) {
-	return f.openImportReaderContext(context.Background(), source)
-}
-
-func (f *Document) openImportReaderContext(ctx context.Context, source io.Reader) (*importpdf.Source, error) {
-	if source == nil {
-		return nil, fmt.Errorf("%w: source is nil", ErrUnsupportedPDFImport)
-	}
-	limit := f.importedPDFByteLimit()
-	data, err := io.ReadAll(io.LimitReader(contextReader{ctx: ctx, r: source}, limit+1))
-	if err == nil && int64(len(data)) > limit {
-		err = fmt.Errorf("%w: PDF import source exceeds maximum size", ErrUnsupportedPDFImport)
-	}
+	sourcePDF, err := importpdf.OpenWithOptionsContext(ctx, source, f.importOptions())
 	if err != nil {
+		err = importContextOutputError(ctx, err)
+		if errors.Is(err, importpdf.ErrSourceTooLarge) {
+			return nil, fmt.Errorf("%w: %w", ErrUnsupportedPDFImport, err)
+		}
 		return nil, err
-	}
-	sourcePDF, err := importpdf.OpenBytesImmutableWithOptionsContext(ctx, data, f.importOptions())
-	if err != nil {
-		return nil, importContextOutputError(ctx, err)
 	}
 	return sourcePDF, nil
 }
@@ -293,25 +242,6 @@ func importContextOutputError(ctx context.Context, err error) error {
 		return ctxErr
 	}
 	return err
-}
-
-type contextReader struct {
-	ctx context.Context
-	r   io.Reader
-}
-
-func (r contextReader) Read(p []byte) (int, error) {
-	if err := outputCanceledError(r.ctx); err != nil {
-		return 0, err
-	}
-	n, err := r.r.Read(p)
-	if err != nil {
-		return n, err
-	}
-	if n == 0 {
-		return n, outputCanceledError(r.ctx)
-	}
-	return n, nil
 }
 
 func (f *Document) checkImportedPDFBytes(size int64) error {

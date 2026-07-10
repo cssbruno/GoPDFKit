@@ -5,7 +5,6 @@ package document
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -524,21 +523,19 @@ func utf8FontDefinition(fontKey, fileStr string, utf8Bytes []byte) (fontDefiniti
 	return utf8FontDefinitionFromBytes(fontKey, fileStr, append([]byte(nil), utf8Bytes...))
 }
 
-func utf8FontDefinitionOwned(fontKey, fileStr string, utf8Bytes []byte) (fontDefinition, error) {
-	return utf8FontDefinitionFromBytes(fontKey, fileStr, utf8Bytes)
-}
-
 func utf8FontDefinitionFromBytes(fontKey, fileStr string, utf8Bytes []byte) (fontDefinition, error) {
-	reader := fileReader{readerPosition: 0, array: utf8Bytes}
-	utf8File := newUTF8Font(&reader)
-	utf8File.sourceID = sha256.Sum256(utf8Bytes)
-	if err := utf8File.parseFile(); err != nil {
+	utf8File, err := parseUTF8Font(utf8Bytes)
+	if err != nil {
 		return fontDefinition{}, err
 	}
+	return utf8FontDefinitionFromParsed(fontKey, fileStr, utf8File), nil
+}
+
+func utf8FontDefinitionFromParsed(fontKey, fileStr string, utf8File *utf8FontFile) fontDefinition {
 	desc := FontDescriptor{Ascent: utf8File.Ascent, Descent: utf8File.Descent, CapHeight: utf8File.CapHeight, Flags: utf8File.Flags, FontBBox: utf8File.Bbox, ItalicAngle: utf8File.ItalicAngle, StemV: utf8File.StemV, MissingWidth: round(utf8File.DefaultWidth)}
 	def := fontDefinition{Tp: "UTF8", Name: fontKey, Desc: desc, Up: round(utf8File.UnderlinePosition), Ut: round(utf8File.UnderlineThickness), Cw: append([]int(nil), utf8File.CharWidths...), File: fileStr, utf8File: utf8File}
 	def.i, _ = generateFontID(def)
-	return def, nil
+	return def
 }
 
 func defaultUTF8UsedRunes(alias string) map[int]int {

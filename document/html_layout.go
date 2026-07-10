@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/gopdfkit/internal/layoutgeom"
 )
 
 type htmlTextStyle struct {
@@ -555,7 +555,7 @@ func (html *HTML) compiledTableHeight(compiled *CompiledHTML, tokens []HTMLSegme
 	tableEl := HTMLSegmentType{Cat: 'O', Str: "table", Attr: table.attrs}
 	tableAncestors := appendHTMLAncestors(ancestors, tableEl)
 	colWidths := html.tableColumnWidths(layoutRows, colCount, tableWd, html.pdf)
-	colOffsets := layout.TrackOffsets(colWidths)
+	colOffsets := layoutgeom.TrackOffsets(colWidths)
 	rowHeights := html.measureTableRowHeights(compiled, layoutRows, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors, htmlBorderStyle{}, table.attrs)
 	return html.tableCaptionHeight(compiled, table, tableWd, lineHt, inherited, fallback, cssRules, tableAncestors) + sumFloat64(rowHeights) + lineHt
 }

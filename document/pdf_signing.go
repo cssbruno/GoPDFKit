@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"strings"
 
 	"github.com/cssbruno/gopdfkit/sign"
 )
@@ -19,6 +20,10 @@ func (f *Document) OutputSigned(w io.Writer, options sign.Options) error {
 // OutputSignedContext writes the current document as a signed PDF and checks
 // ctx before generation/signing and before the final writer call.
 func (f *Document) OutputSignedContext(ctx context.Context, w io.Writer, options sign.Options) error {
+	return f.writeSignedOutputContext(ctx, w, options)
+}
+
+func (f *Document) writeSignedOutputContext(ctx context.Context, w io.Writer, options sign.Options) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -102,7 +107,7 @@ func (f *Document) signedOutputRequest(signOptions sign.Options, outputOptions O
 	return outputRequest{
 		options: outputOptions,
 		write: func(ctx context.Context, w io.Writer) error {
-			return f.OutputSignedContext(ctx, w, signOptions)
+			return f.writeSignedOutputContext(ctx, w, signOptions)
 		},
 	}
 }
@@ -112,13 +117,14 @@ func (f *Document) outputSignedBytes(options sign.Options) ([]byte, error) {
 }
 
 func (f *Document) outputSignedBytesContext(ctx context.Context, options sign.Options) ([]byte, error) {
+	options = f.signingOptions(options)
 	var buf bytes.Buffer
 	outputPolicy := f.outputPolicy
 	if outputPolicy.StreamFinal {
 		f.outputPolicy.StreamFinal = false
 		defer func() { f.outputPolicy = outputPolicy }()
 	}
-	if err := f.OutputContext(ctx, &buf); err != nil {
+	if err := f.writeBufferedOutputContext(ctx, &buf); err != nil {
 		return nil, err
 	}
 	if err := outputCanceledError(ctx); err != nil {
@@ -134,4 +140,11 @@ func (f *Document) outputSignedBytesContext(ctx context.Context, options sign.Op
 		return nil, err
 	}
 	return signed, nil
+}
+
+func (f *Document) signingOptions(options sign.Options) sign.Options {
+	if strings.TrimSpace(options.FieldName) == "" && f.signatureFieldName != "" {
+		options.FieldName = f.signatureFieldName
+	}
+	return options
 }

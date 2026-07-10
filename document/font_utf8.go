@@ -75,6 +75,7 @@ type utf8FontFile struct {
 	CharWidths           []int
 	DefaultWidth         float64
 	CodeSymbolDictionary map[int]int
+	hasUnicodeCMap       bool
 	// static holds parsed tables that depend only on the font file (not the
 	// per-document used-rune subset). When non-nil, GenerateCutFont reuses it
 	// read-only instead of re-parsing the cmap/loca/table directory for every
@@ -198,6 +199,16 @@ func newUTF8Font(reader *fileReader) *utf8FontFile {
 	return &utf
 }
 
+func parseUTF8Font(data []byte) (*utf8FontFile, error) {
+	reader := fileReader{array: data}
+	utf := newUTF8Font(&reader)
+	utf.sourceID = sha256.Sum256(data)
+	if err := utf.parseFile(); err != nil {
+		return nil, err
+	}
+	return utf, nil
+}
+
 func (utf *utf8FontFile) parseFile() error {
 	utf.fileReader.readerPosition = 0
 	utf.symbolPosition = make([]int, 0)
@@ -206,6 +217,7 @@ func (utf *utf8FontFile) parseFile() error {
 	utf.outTablesData = make(map[string][]byte)
 	utf.Ascent = 0
 	utf.Descent = 0
+	utf.hasUnicodeCMap = false
 	codeType := uint32(utf.readUint32())
 	if utf.fileReader.err != nil {
 		return utf.fileReader.err
@@ -608,6 +620,7 @@ func (utf *utf8FontFile) parseTables() {
 	w := utf.parseOS2Table()
 	utf.parsePOSTTable(w)
 	runeCMAPPosition := utf.parseCMAPTable(f)
+	utf.hasUnicodeCMap = runeCMAPPosition != 0
 
 	utf.SeekTable("maxp")
 	utf.skip(4)
@@ -616,6 +629,7 @@ func (utf *utf8FontFile) parseTables() {
 	symbolCharDictionary := make(map[int][]int)
 	charSymbolDictionary := make(map[int]int)
 	utf.generateSCCSDictionaries(runeCMAPPosition, symbolCharDictionary, charSymbolDictionary)
+	utf.charSymbolDictionary = charSymbolDictionary
 
 	scale := 1000.0 / float64(utf.fontElementSize)
 	utf.parseHMTXTable(n, numSymbols, symbolCharDictionary, scale)
@@ -778,16 +792,6 @@ func (utf *utf8FontFile) generateCMAPTable(cidSymbolPairCollection map[int]int, 
 	return cmap
 }
 
-// buildUTF8StaticTables parses the immutable, font-only tables from raw
-// TrueType bytes. The returned value is shared read-only across all documents
-// that embed the same font.
-func buildUTF8StaticTables(data []byte) (*utf8StaticTables, error) {
-	reader := fileReader{array: data}
-	utf := newUTF8Font(&reader)
-	utf.sourceID = sha256.Sum256(data)
-	return utf.parseStaticTables()
-}
-
 // parseStaticTables parses the font-only tables (table directory, cmap
 // dictionaries and loca glyph offsets) that do not depend on which runes a
 // document uses. The result is immutable and may be shared read-only across
@@ -804,6 +808,24 @@ func (utf *utf8FontFile) parseStaticTables() (*utf8StaticTables, error) {
 	utf.skip(4)
 	utf.generateTableDescriptions()
 
+	if utf.generateCMAP() == nil {
+		return nil, errors.New("font does not have a Unicode cmap table")
+	}
+	utf.hasUnicodeCMap = true
+	return utf.staticTablesFromParsedFont()
+}
+
+// staticTablesFromParsedFont builds the immutable subset metadata from a font
+// that parseFile has already validated. It deliberately reuses the parsed SFNT
+// directory and cmap instead of parsing the same bytes a second time.
+func (utf *utf8FontFile) staticTablesFromParsedFont() (*utf8StaticTables, error) {
+	if len(utf.tableDescriptions) == 0 {
+		return nil, errors.New("font does not have parsed TrueType tables")
+	}
+	if !utf.hasUnicodeCMap || utf.charSymbolDictionary == nil {
+		return nil, errors.New("font does not have a Unicode cmap table")
+	}
+
 	utf.SeekTable("head")
 	utf.skip(50)
 	locaFormat := utf.readUint16()
@@ -815,10 +837,6 @@ func (utf *utf8FontFile) parseStaticTables() (*utf8StaticTables, error) {
 	utf.SeekTable("maxp")
 	utf.skip(4)
 	numSymbols := utf.readUint16()
-
-	if utf.generateCMAP() == nil {
-		return nil, errors.New("font does not have a Unicode cmap table")
-	}
 
 	utf.parseLOCATable(locaFormat, numSymbols)
 	if utf.fileReader.err != nil {

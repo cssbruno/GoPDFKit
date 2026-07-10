@@ -11,7 +11,8 @@ import (
 )
 
 // FontCache stores parsed UTF-8 TrueType font metrics for reuse across
-// documents. Each Document still receives its own mutable subset state.
+// documents. Its methods are safe for concurrent use; each Document still
+// receives its own mutable subset state.
 type FontCache struct {
 	mu    sync.RWMutex
 	fonts map[string]cachedUTF8Font
@@ -165,12 +166,13 @@ func storeSharedUTF8FontFile(key sharedUTF8FontFileCacheKey, cached cachedUTF8Fo
 
 func newCachedUTF8Font(fontKey, fontPath string, data []byte) (cachedUTF8Font, error) {
 	stored := append([]byte(nil), data...)
-	def, err := utf8FontDefinitionOwned(fontKey, fontPath, stored)
+	parsed, err := parseUTF8Font(stored)
 	if err != nil {
 		return cachedUTF8Font{}, err
 	}
+	def := utf8FontDefinitionFromParsed(fontKey, fontPath, parsed)
 	def.utf8File = nil
-	static, err := buildUTF8StaticTables(stored)
+	static, err := parsed.staticTablesFromParsedFont()
 	if err != nil {
 		return cachedUTF8Font{}, err
 	}

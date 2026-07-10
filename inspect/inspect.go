@@ -12,8 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"regexp"
-	"strconv"
 	"strings"
 	"unicode/utf16"
 
@@ -25,13 +23,10 @@ const (
 	maxDecodedStreamBytes = 64 * 1024 * 1024
 	maxDecodedStreamCount = 4096
 	maxDecodedTotalBytes  = 128 * 1024 * 1024
-	mediaBoxMatchCount    = 5
 	textTokenCapacity     = 8
 	pdfOctalBase          = 8
 	utf16BOMBytes         = 2
 )
-
-var mediaBoxPattern = regexp.MustCompile(`/MediaBox\s*\[\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+))`)
 
 // ValidateStructure checks that data can be parsed as an unencrypted classic
 // PDF with at least one importable page.
@@ -69,28 +64,15 @@ func PageCountContext(ctx context.Context, data []byte) (int, error) {
 
 // FirstPageSizePoints returns the first MediaBox dimensions in PDF points.
 func FirstPageSizePoints(data []byte) (float64, float64, error) {
-	match := mediaBoxPattern.FindSubmatch(data)
-	if len(match) != mediaBoxMatchCount {
+	source, err := importpdf.OpenBytes(data)
+	if err != nil {
+		return 0, 0, fmt.Errorf("parse pdf: %w", err)
+	}
+	size, ok := source.PageSizes()[1]["MediaBox"]
+	if !ok {
 		return 0, 0, errors.New("pdf MediaBox not found")
 	}
-
-	llx, err := strconv.ParseFloat(string(match[1]), 64)
-	if err != nil {
-		return 0, 0, fmt.Errorf("parse MediaBox lower-left x: %w", err)
-	}
-	lly, err := strconv.ParseFloat(string(match[2]), 64)
-	if err != nil {
-		return 0, 0, fmt.Errorf("parse MediaBox lower-left y: %w", err)
-	}
-	urx, err := strconv.ParseFloat(string(match[3]), 64)
-	if err != nil {
-		return 0, 0, fmt.Errorf("parse MediaBox upper-right x: %w", err)
-	}
-	ury, err := strconv.ParseFloat(string(match[4]), 64)
-	if err != nil {
-		return 0, 0, fmt.Errorf("parse MediaBox upper-right y: %w", err)
-	}
-	return urx - llx, ury - lly, nil
+	return size.Wd, size.Ht, nil
 }
 
 // Text extracts literal text operators from PDF content streams.

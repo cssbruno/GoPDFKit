@@ -5,6 +5,7 @@ package document_test
 
 import (
 	"bytes"
+	"errors"
 	"math"
 	"os"
 	"strings"
@@ -121,5 +122,18 @@ func TestImportPageRejectsUnsupportedSource(t *testing.T) {
 	}
 	if !pdf.Err() {
 		t.Fatal("expected unsupported source error")
+	}
+	if !errors.Is(pdf.Error(), document.ErrUnsupportedPDFImport) {
+		t.Fatalf("unsupported source error = %v, want ErrUnsupportedPDFImport", pdf.Error())
+	}
+}
+
+func TestDocumentGetPageSizesAppliesImportLimit(t *testing.T) {
+	pdf := document.MustNew(document.WithLimits(document.Limits{MaxImportedPDFBytes: 3}))
+	if sizes := pdf.GetPageSizes(importSourcePDF(t, false)); sizes != nil {
+		t.Fatalf("GetPageSizes() = %#v, want nil", sizes)
+	}
+	if !errors.Is(pdf.Error(), document.ErrUnsupportedPDFImport) {
+		t.Fatalf("GetPageSizes() error = %v, want ErrUnsupportedPDFImport", pdf.Error())
 	}
 }

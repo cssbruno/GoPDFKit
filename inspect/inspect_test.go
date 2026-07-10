@@ -84,12 +84,26 @@ func TestInspectContextCanceled(t *testing.T) {
 }
 
 func TestFirstPageSizePointsUsesMediaBoxDimensions(t *testing.T) {
-	width, height, err := FirstPageSizePoints([]byte("/MediaBox [-10.5 20 110 220]"))
+	pdfBytes := inspectTestPDF(t)
+	pdfBytes = bytes.Replace(
+		pdfBytes,
+		[]byte("/MediaBox [0 0 595.28 841.89]"),
+		[]byte("/MediaBox [-10.5 20 110 220 ]"),
+		1,
+	)
+
+	width, height, err := FirstPageSizePoints(pdfBytes)
 	if err != nil {
 		t.Fatalf("FirstPageSizePoints() error = %v", err)
 	}
 	if width != 120.5 || height != 200 {
 		t.Fatalf("FirstPageSizePoints() = %v, %v; want 120.5, 200", width, height)
+	}
+}
+
+func TestFirstPageSizePointsRejectsUnparsedFragment(t *testing.T) {
+	if _, _, err := FirstPageSizePoints([]byte("/MediaBox [0 0 10 20]")); err == nil {
+		t.Fatal("FirstPageSizePoints() error = nil, want invalid PDF error")
 	}
 }
 

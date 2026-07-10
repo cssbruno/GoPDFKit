@@ -174,11 +174,11 @@ func (f *Document) putcatalog() {
 	if f.nXmp > 0 {
 		f.outf("/Metadata %d 0 R", f.nXmp)
 	}
+	if strings.TrimSpace(f.compliance.Lang) != "" {
+		f.outf("/Lang %s", f.textstring(f.compliance.Lang))
+	}
 	if f.compliance.PDFUA2 {
 		f.out("/MarkInfo << /Marked true >>")
-		if strings.TrimSpace(f.compliance.Lang) != "" {
-			f.outf("/Lang %s", f.textstring(f.compliance.Lang))
-		}
 		f.out("/ViewerPreferences << /DisplayDocTitle true >>")
 	}
 	if f.tagged.structTreeRootObj > 0 {
@@ -401,7 +401,7 @@ func (f *Document) enddocContext(ctx context.Context) {
 	if f.err != nil {
 		return
 	}
-	defer f.cleanupAttachmentCompressedFiles()
+	defer f.ensureResourceStore().cleanupAttachmentCompressedFiles()
 	if err := outputCanceledError(ctx); err != nil {
 		f.SetError(err)
 		return
@@ -476,7 +476,7 @@ func (f *Document) enddocContext(ctx context.Context) {
 		f.SetError(f.outputSink.err)
 		return
 	}
-	f.state = 3
+	f.state = documentStateClosed
 }
 
 func (f *Document) needsFileIDHash() bool {

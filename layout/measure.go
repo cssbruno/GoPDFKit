@@ -6,6 +6,8 @@ package layout
 import (
 	"strings"
 	"unicode"
+
+	"github.com/cssbruno/gopdfkit/internal/layoutgeom"
 )
 
 const (
@@ -326,8 +328,16 @@ func measureQRVerificationBlock(ctx MeasureContext, block QRVerificationBlock) B
 	if qrSize <= 0 {
 		qrSize = 25
 	}
-	textHeight := measureTextSegments(ctx, block.Text, MergedTextStyle(ctx.DefaultStyle, style), ctx.Width-qrSize)
-	height := measureMaxFloat(qrSize, textHeight) + VerticalSpacing(box.Margin) + VerticalSpacing(box.Padding) + BorderVertical(box.Border)
+	textWidth := ctx.Width - qrSize
+	if strings.EqualFold(block.QR.Align, "center") || strings.EqualFold(block.QR.Align, "c") {
+		textWidth = ctx.Width
+	}
+	textHeight := measureTextSegments(ctx, block.Text, MergedTextStyle(ctx.DefaultStyle, style), textWidth)
+	contentHeight := measureMaxFloat(qrSize, textHeight)
+	if strings.EqualFold(block.QR.Align, "center") || strings.EqualFold(block.QR.Align, "c") {
+		contentHeight = qrSize + 2 + textHeight
+	}
+	height := contentHeight + VerticalSpacing(box.Margin) + VerticalSpacing(box.Padding) + BorderVertical(box.Border)
 	return BlockMeasurement{
 		Kind:         block.DocumentBlockKind(),
 		Width:        ctx.Width,
@@ -420,7 +430,7 @@ func measureTableRow(ctx MeasureContext, row TableRow, table TableBlock) BlockMe
 		}
 		cellWidth := sumMeasureFloat64(widths[col:measureMinInt(col+span, len(widths))])
 		childCtx := ctx
-		cellBox := cell.EffectiveBox()
+		cellBox := tableCellBox(cell.EffectiveBox(), ctx.CellPadding)
 		cellStyle := cell.EffectiveStyle()
 		childCtx.Width = cellWidth - horizontalSpacing(cellBox.Padding) - borderHorizontal(cellBox.Border)
 		cellMeasure := measureBlockSequence(childCtx, cell.Blocks)
@@ -458,6 +468,12 @@ func measureTableRowColumnCount(row TableRow) int {
 
 func measureTextSegments(ctx MeasureContext, segments []TextSegment, style TextStyle, width float64) float64 {
 	lineHeight := ResolvedLineHeight(style)
+	for _, segment := range segments {
+		segmentHeight := ResolvedLineHeight(MergedTextStyle(style, segment.EffectiveStyle()))
+		if segmentHeight > lineHeight {
+			lineHeight = segmentHeight
+		}
+	}
 	text := TextSegmentsPlainText(segments)
 	if text == "" {
 		return lineHeight
@@ -627,36 +643,18 @@ func measureMinInt(a, b int) int {
 }
 
 func measureTableColumnWidths(total float64, count int, columns []TableColumn) []float64 {
-	if count <= 0 {
-		return nil
+	constraints := make([]layoutgeom.TrackConstraint, len(columns))
+	for i, column := range columns {
+		constraints[i] = layoutgeom.TrackConstraint{Preferred: column.Width, Min: column.MinWidth, Max: column.MaxWidth}
 	}
-	widths := make([]float64, count)
-	fixed := 0.0
-	for i := 0; i < count && i < len(columns); i++ {
-		if columns[i].Width > 0 {
-			widths[i] = columns[i].Width
-			fixed += widths[i]
-		}
+	return layoutgeom.ResolveTracks(total, count, constraints)
+}
+
+func tableCellBox(box BoxStyle, fallback float64) BoxStyle {
+	if box.Padding == (Spacing{}) && fallback > 0 {
+		box.Padding = Spacing{Top: fallback, Right: fallback, Bottom: fallback, Left: fallback}
 	}
-	remainingCount := 0
-	for _, width := range widths {
-		if width <= 0 {
-			remainingCount++
-		}
-	}
-	fill := 0.0
-	if remainingCount > 0 {
-		fill = (total - fixed) / float64(remainingCount)
-	}
-	if fill <= 0 {
-		fill = total / float64(count)
-	}
-	for i := range widths {
-		if widths[i] <= 0 {
-			widths[i] = fill
-		}
-	}
-	return widths
+	return box
 }
 
 func sumMeasureFloat64(values []float64) float64 {

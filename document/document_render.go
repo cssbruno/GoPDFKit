@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cssbruno/gopdfkit/internal/layoutgeom"
 	"github.com/cssbruno/gopdfkit/layout"
 )
 
@@ -37,6 +38,9 @@ func (f *Document) WriteDocument(doc *layout.LayoutDocument) {
 	if doc.Metadata.Author != "" {
 		f.SetAuthor(doc.Metadata.Author, true)
 	}
+	if strings.TrimSpace(doc.Language) != "" {
+		f.compliance.Lang = strings.TrimSpace(doc.Language)
+	}
 	template := doc.PageTemplate
 	f.applyPageTemplateMargins(template)
 	if len(doc.Attachments) > 0 {
@@ -52,9 +56,8 @@ func (f *Document) WriteDocument(doc *layout.LayoutDocument) {
 	renderer.renderHeader()
 	renderer.renderBlocks(doc.Body)
 	if doc.Signature != nil {
-		for _, row := range doc.Signature.Rows {
-			renderer.renderBlock(row)
-		}
+		f.signatureFieldName = doc.Signature.PAdESFieldName()
+		renderer.renderSignature(*doc.Signature)
 	}
 	if doc.QR != nil {
 		renderer.renderBlock(layout.QRVerificationBlock{QR: *doc.QR})
@@ -81,6 +84,10 @@ type documentRenderer struct {
 	measureCtxUnit  float64
 	measureCtxOK    bool
 	imageNameCache  map[documentImageCacheKey]string
+	scopedStyle     layout.TextStyle
+	scopedStyleOK   bool
+	boxHeight       float64
+	boxHeightOK     bool
 }
 
 type documentImageCacheKey struct {
@@ -91,12 +98,30 @@ type documentImageCacheKey struct {
 type documentTableRowMeasurement struct {
 	height float64
 	cells  []documentTableCellMeasurement
+	row    layout.TableRow
+	header bool
 }
 
 type documentTableCellMeasurement struct {
 	width         float64
 	height        float64
+	contentHeight float64
 	blockMeasures []layout.BlockMeasurement
+	cell          layout.TableCell
+	column        int
+	colSpan       int
+	rowSpan       int
+	tagRowSpan    int
+}
+
+type documentTableLayout struct {
+	widths         []float64
+	offsets        []float64
+	rowOffsets     []float64
+	rows           []documentTableRowMeasurement
+	headerRows     int
+	repeatHeader   bool
+	borderCollapse bool
 }
 
 func (r *documentRenderer) contentWidth() float64 {
@@ -125,6 +150,18 @@ func (r *documentRenderer) withContentWidth(width float64, render func()) {
 	render()
 }
 
+func (r *documentRenderer) withTextStyle(style layout.TextStyle, render func()) {
+	oldStyle, oldOK := r.scopedStyle, r.scopedStyleOK
+	if oldOK {
+		style = layout.MergedTextStyle(oldStyle, style)
+	}
+	r.scopedStyle, r.scopedStyleOK = style, true
+	defer func() {
+		r.scopedStyle, r.scopedStyleOK = oldStyle, oldOK
+	}()
+	render()
+}
+
 func (r *documentRenderer) measureContext() layout.MeasureContext {
 	return r.measureContextForWidth(r.contentWidth())
 }
@@ -138,18 +175,22 @@ func (r *documentRenderer) measureContextForWidth(width float64) layout.MeasureC
 		r.measureCtxUnit = r.pdf.fontSize
 		r.measureCtxOK = true
 	}
-	return r.measureCtx
+	ctx := r.measureCtx
+	if r.scopedStyleOK {
+		ctx.DefaultStyle = layout.MergedTextStyle(ctx.DefaultStyle, r.scopedStyle)
+	}
+	return ctx
 }
 
 func (r *documentRenderer) mergedStyle(style layout.TextStyle) layout.TextStyle {
-	return mergedTextStyle(r.measureContext().DefaultStyle, style)
+	return layout.MergedTextStyle(r.measureContext().DefaultStyle, style)
 }
 
 func (r *documentRenderer) textSegmentsPlainText(segments []layout.TextSegment) string {
 	if len(segments) == 0 {
 		return ""
 	}
-	return textSegmentsPlainText(segments)
+	return layout.TextSegmentsPlainText(segments)
 }
 
 func (r *documentRenderer) availableHeight() float64 {
@@ -253,6 +294,11 @@ func (r *documentRenderer) renderBlockMeasured(block layout.Block, measure layou
 	if !r.renderingShell && (measure.BreakBefore || measure.ShouldMoveToNextPage(r.availableHeight())) {
 		r.addPageWithTemplate()
 	}
+	oldBoxHeight, oldBoxHeightOK := r.boxHeight, r.boxHeightOK
+	r.boxHeight, r.boxHeightOK = measure.Height, measure.Height > 0
+	defer func() {
+		r.boxHeight, r.boxHeightOK = oldBoxHeight, oldBoxHeightOK
+	}()
 	switch b := block.(type) {
 	case layout.ParagraphBlock:
 		r.renderParagraph(b)
@@ -309,9 +355,8 @@ func (r *documentRenderer) renderParagraph(block layout.ParagraphBlock) {
 	box := documentParagraphBox(block.EffectiveBox())
 	r.renderBox(box, func() {
 		style := r.mergedStyle(block.EffectiveStyle())
-		r.applyTextStyle(style)
 		r.pdf.SetNextTextRole(taggedRoleP)
-		r.pdf.MultiCell(r.contentWidth(), resolvedLineHeight(style), r.textSegmentsPlainText(block.Segments), "", textAlign(style.Align), false)
+		r.renderTextSegments(block.Segments, style, r.contentWidth())
 	})
 }
 
@@ -320,17 +365,63 @@ func (r *documentRenderer) renderHeading(block layout.HeadingBlock) {
 	blockStyle := block.EffectiveStyle()
 	r.renderBox(box, func() {
 		defaultStyle := r.measureContext().DefaultStyle
-		style := mergedTextStyle(defaultStyle, blockStyle)
+		style := layout.MergedTextStyle(defaultStyle, blockStyle)
 		style.Bold = true
 		if blockStyle.FontSize <= 0 {
-			style.FontSize = documentHeadingFontSize(defaultStyle.FontSize, block.Level)
-			style.LineHeight = firstPositive(blockStyle.LineHeight, defaultStyle.LineHeight*style.FontSize/defaultStyle.FontSize)
+			style.FontSize = layout.HeadingFontSize(defaultStyle.FontSize, block.Level)
+			style.LineHeight = layout.FirstPositive(blockStyle.LineHeight, defaultStyle.LineHeight*style.FontSize/defaultStyle.FontSize)
 		}
-		r.applyTextStyle(style)
 		r.pdf.SetNextTextRole(documentHeadingRole(block.Level))
-		r.pdf.MultiCell(r.contentWidth(), resolvedLineHeight(style), r.textSegmentsPlainText(block.Segments), "", textAlign(style.Align), false)
-		r.pdf.Ln(resolvedLineHeight(style) * 0.25)
+		r.renderTextSegments(block.Segments, style, r.contentWidth())
+		r.pdf.Ln(layout.ResolvedLineHeight(style) * 0.25)
 	})
+}
+
+func (r *documentRenderer) renderTextSegments(segments []layout.TextSegment, style layout.TextStyle, width float64) {
+	lineHeight := layout.ResolvedLineHeight(style)
+	if !textSegmentsHavePresentation(segments) {
+		r.applyTextStyle(style)
+		r.pdf.MultiCell(width, lineHeight, r.textSegmentsPlainText(segments), "", textAlign(style.Align), false)
+		return
+	}
+
+	startX, startY := r.pdf.GetXY()
+	r.applyTextStyle(style)
+	plainWidth := r.pdf.GetStringWidth(r.textSegmentsPlainText(segments))
+	if plainWidth <= width {
+		switch textAlign(style.Align) {
+		case "C":
+			r.pdf.SetX(startX + (width-plainWidth)/2)
+		case "R":
+			r.pdf.SetX(startX + width - plainWidth)
+		}
+	}
+	for _, segment := range segments {
+		segmentStyle := layout.MergedTextStyle(style, segment.EffectiveStyle())
+		r.applyTextStyle(segmentStyle)
+		if segment.Link != "" {
+			r.pdf.WriteLinkString(layout.ResolvedLineHeight(segmentStyle), segment.Text, segment.Link)
+		} else {
+			r.pdf.Write(layout.ResolvedLineHeight(segmentStyle), segment.Text)
+		}
+		if r.pdf.err != nil {
+			return
+		}
+	}
+	endY := r.pdf.GetY()
+	if endY < startY+lineHeight {
+		endY = startY + lineHeight
+	}
+	r.pdf.SetXY(startX, endY)
+}
+
+func textSegmentsHavePresentation(segments []layout.TextSegment) bool {
+	for _, segment := range segments {
+		if segment.Link != "" || segment.StyleRef != nil || segment.Style != (layout.TextStyle{}) {
+			return true
+		}
+	}
+	return false
 }
 
 func documentHeadingRole(level int) string {
@@ -407,60 +498,153 @@ func (r *documentRenderer) renderTable(block layout.TableBlock) {
 			return
 		}
 		widths := tableRenderWidths(block, r.contentWidth(), colCount)
-		widthOffsets := layout.TrackOffsets(widths)
-		renderRows := func(rows []layout.TableRow, header bool) {
-			for i := range rows {
-				r.renderTableRow(&rows[i], widths, widthOffsets, header)
+		tableLayout := r.measureTableLayout(block, widths)
+		for rowIndex := range tableLayout.rows {
+			row := &tableLayout.rows[rowIndex]
+			if !row.header && layout.ExceedsAvailableHeight(tableLayout.requiredHeight(rowIndex), r.availableHeight()) && r.pdf.GetY() > r.pdf.tMargin {
+				r.addPageWithTemplate()
+				if tableLayout.repeatHeader {
+					for headerIndex := 0; headerIndex < tableLayout.headerRows; headerIndex++ {
+						r.renderTableLayoutRow(tableLayout, headerIndex)
+					}
+				}
 			}
+			r.renderTableLayoutRow(tableLayout, rowIndex)
 		}
-		renderRows(block.Header, true)
-		renderRows(block.Body, false)
-		renderRows(block.Footer, false)
 	})
 }
 
-func (r *documentRenderer) renderTableRow(row *layout.TableRow, widths, widthOffsets []float64, header bool) {
-	if row == nil {
+func (r *documentRenderer) renderTableLayoutRow(tableLayout documentTableLayout, rowIndex int) {
+	if rowIndex < 0 || rowIndex >= len(tableLayout.rows) {
 		return
 	}
-	if len(widths) == 0 {
-		return
-	}
+	row := tableLayout.rows[rowIndex]
 	r.pdf.BeginStructure(taggedRoleTR)
 	defer r.pdf.EndStructure()
 	x, y := r.pdf.GetXY()
-	rowMeasurement := r.measureRenderedTableRowCached(row, widths, widthOffsets)
-	rowHeight := rowMeasurement.height
+	rowHeight := row.height
 	if rowHeight <= 0 {
 		rowHeight = 6
 	}
-	if layout.ExceedsAvailableHeight(rowHeight, r.availableHeight()) && r.pdf.GetY() > r.pdf.tMargin {
-		r.addPageWithTemplate()
-		x, y = r.pdf.GetXY()
-	}
-	col := 0
-	for i, cell := range row.Cells {
-		if col >= len(widths) {
-			break
-		}
-		span := cell.ColSpan
-		if span <= 0 {
-			span = 1
-		}
-		if i >= len(rowMeasurement.cells) {
-			break
-		}
-		cellMeasurement := rowMeasurement.cells[i]
-		wd := cellMeasurement.width
-		r.renderTableCell(cell, cellMeasurement, x, y, wd, rowHeight, header, taggedTableAttributes{
-			Scope:   tableCellHeaderScope(header),
-			RowSpan: cell.RowSpan,
-			ColSpan: span,
+	for _, cell := range row.cells {
+		cellX := x + layoutgeom.SpanSize(tableLayout.offsets, 0, cell.column)
+		cellHeight := layoutgeom.SpanSize(tableLayout.rowOffsets, rowIndex, cell.rowSpan)
+		r.renderTableCell(cell, cellX, y, cell.width, cellHeight, row.header, blockTableCellEdges{
+			collapse:   tableLayout.borderCollapse,
+			lastColumn: cell.column+cell.colSpan >= len(tableLayout.widths),
+			lastRow:    rowIndex+cell.rowSpan >= len(tableLayout.rows),
+		}, taggedTableAttributes{
+			Scope:   tableCellHeaderScope(row.header),
+			RowSpan: cell.tagRowSpan,
+			ColSpan: cell.colSpan,
 		})
-		x += wd
-		col += span
 	}
 	r.pdf.SetXY(r.pdf.lMargin, y+rowHeight)
+}
+
+func (tableLayout documentTableLayout) requiredHeight(rowIndex int) float64 {
+	if rowIndex < 0 || rowIndex >= len(tableLayout.rows) {
+		return 0
+	}
+	span := 1
+	for _, cell := range tableLayout.rows[rowIndex].cells {
+		if cell.rowSpan > span {
+			span = cell.rowSpan
+		}
+	}
+	return layoutgeom.SpanSize(tableLayout.rowOffsets, rowIndex, span)
+}
+
+func (r *documentRenderer) measureTableLayout(block layout.TableBlock, widths []float64) documentTableLayout {
+	rows := make([]documentTableRowMeasurement, 0, len(block.Header)+len(block.Body)+len(block.Footer))
+	appendRows := func(source []layout.TableRow, header bool) {
+		for _, row := range source {
+			rows = append(rows, documentTableRowMeasurement{row: row, header: header})
+		}
+	}
+	appendRows(block.Header, true)
+	appendRows(block.Body, false)
+	appendRows(block.Footer, false)
+
+	tableLayout := documentTableLayout{
+		widths:         widths,
+		offsets:        layoutgeom.TrackOffsets(widths),
+		rows:           rows,
+		headerRows:     len(block.Header),
+		repeatHeader:   block.Style.RepeatHeader && len(block.Header) > 0,
+		borderCollapse: block.Style.BorderCollapse,
+	}
+	if len(rows) == 0 || len(widths) == 0 {
+		return tableLayout
+	}
+
+	occupied := make([][]bool, len(rows))
+	for i := range occupied {
+		occupied[i] = make([]bool, len(widths))
+	}
+	for rowIndex := range tableLayout.rows {
+		column := 0
+		for _, cell := range tableLayout.rows[rowIndex].row.Cells {
+			for column < len(widths) && occupied[rowIndex][column] {
+				column++
+			}
+			if column >= len(widths) {
+				break
+			}
+			colSpan := normalizedSpan(cell.ColSpan, len(widths)-column)
+			rowSpan := normalizedSpan(cell.RowSpan, len(rows)-rowIndex)
+			cellWidth := layoutgeom.SpanSize(tableLayout.offsets, column, colSpan)
+			measurement := r.measureRenderedTableCellDetailed(cell, cellWidth)
+			measurement.column = column
+			measurement.colSpan = colSpan
+			measurement.rowSpan = rowSpan
+			measurement.tagRowSpan = max(cell.RowSpan, 1)
+			tableLayout.rows[rowIndex].cells = append(tableLayout.rows[rowIndex].cells, measurement)
+			if rowSpan == 1 && measurement.height > tableLayout.rows[rowIndex].height {
+				tableLayout.rows[rowIndex].height = measurement.height
+			}
+			for occupiedRow := rowIndex + 1; occupiedRow < rowIndex+rowSpan; occupiedRow++ {
+				for occupiedColumn := column; occupiedColumn < column+colSpan; occupiedColumn++ {
+					occupied[occupiedRow][occupiedColumn] = true
+				}
+			}
+			column += colSpan
+		}
+		if tableLayout.rows[rowIndex].height <= 0 {
+			tableLayout.rows[rowIndex].height = 6
+		}
+	}
+
+	for rowIndex := range tableLayout.rows {
+		for _, cell := range tableLayout.rows[rowIndex].cells {
+			if cell.rowSpan <= 1 {
+				continue
+			}
+			current := 0.0
+			for spanRow := rowIndex; spanRow < rowIndex+cell.rowSpan; spanRow++ {
+				current += tableLayout.rows[spanRow].height
+			}
+			if deficit := cell.height - current; deficit > 0 {
+				share := deficit / float64(cell.rowSpan)
+				for spanRow := rowIndex; spanRow < rowIndex+cell.rowSpan; spanRow++ {
+					tableLayout.rows[spanRow].height += share
+				}
+			}
+		}
+	}
+	heights := make([]float64, len(tableLayout.rows))
+	for rowIndex := range tableLayout.rows {
+		heights[rowIndex] = tableLayout.rows[rowIndex].height
+	}
+	tableLayout.rowOffsets = layoutgeom.TrackOffsets(heights)
+	return tableLayout
+}
+
+func normalizedSpan(value, available int) int {
+	if value <= 0 {
+		value = 1
+	}
+	return min(value, available)
 }
 
 func (r *documentRenderer) measureRenderedTableRow(row layout.TableRow, widths []float64) float64 {
@@ -469,10 +653,6 @@ func (r *documentRenderer) measureRenderedTableRow(row layout.TableRow, widths [
 
 func (r *documentRenderer) measureRenderedTableRowWithOffsets(row layout.TableRow, widths, widthOffsets []float64) float64 {
 	return r.measureRenderedTableRowDetailed(row, widths, widthOffsets).height
-}
-
-func (r *documentRenderer) measureRenderedTableRowCached(row *layout.TableRow, widths, widthOffsets []float64) documentTableRowMeasurement {
-	return r.measureRenderedTableRowDetailed(*row, widths, widthOffsets)
 }
 
 func (r *documentRenderer) measureRenderedTableRowDetailed(row layout.TableRow, widths, widthOffsets []float64) documentTableRowMeasurement {
@@ -504,15 +684,21 @@ func (r *documentRenderer) measureRenderedTableCell(cell layout.TableCell, width
 }
 
 func (r *documentRenderer) measureRenderedTableCellDetailed(cell layout.TableCell, width float64) documentTableCellMeasurement {
-	measurement := documentTableCellMeasurement{width: width}
-	contentWidth := width - 2
+	box := documentTableCellBox(cell.EffectiveBox(), r.measureContext().CellPadding)
+	cellStyle := cell.EffectiveStyle()
+	if cell.Align != "" {
+		cellStyle.Align = cell.Align
+	}
+	measurement := documentTableCellMeasurement{width: width, cell: cell}
+	contentWidth := width - horizontalBoxSpacing(box)
 	if contentWidth < 0 {
 		contentWidth = 0
 	}
 	ctx := r.measureContextForWidth(contentWidth)
+	ctx.DefaultStyle = layout.MergedTextStyle(ctx.DefaultStyle, cellStyle)
 	if len(cell.Blocks) == 0 {
-		style := mergedTextStyle(ctx.DefaultStyle, cell.EffectiveStyle())
-		measurement.height = maxPositive(4, resolvedLineHeight(style))
+		measurement.contentHeight = maxPositive(4, layout.ResolvedLineHeight(ctx.DefaultStyle))
+		measurement.height = measurement.contentHeight + verticalBoxSpacing(box)
 		return measurement
 	}
 	total := 0.0
@@ -523,29 +709,130 @@ func (r *documentRenderer) measureRenderedTableCellDetailed(cell layout.TableCel
 		total += blockMeasure.Height
 	}
 	if total <= 0 {
-		total = resolvedLineHeight(mergedTextStyle(ctx.DefaultStyle, cell.EffectiveStyle()))
+		total = layout.ResolvedLineHeight(layout.MergedTextStyle(ctx.DefaultStyle, cell.EffectiveStyle()))
 	}
-	measurement.height = total + 2
+	measurement.contentHeight = total
+	measurement.height = total + verticalBoxSpacing(box)
 	return measurement
 }
 
-func (r *documentRenderer) renderTableCell(cell layout.TableCell, measurement documentTableCellMeasurement, x, y, wd, ht float64, header bool, tableAttrs taggedTableAttributes) {
+type blockTableCellEdges struct {
+	collapse   bool
+	lastColumn bool
+	lastRow    bool
+}
+
+func (r *documentRenderer) renderTableCell(measurement documentTableCellMeasurement, x, y, wd, ht float64, header bool, edges blockTableCellEdges, tableAttrs taggedTableAttributes) {
 	if header {
 		r.pdf.beginTableCellStructure(taggedRoleTH, tableAttrs)
 	} else {
 		r.pdf.beginTableCellStructure(taggedRoleTD, tableAttrs)
 	}
 	defer r.pdf.EndStructure()
-	r.pdf.BeginArtifact()
-	r.pdf.Rect(x, y, wd, ht, "D")
-	r.pdf.EndArtifact()
-	cellX := x + 1
-	r.pdf.SetXY(cellX, y+1)
+	cell := measurement.cell
+	box := documentTableCellBox(cell.EffectiveBox(), r.measureContext().CellPadding)
+	r.drawTableCellBox(x, y, wd, ht, box, edges)
+	contentWidth := maxPositive(0, wd-horizontalBoxSpacing(box))
+	contentHeight := maxPositive(0, ht-verticalBoxSpacing(box))
+	contentY := y + box.Border.Top.Width + box.Padding.Top
+	remaining := contentHeight - measurement.contentHeight
+	switch strings.ToUpper(cell.VerticalAlign) {
+	case "M", "MIDDLE", "CENTER", "C":
+		contentY += maxPositive(0, remaining/2)
+	case "B", "BOTTOM":
+		contentY += maxPositive(0, remaining)
+	}
+	contentX := x + box.Border.Left.Width + box.Padding.Left
+	r.pdf.SetXY(contentX, contentY)
 	if len(cell.Blocks) > 0 {
-		r.withContentWidth(wd-2, func() {
-			r.renderBlocksWithMeasurements(cell.Blocks, measurement.blockMeasures)
+		style := cell.EffectiveStyle()
+		if cell.Align != "" {
+			style.Align = cell.Align
+		}
+		r.withTextStyle(style, func() {
+			r.withContentWidth(contentWidth, func() {
+				r.renderBlocksWithMeasurements(cell.Blocks, measurement.blockMeasures)
+			})
 		})
 	}
+}
+
+func documentTableCellBox(box layout.BoxStyle, fallback float64) layout.BoxStyle {
+	if box.Padding == (layout.Spacing{}) && fallback > 0 {
+		box.Padding = layout.Spacing{Top: fallback, Right: fallback, Bottom: fallback, Left: fallback}
+	}
+	return box
+}
+
+func horizontalBoxSpacing(box layout.BoxStyle) float64 {
+	return box.Padding.Left + box.Padding.Right + box.Border.Left.Width + box.Border.Right.Width
+}
+
+func verticalBoxSpacing(box layout.BoxStyle) float64 {
+	return box.Padding.Top + box.Padding.Bottom + box.Border.Top.Width + box.Border.Bottom.Width
+}
+
+func (r *documentRenderer) drawTableCellBox(x, y, width, height float64, box layout.BoxStyle, edges blockTableCellEdges) {
+	pdf := r.pdf
+	drawR, drawG, drawB := pdf.GetDrawColor()
+	fillR, fillG, fillB := pdf.GetFillColor()
+	lineWidth := pdf.GetLineWidth()
+	dashArray := append([]float64(nil), pdf.dashArray...)
+	dashPhase := pdf.dashPhase
+	defer func() {
+		pdf.SetDrawColor(drawR, drawG, drawB)
+		pdf.SetFillColor(fillR, fillG, fillB)
+		pdf.SetLineWidth(lineWidth)
+		pdf.dashArray = dashArray
+		pdf.dashPhase = dashPhase
+		pdf.outputDashPattern()
+	}()
+
+	pdf.BeginArtifact()
+	defer pdf.EndArtifact()
+	if box.BackgroundColor.Set {
+		pdf.SetFillColor(box.BackgroundColor.R, box.BackgroundColor.G, box.BackgroundColor.B)
+		pdf.Rect(x, y, width, height, "F")
+	}
+	border := box.Border
+	if !borderVisible(border) {
+		border = defaultTableBorder(lineWidth)
+	}
+	if !edges.collapse || edges.lastRow {
+		r.drawBorderSide(border.Bottom, x, y+height, x+width, y+height)
+	}
+	if !edges.collapse || edges.lastColumn {
+		r.drawBorderSide(border.Right, x+width, y, x+width, y+height)
+	}
+	r.drawBorderSide(border.Top, x, y, x+width, y)
+	r.drawBorderSide(border.Left, x, y, x, y+height)
+}
+
+func defaultTableBorder(width float64) layout.BorderStyle {
+	if width <= 0 {
+		width = 0.2
+	}
+	side := layout.BorderSide{Width: width, Style: "solid"}
+	return layout.BorderStyle{Top: side, Right: side, Bottom: side, Left: side}
+}
+
+func (r *documentRenderer) drawBorderSide(side layout.BorderSide, x1, y1, x2, y2 float64) {
+	if side.Width <= 0 {
+		return
+	}
+	r.pdf.SetLineWidth(side.Width)
+	if side.Color.Set {
+		r.pdf.SetDrawColor(side.Color.R, side.Color.G, side.Color.B)
+	}
+	switch strings.ToLower(strings.TrimSpace(side.Style)) {
+	case "dashed":
+		r.pdf.SetDashPattern([]float64{3 * side.Width, 2 * side.Width}, 0)
+	case "dotted":
+		r.pdf.SetDashPattern([]float64{side.Width, 2 * side.Width}, 0)
+	default:
+		r.pdf.SetDashPattern(nil, 0)
+	}
+	r.pdf.Line(x1, y1, x2, y2)
 }
 
 func tableCellHeaderScope(header bool) string {
@@ -557,8 +844,8 @@ func tableCellHeaderScope(header bool) string {
 
 func (r *documentRenderer) renderImage(block layout.ImageBlock) {
 	r.renderBox(block.EffectiveBox(), func() {
-		wd := firstPositive(block.Width, block.MaxWidth, r.contentWidth())
-		ht := firstPositive(block.Height, block.MaxHeight, wd*0.75)
+		wd := layout.FirstPositive(block.Width, block.MaxWidth, r.contentWidth())
+		ht := layout.FirstPositive(block.Height, block.MaxHeight, wd*0.75)
 		if block.MaxWidth > 0 && wd > block.MaxWidth {
 			wd = block.MaxWidth
 		}
@@ -674,10 +961,17 @@ func (r *documentRenderer) renderSignatureRow(block layout.SignatureRowBlock) {
 			columns = []layout.SignatureColumn{{}}
 		}
 		gap := 8.0
-		wd := (r.contentWidth() - gap*float64(len(columns)-1)) / float64(len(columns))
+		available := r.contentWidth() - gap*float64(len(columns)-1)
+		constraints := make([]layoutgeom.TrackConstraint, len(columns))
+		for i, column := range columns {
+			constraints[i].Preferred = column.Width
+		}
+		widths := layoutgeom.ResolveTracks(available, len(columns), constraints)
+		offsets := layoutgeom.TrackOffsets(widths)
 		y := r.pdf.GetY() + 12
 		for i, col := range columns {
-			x := r.pdf.lMargin + float64(i)*(wd+gap)
+			wd := widths[i]
+			x := r.pdf.lMargin + offsets[i] + float64(i)*gap
 			r.pdf.BeginArtifact()
 			r.pdf.Line(x, y, x+wd, y)
 			r.pdf.EndArtifact()
@@ -688,6 +982,21 @@ func (r *documentRenderer) renderSignatureRow(block layout.SignatureRowBlock) {
 		}
 		r.pdf.SetY(maxPositive(r.pdf.GetY(), y+12))
 	})
+}
+
+func (r *documentRenderer) renderSignature(signature layout.SignatureBlock) {
+	if signature.KeepTogether {
+		total := 0.0
+		for _, row := range signature.Rows {
+			total += layout.MeasureBlock(r.measureContext(), row).Height
+		}
+		if layout.ExceedsAvailableHeight(total, r.availableHeight()) && r.pdf.GetY() > r.pdf.tMargin {
+			r.addPageWithTemplate()
+		}
+	}
+	for _, row := range signature.Rows {
+		r.renderBlock(row)
+	}
 }
 
 func signatureColumnText(col layout.SignatureColumn) string {
@@ -759,14 +1068,30 @@ func (r *documentRenderer) renderQRVerification(block layout.QRVerificationBlock
 		if size <= 0 {
 			size = 25
 		}
-		x, y := r.pdf.GetXY()
-		r.pdf.BeginArtifact()
-		r.pdf.Rect(x, y, size, size, "D")
-		r.pdf.Line(x, y, x+size, y+size)
-		r.pdf.Line(x+size, y, x, y+size)
-		r.pdf.EndArtifact()
+		startX, y := r.pdf.GetXY()
+		x := startX
 		textX := x + size + 4
-		r.pdf.SetXY(textX, y)
+		textY := y
+		textWidth := r.contentWidth() - size - 4
+		switch textAlign(qr.Align) {
+		case "C":
+			x += (r.contentWidth() - size) / 2
+			textX = startX
+			textY = y + size + 2
+			textWidth = r.contentWidth()
+		case "R":
+			x += r.contentWidth() - size
+			textX = startX
+			textWidth = r.contentWidth() - size - 4
+		}
+		payload := firstNonEmpty(strings.TrimSpace(qr.URL), strings.TrimSpace(qr.Value))
+		name, err := r.pdf.RegisterQRCodePNG(payload, defaultQRCodeSizePx)
+		if err != nil {
+			r.pdf.SetError(err)
+			return
+		}
+		r.pdf.ImageOptions(name, x, y, size, size, false, ImageOptions{ImageType: "png"}, 0, "")
+		r.pdf.SetXY(textX, textY)
 		segments := block.Text
 		if len(segments) == 0 {
 			text := firstNonEmpty(qr.Label, "Verification")
@@ -779,7 +1104,7 @@ func (r *documentRenderer) renderQRVerification(block layout.QRVerificationBlock
 		}
 		r.applyTextStyle(r.mergedStyle(block.EffectiveStyle()))
 		r.pdf.SetNextTextRole(taggedRoleP)
-		r.pdf.MultiCell(r.contentWidth()-size-4, 5, r.textSegmentsPlainText(segments), "", "L", false)
+		r.pdf.MultiCell(max(textWidth, 0), 5, r.textSegmentsPlainText(segments), "", "L", false)
 		if r.pdf.GetY() < y+size {
 			r.pdf.SetY(y + size)
 		}
@@ -793,8 +1118,11 @@ func (r *documentRenderer) renderBox(box layout.BoxStyle, render func()) {
 	x, y := r.pdf.GetXY()
 	wd := r.contentWidth()
 	if box.BackgroundColor.Set {
-		r.pdf.SetFillColor(box.BackgroundColor.R, box.BackgroundColor.G, box.BackgroundColor.B)
-		r.pdf.Rect(x, y, wd, maxPositive(1, box.Padding.Top+box.Padding.Bottom), "F")
+		height := box.Padding.Top + box.Padding.Bottom
+		if r.boxHeightOK {
+			height = r.boxHeight - box.Margin.Top - box.Margin.Bottom
+		}
+		r.drawBoxBackground(x, y, wd, maxPositive(1, height), box.BackgroundColor)
 	}
 	r.pdf.SetXY(x+box.Padding.Left, y+box.Padding.Top)
 	oldLeft, oldRight := r.pdf.lMargin, r.pdf.rMargin
@@ -806,8 +1134,35 @@ func (r *documentRenderer) renderBox(box layout.BoxStyle, render func()) {
 	r.pdf.Ln(box.Padding.Bottom + box.Margin.Bottom)
 	if borderVisible(box.Border) {
 		bottomY := r.pdf.GetY()
-		r.pdf.Rect(x, y, wd, bottomY-y, "D")
+		r.drawBoxBorder(x, y, wd, bottomY-y-box.Margin.Bottom, box.Border)
 	}
+}
+
+func (r *documentRenderer) drawBoxBackground(x, y, width, height float64, color layout.DocumentColor) {
+	fillR, fillG, fillB := r.pdf.GetFillColor()
+	r.pdf.BeginArtifact()
+	r.pdf.SetFillColor(color.R, color.G, color.B)
+	r.pdf.Rect(x, y, width, height, "F")
+	r.pdf.SetFillColor(fillR, fillG, fillB)
+	r.pdf.EndArtifact()
+}
+
+func (r *documentRenderer) drawBoxBorder(x, y, width, height float64, border layout.BorderStyle) {
+	drawR, drawG, drawB := r.pdf.GetDrawColor()
+	lineWidth := r.pdf.GetLineWidth()
+	dashArray := append([]float64(nil), r.pdf.dashArray...)
+	dashPhase := r.pdf.dashPhase
+	r.pdf.BeginArtifact()
+	r.drawBorderSide(border.Top, x, y, x+width, y)
+	r.drawBorderSide(border.Right, x+width, y, x+width, y+height)
+	r.drawBorderSide(border.Bottom, x, y+height, x+width, y+height)
+	r.drawBorderSide(border.Left, x, y, x, y+height)
+	r.pdf.SetDrawColor(drawR, drawG, drawB)
+	r.pdf.SetLineWidth(lineWidth)
+	r.pdf.dashArray = dashArray
+	r.pdf.dashPhase = dashPhase
+	r.pdf.outputDashPattern()
+	r.pdf.EndArtifact()
 }
 
 func (r *documentRenderer) applyTextStyle(style layout.TextStyle) {
@@ -947,33 +1302,11 @@ func tableRowColumnCount(row layout.TableRow) int {
 }
 
 func tableRenderWidths(table layout.TableBlock, total float64, count int) []float64 {
-	widths := make([]float64, count)
-	fixed := 0.0
-	for i := 0; i < count && i < len(table.Columns); i++ {
-		if table.Columns[i].Width > 0 {
-			widths[i] = table.Columns[i].Width
-			fixed += widths[i]
-		}
+	constraints := make([]layoutgeom.TrackConstraint, len(table.Columns))
+	for i, column := range table.Columns {
+		constraints[i] = layoutgeom.TrackConstraint{Preferred: column.Width, Min: column.MinWidth, Max: column.MaxWidth}
 	}
-	remainingCount := 0
-	for _, width := range widths {
-		if width <= 0 {
-			remainingCount++
-		}
-	}
-	fill := 0.0
-	if remainingCount > 0 {
-		fill = (total - fixed) / float64(remainingCount)
-	}
-	if fill <= 0 {
-		fill = total / float64(count)
-	}
-	for i := range widths {
-		if widths[i] <= 0 {
-			widths[i] = fill
-		}
-	}
-	return widths
+	return layoutgeom.ResolveTracks(total, count, constraints)
 }
 
 func borderVisible(border layout.BorderStyle) bool {

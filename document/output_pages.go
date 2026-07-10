@@ -188,6 +188,9 @@ type pageStreamCompressor struct {
 	results   <-chan pageStreamData
 	scheduled []bool
 	pending   map[int]pageStreamData
+	cancel    context.CancelFunc
+	done      <-chan struct{}
+	stopOnce  sync.Once
 }
 
 func replaceAliasBytes(data []byte, pairs []aliasReplacementBytes) []byte {
@@ -261,6 +264,9 @@ func (f *Document) putpagesContext(ctx context.Context) {
 	f.pageObjectNumbers = pagesObjectNumbers
 	f.tagged.pageObjNums = ensureIntSliceLen(f.tagged.pageObjNums, nb+1)
 	pageStreams := f.startPageStreamCompressorContext(ctx, nb)
+	if pageStreams != nil {
+		defer pageStreams.stop()
+	}
 	for n := 1; n <= nb; n++ {
 		if err := outputCanceledError(ctx); err != nil {
 			f.SetError(err)
@@ -415,12 +421,16 @@ func (f *Document) startPageStreamCompressorContext(ctx context.Context, nb int)
 	if scheduledCount == 0 {
 		return nil
 	}
+	workerCtx, cancel := context.WithCancel(ctx)
 	workers := f.pageCompressionWorkers
 	if workers < 1 {
 		workers = 1
 	}
 	results := make(chan pageStreamData)
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
+		defer close(results)
 		sem := make(chan struct{}, workers)
 		var wg sync.WaitGroup
 	schedule:
@@ -428,10 +438,13 @@ func (f *Document) startPageStreamCompressorContext(ctx context.Context, nb int)
 			if !scheduled[page] {
 				continue
 			}
+			if workerCtx.Err() != nil {
+				break schedule
+			}
 			data := f.pages[page].Bytes()
 			select {
 			case sem <- struct{}{}:
-			case <-ctx.Done():
+			case <-workerCtx.Done():
 				break schedule
 			}
 			wg.Add(1)
@@ -451,17 +464,18 @@ func (f *Document) startPageStreamCompressorContext(ctx context.Context, nb int)
 				}
 				select {
 				case results <- result:
-				case <-ctx.Done():
+				case <-workerCtx.Done():
 				}
 			}(page, data)
 		}
 		wg.Wait()
-		close(results)
 	}()
 	return &pageStreamCompressor{
 		results:   results,
 		scheduled: scheduled,
 		pending:   make(map[int]pageStreamData),
+		cancel:    cancel,
+		done:      done,
 	}
 }
 
@@ -478,6 +492,16 @@ func pageBoxOutputKeys(pageBoxes map[string]PageBox, sorted bool) []string {
 
 func (c *pageStreamCompressor) page(page int) (pageStreamData, bool) {
 	return c.pageContext(context.Background(), page)
+}
+
+func (c *pageStreamCompressor) stop() {
+	if c == nil {
+		return
+	}
+	c.stopOnce.Do(func() {
+		c.cancel()
+		<-c.done
+	})
 }
 
 func (c *pageStreamCompressor) pageContext(ctx context.Context, page int) (pageStreamData, bool) {

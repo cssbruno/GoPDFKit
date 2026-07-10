@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+### Fixed
+
+- Made typed table measurement and rendering share column constraints, span
+  geometry, pagination boundaries, repeated headers, cell alignment, and box
+  styling, with typed-versus-HTML parity coverage.
+- Rendered styled and linked text segments, real QR images, document language,
+  signature field names, and requested signature-column widths from the typed
+  layout model.
+- Applied output options atomically so a later validation error cannot leave
+  earlier settings partially mutated.
+
+### Changed
+
+- Moved shared geometry into a private internal package while preserving the
+  existing `layout` compatibility functions.
+- Moved resource initialization and PDF object-number allocation behavior onto
+  their concrete private owners and separated resource object numbers from
+  attachment caches.
+- Routed output orchestration through private buffered, streaming, and signing
+  primitives instead of re-entering public wrappers.
+- Replaced the PDF inspection MediaBox regex with the real importer parser and
+  bounded importer sources with a sentinel `ErrSourceTooLarge` error.
+- Made page-compression workers explicitly cancellable and bounded the string
+  width cache with constant-time ring eviction.
+
+### Removed
+
+- Removed the redundant `importpdf` capability interfaces and forwarding
+  helpers; applications call `document.Document` import methods directly.
+- Removed benchmark execution from CI. Benchmarks and profiling remain
+  available as explicit local Make targets.
+
 ## v0.12.0 - 2026-07-09
 
 Intentionally breaking pre-v1 release that makes ownership and package

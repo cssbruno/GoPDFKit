@@ -36,14 +36,14 @@ func TestObjRefAccessors(t *testing.T) {
 
 func TestOpenBytesWithOptionsAppliesSourceLimit(t *testing.T) {
 	_, err := OpenBytesWithOptions([]byte("%PDF-too-large"), ImportOptions{MaxSourceBytes: 3})
-	if err == nil || !strings.Contains(err.Error(), "PDF import source exceeds maximum size") {
+	if !errors.Is(err, ErrSourceTooLarge) {
 		t.Fatalf("OpenBytesWithOptions() error = %v, want source size limit", err)
 	}
 }
 
 func TestOpenReaderWithOptionsAppliesSourceLimit(t *testing.T) {
 	_, err := OpenReaderWithOptions(strings.NewReader("%PDF-too-large"), ImportOptions{MaxSourceBytes: 3})
-	if err == nil || !strings.Contains(err.Error(), "PDF import source exceeds maximum size") {
+	if !errors.Is(err, ErrSourceTooLarge) {
 		t.Fatalf("OpenReaderWithOptions() error = %v, want source size limit", err)
 	}
 }

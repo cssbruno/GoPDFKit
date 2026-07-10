@@ -45,7 +45,9 @@ type ThumbnailOptions struct {
 	Upscale bool
 }
 
-type pdfImageRegistrar interface {
+// ImageRegistrar is the narrow image-registration contract used by
+// RegisterThumbnail. Document implements it.
+type ImageRegistrar interface {
 	RegisterImageOptionsReader(imgName string, options ImageOptions, r io.Reader) *ImageInfo
 	SetError(err error)
 }
@@ -106,7 +108,7 @@ func GenerateThumbnailImage(src image.Image, sourceFormat string, options Thumbn
 
 // RegisterThumbnail creates a thumbnail from r and registers it with pdf under
 // name.
-func RegisterThumbnail(pdf pdfImageRegistrar, name string, r io.Reader, options ThumbnailOptions) (*ImageInfo, error) {
+func RegisterThumbnail(pdf ImageRegistrar, name string, r io.Reader, options ThumbnailOptions) (*ImageInfo, error) {
 	if pdf == nil {
 		return nil, errors.New("pdf registrar is nil")
 	}

@@ -106,23 +106,3 @@ func restorePDFTextStyle(pdf *Document, state pdfTextStyleState) {
 	pdf.underline = state.underline
 	pdf.strikeout = state.strikeout
 }
-
-func textSegmentsPlainText(segments []layout.TextSegment) string {
-	return layout.TextSegmentsPlainText(segments)
-}
-
-func mergedTextStyle(base, override layout.TextStyle) layout.TextStyle {
-	return layout.MergedTextStyle(base, override)
-}
-
-func resolvedLineHeight(style layout.TextStyle) float64 {
-	return layout.ResolvedLineHeight(style)
-}
-
-func documentHeadingFontSize(base float64, level int) float64 {
-	return layout.HeadingFontSize(base, level)
-}
-
-func firstPositive(values ...float64) float64 {
-	return layout.FirstPositive(values...)
-}
