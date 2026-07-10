@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## v0.11.2 - 2026-07-09
+
+Patch release for safer PDF parsing, deterministic test isolation, and
+enforced release-quality checks.
+
+### Fixed
+
+- Parsed imported PDFs from a stable in-memory snapshot and recognized object
+  boundaries only outside PDF streams, strings, names, and comments.
+- Correctly calculated page dimensions from all `/MediaBox` coordinates and
+  bounded decoded stream and DER child processing.
+- Prevented generated test PDFs from modifying repository assets.
+- Updated the nested external QR-code module dependency set.
+
+### Changed
+
+- Consolidated document output option application and removed unused internal
+  forwarding helpers.
+- Enforced nested-module, coverage, lint, security, race, fuzz, benchmark,
+  and external-compliance checks in CI and release automation.
+
 ## v0.11.1 - 2026-06-30
 
 Patch release for HTML table CSS rendering and a Brazilian lab-report example.
