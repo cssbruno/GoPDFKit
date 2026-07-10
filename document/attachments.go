@@ -182,10 +182,6 @@ type attachmentCompressionTask struct {
 	content    []byte
 }
 
-func (f *Document) prepareAttachmentCompression() {
-	f.prepareAttachmentCompressionContext(context.Background())
-}
-
 func (f *Document) prepareAttachmentCompressionContext(ctx context.Context) {
 	if f.err != nil {
 		return
@@ -280,10 +276,6 @@ schedule:
 			result.attachment.Content = nil
 		}
 	}
-}
-
-func (f *Document) attachmentCompressionTasks() []attachmentCompressionTask {
-	return f.attachmentCompressionTasksContext(context.Background())
 }
 
 func (f *Document) attachmentCompressionTasksContext(ctx context.Context) []attachmentCompressionTask {
@@ -415,11 +407,6 @@ func attachmentShouldReleaseLoadedContent(a *Attachment, size int) bool {
 	return a != nil && (a.FilePath != "" || a.Loader != nil) && size >= attachmentCompressionSpoolThreshold
 }
 
-// embed includes the attachment content and updates its internal reference.
-func (f *Document) embed(a *Attachment) {
-	f.embedContext(context.Background(), a)
-}
-
 func (f *Document) embedContext(ctx context.Context, a *Attachment) {
 	if a == nil {
 		f.SetErrorf("attachment is nil")
@@ -544,10 +531,6 @@ func attachmentHasInlineContent(a Attachment) bool {
 	return a.Content != nil || (strings.TrimSpace(a.FilePath) == "" && a.Loader == nil)
 }
 
-func (f *Document) loadAttachmentContent(a *Attachment) bool {
-	return f.loadAttachmentContentContext(context.Background(), a)
-}
-
 func (f *Document) loadAttachmentContentContext(ctx context.Context, a *Attachment) bool {
 	if a == nil {
 		return true
@@ -644,10 +627,6 @@ func (f *Document) SetMaxAttachmentBytes(maxBytes int64) {
 		maxBytes = MaxAttachmentBytes
 	}
 	f.maxAttachmentBytes = maxBytes
-}
-
-func readAttachmentFileLimit(filename string, limit int64) ([]byte, error) {
-	return readAttachmentFileLimitContext(context.Background(), filename, limit)
 }
 
 func readAttachmentFileLimitContext(ctx context.Context, filename string, limit int64) ([]byte, error) {
@@ -860,12 +839,6 @@ func AttachmentFromLoaderWithOptions(filename string, loader AttachmentLoader, o
 	return attachment, nil
 }
 
-// putAttachments embeds the current attachments and stores their object numbers
-// for later use by getEmbeddedFiles().
-func (f *Document) putAttachments() {
-	f.putAttachmentsContext(context.Background())
-}
-
 func (f *Document) putAttachmentsContext(ctx context.Context) {
 	for i, a := range f.attachments {
 		if err := outputCanceledError(ctx); err != nil {
@@ -948,13 +921,6 @@ func cloneAttachmentImmutable(a Attachment) Attachment {
 
 func (f *Document) cleanupAttachmentCompressedFiles() {
 	f.ensureResourceStore().cleanupAttachmentCompressedFiles()
-}
-
-// putAnnotationsAttachments embeds attachments used by annotations and stores
-// their object numbers for appendAttachmentAnnotationLinks(), which is called for
-// each page.
-func (f *Document) putAnnotationsAttachments() {
-	f.putAnnotationsAttachmentsContext(context.Background())
 }
 
 func (f *Document) putAnnotationsAttachmentsContext(ctx context.Context) {

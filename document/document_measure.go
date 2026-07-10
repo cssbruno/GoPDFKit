@@ -139,18 +139,6 @@ func documentHeadingFontSize(base float64, level int) float64 {
 	return layout.HeadingFontSize(base, level)
 }
 
-func innerWidth(width float64, box BoxStyle) float64 {
-	return layout.InnerWidth(width, box)
-}
-
-func verticalSpacing(spacing Spacing) float64 {
-	return layout.VerticalSpacing(spacing)
-}
-
-func borderVertical(border BorderStyle) float64 {
-	return layout.BorderVertical(border)
-}
-
 func firstPositive(values ...float64) float64 {
 	return layout.FirstPositive(values...)
 }

@@ -75,7 +75,7 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 	nl := 1
 	for i < nb {
 		var c rune
-		charSize := 1
+		var charSize int
 		next := i + 1
 		if f.isCurrentUTF8 {
 			c, charSize = utf8.DecodeRuneInString(s[i:])
@@ -141,11 +141,7 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 					f.ws = 0
 					f.out("0 Tw")
 				}
-				if f.isCurrentUTF8 {
-					f.CellFormat(w, h, s[j:i], b, 2, alignStr, fill, 0, "")
-				} else {
-					f.CellFormat(w, h, s[j:i], b, 2, alignStr, fill, 0, "")
-				}
+				f.CellFormat(w, h, s[j:i], b, 2, alignStr, fill, 0, "")
 			} else {
 				lineEnd := sep
 				if sepInclude {
@@ -160,11 +156,7 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 					}
 					f.outf("%.3f Tw", f.ws*f.k)
 				}
-				if f.isCurrentUTF8 {
-					f.CellFormat(w, h, s[j:lineEnd], b, 2, alignStr, fill, 0, "")
-				} else {
-					f.CellFormat(w, h, s[j:lineEnd], b, 2, alignStr, fill, 0, "")
-				}
+				f.CellFormat(w, h, s[j:lineEnd], b, 2, alignStr, fill, 0, "")
 				if f.isCurrentUTF8 {
 					_, sepSize := utf8.DecodeRuneInString(s[sep:])
 					i = sep + sepSize

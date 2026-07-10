@@ -319,18 +319,12 @@ func (f *Document) OutputWithOptions(w io.Writer, options OutputOptions) error {
 // if output fails before the document closes, the previous output settings are
 // restored while the output error remains latched.
 func (f *Document) OutputWithOptionsContext(ctx context.Context, w io.Writer, options OutputOptions) error {
-	if f.streamFinalForOptions(options) {
-		return f.OutputStreamWithOptionsContext(ctx, w, options)
-	}
-	snapshot := f.outputSettingsSnapshot()
-	if err := f.applyOutputOptions(options); err != nil {
-		return err
-	}
-	err := f.OutputContext(ctx, w)
-	if err != nil && f.state < 3 {
-		f.restoreOutputSettings(snapshot)
-	}
-	return err
+	return f.withOutputOptions(options, func() error {
+		if f.streamFinalForOptions(options) {
+			return f.OutputStreamContext(ctx, w)
+		}
+		return f.OutputContext(ctx, w)
+	})
 }
 
 // OutputStream sends the PDF document to w while streaming final PDF
@@ -352,11 +346,17 @@ func (f *Document) OutputStreamWithOptions(w io.Writer, options OutputOptions) e
 // OutputStreamWithOptionsContext streams final PDF serialization to w using
 // output-wide options and context cancellation.
 func (f *Document) OutputStreamWithOptionsContext(ctx context.Context, w io.Writer, options OutputOptions) error {
+	return f.withOutputOptions(options, func() error {
+		return f.OutputStreamContext(ctx, w)
+	})
+}
+
+func (f *Document) withOutputOptions(options OutputOptions, output func() error) error {
 	snapshot := f.outputSettingsSnapshot()
 	if err := f.applyOutputOptions(options); err != nil {
 		return err
 	}
-	err := f.OutputStreamContext(ctx, w)
+	err := output()
 	if err != nil && f.state < 3 {
 		f.restoreOutputSettings(snapshot)
 	}
@@ -527,7 +527,7 @@ func (f *Document) restoreOutputSettings(snapshot outputSettingsSnapshot) {
 }
 
 func (f *Document) syncOutputForOptions(options OutputOptions) bool {
-	return !(f.outputPolicy.DisableSync || options.DisableSync)
+	return !f.outputPolicy.DisableSync && !options.DisableSync
 }
 
 func (f *Document) streamFinalForOptions(options OutputOptions) bool {

@@ -854,7 +854,7 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 	// Reuse shared, immutable font tables when available; otherwise parse them
 	// once for this (uncached) font. parseSymbols and the assembly below only
 	// read these structures, so sharing them across concurrent documents is safe.
-	oldMetrics := 0
+	var oldMetrics int
 	if utf.static != nil {
 		utf.tableDescriptions = utf.static.tableDescriptions
 		utf.charSymbolDictionary = utf.static.charSymbolDictionary
@@ -1000,16 +1000,15 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 
 	utf.setOutTable("hmtx", hmtxData)
 
-	LocaFormat := 0
+	locaFormat := 0
 	if ((pos + 1) >> 1) > 0xFFFF {
-		LocaFormat = 1
+		locaFormat = 1
 		locaData := make([]byte, 0, len(offsets)*4)
 		for _, offset := range offsets {
 			locaData = appendUint32BE(locaData, offset)
 		}
 		utf.setOutTable("loca", locaData)
 	} else {
-		LocaFormat = 0
 		locaData := make([]byte, 0, len(offsets)*2)
 		for _, offset := range offsets {
 			locaData = appendUint16BE(locaData, offset/2)
@@ -1018,7 +1017,7 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 	}
 
 	headData := utf.getTableData("head")
-	headData = utf.insertUint16(headData, 50, LocaFormat)
+	headData = utf.insertUint16(headData, 50, locaFormat)
 	if utf.fileReader.err != nil {
 		return nil
 	}
