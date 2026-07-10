@@ -76,9 +76,9 @@ code. It keeps an FPDF-style API for familiar page/text/drawing workflows, with
 additional helpers for HTML fragments, imported pages, signing, thumbnails, and
 optional typed document models.
 
-The root `gopdfkit` package is intentionally small. It exposes the default
-constructor and public aliases. Import `github.com/cssbruno/gopdfkit/document`
-when you need the full API.
+The canonical API is `github.com/cssbruno/gopdfkit/document`. The module root
+no longer contains a facade package as of v0.12.0. Renderer-independent typed
+models and measurement primitives live in `github.com/cssbruno/gopdfkit/layout`.
 
 ## Install
 
@@ -91,10 +91,10 @@ go get github.com/cssbruno/gopdfkit@latest
 ```go
 package main
 
-import "github.com/cssbruno/gopdfkit"
+import "github.com/cssbruno/gopdfkit/document"
 
 func main() {
-	pdf, err := gopdfkit.NewDocument()
+	pdf, err := document.NewDocument()
 	if err != nil {
 		panic(err)
 	}
@@ -107,19 +107,18 @@ func main() {
 }
 ```
 
-Use `document.NewWithOptions` when page construction settings should be
-configured with a struct:
+Configure construction with typed functional options:
 
 ```go
-pdf := document.NewWithOptions(document.Options{
-	OrientationStr: "P",
-	UnitStr:        "mm",
-	SizeStr:        "A4",
-	Optimize:       true,
-})
+pdf := document.MustNew(
+	document.WithOrientation(document.OrientationPortrait),
+	document.WithUnit(document.UnitMillimeter),
+	document.WithPageSize(document.PageSizeA4),
+	document.WithBestCompression(),
+)
 ```
 
-`Optimize: true` selects best zlib compression for generated page and template
+`WithBestCompression` selects best zlib compression for generated page and template
 streams. It is not a full PDF optimizer for images, object streams, fonts, or
 arbitrary existing PDFs.
 
@@ -130,7 +129,7 @@ arbitrary existing PDFs.
 | Precise drawing, custom pagination, or FPDF-style control | `Document` drawing/text/table methods |
 | Report-like documents with fixed HTML/CSS and changing values | `document.CompileHTMLTemplate` + `HTML.WriteTemplate` |
 | One-off HTML fragments or normal rich text sections | `HTMLNew().Write` |
-| Typed Go blocks without HTML strings, or existing model-based code | `document.NewDocumentModel` + `WriteDocument` |
+| Typed Go blocks without HTML strings, or existing model-based code | `layout.NewDocumentModel` + `document.WriteDocument` |
 
 The `layout` package exists for the last case: an optional typed block model. It
 is not the default template system. Prefer compiled HTML templates when the
@@ -153,32 +152,34 @@ The same path is available through `OutputStream`,
 Streaming final output is opt-in, consumes the document for final output, and is
 disabled for signed output because signing needs the complete byte range.
 
-Use `document.NewWithDefaults` when compression, catalog ordering, or fixed
-metadata dates should be explicit for one document instead of inherited from
-package-wide defaults:
+Use `document.NewDocumentWithDefaults` when compression, catalog ordering, or
+fixed metadata dates should be explicit for one document. Defaults are
+immutable and request-scoped; there are no package-wide setters:
 
 ```go
 defaults := document.DefaultSettings()
 defaults.Compression = false
-pdf := document.NewWithDefaults(document.Options{SizeStr: "Letter"}, defaults)
+pdf, err := document.NewDocumentWithDefaults(
+	defaults,
+	document.WithPageSize(document.PageSizeLetter),
+)
 ```
 
 ## Optional Typed Document Models
 
-Use `document.NewDocumentModel` only when your application wants typed Go
-blocks instead of HTML templates. The model types also live in
-`github.com/cssbruno/gopdfkit/layout`; the `document` package re-exports them
-for compatibility and renders them with `WriteDocument`.
+Use `layout.NewDocumentModel` only when your application wants typed Go blocks
+instead of HTML templates. The `document` package renders these models with
+`WriteDocument` but does not duplicate the layout API.
 
 Keep product-specific document names in your application:
 
 ```go
-func receiptModel(number string, rows []document.TableRow) *document.LayoutDocument {
-	return document.NewDocumentModel("Receipt "+number,
-		document.MetadataGridBlock{Fields: []document.MetadataField{
+func receiptModel(number string, rows []layout.TableRow) *layout.LayoutDocument {
+	return layout.NewDocumentModel("Receipt "+number,
+		layout.MetadataGridBlock{Fields: []layout.MetadataField{
 			{Label: "Number", Value: number},
 		}},
-		document.TableBlock{Body: rows},
+		layout.TableBlock{Body: rows},
 	)
 }
 ```
@@ -186,11 +187,11 @@ func receiptModel(number string, rows []document.TableRow) *document.LayoutDocum
 Migration from the previous document-kind helpers:
 
 * `document.NewLayoutDocument(document.DocumentKindReport)` becomes
-  `document.NewLayoutDocument()`.
+  `layout.NewLayoutDocument()`.
 * `document.NewGenericDocument("Title", blocks...)` becomes
-  `document.NewDocumentModel("Title", blocks...)`.
+  `layout.NewDocumentModel("Title", blocks...)`.
 * Replace report, transactional, attestation, and statement builders with
-  caller-owned functions that return `*document.LayoutDocument`.
+  caller-owned functions that return `*layout.LayoutDocument`.
 
 ## Current Capabilities
 
@@ -222,7 +223,7 @@ These are not implemented as general-purpose features:
 
 * Full browser-compatible HTML/CSS layout
 * JavaScript page rendering
-* PDF JavaScript actions; `SetJavascript` returns
+* PDF JavaScript actions; `SetJavascriptError` returns
   `ErrJavaScriptUnsupported`, and `javascript:` URI links are rejected
 * AES-based PDF document encryption; `SetAESProtection` returns
   `ErrAESProtectionUnsupported` instead of emitting partial encryption syntax
@@ -319,14 +320,12 @@ Use `Document.RegisterQRCodePNG` for QR-code verification blocks.
 ## Packages
 
 ```text
-gopdfkit   root package: default constructor and public aliases
 document   main PDF generation API
-layout     optional typed block model used by document.WriteDocument
+layout     typed block model, geometry, pagination, and measurement primitives
 font       font parsing and JSON font definition generation
 importpdf  small wrappers around imported-page APIs
 inspect    lightweight PDF structure, stream, page, and text inspection
 sign       CMS-first PDF signing and signature verification
-sign/pkcs7 legacy PKCS #7 terminology wrappers around CMS APIs
 ```
 
 Useful repository directories:
@@ -480,8 +479,7 @@ digestHex, err := sign.DigestHexForByteRange(pdfBytes, byteRange, crypto.SHA256)
 content, err := sign.SignedContentForByteRange(pdfBytes, byteRange)
 ```
 
-Legacy PKCS #7 terminology is kept separate in `sign/pkcs7`. New code should
-prefer the CMS names in `sign`.
+v0.12 removes the legacy `sign/pkcs7` wrappers. Use the CMS names in `sign`.
 
 ## Inspection
 
@@ -508,10 +506,9 @@ Applications can transfer their own failures into the PDF object with
 
 ## API Surface
 
-For new applications, import `github.com/cssbruno/gopdfkit/document`. It is the
-canonical public API. The root `gopdfkit` package and `document` layout aliases
-remain compatibility facades until the next major release; no new aliases are
-added to either surface.
+Import `github.com/cssbruno/gopdfkit/document` for PDF generation and
+`github.com/cssbruno/gopdfkit/layout` for typed models and pure layout
+primitives. See `MIGRATION_v0.12.md` when upgrading from v0.11 or earlier.
 
 Common commands:
 

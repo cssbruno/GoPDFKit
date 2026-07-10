@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+## v0.12.0 - 2026-07-09
+
+Intentionally breaking pre-v1 release that makes ownership and package
+boundaries explicit. See `MIGRATION_v0.12.md` for exact replacements.
+
+### Changed
+
+- Made `document` the only high-level PDF API and `layout` the direct owner of
+  typed models, geometry, pagination, and measurement primitives.
+- Replaced all document construction variants with `NewDocument`, `MustNew`,
+  and `NewDocumentWithDefaults`, configured through typed functional options.
+- Made defaults immutable and document-scoped, eliminating package-global
+  configuration and test-order coupling.
+- Split `Document` serialization, resource/cache ownership, page geometry,
+  metadata/compliance, and security/runtime policy into concrete private state
+  owners while preserving the public `Document` facade.
+- Collapsed construction normalization and operational policy into one private
+  configuration path and centralized every output variant behind one private
+  coordinator.
+- Shared pure image-fit, measurement, table geometry, and pagination behavior
+  between typed layout and HTML rendering with parity coverage.
+- Kept benchmarks as explicit local commands while excluding them from CI and
+  release workflows.
+
+### Removed
+
+- Removed the root `gopdfkit` facade package and all mirrored declarations.
+- Removed `document` aliases for `layout` types, constructors, and measurement
+  helpers.
+- Removed legacy string constructors, the exported `document.Options` bridge,
+  mutable package-default setters, and deprecated compatibility names listed in
+  the migration guide.
+- Removed the legacy `sign/pkcs7` wrapper package and nonstandard
+  `Document.CurveCubic` alias.
+
 ## v0.11.3 - 2026-07-09
 
 Patch release for incremental Document ownership boundaries, centralized output
