@@ -83,6 +83,26 @@ func TestInspectContextCanceled(t *testing.T) {
 	}
 }
 
+func TestFirstPageSizePointsUsesMediaBoxDimensions(t *testing.T) {
+	width, height, err := FirstPageSizePoints([]byte("/MediaBox [-10.5 20 110 220]"))
+	if err != nil {
+		t.Fatalf("FirstPageSizePoints() error = %v", err)
+	}
+	if width != 120.5 || height != 200 {
+		t.Fatalf("FirstPageSizePoints() = %v, %v; want 120.5, 200", width, height)
+	}
+}
+
+func TestDecodedStreamsEnforcesAggregateLimits(t *testing.T) {
+	data := []byte("<<>>\nstream\nabc\nendstream\n<<>>\nstream\ndef\nendstream\n")
+	if _, err := decodedStreamsContext(context.Background(), data, 3, 5, 2); err == nil || !strings.Contains(err.Error(), "decoded pdf streams exceed") {
+		t.Fatalf("decodedStreamsContext() aggregate limit error = %v", err)
+	}
+	if _, err := decodedStreamsContext(context.Background(), data, 3, 6, 1); err == nil || !strings.Contains(err.Error(), "stream count") {
+		t.Fatalf("decodedStreamsContext() stream-count limit error = %v", err)
+	}
+}
+
 func inspectTestPDF(t *testing.T) []byte {
 	t.Helper()
 

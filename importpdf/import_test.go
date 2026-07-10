@@ -5,6 +5,7 @@ package importpdf_test
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -80,6 +81,95 @@ func TestOpenReaderAtPageAndSizes(t *testing.T) {
 	}
 	if math.Abs(page.WidthPoints()-595.28) > 0.01 || math.Abs(page.HeightPoints()-841.89) > 0.01 {
 		t.Fatalf("unexpected page size %.2fx%.2f", page.WidthPoints(), page.HeightPoints())
+	}
+}
+
+func TestOpenFileKeepsSnapshotAfterReplacement(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "source.pdf")
+	original := importPDFWithContent("BT (original) Tj ET")
+	replacement := importPDFWithContent("BT (replacement) Tj ET")
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatalf("write original source PDF: %v", err)
+	}
+
+	source, err := importpdf.OpenFile(path)
+	if err != nil {
+		t.Fatalf("OpenFile() error = %v", err)
+	}
+	if err := os.WriteFile(path, replacement, 0o600); err != nil {
+		t.Fatalf("replace source PDF: %v", err)
+	}
+
+	page, err := source.Page(1, "MediaBox")
+	if err != nil {
+		t.Fatalf("Page() after replacement error = %v", err)
+	}
+	content, err := page.ContentWithError()
+	if err != nil {
+		t.Fatalf("ContentWithError() after replacement error = %v", err)
+	}
+	if !bytes.Contains(content, []byte("original")) || bytes.Contains(content, []byte("replacement")) {
+		t.Fatalf("imported content = %q, want the original file snapshot", content)
+	}
+}
+
+func TestSourceCacheKeepsSnapshotAfterReplacement(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "source.pdf")
+	if err := os.WriteFile(path, importPDFWithContent("BT (cached original) Tj ET"), 0o600); err != nil {
+		t.Fatalf("write original source PDF: %v", err)
+	}
+
+	source, err := importpdf.NewSourceCache().OpenFile(path)
+	if err != nil {
+		t.Fatalf("SourceCache.OpenFile() error = %v", err)
+	}
+	if err := os.WriteFile(path, importPDFWithContent("BT (cached replacement) Tj ET"), 0o600); err != nil {
+		t.Fatalf("replace source PDF: %v", err)
+	}
+
+	page, err := source.Page(1, "MediaBox")
+	if err != nil {
+		t.Fatalf("Page() after replacement error = %v", err)
+	}
+	content, err := page.ContentWithError()
+	if err != nil {
+		t.Fatalf("ContentWithError() after replacement error = %v", err)
+	}
+	if !bytes.Contains(content, []byte("cached original")) || bytes.Contains(content, []byte("cached replacement")) {
+		t.Fatalf("cached imported content = %q, want the original file snapshot", content)
+	}
+}
+
+func TestOpenersAcceptContentStreamContainingEndobj(t *testing.T) {
+	source := importPDFWithContent("BT (endobj) Tj ET")
+	openers := map[string]func() (*importpdf.Source, error){
+		"bytes": func() (*importpdf.Source, error) {
+			return importpdf.OpenBytes(source)
+		},
+		"reader-at": func() (*importpdf.Source, error) {
+			return importpdf.OpenReaderAt(byteReaderAt(source), int64(len(source)))
+		},
+	}
+	for name, open := range openers {
+		t.Run(name, func(t *testing.T) {
+			pdf, err := open()
+			if err != nil {
+				t.Fatalf("open PDF: %v", err)
+			}
+			page, err := pdf.Page(1, "MediaBox")
+			if err != nil {
+				t.Fatalf("Page() error = %v", err)
+			}
+			content, err := page.ContentWithError()
+			if err != nil {
+				t.Fatalf("ContentWithError() error = %v", err)
+			}
+			if !bytes.Contains(content, []byte("(endobj)")) {
+				t.Fatalf("content = %q, want literal endobj", content)
+			}
+		})
 	}
 }
 
@@ -183,4 +273,27 @@ func importSourcePDF(t *testing.T) []byte {
 		t.Fatalf("source Output() error = %v", err)
 	}
 	return out.Bytes()
+}
+
+func importPDFWithContent(content string) []byte {
+	objects := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Resources <<>> /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+	}
+	var output bytes.Buffer
+	output.WriteString("%PDF-1.4\n")
+	offsets := make([]int, 1, len(objects)+1)
+	for i, object := range objects {
+		offsets = append(offsets, output.Len())
+		fmt.Fprintf(&output, "%d 0 obj\n%s\nendobj\n", i+1, object)
+	}
+	xref := output.Len()
+	fmt.Fprintf(&output, "xref\n0 %d\n0000000000 65535 f \n", len(offsets))
+	for _, offset := range offsets[1:] {
+		fmt.Fprintf(&output, "%010d 00000 n \n", offset)
+	}
+	fmt.Fprintf(&output, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%EOF\n", len(offsets), xref)
+	return output.Bytes()
 }

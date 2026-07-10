@@ -106,10 +106,6 @@ func signContextErr(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func newPDFXrefResolver(input []byte, offset int) (*pdfXrefResolver, error) {
-	return newPDFXrefResolverContext(context.Background(), input, offset)
-}
-
 func newPDFXrefResolverContext(ctx context.Context, input []byte, offset int) (*pdfXrefResolver, error) {
 	resolver := &pdfXrefResolver{input: input, offsets: make(map[int]int)}
 	seen := make(map[int]bool)
@@ -143,10 +139,6 @@ func newPDFXrefResolverContext(ctx context.Context, input []byte, offset int) (*
 		}
 		offset = prev
 	}
-}
-
-func (resolver *pdfXrefResolver) objectOffset(object int) (int, error) {
-	return resolver.objectOffsetContext(context.Background(), object)
 }
 
 func (resolver *pdfXrefResolver) objectOffsetContext(ctx context.Context, object int) (int, error) {
@@ -189,10 +181,6 @@ func findStartXref(input []byte) (int, error) {
 	return value, nil
 }
 
-func parseTrailer(trailer []byte) (int, pdfRef, error) {
-	return parseTrailerContext(context.Background(), trailer)
-}
-
 func parseTrailerContext(ctx context.Context, trailer []byte) (int, pdfRef, error) {
 	if err := signContextErr(ctx); err != nil {
 		return 0, pdfRef{}, err
@@ -223,10 +211,6 @@ func parseTrailerContext(ctx context.Context, trailer []byte) (int, pdfRef, erro
 		return 0, pdfRef{}, errors.New("pdfsigning: trailer /Root not found")
 	}
 	return size, root, nil
-}
-
-func parsePrevXref(trailer []byte) (int, bool, error) {
-	return parsePrevXrefContext(context.Background(), trailer)
 }
 
 func parsePrevXrefContext(ctx context.Context, trailer []byte) (int, bool, error) {
@@ -279,10 +263,6 @@ func preservedTrailerEntriesContext(ctx context.Context, trailer []byte) (string
 	return out.String(), nil
 }
 
-func trailerDictionary(trailer []byte) ([]byte, error) {
-	return trailerDictionaryContext(context.Background(), trailer)
-}
-
 func trailerDictionaryContext(ctx context.Context, trailer []byte) ([]byte, error) {
 	if err := signContextErr(ctx); err != nil {
 		return nil, err
@@ -299,10 +279,6 @@ func trailerDictionaryContext(ctx context.Context, trailer []byte) ([]byte, erro
 		return nil, err
 	}
 	return trailer[start : start+end], nil
-}
-
-func trailerEntryValue(dict []byte, key string) ([]byte, bool, error) {
-	return trailerEntryValueContext(context.Background(), dict, key)
 }
 
 func trailerEntryValueContext(ctx context.Context, dict []byte, key string) ([]byte, bool, error) {
@@ -322,10 +298,6 @@ func trailerEntryValueContext(ctx context.Context, dict []byte, key string) ([]b
 		return nil, false, fmt.Errorf("pdfsigning: invalid trailer %s value: %w", key, err)
 	}
 	return bytes.TrimSpace(dict[valueStart:valueEnd]), true, nil
-}
-
-func pdfValueEnd(input []byte, start int) (int, error) {
-	return pdfValueEndContext(context.Background(), input, start)
 }
 
 func pdfValueEndContext(ctx context.Context, input []byte, start int) (int, error) {
@@ -382,11 +354,6 @@ func pdfValueEndContext(ctx context.Context, input []byte, start int) (int, erro
 	}
 }
 
-func pdfTokenEnd(input []byte, start int) int {
-	end, _ := pdfTokenEndContext(context.Background(), input, start)
-	return end
-}
-
 func pdfTokenEndContext(ctx context.Context, input []byte, start int) (int, error) {
 	pos := start
 	for pos < len(input) && !isPDFTokenEnd(input, pos) {
@@ -405,57 +372,6 @@ func isPDFTokenEnd(input []byte, pos int) bool {
 		return true
 	}
 	return input[pos] <= 0x20 || pdfDelimiter[input[pos]]
-}
-
-func parseXrefTables(input []byte, offset int) (map[int]int, error) {
-	return parseXrefTablesContext(context.Background(), input, offset)
-}
-
-func parseXrefTablesContext(ctx context.Context, input []byte, offset int) (map[int]int, error) {
-	merged := make(map[int]int)
-	seen := make(map[int]bool)
-	for {
-		if err := signContextErr(ctx); err != nil {
-			return nil, err
-		}
-		if offset < 0 || offset >= len(input) {
-			return nil, errors.New("pdfsigning: xref offset outside PDF")
-		}
-		if seen[offset] {
-			return nil, errors.New("pdfsigning: cyclic xref /Prev chain")
-		}
-		seen[offset] = true
-		offsets, err := parseXrefTableContext(ctx, input, offset)
-		if err != nil {
-			return nil, err
-		}
-		for object, objectOffset := range offsets {
-			if _, exists := merged[object]; !exists {
-				merged[object] = objectOffset
-			}
-		}
-		trailer, err := xrefTrailerContext(ctx, input, offset)
-		if err != nil {
-			return nil, err
-		}
-		if encrypted, err := hasPDFNameContext(ctx, trailer, "/Encrypt"); err != nil {
-			return nil, err
-		} else if encrypted {
-			return nil, errors.New("pdfsigning: encrypted PDFs are not supported")
-		}
-		prev, ok, err := parsePrevXrefContext(ctx, trailer)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			return merged, nil
-		}
-		offset = prev
-	}
-}
-
-func xrefTrailer(input []byte, offset int) ([]byte, error) {
-	return xrefTrailerContext(context.Background(), input, offset)
 }
 
 func xrefTrailerContext(ctx context.Context, input []byte, offset int) ([]byte, error) {
@@ -557,11 +473,7 @@ func parseXrefTableContext(ctx context.Context, input []byte, offset int) (map[i
 			return nil, errors.New("pdfsigning: invalid xref subsection")
 		}
 		if offsets == nil {
-			if count > 0 {
-				offsets = make(map[int]int, count)
-			} else {
-				offsets = make(map[int]int)
-			}
+			offsets = make(map[int]int, max(count, 0))
 		}
 		for n := 0; n < count; n++ {
 			if err := signContextErr(ctx); err != nil {
@@ -588,10 +500,6 @@ func parseXrefTableContext(ctx context.Context, input []byte, offset int) (map[i
 		offsets = make(map[int]int)
 	}
 	return offsets, nil
-}
-
-func parseXrefTableObjectOffset(input []byte, offset, targetObject int) (int, bool, error) {
-	return parseXrefTableObjectOffsetContext(context.Background(), input, offset, targetObject)
 }
 
 func parseXrefTableObjectOffsetContext(ctx context.Context, input []byte, offset, targetObject int) (int, bool, error) {
@@ -690,10 +598,6 @@ func nextPDFLine(input []byte, pos int) ([]byte, int) {
 		pos++
 	}
 	return line, pos
-}
-
-func findFirstPage(input []byte, xref *pdfXrefResolver, ref pdfRef, depth int) (pdfRef, error) {
-	return findFirstPageContext(context.Background(), input, xref, ref, depth)
 }
 
 func findFirstPageContext(ctx context.Context, input []byte, xref *pdfXrefResolver, ref pdfRef, depth int) (pdfRef, error) {
@@ -808,22 +712,71 @@ func findDictionaryEnd(input []byte) (int, error) {
 }
 
 func findDictionaryEndContext(ctx context.Context, input []byte) (int, error) {
+	if len(input) < 2 || input[0] != '<' || input[1] != '<' {
+		return 0, errors.New("pdfsigning: dictionary start not found")
+	}
 	depth := 0
+	inString := false
+	stringDepth := 0
+	inHex := false
+	inComment := false
+	escaped := false
 	for i := 0; i < len(input)-1; i++ {
 		if i%1024 == 0 {
 			if err := signContextErr(ctx); err != nil {
 				return 0, err
 			}
 		}
+		if inComment {
+			if input[i] == '\r' || input[i] == '\n' {
+				inComment = false
+			}
+			continue
+		}
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			switch input[i] {
+			case '\\':
+				escaped = true
+			case '(':
+				stringDepth++
+			case ')':
+				if stringDepth == 0 {
+					inString = false
+				} else {
+					stringDepth--
+				}
+			}
+			continue
+		}
+		if inHex {
+			if input[i] == '>' {
+				inHex = false
+			}
+			continue
+		}
 		switch {
+		case input[i] == '%':
+			inComment = true
+		case input[i] == '(':
+			inString = true
+			stringDepth = 0
 		case input[i] == '<' && input[i+1] == '<':
 			depth++
 			i++
+		case input[i] == '<':
+			inHex = true
 		case input[i] == '>' && input[i+1] == '>':
 			depth--
 			i++
 			if depth == 0 {
 				return i + 1, nil
+			}
+			if depth < 0 {
+				return 0, errors.New("pdfsigning: invalid dictionary nesting")
 			}
 		}
 	}
@@ -1017,10 +970,6 @@ func findArrayEndContext(ctx context.Context, input []byte) (int, error) {
 		}
 	}
 	return 0, errors.New("pdfsigning: array end not found")
-}
-
-func findStringEnd(input []byte) (int, error) {
-	return findStringEndContext(context.Background(), input)
 }
 
 func findStringEndContext(ctx context.Context, input []byte) (int, error) {

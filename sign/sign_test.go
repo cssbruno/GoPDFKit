@@ -705,6 +705,13 @@ func TestSignatureAlgorithmIDUsesRSAWithDigestOID(t *testing.T) {
 	}
 }
 
+func TestReadDERChildrenLimitsNodeCount(t *testing.T) {
+	input := bytes.Repeat([]byte{0x05, 0x00}, maxDERChildren+1)
+	if _, err := readDERChildren(input); err == nil || !strings.Contains(err.Error(), "child count") {
+		t.Fatalf("readDERChildren() limit error = %v", err)
+	}
+}
+
 func TestAddAnnotationRejectsIndirectAnnotsWithoutUsingLaterArray(t *testing.T) {
 	dict := []byte("<< /Type /Page /Annots 12 0 R /MediaBox [0 0 10 10] >>")
 	_, err := addAnnotation(dict, "20 0 R")
@@ -830,6 +837,17 @@ func TestSigningScannersHonorContextInsideLoops(t *testing.T) {
 	ctx = &errAfterContext{Context: context.Background(), remaining: 1}
 	if _, err := pdfValueEndContext(ctx, []byte("("+strings.Repeat("x", 4096)), 0); !errors.Is(err, context.Canceled) {
 		t.Fatalf("pdfValueEndContext() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestFindDictionaryEndSkipsStringAndCommentDelimiters(t *testing.T) {
+	input := []byte("<< /Literal (>>) /Nested << /Hex <3E3E> >> % >>\n /Value 1 >>")
+	end, err := findDictionaryEnd(input)
+	if err != nil {
+		t.Fatalf("findDictionaryEnd() error = %v", err)
+	}
+	if end != len(input) {
+		t.Fatalf("findDictionaryEnd() = %d, want %d", end, len(input))
 	}
 }
 
