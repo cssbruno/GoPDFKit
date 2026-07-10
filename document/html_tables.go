@@ -9,6 +9,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/cssbruno/gopdfkit/layout"
 )
 
 type htmlTableType struct {
@@ -289,7 +291,7 @@ func (html *HTML) writeParsedTable(compiled *CompiledHTML, table htmlTableType, 
 				forceTopBorder = false
 			}
 		}
-		if pdf.y+rowHt > pdf.pageBreakTrigger && !pdf.inHeader && !pdf.inFooter && pdf.acceptPageBreak() {
+		if layout.ExceedsAvailableHeight(rowHt, pdf.pageBreakTrigger-pdf.y) && !pdf.inHeader && !pdf.inFooter && pdf.acceptPageBreak() {
 			if !html.addPageFormat() {
 				return end
 			}
@@ -932,7 +934,7 @@ func (html *HTML) shouldMoveTableRowToAvoidOrphan(rows []htmlTableLayoutRow, hei
 	nextHt := heights[index+1]
 	pairHt := rowHt + nextHt
 	remaining := html.pdf.pageBreakTrigger - html.pdf.y
-	return rowHt <= remaining && pairHt > remaining && pairHt <= pageContentHt && !html.pdf.inHeader && !html.pdf.inFooter && html.pdf.acceptPageBreak()
+	return !layout.ExceedsAvailableHeight(rowHt, remaining) && layout.ExceedsAvailableHeight(pairHt, remaining) && !layout.ExceedsAvailableHeight(pairHt, pageContentHt) && !html.pdf.inHeader && !html.pdf.inFooter && html.pdf.acceptPageBreak()
 }
 
 func htmlTableCellMinWidth(cell htmlTableCell, pdf *Document) float64 {

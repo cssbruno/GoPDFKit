@@ -9,6 +9,8 @@ import (
 	"encoding/hex"
 	"strconv"
 	"strings"
+
+	"github.com/cssbruno/gopdfkit/layout"
 )
 
 const (
@@ -432,7 +434,7 @@ func (r *documentRenderer) renderTableRow(row *TableRow, widths, widthOffsets []
 	if rowHeight <= 0 {
 		rowHeight = 6
 	}
-	if rowHeight > r.availableHeight() && r.pdf.GetY() > r.pdf.tMargin {
+	if layout.ExceedsAvailableHeight(rowHeight, r.availableHeight()) && r.pdf.GetY() > r.pdf.tMargin {
 		r.addPageWithTemplate()
 		x, y = r.pdf.GetXY()
 	}
@@ -645,33 +647,20 @@ func (r *documentRenderer) renderFittedImage(name string, options ImageOptions, 
 		r.pdf.ImageOptions(name, x, y, targetW, targetH, false, options, 0, "")
 		return
 	}
-	imageW, imageH := info.Width(), info.Height()
-	scaleX := targetW / imageW
-	scaleY := targetH / imageH
-	scale := scaleX
+	fitted := layout.FitImage(info.Width(), info.Height(), targetW, targetH, fit)
 	if fit == ImageFitContain {
-		if scaleY < scale {
-			scale = scaleY
-		}
-		drawW := imageW * scale
-		drawH := imageH * scale
-		r.pdf.ImageOptions(name, x+(targetW-drawW)/2, y+(targetH-drawH)/2, drawW, drawH, false, options, 0, "")
+		r.pdf.ImageOptions(name, x+fitted.OffsetX, y+fitted.OffsetY, fitted.Width, fitted.Height, false, options, 0, "")
 		return
 	}
-	if scaleY > scale {
-		scale = scaleY
-	}
-	drawW := imageW * scale
-	drawH := imageH * scale
 	r.pdf.ImageOptionsExtended(name, ExtendedImageOptions{
 		X:       x,
 		Y:       y,
-		W:       drawW,
-		H:       drawH,
+		W:       fitted.Width,
+		H:       fitted.Height,
 		Options: options,
 		Crop: &ImageCrop{
-			X: (drawW - targetW) / 2,
-			Y: (drawH - targetH) / 2,
+			X: -fitted.OffsetX,
+			Y: -fitted.OffsetY,
 			W: targetW,
 			H: targetH,
 		},
