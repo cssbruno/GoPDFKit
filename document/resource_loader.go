@@ -48,7 +48,7 @@ func (FileResourceLoader) OpenResource(ctx context.Context, _ ResourceKind, name
 	if err := outputCanceledError(ctx); err != nil {
 		return nil, ResourceInfo{}, err
 	}
-	file, err := os.Open(name)
+	file, err := os.Open(name) // #nosec G304 -- FileResourceLoader intentionally implements explicit file-path loading.
 	if err != nil {
 		return nil, ResourceInfo{}, err
 	}

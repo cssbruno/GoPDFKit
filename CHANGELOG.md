@@ -1,6 +1,29 @@
 # Changelog
 
-## Unreleased
+## v0.12.2 - 2026-07-11
+
+Security hardening release with bounded untrusted-input parsing, explicit
+signature trust semantics, immutable CI dependencies, and preserved PDF output
+determinism.
+
+### Security
+
+- Prevented server-safe documents from retaining caller HTML or SVG source in
+  process-global caches, and enforced generated-page limits while automatic
+  HTML text pagination is occurring.
+- Bounded public HTML compilation, tokenization, compiled-plan rendering, and
+  compiled-template value expansion; preflighted SVG XML depth and node counts
+  before recursive decoding.
+- Bounded signing input size, incremental xref traversal, and xref entry scans,
+  and split trusted signature verification from explicitly named integrity-only
+  verification.
+- Added aggregate serialized-template node, image, and page budgets and rejected
+  trailing bytes after a decoded template.
+- Pinned GitHub Actions and compliance container images to immutable revisions,
+  narrowed workflow permissions, and isolated release write permissions to the
+  publishing job.
+- Replaced blanket static-analysis exclusions with narrow reviewed suppressions,
+  and updated the required Go patch release to 1.26.5.
 
 ### Fixed
 

@@ -32,6 +32,7 @@ type CacheStats struct {
 type SharedCachesStats struct {
 	Images CacheStats
 	Fonts  CacheStats
+	HTML   CacheStats
 }
 
 // Stats returns a best-effort snapshot of the document's current resource
@@ -197,12 +198,13 @@ func (c *FontCache) Clear() {
 	c.mu.Unlock()
 }
 
-// SharedCacheStats returns a snapshot of package-level image and UTF-8 font
-// caches.
+// SharedCacheStats returns a snapshot of package-level image, UTF-8 font, and
+// compiled HTML caches.
 func SharedCacheStats() SharedCachesStats {
 	return SharedCachesStats{
 		Images: sharedImageCacheStats(),
 		Fonts:  sharedFontCacheStats(),
+		HTML:   sharedCompiledHTMLCacheStats(),
 	}
 }
 

@@ -125,6 +125,7 @@ type documentPolicyState struct {
 	outputPolicy      OutputPolicy
 	hooks             Hooks
 	protect           protectType
+	pageAddGuard      func() error
 }
 
 // Document represents a single PDF document under construction.

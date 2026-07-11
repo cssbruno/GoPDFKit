@@ -139,14 +139,24 @@ func CompileHTMLTemplateContext(ctx context.Context, templateHTML string) (*Comp
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if len(templateHTML) > htmlDefaultMaxHTMLBytes {
+		return nil, ErrHTMLLimitExceeded
+	}
+	if strings.Contains(templateHTML, htmlTemplateSlotPrefix) {
+		return nil, errors.New("HTML template contains a reserved slot marker")
+	}
 	markedHTML, placeholders, err := markHTMLTemplatePlaceholders(templateHTML)
 	if err != nil {
 		return nil, err
+	}
+	if len(markedHTML) > htmlDefaultMaxHTMLBytes {
+		return nil, ErrHTMLLimitExceeded
 	}
 	compiled, err := compileHTMLWithDataImageLimitContext(ctx, markedHTML, true, htmlDefaultMaxDataImageBytes)
 	if err != nil {
 		return nil, err
 	}
+	compiled.sourceBytes = len(templateHTML)
 	slots, err := compiledHTMLTemplateSlots(compiled.tokens, placeholders)
 	if err != nil {
 		return nil, err
@@ -174,7 +184,7 @@ func (html *HTML) WriteTemplateContext(ctx context.Context, lineHt float64, temp
 		html.pdf.SetError(err)
 		return err
 	}
-	compiled, err := template.render(values)
+	compiled, err := template.render(values, html.maxHTMLBytes())
 	if err != nil {
 		html.pdf.SetError(err)
 		return err
@@ -311,13 +321,15 @@ func compiledHTMLTemplateDisallowedContext(stack []string) string {
 	return ""
 }
 
-func (template *CompiledHTMLTemplate) render(values HTMLTemplateValues) (*CompiledHTML, error) {
+func (template *CompiledHTMLTemplate) render(values HTMLTemplateValues, maxBytes int) (*CompiledHTML, error) {
 	if template == nil || template.compiled == nil {
 		return nil, errors.New("compiled HTML template is nil")
 	}
-	rendered := template.cloneCompiled()
 	if len(template.slots) == 0 {
-		return rendered, nil
+		if template.compiled.sourceBytes > maxBytes {
+			return nil, ErrHTMLLimitExceeded
+		}
+		return template.cloneCompiled(), nil
 	}
 	replacements := make(map[string]string, len(template.slots))
 	for _, slot := range template.slots {
@@ -332,8 +344,16 @@ func (template *CompiledHTMLTemplate) render(values HTMLTemplateValues) (*Compil
 		if err != nil {
 			return nil, fmt.Errorf("render HTML template value %s: %w", slot.key, err)
 		}
+		if strings.Contains(renderedValue, htmlTemplateSlotPrefix) {
+			return nil, fmt.Errorf("render HTML template value %s contains a reserved slot marker", slot.key)
+		}
 		replacements[slot.marker] = renderedValue
 	}
+	renderedBytes, err := template.renderedSize(replacements, maxBytes)
+	if err != nil {
+		return nil, err
+	}
+	rendered := template.cloneCompiled()
 	for _, slot := range template.slots {
 		value := replacements[slot.marker]
 		if slot.token < 0 || slot.token >= len(rendered.tokens) {
@@ -349,9 +369,45 @@ func (template *CompiledHTMLTemplate) render(values HTMLTemplateValues) (*Compil
 		}
 		attrs[slot.attr] = strings.ReplaceAll(attrs[slot.attr], slot.marker, value)
 	}
+	rendered.sourceBytes = renderedBytes
 	rendered.elementText = nil
 	rendered.tables = compiledHTMLTemplateTables(rendered.tokens)
 	return rendered, nil
+}
+
+func (template *CompiledHTMLTemplate) renderedSize(replacements map[string]string, maxBytes int) (int, error) {
+	if maxBytes <= 0 {
+		maxBytes = htmlDefaultMaxHTMLBytes
+	}
+	size := template.compiled.sourceBytes
+	if size > maxBytes {
+		return 0, ErrHTMLLimitExceeded
+	}
+	for _, slot := range template.slots {
+		value, ok := replacements[slot.marker]
+		if !ok || slot.token < 0 || slot.token >= len(template.compiled.tokens) {
+			continue
+		}
+		token := template.compiled.tokens[slot.token]
+		target := token.Str
+		if slot.attr != "" {
+			target = token.Attr[slot.attr]
+		}
+		count := strings.Count(target, slot.marker)
+		if count == 0 {
+			continue
+		}
+		delta := len(value) - len(slot.placeholder)
+		if delta > 0 {
+			if count > (maxBytes-size)/delta {
+				return 0, ErrHTMLLimitExceeded
+			}
+			size += count * delta
+		} else {
+			size += count * delta
+		}
+	}
+	return size, nil
 }
 
 func (template *CompiledHTMLTemplate) cloneCompiled() *CompiledHTML {

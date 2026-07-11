@@ -360,8 +360,15 @@ tools/                 tool-only module for quality/security commands
 ## HTML Support
 
 `HTMLNew()` renders a bounded HTML/CSS subset, not browser layout. `Write` uses
-a shared compiled-plan cache; use `CompileHTML` and `WriteCompiled` when you
-want to own the plan.
+a shared compiled-plan cache under the default resource policy; documents made
+with `WithServerSafeDefaults` compile privately and do not retain caller HTML or
+SVG source in package-global caches. Use `CompileHTML` and `WriteCompiled` when
+you want to own and explicitly reuse the plan.
+
+Public compilation and tokenization accept at most 4 MiB and 100,000 tokens of
+HTML. Rendering a compiled plan still applies the destination
+`HTML.MaxHTMLBytes`, and compiled template values are size-checked before
+replacement so slots cannot expand past that document budget.
 
 Choose the HTML API by what changes:
 
@@ -485,6 +492,22 @@ signedPDF, err := sign.EmbedDetachedCMS(pdfBytes, cms)
 result, err := sign.VerifyDetachedCMS(cms, prepared.SignedContent, roots)
 cert, err := sign.SignerCertificate(cms)
 ```
+
+Trusted verification APIs (`Verify`, `VerifyCMS`, and `VerifyDetachedCMS`)
+require a non-nil root certificate pool. Use the explicitly named
+`VerifyIntegrity`, `VerifyCMSIntegrity`, or `VerifyDetachedCMSIntegrity` only
+when cryptographic integrity without signer trust is the intended result; those
+results must not be used for authorization.
+
+Signing reads are bounded to `sign.DefaultMaxSourceBytes`, incremental xref
+traversal to `sign.DefaultMaxXrefChainLength`, and declared/scanned xref entries
+to `sign.DefaultMaxXrefEntries`. Set the corresponding fields in `sign.Options`
+to apply smaller application limits.
+
+Serialized template decoding rejects trailing data and applies both per-node
+and aggregate limits. `TemplateDecodeOptions` exposes `MaxNodes`,
+`MaxTotalImages`, and `MaxTotalPages` for applications that need tighter
+budgets.
 
 For workflows that require exactly one PDF signature, use
 `ExtractSingleSignature`. Its ByteRange can be converted to the fixed

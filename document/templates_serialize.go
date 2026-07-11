@@ -84,6 +84,9 @@ const (
 	maxTemplatePageBytes       = 16 * 1024 * 1024
 	maxTemplatePages           = 1000
 	maxTemplateSerializedBytes = 16 * 1024 * 1024
+	maxTemplateNodes           = 10000
+	maxTemplateTotalImages     = 4096
+	maxTemplateTotalPages      = 10000
 )
 
 // TemplateDecodeOptions controls limits used when deserializing templates.
@@ -94,6 +97,9 @@ type TemplateDecodeOptions struct {
 	MaxImages          int
 	MaxChildren        int
 	MaxPageBytes       int
+	MaxNodes           int
+	MaxTotalImages     int
+	MaxTotalPages      int
 }
 
 func normalizeTemplateDecodeOptions(options TemplateDecodeOptions) (TemplateDecodeOptions, error) {
@@ -112,7 +118,16 @@ func normalizeTemplateDecodeOptions(options TemplateDecodeOptions) (TemplateDeco
 	if options.MaxPageBytes == 0 {
 		options.MaxPageBytes = maxTemplatePageBytes
 	}
-	if options.MaxSerializedBytes < 0 || options.MaxPages < 0 || options.MaxImages < 0 || options.MaxChildren < 0 || options.MaxPageBytes < 0 {
+	if options.MaxNodes == 0 {
+		options.MaxNodes = maxTemplateNodes
+	}
+	if options.MaxTotalImages == 0 {
+		options.MaxTotalImages = maxTemplateTotalImages
+	}
+	if options.MaxTotalPages == 0 {
+		options.MaxTotalPages = maxTemplateTotalPages
+	}
+	if options.MaxSerializedBytes < 0 || options.MaxPages < 0 || options.MaxImages < 0 || options.MaxChildren < 0 || options.MaxPageBytes < 0 || options.MaxNodes < 0 || options.MaxTotalImages < 0 || options.MaxTotalPages < 0 {
 		return TemplateDecodeOptions{}, errors.New("invalid template decode limit")
 	}
 	return options, nil
@@ -240,6 +255,9 @@ func DeserializeTemplateWithOptions(b []byte, options TemplateDecodeOptions) (Te
 	tpl, err := r.readTemplate(0)
 	if err != nil {
 		return nil, err
+	}
+	if r.pos != len(r.data) {
+		return nil, errors.New("trailing data after serialized template")
 	}
 	if err := tpl.validateWithOptions(options); err != nil {
 		return nil, err
@@ -610,10 +628,13 @@ func (w *templateBinaryWriter) writeByte(value byte) {
 }
 
 type templateBinaryReader struct {
-	data    []byte
-	pos     int
-	err     error
-	options TemplateDecodeOptions
+	data        []byte
+	pos         int
+	err         error
+	options     TemplateDecodeOptions
+	nodes       int
+	totalImages int
+	totalPages  int
 }
 
 func (r *templateBinaryReader) readTemplate(depth int) (*DocumentTpl, error) {
@@ -623,6 +644,10 @@ func (r *templateBinaryReader) readTemplate(depth int) (*DocumentTpl, error) {
 	if depth > maxTemplateDepth {
 		return nil, errors.New("template nesting depth exceeded")
 	}
+	if r.nodes >= r.options.MaxNodes {
+		return nil, errors.New("template node count exceeds maximum size")
+	}
+	r.nodes++
 	childCount := r.readCount(r.options.MaxChildren, "template children")
 	children := make([]Template, 0, childCount)
 	for i := 0; i < childCount; i++ {
@@ -653,6 +678,10 @@ func (r *templateBinaryReader) readTemplate(depth int) (*DocumentTpl, error) {
 
 func (r *templateBinaryReader) readImages() map[string]*ImageInfo {
 	count := r.readCount(r.options.MaxImages, "template images")
+	r.addAggregateCount(&r.totalImages, count, r.options.MaxTotalImages, "total template images")
+	if r.err != nil {
+		return nil
+	}
 	images := make(map[string]*ImageInfo, count)
 	for i := 0; i < count; i++ {
 		key := r.readString()
@@ -691,11 +720,26 @@ func (r *templateBinaryReader) readImage() *ImageInfo {
 
 func (r *templateBinaryReader) readBytesList() [][]byte {
 	count := r.readCount(r.options.MaxPages, "template pages")
+	r.addAggregateCount(&r.totalPages, count, r.options.MaxTotalPages, "total template pages")
+	if r.err != nil {
+		return nil
+	}
 	values := make([][]byte, count)
 	for i := range values {
 		values[i] = r.readLimitedBytes(r.options.MaxPageBytes)
 	}
 	return values
+}
+
+func (r *templateBinaryReader) addAggregateCount(total *int, count, max int, name string) {
+	if r.err != nil {
+		return
+	}
+	if count < 0 || count > max-*total {
+		r.err = fmt.Errorf("%s exceeds maximum size", name)
+		return
+	}
+	*total += count
 }
 
 func (r *templateBinaryReader) readString() string {

@@ -30,6 +30,9 @@ func HTMLTokenize(htmlStr string) []HTMLSegmentType {
 
 // HTMLTokenizeContext returns HTML tokens and checks ctx during tokenization.
 func HTMLTokenizeContext(ctx context.Context, htmlStr string) ([]HTMLSegmentType, error) {
+	if len(htmlStr) > htmlDefaultMaxHTMLBytes {
+		return nil, ErrHTMLLimitExceeded
+	}
 	return htmlTokenizeContext(ctx, htmlStr, nil)
 }
 
@@ -39,7 +42,18 @@ func htmlTokenize(htmlStr string, attrCache map[string]map[string]string) []HTML
 }
 
 func htmlTokenizeContext(ctx context.Context, htmlStr string, attrCache map[string]map[string]string) ([]HTMLSegmentType, error) {
-	list := make([]HTMLSegmentType, 0, strings.Count(htmlStr, "<")+1)
+	capacity := strings.Count(htmlStr, "<") + 1
+	if capacity > htmlMaxTokenCount {
+		capacity = htmlMaxTokenCount
+	}
+	list := make([]HTMLSegmentType, 0, capacity)
+	appendToken := func(token HTMLSegmentType) error {
+		if len(list) >= htmlMaxTokenCount {
+			return ErrHTMLLimitExceeded
+		}
+		list = append(list, token)
+		return nil
+	}
 	processed := 0
 	for len(htmlStr) > 0 {
 		if processed%1024 == 0 {
@@ -51,12 +65,16 @@ func htmlTokenizeContext(ctx context.Context, htmlStr string, attrCache map[stri
 		tagStart := strings.IndexByte(htmlStr, '<')
 		if tagStart < 0 {
 			if htmlStr != "" {
-				list = append(list, HTMLSegmentType{Cat: 'T', Str: htmlUnescapeString(htmlStr)})
+				if err := appendToken(HTMLSegmentType{Cat: 'T', Str: htmlUnescapeString(htmlStr)}); err != nil {
+					return nil, err
+				}
 			}
 			break
 		}
 		if tagStart > 0 {
-			list = append(list, HTMLSegmentType{Cat: 'T', Str: htmlUnescapeString(htmlStr[:tagStart])})
+			if err := appendToken(HTMLSegmentType{Cat: 'T', Str: htmlUnescapeString(htmlStr[:tagStart])}); err != nil {
+				return nil, err
+			}
 			htmlStr = htmlStr[tagStart:]
 			continue
 		}
@@ -70,7 +88,9 @@ func htmlTokenizeContext(ctx context.Context, htmlStr string, attrCache map[stri
 		}
 		tagEnd := htmlTagEnd(htmlStr)
 		if tagEnd < 0 {
-			list = append(list, HTMLSegmentType{Cat: 'T', Str: htmlUnescapeString(htmlStr)})
+			if err := appendToken(HTMLSegmentType{Cat: 'T', Str: htmlUnescapeString(htmlStr)}); err != nil {
+				return nil, err
+			}
 			break
 		}
 		rawTag := htmlStr[1:tagEnd]
@@ -83,12 +103,18 @@ func htmlTokenizeContext(ctx context.Context, htmlStr string, attrCache map[stri
 			continue
 		}
 		if closeTag {
-			list = append(list, HTMLSegmentType{Cat: 'C', Str: name})
+			if err := appendToken(HTMLSegmentType{Cat: 'C', Str: name}); err != nil {
+				return nil, err
+			}
 			continue
 		}
-		list = append(list, HTMLSegmentType{Cat: 'O', Str: name, Attr: attrs})
+		if err := appendToken(HTMLSegmentType{Cat: 'O', Str: name, Attr: attrs}); err != nil {
+			return nil, err
+		}
 		if selfClosing {
-			list = append(list, HTMLSegmentType{Cat: 'C', Str: name})
+			if err := appendToken(HTMLSegmentType{Cat: 'C', Str: name}); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if err := outputCanceledError(ctx); err != nil {

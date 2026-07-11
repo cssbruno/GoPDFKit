@@ -17,6 +17,7 @@ import (
 // CompiledHTML stores the reusable parse products for an HTML fragment. It is
 // safe to reuse across documents.
 type CompiledHTML struct {
+	sourceBytes       int
 	tokens            []HTMLSegmentType
 	cssRules          []htmlCSSRule
 	styleDeclarations map[string]map[string]string
@@ -97,6 +98,9 @@ func CompileHTML(htmlStr string) (*CompiledHTML, error) {
 // CompileHTMLContext tokenizes and compiles an HTML fragment while checking ctx
 // during tokenization, data-image decoding, and inline-SVG parsing.
 func CompileHTMLContext(ctx context.Context, htmlStr string) (*CompiledHTML, error) {
+	if len(htmlStr) > htmlDefaultMaxHTMLBytes {
+		return nil, ErrHTMLLimitExceeded
+	}
 	return compileHTMLWithDataImageLimitContext(ctx, htmlStr, true, htmlDefaultMaxDataImageBytes)
 }
 
@@ -114,6 +118,7 @@ func compileHTMLWithDataImageLimitContext(ctx context.Context, htmlStr string, c
 		return nil, err
 	}
 	compiled := compileHTMLTokens(tokens, cacheReusableData)
+	compiled.sourceBytes = len(htmlStr)
 	if err := outputCanceledError(ctx); err != nil {
 		return nil, err
 	}

@@ -12,20 +12,21 @@ on:
         default: v0.1.0
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
-    name: Release
+  validate:
+    name: Validate Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: tools/go.mod
           cache: true
@@ -58,7 +59,7 @@ jobs:
 
       - name: Start Arlington checker
         env:
-          ARLINGTON_DOCKER_IMAGE: verapdf/arlington:v1.30.1
+          ARLINGTON_DOCKER_IMAGE: verapdf/arlington@sha256:c6c8383ba5eea45047aeedfa3dd3532e7957b39ddcd40c9ebc4d20d4d884a3a8 # v1.30.1
         run: |
           docker run -d --rm --name gopdfkit-arlington -p 8080:8080 "$ARLINGTON_DOCKER_IMAGE"
           for attempt in $(seq 1 60); do
@@ -74,7 +75,7 @@ jobs:
         env:
           REQUIRE_COMPLIANCE_TOOLS: "1"
           SRGB_ICC: /usr/share/color/icc/colord/sRGB.icc
-          VERAPDF_DOCKER_IMAGE: verapdf/cli:v1.30.2
+          VERAPDF_DOCKER_IMAGE: verapdf/cli@sha256:d5ee329657cf9bc4b2400392dd54c7d0a0ce9980ff6fa2da5590eebeec007cdb # v1.30.2
           VERAPDF: tools/verapdf-docker.sh 0
           PDFUA_CHECKER: tools/verapdf-docker.sh ua2
           ARLINGTON_CHECKER: tools/arlington-validate.sh
@@ -86,6 +87,37 @@ jobs:
       - name: Stop Arlington checker
         if: always()
         run: docker rm -f gopdfkit-arlington || true
+
+  release:
+    name: Publish Release
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME}"
+          fi
+          echo "VERSION=${version}" >> "${GITHUB_ENV}"
+
+      - name: Ensure tag exists
+        shell: bash
+        run: git rev-parse -q --verify "refs/tags/${VERSION}"
+
+      - name: Checkout release tag
+        shell: bash
+        run: git checkout --detach "refs/tags/${VERSION}"
 
       - name: Build release notes
         run: make release-notes VERSION="${VERSION}" > release-notes.md

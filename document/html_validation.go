@@ -79,17 +79,20 @@ func (html *HTML) generatedPageCount() int {
 	return pageCount - html.renderStartPageCount + 1
 }
 
+func (html *HTML) checkGeneratedPageLimitForAdd() error {
+	pageCount := html.generatedPageCount() + 1
+	maxPages := html.maxGeneratedPages()
+	if pageCount <= maxPages {
+		return nil
+	}
+	return fmt.Errorf("%w: HTML rendering exceeded maximum generated pages: %d > %d", ErrHTMLLimitExceeded, pageCount, maxPages)
+}
+
 func (html *HTML) addPageFormat() bool {
 	if html == nil || html.pdf == nil {
 		return false
 	}
 	html.pdf.addPageFormatRotation(html.pdf.curOrientation, html.pdf.curPageSize, html.pdf.curRotation)
-	pageCount := html.generatedPageCount()
-	maxPages := html.maxGeneratedPages()
-	if pageCount > maxPages {
-		html.pdf.SetError(fmt.Errorf("%w: HTML rendering exceeded maximum generated pages: %d > %d", ErrHTMLLimitExceeded, pageCount, maxPages))
-		return false
-	}
 	return html.pdf.err == nil
 }
 

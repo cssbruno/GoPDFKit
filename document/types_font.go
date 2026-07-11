@@ -4,7 +4,7 @@
 package document
 
 import (
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505 -- Used only as a stable font-definition identifier, never for authentication.
 	"encoding/hex"
 	"encoding/json"
 	"hash"
@@ -117,7 +117,7 @@ type fontDefinition struct {
 func generateFontID(fdt fontDefinition) (string, error) {
 	// File can differ when the same font is generated in a different instance.
 	fdt.File = ""
-	h := sha1.New()
+	h := sha1.New() // #nosec G401 -- Compatibility identifier for generated font definitions.
 	w := hashJSONNoFinalNewline{hash: h}
 	if err := json.NewEncoder(&w).Encode(&fdt); err != nil {
 		return "", err

@@ -391,7 +391,7 @@ func parseImageOptionsReaderWithLimitsContext(ctx context.Context, options Image
 }
 
 func openImageFile(fileStr string) (*os.File, error) {
-	return os.Open(fileStr)
+	return os.Open(fileStr) // #nosec G304 -- RegisterImageOptions is an explicit caller-path API.
 }
 
 func normalizeImageType(imageType string) string {

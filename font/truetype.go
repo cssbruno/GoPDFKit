@@ -108,7 +108,7 @@ func ParseTTF(fileStr string) (ttfRec TrueType, err error) {
 // TrueType outlines and CFF/PostScript outlines.
 func ParseOpenType(fileStr string) (openTypeRec OpenType, err error) {
 	var t ttfParser
-	t.f, err = os.Open(fileStr)
+	t.f, err = os.Open(fileStr) // #nosec G304 -- Parse accepts an explicit caller-supplied font path.
 	if err != nil {
 		return
 	}

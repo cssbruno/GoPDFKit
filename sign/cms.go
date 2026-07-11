@@ -40,6 +40,10 @@ var (
 
 const maxCMSPackageBytes = 16 * 1024 * 1024
 
+// ErrTrustStoreRequired is returned by trusted verification APIs when no root
+// certificate pool is supplied.
+var ErrTrustStoreRequired = errors.New("pdfsigning: trust store is required")
+
 // CMSOptions configures CMS SignedData creation.
 type CMSOptions struct {
 	// Signer signs the CMS signed attributes.
@@ -195,12 +199,30 @@ func derValueContent(encoded []byte) []byte {
 
 // VerifyCMS verifies attached CMS SignedData.
 func VerifyCMS(signature []byte, truststore *x509.CertPool) (*CMSVerifyResult, error) {
+	if truststore == nil {
+		return nil, ErrTrustStoreRequired
+	}
 	return verifyCMS(signature, nil, truststore, false)
+}
+
+// VerifyCMSIntegrity verifies CMS cryptographic integrity without establishing
+// signer trust. Callers must not use it as an authorization decision.
+func VerifyCMSIntegrity(signature []byte) (*CMSVerifyResult, error) {
+	return verifyCMS(signature, nil, nil, false)
 }
 
 // VerifyDetachedCMS verifies detached CMS SignedData against content.
 func VerifyDetachedCMS(signature, content []byte, truststore *x509.CertPool) (*CMSVerifyResult, error) {
+	if truststore == nil {
+		return nil, ErrTrustStoreRequired
+	}
 	return verifyCMS(signature, content, truststore, true)
+}
+
+// VerifyDetachedCMSIntegrity verifies detached CMS cryptographic integrity
+// without establishing signer trust.
+func VerifyDetachedCMSIntegrity(signature, content []byte) (*CMSVerifyResult, error) {
+	return verifyCMS(signature, content, nil, true)
 }
 
 func verifyCMS(signature []byte, detachedContent []byte, truststore *x509.CertPool, requireDetached bool) (*CMSVerifyResult, error) {

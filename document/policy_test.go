@@ -58,6 +58,23 @@ func TestWithServerSafeDefaultsAppliesServerPolicy(t *testing.T) {
 	}
 }
 
+func TestWithServerSafeDefaultsDoesNotPopulateSharedHTMLCache(t *testing.T) {
+	ClearSharedCaches()
+	t.Cleanup(ClearSharedCaches)
+
+	pdf := MustNew(WithServerSafeDefaults())
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	html := pdf.HTMLNew()
+	html.Write(5, `<p>server-safe cache isolation</p>`)
+	if err := pdf.Error(); err != nil {
+		t.Fatalf("HTML.Write() error = %v", err)
+	}
+	if stats := SharedCacheStats(); stats.HTML.Entries != 0 || stats.HTML.Bytes != 0 {
+		t.Fatalf("SharedCacheStats().HTML = %#v, want empty cache", stats.HTML)
+	}
+}
+
 func TestSetProductionPolicyAppliesToLegacyDocument(t *testing.T) {
 	pdf := MustNew()
 	policy := ServerSafePolicy()
@@ -426,5 +443,27 @@ func TestTemplateDecodeOptionsApplySerializedLimit(t *testing.T) {
 	}
 	if _, err = DeserializeTemplateWithOptions(encoded, TemplateDecodeOptions{MaxSerializedBytes: len(encoded)}); err != nil {
 		t.Fatalf("DeserializeTemplateWithOptions() error = %v", err)
+	}
+}
+
+func TestTemplateDecodeRejectsTrailingDataAndAggregateNodes(t *testing.T) {
+	child := CreateTpl(Point{}, Size{Wd: 5, Ht: 5}, "P", "pt", "", func(t *Tpl) {
+		t.RawWriteStr("0 0 m")
+	})
+	parent := CreateTpl(Point{}, Size{Wd: 10, Ht: 10}, "P", "pt", "", func(t *Tpl) {
+		t.UseTemplate(child)
+	})
+	encoded, err := parent.Serialize()
+	if err != nil {
+		t.Fatalf("Serialize() error = %v", err)
+	}
+	if _, err := DeserializeTemplate(append(append([]byte(nil), encoded...), 0)); err == nil || !strings.Contains(err.Error(), "trailing data") {
+		t.Fatalf("DeserializeTemplate() trailing-data error = %v", err)
+	}
+	if _, err := DeserializeTemplateWithOptions(encoded, TemplateDecodeOptions{MaxNodes: 1}); err == nil || !strings.Contains(err.Error(), "node count") {
+		t.Fatalf("DeserializeTemplateWithOptions() node-limit error = %v", err)
+	}
+	if _, err := DeserializeTemplateWithOptions(encoded, TemplateDecodeOptions{MaxTotalPages: 2}); err == nil || !strings.Contains(err.Error(), "total template pages") {
+		t.Fatalf("DeserializeTemplateWithOptions() page-limit error = %v", err)
 	}
 }

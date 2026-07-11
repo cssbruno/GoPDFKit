@@ -4,8 +4,8 @@
 package document
 
 import (
+	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -15,23 +15,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 )
 
-const maxSVGSourceBytes = 4 * 1024 * 1024
-
-const svgParseCacheLimit = 32
-
-var svgParseCache = struct {
-	sync.Mutex
-	keys []svgParseCacheKey
-	data map[svgParseCacheKey]SVG
-}{data: make(map[svgParseCacheKey]SVG)}
-
-type svgParseCacheKey struct {
-	size int
-	sum  [32]byte
-}
+const (
+	maxSVGSourceBytes = 4 * 1024 * 1024
+	svgMaxNodeCount   = 100000
+)
 
 func svgNumberFields(numStr string) []string {
 	return svgScanFields(numStr, false)
@@ -88,91 +77,6 @@ func svgScanFields(s string, commands bool) []string {
 		fields = append(fields, s[start:i])
 	}
 	return fields
-}
-
-func svgParseCacheGet(key svgParseCacheKey) (SVG, bool) {
-	svgParseCache.Lock()
-	sig, ok := svgParseCache.data[key]
-	svgParseCache.Unlock()
-	if !ok {
-		return SVG{}, false
-	}
-	return cloneSVG(sig), true
-}
-
-func svgParseCachePut(key svgParseCacheKey, sig SVG) {
-	svgParseCache.Lock()
-	defer svgParseCache.Unlock()
-	if _, ok := svgParseCache.data[key]; ok {
-		return
-	}
-	if len(svgParseCache.keys) >= svgParseCacheLimit {
-		evict := svgParseCache.keys[0]
-		copy(svgParseCache.keys, svgParseCache.keys[1:])
-		svgParseCache.keys = svgParseCache.keys[:len(svgParseCache.keys)-1]
-		delete(svgParseCache.data, evict)
-	}
-	svgParseCache.keys = append(svgParseCache.keys, key)
-	svgParseCache.data[key] = cloneSVG(sig)
-}
-
-func cloneSVG(sig SVG) SVG {
-	sig.Segments = cloneSVGSegmentGroups(sig.Segments)
-	sig.Paths = cloneSVGPaths(sig.Paths)
-	sig.Texts = append([]SVGText(nil), sig.Texts...)
-	sig.Images = append([]SVGImage(nil), sig.Images...)
-	sig.Elements = cloneSVGElements(sig.Elements)
-	return sig
-}
-
-func cloneSVGSegmentGroups(groups [][]SVGSegment) [][]SVGSegment {
-	if len(groups) == 0 {
-		return nil
-	}
-	out := make([][]SVGSegment, len(groups))
-	for i, group := range groups {
-		out[i] = append([]SVGSegment(nil), group...)
-	}
-	return out
-}
-
-func cloneSVGPaths(paths []SVGPath) []SVGPath {
-	if len(paths) == 0 {
-		return nil
-	}
-	out := make([]SVGPath, len(paths))
-	for i, path := range paths {
-		out[i] = cloneSVGPath(path)
-	}
-	return out
-}
-
-func cloneSVGPath(path SVGPath) SVGPath {
-	path.Segments = append([]SVGSegment(nil), path.Segments...)
-	path.Style = cloneSVGStyle(path.Style)
-	return path
-}
-
-func cloneSVGStyle(style SVGStyle) SVGStyle {
-	style.ClipPath = append([]SVGSegment(nil), style.ClipPath...)
-	style.StrokeDashArray = append([]float64(nil), style.StrokeDashArray...)
-	style.FillGradient.Stops = append([]SVGGradientStop(nil), style.FillGradient.Stops...)
-	style.FillPattern.Elements = cloneSVGElements(style.FillPattern.Elements)
-	return style
-}
-
-func cloneSVGElements(elements []SVGElement) []SVGElement {
-	if len(elements) == 0 {
-		return nil
-	}
-	out := make([]SVGElement, len(elements))
-	for i, element := range elements {
-		out[i] = element
-		out[i].Path = cloneSVGPath(element.Path)
-		out[i].Text.widthCache = svgTextWidthCache{}
-		out[i].Image.Data = append([]byte(nil), element.Image.Data...)
-	}
-	return out
 }
 
 func pathArgStart(c byte) bool {
@@ -1120,12 +1024,12 @@ func SVGParseContext(ctx context.Context, buf []byte) (sig SVG, err error) {
 	if len(buf) > maxSVGSourceBytes {
 		return SVG{}, errors.New("SVG source exceeds maximum size")
 	}
-	cacheKey := svgParseCacheKey{size: len(buf), sum: sha256.Sum256(buf)}
-	if cached, ok := svgParseCacheGet(cacheKey); ok {
-		return cached, nil
+	if err := validateSVGXMLStructureContext(ctx, buf); err != nil {
+		return SVG{}, err
 	}
 	var src svgNode
-	err = xml.Unmarshal(buf, &src)
+	decoder := xml.NewDecoder(contextReader{ctx: ctx, r: bytes.NewReader(buf)})
+	err = decoder.Decode(&src)
 	if err == nil {
 		err = outputCanceledError(ctx)
 	}
@@ -1147,10 +1051,43 @@ func SVGParseContext(ctx context.Context, buf []byte) (sig SVG, err error) {
 	}
 	if err != nil {
 		sig = SVG{}
-	} else {
-		svgParseCachePut(cacheKey, sig)
 	}
 	return
+}
+
+func validateSVGXMLStructureContext(ctx context.Context, buf []byte) error {
+	decoder := xml.NewDecoder(contextReader{ctx: ctx, r: bytes.NewReader(buf)})
+	depth := 0
+	nodes := 0
+	tokens := 0
+	for {
+		if tokens%1024 == 0 {
+			if err := outputCanceledError(ctx); err != nil {
+				return err
+			}
+		}
+		token, err := decoder.Token()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		tokens++
+		switch token.(type) {
+		case xml.StartElement:
+			depth++
+			nodes++
+			if depth > svgMaxNestingDepth {
+				return fmt.Errorf("SVG nesting depth exceeds %d", svgMaxNestingDepth)
+			}
+			if nodes > svgMaxNodeCount {
+				return fmt.Errorf("SVG node count exceeds %d", svgMaxNodeCount)
+			}
+		case xml.EndElement:
+			depth--
+		}
+	}
 }
 
 // SVGFileParse parses an SVG file into a descriptor that SVGWrite can render.
@@ -1177,7 +1114,7 @@ func readSVGFileContext(ctx context.Context, path string) ([]byte, error) {
 	if err := outputCanceledError(ctx); err != nil {
 		return nil, err
 	}
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- SVGFileParse is an explicit caller-path API with a 4 MiB read limit.
 	if err != nil {
 		return nil, err
 	}

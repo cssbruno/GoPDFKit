@@ -96,9 +96,9 @@ func ComparePDFs(rdr1, rdr2 io.Reader, printDiff bool) (err error) {
 // the second file cannot be read; otherwise an error is returned.
 func ComparePDFFiles(file1Str, file2Str string, printDiff bool) (err error) {
 	var sl1, sl2 []byte
-	sl1, err = os.ReadFile(file1Str)
+	sl1, err = os.ReadFile(file1Str) // #nosec G304 -- test helper intentionally compares caller-selected fixtures.
 	if err == nil {
-		sl2, err = os.ReadFile(file2Str)
+		sl2, err = os.ReadFile(file2Str) // #nosec G304 -- test helper intentionally compares caller-selected fixtures.
 		if err == nil {
 			err = CompareBytes(sl1, sl2, printDiff)
 		} else {

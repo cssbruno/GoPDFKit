@@ -5,6 +5,8 @@ package document
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"math"
 	"strconv"
 	"strings"
@@ -731,6 +733,75 @@ func TestHTMLWriteMaxGeneratedPages(t *testing.T) {
 	}
 	if got, want := pdf.err.Error(), "HTML rendering exceeded maximum generated pages: 2 > 1"; !strings.Contains(got, want) {
 		t.Fatalf("error = %q, want to contain %q", got, want)
+	}
+}
+
+func TestHTMLWriteMaxGeneratedPagesCoversAutomaticTextBreaks(t *testing.T) {
+	pdf := MustNew()
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.SetY(pdf.pageBreakTrigger - 1)
+
+	html := pdf.HTMLNew()
+	html.MaxGeneratedPages = 1
+	html.Write(5, `automatic page break`)
+
+	if !errors.Is(pdf.Error(), ErrHTMLLimitExceeded) {
+		t.Fatalf("HTML.Write() error = %v, want ErrHTMLLimitExceeded", pdf.Error())
+	}
+	if got := pdf.PageCount(); got != 1 {
+		t.Fatalf("PageCount() = %d, want 1", got)
+	}
+}
+
+func TestCompiledHTMLRespectsSourceAndRenderedTemplateLimits(t *testing.T) {
+	if _, err := CompileHTMLContext(context.Background(), strings.Repeat("x", htmlDefaultMaxHTMLBytes+1)); !errors.Is(err, ErrHTMLLimitExceeded) {
+		t.Fatalf("CompileHTMLContext() error = %v, want ErrHTMLLimitExceeded", err)
+	}
+	if _, err := HTMLTokenizeContext(context.Background(), strings.Repeat("x", htmlDefaultMaxHTMLBytes+1)); !errors.Is(err, ErrHTMLLimitExceeded) {
+		t.Fatalf("HTMLTokenizeContext() error = %v, want ErrHTMLLimitExceeded", err)
+	}
+	if _, err := HTMLTokenizeContext(context.Background(), strings.Repeat(`<b/>`, htmlMaxTokenCount/2+1)); !errors.Is(err, ErrHTMLLimitExceeded) {
+		t.Fatalf("HTMLTokenizeContext() token-limit error = %v, want ErrHTMLLimitExceeded", err)
+	}
+
+	compiled, err := CompileHTML(`<p>compiled source is larger than the render budget</p>`)
+	if err != nil {
+		t.Fatalf("CompileHTML() error = %v", err)
+	}
+	pdf := MustNew()
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	html := pdf.HTMLNew()
+	html.MaxHTMLBytes = 8
+	html.WriteCompiled(5, compiled)
+	if !errors.Is(pdf.Error(), ErrHTMLLimitExceeded) {
+		t.Fatalf("WriteCompiled() error = %v, want ErrHTMLLimitExceeded", pdf.Error())
+	}
+
+	template, err := CompileHTMLTemplate(`<p>{{value}}</p>`)
+	if err != nil {
+		t.Fatalf("CompileHTMLTemplate() error = %v", err)
+	}
+	pdf = MustNew()
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	html = pdf.HTMLNew()
+	html.MaxHTMLBytes = 32
+	err = html.WriteTemplateContext(context.Background(), 5, template, HTMLTemplateValues{"value": strings.Repeat("x", 64)})
+	if !errors.Is(err, ErrHTMLLimitExceeded) {
+		t.Fatalf("WriteTemplateContext() error = %v, want ErrHTMLLimitExceeded", err)
+	}
+	if _, err := CompileHTMLTemplate(`<p>` + htmlTemplateSlotPrefix + `0` + htmlTemplateSlotSuffix + `</p>`); err == nil || !strings.Contains(err.Error(), "reserved slot marker") {
+		t.Fatalf("CompileHTMLTemplate() reserved-marker error = %v", err)
+	}
+	pdf = MustNew()
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	html = pdf.HTMLNew()
+	err = html.WriteTemplateContext(context.Background(), 5, template, HTMLTemplateValues{"value": htmlTemplateSlotPrefix + "0" + htmlTemplateSlotSuffix})
+	if err == nil || !strings.Contains(err.Error(), "reserved slot marker") {
+		t.Fatalf("WriteTemplateContext() reserved-marker error = %v", err)
 	}
 }
 

@@ -110,7 +110,7 @@ func baseNoExt(fileStr string) string {
 
 func loadMap(encodingFileStr string) (encList encListType, err error) {
 	var f *os.File
-	f, err = os.Open(encodingFileStr)
+	f, err = os.Open(encodingFileStr) // #nosec G304 -- Font generation accepts explicit caller-supplied paths.
 	if err == nil {
 		defer func() { _ = f.Close() }()
 		for j := range encList {
@@ -153,7 +153,7 @@ func getInfoFromTrueType(fileStr string, msgWriter io.Writer, embed bool, encLis
 			err = errors.New("font license does not allow embedding")
 			return
 		}
-		info.Data, err = os.ReadFile(fileStr)
+		info.Data, err = os.ReadFile(fileStr) // #nosec G304 -- Font generation accepts an explicit source path.
 		if err != nil {
 			return
 		}
@@ -289,7 +289,7 @@ func getInfoFromType1(fileStr string, msgWriter io.Writer, embed bool, encList e
 	info.Widths = make([]int, 256)
 	if embed {
 		var f *os.File
-		f, err = os.Open(fileStr)
+		f, err = os.Open(fileStr) // #nosec G304 -- Font generation accepts an explicit source path.
 		if err != nil {
 			return
 		}
@@ -319,7 +319,7 @@ func getInfoFromType1(fileStr string, msgWriter io.Writer, embed bool, encList e
 		return
 	}
 	var f *os.File
-	f, err = os.Open(afmFileStr)
+	f, err = os.Open(afmFileStr) // #nosec G304 -- Font generation accepts an explicit AFM path.
 	if err != nil {
 		return
 	}
@@ -479,7 +479,7 @@ func makeDefinitionFile(fileStr, tpStr, encodingFileStr string, embed bool, encL
 		return err
 	}
 	var f *os.File
-	f, err = os.Create(fileStr)
+	f, err = os.Create(fileStr) // #nosec G304 -- Destination is explicitly selected by the font-generation caller.
 	if err != nil {
 		return err
 	}
@@ -570,7 +570,7 @@ func Make(fontFileStr, encodingFileStr, dstDirStr string, msgWriter io.Writer, e
 		var f *os.File
 		info.File = baseStr + ".z"
 		zFileStr := filepath.Join(dstDirStr, info.File)
-		f, err = os.Create(zFileStr)
+		f, err = os.Create(zFileStr) // #nosec G304 -- Destination is explicitly selected by the font-generation caller.
 		if err != nil {
 			return err
 		}
@@ -597,7 +597,7 @@ func Make(fontFileStr, encodingFileStr, dstDirStr string, msgWriter io.Writer, e
 
 func openTypeFontType(fileStr string) (string, error) {
 	var header [4]byte
-	f, err := os.Open(fileStr)
+	f, err := os.Open(fileStr) // #nosec G304 -- Font generation accepts an explicit source path.
 	if err != nil {
 		return "", err
 	}

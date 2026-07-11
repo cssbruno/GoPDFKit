@@ -64,11 +64,31 @@ func (contents *PDFSignatureContents) ByteRange64() ([4]int64, error) {
 
 // Verify verifies the first CMS signature found in a signed PDF.
 func Verify(input []byte, truststore *x509.CertPool) (*PDFSignature, error) {
+	if truststore == nil {
+		return nil, ErrTrustStoreRequired
+	}
 	extracted, err := ExtractSignature(input)
 	if err != nil {
 		return nil, err
 	}
 	result, err := VerifyDetachedCMS(extracted.CMS, extracted.SignedContent, truststore)
+	if err != nil {
+		return nil, err
+	}
+	if !result.Detached {
+		return nil, errors.New("pdfsigning: PDF signature CMS must be detached")
+	}
+	return &PDFSignature{ByteRange: extracted.ByteRange, CMS: result}, nil
+}
+
+// VerifyIntegrity verifies the first CMS signature's cryptographic integrity
+// without establishing signer trust. It must not be used for authorization.
+func VerifyIntegrity(input []byte) (*PDFSignature, error) {
+	extracted, err := ExtractSignature(input)
+	if err != nil {
+		return nil, err
+	}
+	result, err := VerifyDetachedCMSIntegrity(extracted.CMS, extracted.SignedContent)
 	if err != nil {
 		return nil, err
 	}

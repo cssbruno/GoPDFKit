@@ -134,7 +134,7 @@ func (c *ImageCache) registerImageOptions(name, fileStr string, options ImageOpt
 		c.mu.Unlock()
 		return info, true, nil
 	}
-	file, err := os.Open(fileStr)
+	file, err := os.Open(fileStr) // #nosec G304 -- Cache API accepts explicit caller-selected image paths.
 	if err != nil {
 		return nil, false, err
 	}

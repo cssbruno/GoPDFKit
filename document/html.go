@@ -75,6 +75,7 @@ const (
 	htmlMaxCSSBytes              = 1 * 1024 * 1024
 	htmlMaxCSSRules              = 2048
 	htmlMaxCSSSelectors          = 4096
+	htmlMaxTokenCount            = 100000
 )
 
 // HTMLNew returns an instance that writes HTML into the current PDF document.
@@ -126,7 +127,8 @@ func (html *HTML) WriteContext(ctx context.Context, lineHt float64, htmlStr stri
 		html.pdf.SetError(ErrHTMLLimitExceeded)
 		return html.pdf.Error()
 	}
-	compiled, err := compileHTMLForWriteContext(ctx, htmlStr, html.maxDataImageBytes())
+	useSharedCache := html.pdf != nil && html.pdf.resourceCachePolicy == ResourceCacheShared
+	compiled, err := compileHTMLForWriteContext(ctx, htmlStr, html.maxDataImageBytes(), useSharedCache)
 	if err != nil {
 		html.pdf.SetError(err)
 		return err
@@ -142,6 +144,10 @@ func (html *HTML) WriteContext(ctx context.Context, lineHt float64, htmlStr stri
 // WriteCompiled renders a precompiled HTML fragment. Use CompileHTML when the
 // same HTML is rendered repeatedly across documents.
 func (html *HTML) WriteCompiled(lineHt float64, compiled *CompiledHTML) {
+	if compiled != nil && compiled.sourceBytes > html.maxHTMLBytes() {
+		html.pdf.SetError(ErrHTMLLimitExceeded)
+		return
+	}
 	if err := compiled.validate(); err != nil {
 		html.pdf.SetError(err)
 		return
@@ -160,7 +166,16 @@ func (html *HTML) WriteCompiled(lineHt float64, compiled *CompiledHTML) {
 	previousStyleDeclarationCache := html.styleDeclarationCache
 	previousCompiledStyleCache := html.compiledStyleCache
 	previousInlineSVGCache := html.inlineSVGCache
+	previousPageAddGuard := html.pdf.pageAddGuard
 	html.renderStartPageCount = html.pdf.PageCount()
+	html.pdf.pageAddGuard = func() error {
+		if previousPageAddGuard != nil {
+			if err := previousPageAddGuard(); err != nil {
+				return err
+			}
+		}
+		return html.checkGeneratedPageLimitForAdd()
+	}
 	html.renderCacheActive = true
 	html.dataImageCache = make(map[string]htmlImageSource)
 	html.styleDeclarationCache = nil
@@ -178,6 +193,7 @@ func (html *HTML) WriteCompiled(lineHt float64, compiled *CompiledHTML) {
 		html.styleDeclarationCache = previousStyleDeclarationCache
 		html.compiledStyleCache = previousCompiledStyleCache
 		html.inlineSVGCache = previousInlineSVGCache
+		html.pdf.pageAddGuard = previousPageAddGuard
 	}()
 	newHTMLRenderSession(html, compiled, lineHt).render()
 }

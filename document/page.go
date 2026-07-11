@@ -236,6 +236,12 @@ func (f *Document) addPageFormatRotation(orientationStr string, size Size, rotat
 		f.err = err
 		return
 	}
+	if f.pageAddGuard != nil {
+		if err := f.pageAddGuard(); err != nil {
+			f.SetError(err)
+			return
+		}
+	}
 	if err := f.checkPageLimitForAdd(); err != nil {
 		return
 	}

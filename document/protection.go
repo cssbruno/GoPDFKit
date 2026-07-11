@@ -4,9 +4,9 @@
 package document
 
 import (
-	"crypto/md5"
+	"crypto/md5" // #nosec G501 -- The isolated legacy PDF RC4 compatibility algorithm requires MD5.
 	"crypto/rand"
-	"crypto/rc4"
+	"crypto/rc4" // #nosec G503 -- This file is explicitly limited to legacy PDF RC4 compatibility.
 	"io"
 )
 
@@ -44,7 +44,7 @@ func (p *protectType) rc4(n uint32, buf *[]byte) {
 	if p.rc4cipher == nil || p.rc4n != n {
 		var key [10]byte
 		p.objectKey(n, &key)
-		p.rc4cipher, _ = rc4.NewCipher(key[:])
+		p.rc4cipher, _ = rc4.NewCipher(key[:]) // #nosec G405 -- Required by the legacy PDF standard-security algorithm.
 		p.rc4n = n
 	}
 	p.rc4cipher.XORKeyStream(*buf, *buf)
@@ -54,14 +54,14 @@ func (p *protectType) objectKey(n uint32, key *[10]byte) {
 	var buf [32]byte
 	input := append(buf[:0], p.encryptionKey...)
 	input = append(input, byte(n), byte(n>>8), byte(n>>16), 0, 0)
-	sum := md5.Sum(input)
+	sum := md5.Sum(input) // #nosec G401 -- Required by the legacy PDF standard-security algorithm.
 	copy(key[:], sum[:10])
 }
 
 func oValueGen(userPass, ownerPass []byte) (v []byte) {
 	var c *rc4.Cipher
-	tmp := md5.Sum(ownerPass)
-	c, _ = rc4.NewCipher(tmp[0:5])
+	tmp := md5.Sum(ownerPass)      // #nosec G401 -- Required by the legacy PDF standard-security algorithm.
+	c, _ = rc4.NewCipher(tmp[0:5]) // #nosec G405 -- Required by the legacy PDF standard-security algorithm.
 	size := len(userPass)
 	v = make([]byte, size)
 	c.XORKeyStream(v, userPass)
@@ -70,7 +70,7 @@ func oValueGen(userPass, ownerPass []byte) (v []byte) {
 
 func (p *protectType) uValueGen() (v []byte) {
 	var c *rc4.Cipher
-	c, _ = rc4.NewCipher(p.encryptionKey)
+	c, _ = rc4.NewCipher(p.encryptionKey) // #nosec G405 -- Required by the legacy PDF standard-security algorithm.
 	size := len(p.padding)
 	v = make([]byte, size)
 	c.XORKeyStream(v, p.padding)
@@ -106,7 +106,7 @@ func (p *protectType) setProtection(privFlag byte, userPassStr, ownerPassStr str
 	buf = append(buf, userPass...)
 	buf = append(buf, p.oValue...)
 	buf = append(buf, privFlag, 0xff, 0xff, 0xff)
-	sum := md5.Sum(buf)
+	sum := md5.Sum(buf) // #nosec G401 -- Required by the legacy PDF standard-security algorithm.
 	p.encryptionKey = sum[0:5]
 	p.uValue = p.uValueGen()
 	p.pValue = -(int(privFlag^255) + 1)

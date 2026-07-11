@@ -27,7 +27,7 @@ func FuzzVerifyCMS(f *testing.F) {
 	f.Add(derSequence(derOID(oidSignedData), der(0xa0, derSequence())))
 	f.Add([]byte("not cms"))
 	f.Fuzz(func(t *testing.T, input []byte) {
-		_, _ = VerifyCMS(input, nil)
+		_, _ = VerifyCMSIntegrity(input)
 	})
 }
 

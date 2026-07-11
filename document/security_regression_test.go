@@ -396,8 +396,21 @@ func TestSecuritySVGRejectsExcessiveNesting(t *testing.T) {
 		svg.WriteString(`</g>`)
 	}
 	svg.WriteString(`</svg>`)
-	if _, err := SVGParse([]byte(svg.String())); err == nil {
-		t.Fatal("SVGParse accepted excessive nesting")
+	if _, err := SVGParse([]byte(svg.String())); err == nil || !strings.Contains(err.Error(), "nesting depth") {
+		t.Fatalf("SVGParse excessive-nesting error = %v", err)
+	}
+}
+
+func TestSecuritySVGRejectsExcessiveNodeCount(t *testing.T) {
+	var svg strings.Builder
+	svg.Grow(svgMaxNodeCount*4 + 64)
+	svg.WriteString(`<svg width="1" height="1">`)
+	for range svgMaxNodeCount {
+		svg.WriteString(`<g/>`)
+	}
+	svg.WriteString(`</svg>`)
+	if _, err := SVGParse([]byte(svg.String())); err == nil || !strings.Contains(err.Error(), "node count") {
+		t.Fatalf("SVGParse excessive-node error = %v", err)
 	}
 }
 

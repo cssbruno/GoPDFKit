@@ -172,7 +172,7 @@ func UnicodeTranslator(r io.Reader) (f func(string) string, err error) {
 // not perform any rune translation.
 func UnicodeTranslatorFromFile(fileStr string) (f func(string) string, err error) {
 	var fl *os.File
-	fl, err = os.Open(fileStr)
+	fl, err = os.Open(fileStr) // #nosec G304 -- Utility reads an explicit caller-selected encoding file.
 	if err == nil {
 		f, err = UnicodeTranslator(fl)
 		_ = fl.Close()

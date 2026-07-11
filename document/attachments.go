@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
-	"crypto/md5"
+	"crypto/md5" // #nosec G501 -- PDF embedded-file CheckSum fields require MD5 by specification.
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -112,7 +112,7 @@ type attachmentStream struct {
 
 // checksum returns the hex-encoded PDF attachment checksum of data.
 func attachmentChecksum(data []byte) string {
-	tmp := md5.Sum(data)
+	tmp := md5.Sum(data) // #nosec G401 -- Non-security PDF CheckSum compatibility field.
 	return hex.EncodeToString(tmp[:])
 }
 
@@ -326,7 +326,7 @@ func compressAttachmentWithChecksum(content []byte, level int, spool bool) (atta
 	}
 	buf := compressBufferPool.Get().(*bytes.Buffer)
 	buf.Reset()
-	sum := md5.New()
+	sum := md5.New() // #nosec G401 -- Non-security PDF CheckSum compatibility field.
 	list := zlibFreeList(level)
 	cmp, err := pooledZlibWriter(list, buf, level)
 	if err != nil {
@@ -370,7 +370,7 @@ func compressAttachmentWithChecksumFile(content []byte, level int) (attachmentSt
 			_ = os.Remove(path)
 		}
 	}()
-	sum := md5.New()
+	sum := md5.New() // #nosec G401 -- Non-security PDF CheckSum compatibility field.
 	cmp, err := zlib.NewWriterLevel(file, level)
 	if err != nil {
 		return attachmentStream{}, "", err
@@ -633,7 +633,7 @@ func readAttachmentFileLimitContext(ctx context.Context, filename string, limit 
 	if err := outputCanceledError(ctx); err != nil {
 		return nil, err
 	}
-	file, err := os.Open(filename)
+	file, err := os.Open(filename) // #nosec G304 -- Explicit caller-path attachment API with bounded reads.
 	if err != nil {
 		return nil, err
 	}
@@ -783,7 +783,7 @@ func AttachmentFromFileWithOptions(fileStr string, options AttachmentOptions) (A
 		if limit == 0 {
 			limit = MaxAttachmentBytes
 		}
-		file, err := os.Open(fileStr)
+		file, err := os.Open(fileStr) // #nosec G304 -- Explicit caller-path attachment API with bounded eager reads.
 		if err != nil {
 			return attachment, err
 		}

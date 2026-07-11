@@ -30,7 +30,10 @@ var sharedCompiledHTMLCache = struct {
 	sizes:   make(map[htmlCompiledCacheKey]int64),
 }
 
-func compileHTMLForWriteContext(ctx context.Context, htmlStr string, maxDataImageBytes int) (*CompiledHTML, error) {
+func compileHTMLForWriteContext(ctx context.Context, htmlStr string, maxDataImageBytes int, useSharedCache bool) (*CompiledHTML, error) {
+	if !useSharedCache {
+		return compileHTMLWithDataImageLimitContext(ctx, htmlStr, true, maxDataImageBytes)
+	}
 	key := htmlCompiledCacheKey{size: len(htmlStr), sum: sha256.Sum256([]byte(htmlStr))}
 	if compiled, ok := lookupSharedCompiledHTML(key); ok {
 		return compiled, nil

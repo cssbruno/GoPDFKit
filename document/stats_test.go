@@ -534,7 +534,7 @@ func TestImageCacheStatsDeduplicateFileAliases(t *testing.T) {
 
 func TestClearSharedCaches(t *testing.T) {
 	ClearSharedCaches()
-	if stats := SharedCacheStats(); stats.Images.Entries != 0 || stats.Fonts.Entries != 0 {
+	if stats := SharedCacheStats(); stats.Images.Entries != 0 || stats.Fonts.Entries != 0 || stats.HTML.Entries != 0 {
 		t.Fatalf("SharedCacheStats() = %#v, want empty shared caches", stats)
 	}
 }

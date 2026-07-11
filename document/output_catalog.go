@@ -486,6 +486,13 @@ func (f *Document) needsFileIDHash() bool {
 func (f *Document) estimateFinalBufferSize() int {
 	resources := f.ensureResourceStore()
 	size := f.buffer.Len() + 4096
+	if !f.compress {
+		for _, page := range f.pages {
+			if page != nil {
+				size += page.Len()
+			}
+		}
+	}
 	size += len(f.pages) * 1024
 	size += len(resources.images) * 2048
 	size += len(resources.fonts) * 1024

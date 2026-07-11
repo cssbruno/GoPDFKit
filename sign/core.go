@@ -13,6 +13,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -24,6 +26,12 @@ import (
 const (
 	defaultSignatureBytes = 16384
 	maxSignatureBytes     = 1 << 20
+	// DefaultMaxSourceBytes bounds PDF inputs accepted by signing APIs.
+	DefaultMaxSourceBytes int64 = 128 * 1024 * 1024
+	// DefaultMaxXrefChainLength bounds incremental PDF revision chains.
+	DefaultMaxXrefChainLength = 128
+	// DefaultMaxXrefEntries bounds the declared/scanned objects in one xref table.
+	DefaultMaxXrefEntries = 1_000_000
 	byteRangeWidth        = 20
 	refPatternFormat      = `%s\s+(\d+)\s+(\d+)\s+R`
 )
@@ -73,6 +81,14 @@ type Options struct {
 	SigningTime time.Time
 	// SignatureSize is the reserved CMS signature size in bytes.
 	SignatureSize int
+	// MaxSourceBytes bounds the source PDF. Zero uses DefaultMaxSourceBytes.
+	MaxSourceBytes int64
+	// MaxXrefChainLength bounds incremental xref revisions. Zero uses
+	// DefaultMaxXrefChainLength.
+	MaxXrefChainLength int
+	// MaxXrefEntries bounds declared and scanned classic xref entries. Zero uses
+	// DefaultMaxXrefEntries.
+	MaxXrefEntries int
 }
 
 type preparedOptions struct {
@@ -81,6 +97,9 @@ type preparedOptions struct {
 	SubFilter       string
 	SigningTime     time.Time
 	SignatureBytes  int
+	MaxSourceBytes  int64
+	MaxXrefChain    int
+	MaxXrefEntries  int
 }
 
 // Bytes signs a PDF byte slice and returns a new signed PDF.
@@ -108,14 +127,7 @@ func BytesContext(ctx context.Context, input []byte, options Options) ([]byte, e
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	pdfCtx, err := analyzePDFContext(ctx, input)
-	if err != nil {
-		return nil, err
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	return signPDFContext(ctx, pdfCtx, prepared, false)
+	return signBytesPrepared(ctx, input, prepared, false)
 }
 
 // AppendBytes signs a PDF byte slice and may reuse input's backing array for
@@ -144,29 +156,35 @@ func AppendBytesContext(ctx context.Context, input []byte, options Options) ([]b
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	pdfCtx, err := analyzePDFContext(ctx, input)
-	if err != nil {
-		return nil, err
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	return signPDFContext(ctx, pdfCtx, prepared, true)
+	return signBytesPrepared(ctx, input, prepared, true)
 }
 
 // File signs inputPath and writes the signed PDF to outputPath.
 func File(inputPath, outputPath string, options Options) error {
+	return FileContext(context.Background(), inputPath, outputPath, options)
+}
+
+// FileContext signs inputPath with bounded reads and context cancellation, then
+// writes the signed PDF to outputPath.
+func FileContext(ctx context.Context, inputPath, outputPath string, options Options) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if inputPath == "" {
 		return ErrMissingInput
 	}
 	if outputPath == "" {
 		return ErrMissingOutput
 	}
-	input, err := os.ReadFile(inputPath)
+	prepared, err := prepareSigningOptions(options)
+	if err != nil {
+		return err
+	}
+	input, err := readSigningFileContext(ctx, inputPath, prepared.MaxSourceBytes)
 	if err != nil {
 		return fmt.Errorf("read PDF: %w", err)
 	}
-	signed, err := Bytes(input, options)
+	signed, err := signBytesPrepared(ctx, input, prepared, false)
 	if err != nil {
 		return err
 	}
@@ -174,6 +192,58 @@ func File(inputPath, outputPath string, options Options) error {
 		return fmt.Errorf("write signed PDF: %w", err)
 	}
 	return nil
+}
+
+func signBytesPrepared(ctx context.Context, input []byte, prepared preparedOptions, reuseInput bool) ([]byte, error) {
+	if len(input) == 0 {
+		return nil, ErrMissingInput
+	}
+	if int64(len(input)) > prepared.MaxSourceBytes {
+		return nil, fmt.Errorf("pdfsigning: source PDF exceeds maximum size")
+	}
+	pdfCtx, err := analyzePDFContext(ctx, input, prepared.MaxXrefChain, prepared.MaxXrefEntries)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return signPDFContext(ctx, pdfCtx, prepared, reuseInput)
+}
+
+func readSigningFileContext(ctx context.Context, path string, maxBytes int64) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	file, err := os.Open(path) // #nosec G304 -- FileContext is an explicit caller-path API; reads are size-bounded.
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	if info, statErr := file.Stat(); statErr == nil && info.Mode().IsRegular() && info.Size() > maxBytes {
+		return nil, errors.New("pdfsigning: source PDF exceeds maximum size")
+	}
+	data, err := io.ReadAll(io.LimitReader(signingContextReader{ctx: ctx, r: file}, maxBytes+1))
+	if err == nil && int64(len(data)) > maxBytes {
+		err = errors.New("pdfsigning: source PDF exceeds maximum size")
+	}
+	return data, err
+}
+
+type signingContextReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (r signingContextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	n, err := r.r.Read(p)
+	if err == nil {
+		err = r.ctx.Err()
+	}
+	return n, err
 }
 
 func prepareSigningOptions(options Options) (preparedOptions, error) {
@@ -201,6 +271,27 @@ func prepareSigningOptions(options Options) (preparedOptions, error) {
 	if signatureBytes < 2048 || signatureBytes > maxSignatureBytes {
 		return preparedOptions{}, fmt.Errorf("pdfsigning: SignatureSize must be between 2048 and %d bytes", maxSignatureBytes)
 	}
+	maxSourceBytes := options.MaxSourceBytes
+	if maxSourceBytes == 0 {
+		maxSourceBytes = DefaultMaxSourceBytes
+	}
+	if maxSourceBytes < 0 || maxSourceBytes > int64(math.MaxInt)-1 {
+		return preparedOptions{}, fmt.Errorf("pdfsigning: invalid MaxSourceBytes %d", maxSourceBytes)
+	}
+	maxXrefChain := options.MaxXrefChainLength
+	if maxXrefChain == 0 {
+		maxXrefChain = DefaultMaxXrefChainLength
+	}
+	if maxXrefChain < 0 {
+		return preparedOptions{}, fmt.Errorf("pdfsigning: invalid MaxXrefChainLength %d", maxXrefChain)
+	}
+	maxXrefEntries := options.MaxXrefEntries
+	if maxXrefEntries == 0 {
+		maxXrefEntries = DefaultMaxXrefEntries
+	}
+	if maxXrefEntries < 0 || maxXrefEntries > maxPDFObjectCount {
+		return preparedOptions{}, fmt.Errorf("pdfsigning: invalid MaxXrefEntries %d", maxXrefEntries)
+	}
 	signingTime := options.SigningTime
 	if signingTime.IsZero() {
 		signingTime = time.Now().UTC()
@@ -215,6 +306,9 @@ func prepareSigningOptions(options Options) (preparedOptions, error) {
 		SubFilter:       subFilter,
 		SigningTime:     signingTime,
 		SignatureBytes:  signatureBytes,
+		MaxSourceBytes:  maxSourceBytes,
+		MaxXrefChain:    maxXrefChain,
+		MaxXrefEntries:  maxXrefEntries,
 	}, nil
 }
 

@@ -49,16 +49,17 @@ type xrefEntry struct {
 }
 
 type pdfXrefResolver struct {
-	input   []byte
-	tables  []int
-	offsets map[int]int
+	input          []byte
+	tables         []int
+	offsets        map[int]int
+	maxXrefEntries int
 }
 
 func analyzePDF(input []byte) (pdfContext, error) {
-	return analyzePDFContext(context.Background(), input)
+	return analyzePDFContext(context.Background(), input, DefaultMaxXrefChainLength, DefaultMaxXrefEntries)
 }
 
-func analyzePDFContext(ctx context.Context, input []byte) (pdfContext, error) {
+func analyzePDFContext(ctx context.Context, input []byte, maxXrefChain, maxXrefEntries int) (pdfContext, error) {
 	if err := signContextErr(ctx); err != nil {
 		return pdfContext{}, err
 	}
@@ -84,11 +85,11 @@ func analyzePDFContext(ctx context.Context, input []byte) (pdfContext, error) {
 	} else if encrypted {
 		return pdfContext{}, errors.New("pdfsigning: encrypted PDFs are not supported")
 	}
-	size, root, err := parseTrailerContext(ctx, trailer)
+	size, root, err := parseTrailerContext(ctx, trailer, maxXrefEntries)
 	if err != nil {
 		return pdfContext{}, err
 	}
-	xref, err := newPDFXrefResolverContext(ctx, input, previousXref)
+	xref, err := newPDFXrefResolverContext(ctx, input, previousXref, maxXrefChain, maxXrefEntries)
 	if err != nil {
 		return pdfContext{}, err
 	}
@@ -106,8 +107,14 @@ func signContextErr(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func newPDFXrefResolverContext(ctx context.Context, input []byte, offset int) (*pdfXrefResolver, error) {
-	resolver := &pdfXrefResolver{input: input, offsets: make(map[int]int)}
+func newPDFXrefResolverContext(ctx context.Context, input []byte, offset, maxXrefChain, maxXrefEntries int) (*pdfXrefResolver, error) {
+	if maxXrefChain <= 0 {
+		return nil, errors.New("pdfsigning: xref chain limit must be positive")
+	}
+	if maxXrefEntries <= 0 || maxXrefEntries > maxPDFObjectCount {
+		return nil, errors.New("pdfsigning: xref entry limit must be positive")
+	}
+	resolver := &pdfXrefResolver{input: input, offsets: make(map[int]int), maxXrefEntries: maxXrefEntries}
 	seen := make(map[int]bool)
 	for {
 		if err := signContextErr(ctx); err != nil {
@@ -118,6 +125,9 @@ func newPDFXrefResolverContext(ctx context.Context, input []byte, offset int) (*
 		}
 		if seen[offset] {
 			return nil, errors.New("pdfsigning: cyclic xref /Prev chain")
+		}
+		if len(seen) >= maxXrefChain {
+			return nil, errors.New("pdfsigning: xref chain exceeds maximum size")
 		}
 		seen[offset] = true
 		trailer, err := xrefTrailerContext(ctx, input, offset)
@@ -152,7 +162,7 @@ func (resolver *pdfXrefResolver) objectOffsetContext(ctx context.Context, object
 		if err := signContextErr(ctx); err != nil {
 			return 0, err
 		}
-		offset, ok, err := parseXrefTableObjectOffsetContext(ctx, resolver.input, tableOffset, object)
+		offset, ok, err := parseXrefTableObjectOffsetContext(ctx, resolver.input, tableOffset, object, resolver.maxXrefEntries)
 		if err != nil {
 			return 0, err
 		}
@@ -181,7 +191,7 @@ func findStartXref(input []byte) (int, error) {
 	return value, nil
 }
 
-func parseTrailerContext(ctx context.Context, trailer []byte) (int, pdfRef, error) {
+func parseTrailerContext(ctx context.Context, trailer []byte, maxXrefEntries int) (int, pdfRef, error) {
 	if err := signContextErr(ctx); err != nil {
 		return 0, pdfRef{}, err
 	}
@@ -200,7 +210,7 @@ func parseTrailerContext(ctx context.Context, trailer []byte) (int, pdfRef, erro
 	if !ok {
 		return 0, pdfRef{}, errors.New("pdfsigning: invalid trailer /Size")
 	}
-	if size <= 0 || size > maxPDFObjectCount {
+	if size <= 0 || size > maxXrefEntries || size > maxPDFObjectCount {
 		return 0, pdfRef{}, fmt.Errorf("pdfsigning: unsupported trailer /Size %d", size)
 	}
 	root, ok, err := findReferenceContext(ctx, dict, "/Root")
@@ -442,14 +452,15 @@ func findByteContext(ctx context.Context, input []byte, needle byte) (int, error
 }
 
 func parseXrefTable(input []byte, offset int) (map[int]int, error) {
-	return parseXrefTableContext(context.Background(), input, offset)
+	return parseXrefTableContext(context.Background(), input, offset, DefaultMaxXrefEntries)
 }
 
-func parseXrefTableContext(ctx context.Context, input []byte, offset int) (map[int]int, error) {
+func parseXrefTableContext(ctx context.Context, input []byte, offset, maxXrefEntries int) (map[int]int, error) {
 	if !bytes.HasPrefix(input[offset:], []byte("xref")) {
 		return nil, errors.New("pdfsigning: only classic xref tables are supported")
 	}
 	var offsets map[int]int
+	totalEntries := 0
 	pos := offset + len("xref")
 	for pos < len(input) {
 		if err := signContextErr(ctx); err != nil {
@@ -471,6 +482,9 @@ func parseXrefTableContext(ctx context.Context, input []byte, offset int) (map[i
 		count, _, ok := parseLeadingInt(line, skipPDFSpaces(line, nextInt))
 		if !ok {
 			return nil, errors.New("pdfsigning: invalid xref subsection")
+		}
+		if err := validateXrefSubsection(first, count, &totalEntries, maxXrefEntries); err != nil {
+			return nil, err
 		}
 		if offsets == nil {
 			offsets = make(map[int]int, max(count, 0))
@@ -502,11 +516,12 @@ func parseXrefTableContext(ctx context.Context, input []byte, offset int) (map[i
 	return offsets, nil
 }
 
-func parseXrefTableObjectOffsetContext(ctx context.Context, input []byte, offset, targetObject int) (int, bool, error) {
+func parseXrefTableObjectOffsetContext(ctx context.Context, input []byte, offset, targetObject, maxXrefEntries int) (int, bool, error) {
 	if !bytes.HasPrefix(input[offset:], []byte("xref")) {
 		return 0, false, errors.New("pdfsigning: only classic xref tables are supported")
 	}
 	pos := offset + len("xref")
+	totalEntries := 0
 	for pos < len(input) {
 		if err := signContextErr(ctx); err != nil {
 			return 0, false, err
@@ -527,6 +542,9 @@ func parseXrefTableObjectOffsetContext(ctx context.Context, input []byte, offset
 		count, _, ok := parseLeadingInt(line, skipPDFSpaces(line, nextInt))
 		if !ok {
 			return 0, false, errors.New("pdfsigning: invalid xref subsection")
+		}
+		if err := validateXrefSubsection(first, count, &totalEntries, maxXrefEntries); err != nil {
+			return 0, false, err
 		}
 		if targetObject < first || targetObject >= first+count {
 			for n := 0; n < count; n++ {
@@ -567,6 +585,14 @@ func parseXrefTableObjectOffsetContext(ctx context.Context, input []byte, offset
 		}
 	}
 	return 0, false, nil
+}
+
+func validateXrefSubsection(first, count int, total *int, maxEntries int) error {
+	if first < 0 || count < 0 || maxEntries <= 0 || first >= maxEntries || count > maxEntries-first || *total > maxEntries-count {
+		return errors.New("pdfsigning: xref entries exceed maximum size")
+	}
+	*total += count
+	return nil
 }
 
 func parseXrefEntryOffset(entry []byte) (int, bool) {

@@ -664,8 +664,8 @@ func TestVerifyCMSRejectsWrongCertificateUsage(t *testing.T) {
 }
 
 func TestVerifyCMSRejectsOversizedCMS(t *testing.T) {
-	if _, err := VerifyCMS(bytes.Repeat([]byte{0x30}, maxCMSPackageBytes+1), nil); err == nil {
-		t.Fatal("VerifyCMS() accepted oversized CMS package")
+	if _, err := VerifyCMSIntegrity(bytes.Repeat([]byte{0x30}, maxCMSPackageBytes+1)); err == nil {
+		t.Fatal("VerifyCMSIntegrity() accepted oversized CMS package")
 	}
 }
 
@@ -816,9 +816,52 @@ func TestAnalyzePDFContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := analyzePDFContext(ctx, testPDFBytes(t))
+	_, err := analyzePDFContext(ctx, testPDFBytes(t), DefaultMaxXrefChainLength, DefaultMaxXrefEntries)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("analyzePDFContext() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestBytesEnforcesSourceAndXrefLimits(t *testing.T) {
+	cert, signer := testSigner(t)
+	input := testPDFBytes(t)
+	if _, err := Bytes(input, Options{Signer: signer, Certificate: cert, MaxSourceBytes: int64(len(input) - 1)}); err == nil || !strings.Contains(err.Error(), "source PDF exceeds") {
+		t.Fatalf("Bytes() source limit error = %v", err)
+	}
+
+	signed, err := Bytes(input, Options{Signer: signer, Certificate: cert})
+	if err != nil {
+		t.Fatalf("Bytes() setup error = %v", err)
+	}
+	if _, err := Bytes(signed, Options{Signer: signer, Certificate: cert, MaxXrefChainLength: 1}); err == nil || !strings.Contains(err.Error(), "xref chain exceeds") {
+		t.Fatalf("Bytes() xref limit error = %v", err)
+	}
+	if _, err := Bytes(input, Options{Signer: signer, Certificate: cert, MaxXrefEntries: 1}); err == nil || !strings.Contains(err.Error(), "trailer /Size") {
+		t.Fatalf("Bytes() xref entry limit error = %v", err)
+	}
+}
+
+func TestTrustedVerificationRequiresRoots(t *testing.T) {
+	if _, err := VerifyCMS(nil, nil); !errors.Is(err, ErrTrustStoreRequired) {
+		t.Fatalf("VerifyCMS() error = %v, want ErrTrustStoreRequired", err)
+	}
+	if _, err := VerifyDetachedCMS(nil, nil, nil); !errors.Is(err, ErrTrustStoreRequired) {
+		t.Fatalf("VerifyDetachedCMS() error = %v, want ErrTrustStoreRequired", err)
+	}
+	cert, signer := testSigner(t)
+	signed, err := Bytes(testPDFBytes(t), Options{Signer: signer, Certificate: cert})
+	if err != nil {
+		t.Fatalf("Bytes() error = %v", err)
+	}
+	if _, err := Verify(signed, nil); !errors.Is(err, ErrTrustStoreRequired) {
+		t.Fatalf("Verify() error = %v, want ErrTrustStoreRequired", err)
+	}
+	verified, err := VerifyIntegrity(signed)
+	if err != nil {
+		t.Fatalf("VerifyIntegrity() error = %v", err)
+	}
+	if !verified.CMS.ValidSignature || verified.CMS.TrustedSigner {
+		t.Fatalf("VerifyIntegrity() result = %#v", verified.CMS)
 	}
 }
 

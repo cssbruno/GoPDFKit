@@ -38,7 +38,7 @@ func main() {
 func expandArgs(args []string) ([]string, error) {
 	var paths []string
 	for _, arg := range args {
-		info, err := os.Stat(arg)
+		info, err := os.Stat(arg) // #nosec G703 -- this CLI intentionally inspects paths supplied by its operator.
 		if err != nil {
 			return nil, err
 		}
@@ -56,7 +56,7 @@ func expandArgs(args []string) ([]string, error) {
 }
 
 func checkPDF(path string) error {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304,G703 -- path is an explicit compliance-check CLI argument.
 	if err != nil {
 		return fmt.Errorf("read %s: %w", path, err)
 	}

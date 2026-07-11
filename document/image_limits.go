@@ -31,7 +31,7 @@ func bufferFromReaderLimit(r io.Reader, limit int) (b *bytes.Buffer, err error) 
 }
 
 func readFileLimit(filename string, limit int64) ([]byte, error) {
-	file, err := os.Open(filename)
+	file, err := os.Open(filename) // #nosec G304 -- Internal helper serves explicit image-path APIs and enforces limits.
 	if err != nil {
 		return nil, err
 	}

@@ -184,7 +184,7 @@ func (f *Document) addFont(familyStr, styleStr, fileStr string, isUTF8 bool) {
 			return
 		}
 		fileStr = joinFontPath(f.fontpath, fileStr)
-		file, err := os.Open(fileStr)
+		file, err := os.Open(fileStr) // #nosec G304 -- Legacy font-path API resolves caller-selected resources.
 		if err != nil {
 			f.err = err
 			return

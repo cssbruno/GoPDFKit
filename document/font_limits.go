@@ -22,7 +22,7 @@ func validateFontDataSize(data []byte, limit int, label string) error {
 }
 
 func readFontResourceFile(path string, limit int) ([]byte, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- Internal helper serves explicit font-path APIs and enforces limits.
 	if err != nil {
 		return nil, err
 	}

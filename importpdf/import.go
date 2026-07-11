@@ -99,7 +99,7 @@ func OpenFileWithOptionsContext(ctx context.Context, path string, options Import
 	if err != nil {
 		return nil, err
 	}
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- OpenFile is an explicit caller-path API and enforces source limits.
 	if err != nil {
 		return nil, err
 	}

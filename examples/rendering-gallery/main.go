@@ -1587,7 +1587,7 @@ func drawCode39Barcode(pdf *document.Document, x, y, width, height float64, valu
 }
 
 func mustRead(path string) []byte {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- bundled example reads its own explicitly selected assets.
 	if err != nil {
 		log.Fatal(err)
 	}

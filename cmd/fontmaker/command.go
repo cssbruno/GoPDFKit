@@ -101,7 +101,7 @@ func (options *fontmakerOptions) prepare() error {
 	if outputDir == "" {
 		return errors.New("output directory cannot be empty")
 	}
-	if err := os.MkdirAll(outputDir, 0o750); err != nil {
+	if err := os.MkdirAll(outputDir, 0o750); err != nil { // #nosec G703 -- --dst explicitly selects the CLI output directory.
 		return fmt.Errorf("prepare output directory %s: %w", outputDir, err)
 	}
 	encoding, err := resolveEncoding(strings.TrimSpace(options.encoding))
@@ -163,7 +163,7 @@ func encodingCandidates(encoding string) []string {
 }
 
 func fileExists(path string) bool {
-	info, err := os.Stat(path)
+	info, err := os.Stat(path) // #nosec G703 -- fontmaker accepts operator-selected font and encoding paths.
 	return err == nil && info != nil && !info.IsDir()
 }
 
