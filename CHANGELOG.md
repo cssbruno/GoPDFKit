@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.12.3 - 2026-07-11
+
+Compliance-baseline follow-up to the v0.12.2 security hardening release.
+
+### Fixed
+
+- Regenerated the pinned veraPDF PDF/A-4e, PDF/A-4f, and signed PDF/A-4f
+  validation counts after confirming that every fixture remains compliant.
+
 ## v0.12.2 - 2026-07-11
 
 Security hardening release with bounded untrusted-input parsing, explicit
