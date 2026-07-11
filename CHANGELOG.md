@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- Updated the veraPDF PDF/A-4 compliance baseline to match the validated
+  v0.12.1 fixture output.
+
 ## v0.12.1 - 2026-07-11
 
 Patch release for safer text and HTML rendering, tighter internal ownership,
