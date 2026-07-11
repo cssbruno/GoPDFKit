@@ -11,7 +11,7 @@
         <name>/work/artifacts/compliance/pdfa4-metadata.pdf</name>
       </item>
       <validationReport jobEndStatus="normal" profileName="PDF/A-4 validation profile" statement="PDF file is compliant with Validation Profile requirements." isCompliant="true">
-        <details passedRules="109" failedRules="0" passedChecks="252" failedChecks="0"></details>
+        <details passedRules="109" failedRules="0" passedChecks="256" failedChecks="0"></details>
       </validationReport>
       <duration start="1781041866657" finish="1781041866874">00:00:00.217</duration>
     </job>
