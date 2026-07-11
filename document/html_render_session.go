@@ -23,7 +23,11 @@ type htmlRenderSession struct {
 func newHTMLRenderSession(html *HTML, compiled *CompiledHTML, lineHt float64) *htmlRenderSession {
 	textR, textG, textB := html.pdf.GetTextColor()
 	fontPt, _ := html.pdf.GetFontSize()
-	base := htmlTextStyle{align: "L", fontSize: fontPt, lineHeight: lineHt}
+	fontFamily := html.pdf.fontFamily
+	if fontFamily == "" {
+		fontFamily = "Helvetica"
+	}
+	base := htmlTextStyle{align: "L", fontFamily: fontFamily, fontSize: fontPt, lineHeight: lineHt}
 	return &htmlRenderSession{
 		html:         html,
 		compiled:     compiled,

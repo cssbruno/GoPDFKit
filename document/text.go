@@ -13,6 +13,9 @@ import (
 // precisely on the page, but it is usually easier to use Cell(), MultiCell()
 // or Write(), which are the standard methods for printing text.
 func (f *Document) Text(x, y float64, txtStr string) {
+	if !f.requireCurrentFont("rendering text") {
+		return
+	}
 	tag := f.consumeNextTextTag(false)
 	utf8Text := f.isCurrentUTF8
 	reverseUTF8 := utf8Text && f.isRTL
@@ -85,7 +88,9 @@ func (f *Document) SetTextRenderingMode(mode int) {
 }
 
 func (f *Document) write(h float64, txtStr string, link int, linkStr string) {
-	cw := f.currentFont.Cw
+	if !f.requireCurrentFont("rendering text") {
+		return
+	}
 	w := f.w - f.rMargin - f.x
 	wmax := (w - 2*f.cMargin) * 1000 / f.fontSize
 	s := txtStr
@@ -125,7 +130,7 @@ func (f *Document) write(h float64, txtStr string, link int, linkStr string) {
 		if c == ' ' {
 			sep = i
 		}
-		l += float64(cw[int(c)])
+		l += float64(f.currentFontRuneWidth(c))
 		if l > wmax {
 			if sep == -1 {
 				if f.x > f.lMargin {

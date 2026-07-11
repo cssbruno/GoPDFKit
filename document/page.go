@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+const maxPageBufferGrowthHint = 64 * 1024
+
 // GetPageSize returns the current page's width and height. This is the paper's
 // size. To compute the size of the area being used, subtract the margins (see
 // GetMargins()).
@@ -496,7 +498,14 @@ func (f *Document) beginpage(orientationStr string, size Size, rotation int) {
 	f.page++
 	f.pageBoxes[f.page] = make(map[string]PageBox)
 	maps.Copy(f.pageBoxes[f.page], f.defPageBoxes)
-	f.pages = append(f.pages, bytes.NewBufferString(""))
+	pageBuffer := bytes.NewBuffer(nil)
+	if previousPage := f.pages[len(f.pages)-1]; previousPage != nil {
+		growthHint := min(previousPage.Cap(), maxPageBufferGrowthHint)
+		if growthHint >= 1024 {
+			pageBuffer.Grow(growthHint)
+		}
+	}
+	f.pages = append(f.pages, pageBuffer)
 	f.aliasPages = append(f.aliasPages, false)
 	f.pageLinks = append(f.pageLinks, make([]pageLink, 0))
 	f.pageAttachments = append(f.pageAttachments, []annotationAttach{})

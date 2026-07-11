@@ -128,6 +128,76 @@ func TestGetStringWidthWithoutFontSetsError(t *testing.T) {
 	}
 }
 
+func TestTextAPIsWithoutFontReturnErrorsInsteadOfPanicking(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(*Document)
+	}{
+		{name: "Text", run: func(pdf *Document) { pdf.Text(10, 10, "abc") }},
+		{name: "Write", run: func(pdf *Document) { pdf.Write(6, "abc") }},
+		{name: "MultiCell", run: func(pdf *Document) { pdf.MultiCell(20, 6, "abc", "", "", false) }},
+		{name: "SplitLines", run: func(pdf *Document) { pdf.SplitLines([]byte("abc"), 20) }},
+		{name: "SplitLineCount", run: func(pdf *Document) { pdf.SplitLineCount([]byte("abc"), 20) }},
+		{name: "SplitText", run: func(pdf *Document) { pdf.SplitText("abc", 20) }},
+		{name: "SplitTextCount", run: func(pdf *Document) { pdf.SplitTextCount("abc", 20) }},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			pdf := MustNew()
+			pdf.AddPage()
+			test.run(pdf)
+			if err := pdf.Error(); err == nil || !strings.Contains(err.Error(), "font must be selected") {
+				t.Fatalf("Error() = %v, want missing-font error", err)
+			}
+		})
+	}
+}
+
+func TestTextMeasurementToleratesShortFontWidthTables(t *testing.T) {
+	pdf := MustNew()
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.currentFont.Cw = pdf.currentFont.Cw[:32]
+	text := string([]byte{'C', 0xff})
+
+	if width := pdf.GetStringWidth(text); width <= 0 {
+		t.Fatalf("GetStringWidth() = %.2f, want positive fallback width", width)
+	}
+	if lines := pdf.SplitLines([]byte(text), 20); len(lines) == 0 {
+		t.Fatal("SplitLines() returned no lines")
+	}
+	pdf.MultiCell(20, 6, text, "", "", false)
+	if err := pdf.Error(); err != nil {
+		t.Fatalf("text APIs with short width table returned error: %v", err)
+	}
+}
+
+func TestHTMLWriteWithoutExplicitFontUsesHelvetica(t *testing.T) {
+	pdf := MustNew()
+	pdf.SetCompression(true)
+	pdf.SetMargins(36, 36, 36)
+	pdf.SetAutoPageBreak(true, 36)
+	pdf.AddPage()
+
+	html := pdf.HTMLNew()
+	html.Write(12, `<h1>Comparable HTML</h1><p>This fragment uses headings, paragraphs, lists, and a simple table.</p><ul><li>Item 01</li></ul><table border="1"><tr><th>Code</th><th>Status</th></tr><tr><td>HTML-01</td><td>Ready</td></tr></table>`)
+
+	if err := pdf.Error(); err != nil {
+		t.Fatalf("HTML Write() error = %v", err)
+	}
+	if pdf.fontFamily != "helvetica" {
+		t.Fatalf("HTML default font = %q, want helvetica", pdf.fontFamily)
+	}
+	var output bytes.Buffer
+	if err := pdf.Output(&output); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if !bytes.HasPrefix(output.Bytes(), []byte("%PDF-")) {
+		t.Fatalf("Output() did not produce a PDF: %q", output.Bytes()[:min(output.Len(), 8)])
+	}
+}
+
 func TestImageAndAttachmentBoundaryValidation(t *testing.T) {
 	pdf := MustNew()
 	if info := pdf.RegisterImageOptionsReader("", ImageOptions{ImageType: "png"}, bytes.NewReader(nil)); info != nil {
