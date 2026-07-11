@@ -42,6 +42,26 @@ func TestStringWidthCacheUsesBoundedRing(t *testing.T) {
 	}
 }
 
+func TestContentCommandBufferReuseIsBounded(t *testing.T) {
+	pdf := MustNew()
+	buffer := pdf.contentCommandBuffer(128)
+	buffer = append(buffer, make([]byte, 128)...)
+	pdf.retainContentCommandBuffer(buffer)
+	retainedCapacity := cap(pdf.contentScratch)
+	if retainedCapacity < 128 {
+		t.Fatalf("retained content scratch capacity = %d, want at least 128", retainedCapacity)
+	}
+	if reused := pdf.contentCommandBuffer(64); cap(reused) != retainedCapacity {
+		t.Fatalf("reused content scratch capacity = %d, want %d", cap(reused), retainedCapacity)
+	}
+
+	oversized := make([]byte, 0, maxContentScratchCapacity+1)
+	pdf.retainContentCommandBuffer(oversized)
+	if got := cap(pdf.contentScratch); got != retainedCapacity {
+		t.Fatalf("oversized content scratch changed retained capacity to %d, want %d", got, retainedCapacity)
+	}
+}
+
 func BenchmarkPerfUTF8ToUTF16(b *testing.B) {
 	text := strings.Repeat("ASCII Ελληνικά こんにちは 😀 ", 64)
 	b.SetBytes(int64(len(text)))

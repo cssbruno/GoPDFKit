@@ -5,6 +5,21 @@ package document
 
 import "strconv"
 
+const maxContentScratchCapacity = 64 * 1024
+
+func (f *Document) contentCommandBuffer(capacity int) []byte {
+	if capacity <= cap(f.contentScratch) {
+		return f.contentScratch[:0]
+	}
+	return make([]byte, 0, capacity)
+}
+
+func (f *Document) retainContentCommandBuffer(buffer []byte) {
+	if buffer != nil && cap(buffer) <= maxContentScratchCapacity {
+		f.contentScratch = buffer[:0]
+	}
+}
+
 func appendPDFNumber(dst []byte, value float64, precision int) []byte {
 	return strconv.AppendFloat(dst, value, 'f', precision, 64)
 }

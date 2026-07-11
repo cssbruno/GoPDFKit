@@ -2,8 +2,19 @@
 
 ## Unreleased
 
+## v0.12.1 - 2026-07-11
+
+Patch release for safer text and HTML rendering, tighter internal ownership,
+and lower allocation pressure in document generation.
+
 ### Fixed
 
+- Made HTML rendering select Helvetica when callers have not explicitly chosen
+  a font, preventing the empty-width-table panic reported by an external
+  benchmark.
+- Made text rendering and measurement APIs report a document error when no font
+  is selected, and safely handle incomplete font-width tables instead of
+  indexing outside their bounds.
 - Made typed table measurement and rendering share column constraints, span
   geometry, pagination boundaries, repeated headers, cell alignment, and box
   styling, with typed-versus-HTML parity coverage.
@@ -26,6 +37,12 @@
   bounded importer sources with a sentinel `ErrSourceTooLarge` error.
 - Made page-compression workers explicitly cancellable and bounded the string
   width cache with constant-time ring eviction.
+- Reused bounded page-buffer capacity from the preceding page to reduce
+  allocation churn without retaining unusually large buffers.
+- Moved compiled HTML traversal stacks into a private render session, interned
+  repeated table-cell appearances, and reused bounded content-command buffers.
+- Reused one parsed SFNT directory and Unicode cmap when building cached UTF-8
+  font definitions and immutable subset tables.
 
 ### Removed
 

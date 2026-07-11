@@ -28,6 +28,8 @@ func (f *Document) SetFontLocation(fontDirStr string) {
 // the named font resources when AddFont() is called. If this operation fails,
 // an attempt is made to load the resources from the configured font directory
 // (see SetFontLocation()).
+//
+// Deprecated: use SetResourceLoader with a ResourceLoader implementation.
 func (f *Document) SetFontLoader(loader FontLoader) {
 	f.fontLoader = loader
 }

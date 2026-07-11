@@ -111,7 +111,9 @@ const (
 	BlockKindPageBreak BlockKind = "page-break"
 )
 
-// Block is implemented by every shared document block.
+// Block identifies a supported shared document block. Rendering and
+// measurement accept the concrete block types declared by this package;
+// implementations from other packages are reported as unsupported.
 type Block interface {
 	DocumentBlockKind() BlockKind
 }

@@ -93,9 +93,6 @@ type htmlTableMeasuredCellAppearanceCache struct {
 }
 
 func (cache *htmlTableMeasuredCellAppearanceCache) intern(value htmlTableMeasuredCellAppearance) *htmlTableMeasuredCellAppearance {
-	if cache == nil {
-		return &value
-	}
 	if cache.last != nil && cache.lastValue == value {
 		return cache.last
 	}
@@ -1409,7 +1406,6 @@ func htmlWrappedSplitTextLineCount(pdf *Document, text string, wd float64) int {
 
 func htmlSplitStringLines(pdf *Document, text string, wd float64) []string {
 	lines := []string{}
-	cw := pdf.currentFont.Cw
 	wmax := int(math.Ceil((wd - 2*pdf.cMargin) * 1000 / pdf.fontSize))
 	nb := len(text)
 	for nb > 0 && text[nb-1] == '\n' {
@@ -1422,7 +1418,7 @@ func htmlSplitStringLines(pdf *Document, text string, wd float64) []string {
 	l := 0
 	for i < nb {
 		c := text[i]
-		l += cw[c]
+		l += pdf.currentFontRuneWidth(rune(c))
 		if c == ' ' || c == '\t' || c == '\n' {
 			sep = i
 		}
@@ -1451,7 +1447,6 @@ func htmlSplitStringLines(pdf *Document, text string, wd float64) []string {
 
 func htmlSplitStringLineCount(pdf *Document, text string, wd float64) int {
 	count := 0
-	cw := pdf.currentFont.Cw
 	wmax := int(math.Ceil((wd - 2*pdf.cMargin) * 1000 / pdf.fontSize))
 	nb := len(text)
 	for nb > 0 && text[nb-1] == '\n' {
@@ -1464,7 +1459,7 @@ func htmlSplitStringLineCount(pdf *Document, text string, wd float64) int {
 	l := 0
 	for i < nb {
 		c := text[i]
-		l += cw[c]
+		l += pdf.currentFontRuneWidth(rune(c))
 		if c == ' ' || c == '\t' || c == '\n' {
 			sep = i
 		}
@@ -1600,7 +1595,7 @@ func htmlTextSegmentWidth(pdf *Document, text string, start, end int, r rune) fl
 			if ch == 0 {
 				break
 			}
-			width += pdf.currentFont.Cw[ch]
+			width += pdf.currentFontRuneWidth(rune(ch))
 		}
 	}
 	return float64(width) * pdf.fontSize / 1000
@@ -1619,7 +1614,7 @@ func htmlTextSymbolWidth(pdf *Document, text string) int {
 		if ch == 0 {
 			break
 		}
-		width += pdf.currentFont.Cw[ch]
+		width += pdf.currentFontRuneWidth(rune(ch))
 	}
 	return width
 }

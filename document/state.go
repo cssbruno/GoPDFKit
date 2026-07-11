@@ -167,6 +167,7 @@ type Document struct {
 	fontSizePt         float64                 // current font size in points
 	fontSize           float64                 // current font size in user unit
 	ws                 float64                 // word spacing
+	contentScratch     []byte                  // bounded scratch for one content command
 	aliasMap           map[string]string       // map of alias->replacement
 	aliasPairs         []aliasReplacementBytes // compiled alias replacements
 	aliasPairsDirty    bool                    // whether aliasPairs needs rebuilding

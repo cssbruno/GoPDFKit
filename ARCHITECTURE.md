@@ -30,6 +30,17 @@ New code should add behavior to the owning private type. Do not add another
 field directly to `Document` when an existing owner is responsible for its
 lifetime.
 
+## Rendering and concurrency
+
+A `Document` is a mutable, single-owner build session and is not safe for
+concurrent calls. Create one document per independently generated PDF.
+`CompiledHTML`, `ImageCache`, and `FontCache` are the reusable cross-document
+inputs and carry their own concurrency guarantees.
+
+Each compiled HTML render creates a private render session that owns its style,
+element, and list stacks. Render-local state must not be added to `CompiledHTML`
+or retained by `HTML` after the call completes.
+
 ## Layout invariants
 
 Typed layout measurement and rendering must consume the same geometry rules.
@@ -40,6 +51,14 @@ coverage.
 
 Public layout fields are behavioral contracts. A field must not be added until
 measurement, rendering, pagination, and regression tests implement it.
+
+## Performance workflow
+
+Benchmarks, regression budgets, `benchstat` comparisons, pprof profiles, and
+runtime traces are local developer tools; they do not run in CI. Optimize from
+profiles, compare repeated samples against a named baseline, and keep behavior
+coverage with the optimization. See the performance section in `README.md` for
+the supported Make targets.
 
 ## Public API policy
 

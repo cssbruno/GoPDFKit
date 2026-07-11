@@ -36,11 +36,7 @@ func (f *Document) GetStringWidth(s string) float64 {
 // GetStringSymbolWidth returns the length of a string in glyph units. A font
 // must be currently selected.
 func (f *Document) GetStringSymbolWidth(s string) int {
-	if f.err != nil {
-		return 0
-	}
-	if f.currentFont.Name == "" {
-		f.SetErrorf("font must be selected before measuring text")
+	if !f.requireCurrentFont("measuring text") {
 		return 0
 	}
 	if key, ok := f.stringWidthCacheKey(s); ok {
@@ -72,10 +68,21 @@ func (f *Document) computeStringSymbolWidth(s string) int {
 			if ch == 0 {
 				break
 			}
-			w += f.currentFont.Cw[ch]
+			w += f.currentFontRuneWidth(rune(ch))
 		}
 	}
 	return w
+}
+
+func (f *Document) requireCurrentFont(action string) bool {
+	if f.err != nil {
+		return false
+	}
+	if f.currentFont.Name == "" {
+		f.SetErrorf("font must be selected before %s", action)
+		return false
+	}
+	return true
 }
 
 func isASCIIString(s string) bool {

@@ -750,15 +750,19 @@ func parseHTMLBoxLengthSigned(value string, pdf *Document, relative float64) (fl
 }
 
 func htmlApplyBorderStyle(pdf *Document, border htmlBorderStyle, fallbackR, fallbackG, fallbackB int, fallbackWidth float64) {
+	drawR, drawG, drawB := fallbackR, fallbackG, fallbackB
 	if border.color.Set && !border.color.None {
-		pdf.SetDrawColor(border.color.R, border.color.G, border.color.B)
-	} else {
-		pdf.SetDrawColor(fallbackR, fallbackG, fallbackB)
+		drawR, drawG, drawB = border.color.R, border.color.G, border.color.B
 	}
+	if !sameRGBColor(pdf.color.draw, drawR, drawG, drawB) {
+		pdf.SetDrawColor(drawR, drawG, drawB)
+	}
+	lineWidth := fallbackWidth
 	if border.width > 0 {
-		pdf.SetLineWidth(border.width)
-	} else {
-		pdf.SetLineWidth(fallbackWidth)
+		lineWidth = border.width
+	}
+	if pdf.GetLineWidth() != lineWidth {
+		pdf.SetLineWidth(lineWidth)
 	}
 }
 
@@ -841,15 +845,19 @@ func htmlDrawBorderSide(pdf *Document, side htmlBorderSideStyle, fallbackR, fall
 	if !side.enabled {
 		return
 	}
+	drawR, drawG, drawB := fallbackR, fallbackG, fallbackB
 	if side.color.Set && !side.color.None {
-		pdf.SetDrawColor(side.color.R, side.color.G, side.color.B)
-	} else {
-		pdf.SetDrawColor(fallbackR, fallbackG, fallbackB)
+		drawR, drawG, drawB = side.color.R, side.color.G, side.color.B
 	}
+	if !sameRGBColor(pdf.color.draw, drawR, drawG, drawB) {
+		pdf.SetDrawColor(drawR, drawG, drawB)
+	}
+	lineWidth := fallbackWidth
 	if side.width > 0 {
-		pdf.SetLineWidth(side.width)
-	} else {
-		pdf.SetLineWidth(fallbackWidth)
+		lineWidth = side.width
+	}
+	if pdf.GetLineWidth() != lineWidth {
+		pdf.SetLineWidth(lineWidth)
 	}
 	pdf.Line(x1, y1, x2, y2)
 }

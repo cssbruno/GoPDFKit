@@ -115,6 +115,7 @@ func (f *Document) estimatedMemoryBytes() int64 {
 	for _, object := range resources.importedObjs {
 		size += int64(len(object))
 	}
+	size += int64(cap(f.contentScratch))
 	size += int64(len(f.xmp))
 	return size
 }

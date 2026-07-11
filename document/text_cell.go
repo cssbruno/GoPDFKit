@@ -105,7 +105,7 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 	}
 	var s []byte
 	if capacity := f.estimateCellFormatBufferCapacity(txtStr, borderStr, fill); capacity > 0 {
-		s = make([]byte, 0, capacity)
+		s = f.contentCommandBuffer(capacity)
 	}
 	if fill || borderStr == "1" {
 		var op string
@@ -299,6 +299,7 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 	if len(s) > 0 {
 		f.outTaggedContent(s, f.consumeNextTextTag(link > 0 || linkStr != ""))
 	}
+	f.retainContentCommandBuffer(s)
 	f.lasth = h
 	if ln > 0 {
 		f.y += h

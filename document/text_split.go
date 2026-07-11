@@ -21,8 +21,10 @@ import (
 // You can use MultiCell if you want to print text on several lines in a
 // simple way.
 func (f *Document) SplitLines(txt []byte, w float64) [][]byte {
+	if !f.requireCurrentFont("measuring text") {
+		return nil
+	}
 	lines := [][]byte{}
-	cw := f.currentFont.Cw
 	wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
 	s := txt
 	if bytes.Contains(s, []byte("\r")) {
@@ -39,7 +41,7 @@ func (f *Document) SplitLines(txt []byte, w float64) [][]byte {
 	l := 0
 	for i < nb {
 		c := s[i]
-		l += cw[c]
+		l += f.currentFontRuneWidth(rune(c))
 		if c == ' ' || c == '\t' || c == '\n' {
 			sep = i
 		}
@@ -71,6 +73,9 @@ func (f *Document) SplitLines(txt []byte, w float64) [][]byte {
 // function can be used to determine the total height of wrapped text for
 // vertical placement purposes.
 func (f *Document) SplitText(txt string, w float64) (lines []string) {
+	if !f.requireCurrentFont("measuring text") {
+		return nil
+	}
 	wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
 	nb := len(txt)
 	for nb > 0 && txt[nb-1] == '\n' {
@@ -132,6 +137,9 @@ func (f *Document) SplitText(txt string, w float64) (lines []string) {
 // SplitTextCount returns the number of lines SplitText would produce without
 // allocating the line strings.
 func (f *Document) SplitTextCount(txt string, w float64) int {
+	if !f.requireCurrentFont("measuring text") {
+		return 0
+	}
 	wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
 	nb := len(txt)
 	for nb > 0 && txt[nb-1] == '\n' {
@@ -184,7 +192,9 @@ func (f *Document) SplitTextCount(txt string, w float64) int {
 // SplitLineCount returns the number of lines SplitLines would produce without
 // allocating a slice of line spans.
 func (f *Document) SplitLineCount(txt []byte, w float64) int {
-	cw := f.currentFont.Cw
+	if !f.requireCurrentFont("measuring text") {
+		return 0
+	}
 	wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
 	s := txt
 	if bytes.Contains(s, []byte("\r")) {
@@ -202,7 +212,7 @@ func (f *Document) SplitLineCount(txt []byte, w float64) int {
 	count := 0
 	for i < nb {
 		c := s[i]
-		l += cw[c]
+		l += f.currentFontRuneWidth(rune(c))
 		if c == ' ' || c == '\t' || c == '\n' {
 			sep = i
 		}
