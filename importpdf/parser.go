@@ -90,6 +90,16 @@ func (p *PageRef) Resources() []byte {
 	return append([]byte(nil), p.resources...)
 }
 
+// ResourcesBorrowed returns the page resource dictionary bytes without
+// copying them. The returned slice is owned by PageRef and must not be
+// retained or modified after the PageRef is no longer in use.
+func (p *PageRef) ResourcesBorrowed() []byte {
+	if p == nil {
+		return nil
+	}
+	return p.resources
+}
+
 // Content returns a copy of the imported page content stream bytes. Use
 // ContentErr to check whether lazy content loading failed.
 func (p *PageRef) Content() []byte {
@@ -139,6 +149,26 @@ func (p *PageRef) ContentWithContext(ctx context.Context) ([]byte, error) {
 		return nil, err
 	}
 	return append([]byte(nil), p.content...), nil
+}
+
+// ContentBorrowedWithContext returns the page content without copying it. The
+// returned slice is owned by PageRef and must not be retained or modified
+// after the PageRef is no longer in use.
+func (p *PageRef) ContentBorrowedWithContext(ctx context.Context) ([]byte, error) {
+	if p == nil {
+		return nil, nil
+	}
+	if err := importContextErr(ctx); err != nil {
+		return nil, err
+	}
+	p.ensureContentContext(ctx)
+	if p.contentErr != nil {
+		return nil, p.contentErr
+	}
+	if err := importContextErr(ctx); err != nil {
+		return nil, err
+	}
+	return p.content, nil
 }
 
 func (p *PageRef) ensureContent() {

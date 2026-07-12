@@ -232,6 +232,7 @@ GoPDFKit currently supports:
 * Reusable PDF templates and imported PDF pages
 * Page workflows built from imported pages: merge, split, reorder, rotate,
   4-up layout, template overlay, and watermark overlay
+* PDF Content Disarm and Reconstruction through the `pdfcdr` package
 * Attachments, metadata, XMP metadata, legacy PDF standard-security protection,
   PDF signing, CMS signature verification, and lightweight PDF inspection
 
@@ -251,6 +252,13 @@ These are not implemented as general-purpose features:
 * Unlocking, decrypting, or removing passwords from existing PDFs
 * Arbitrary PDF editing, OCR, or content rewriting
 * General-purpose semantic text extraction from every possible PDF encoding
+
+`pdfcdr` is intentionally a reconstruction boundary rather than a general PDF
+editor. It accepts the same narrow PDF subset as `importpdf`, removes catalog
+actions, annotations, attachments, metadata, and other active-content
+structures, and writes a new classic-xref PDF containing page content and
+reachable rendering resources. It does not rasterize pages and cannot protect
+against vulnerabilities in a downstream viewer or in image/font decoders.
 
 Imported page support is intentionally narrow: classic xref-table PDFs,
 unencrypted documents, and pages whose content streams are unfiltered or
@@ -343,6 +351,7 @@ layout     typed block model, geometry, pagination, and measurement primitives
 font       font parsing and JSON font definition generation
 importpdf  small wrappers around imported-page APIs
 inspect    lightweight PDF structure, stream, page, and text inspection
+pdfcdr     PDF Content Disarm and Reconstruction
 sign       CMS-first PDF signing and signature verification
 ```
 
@@ -532,6 +541,23 @@ count, err := inspect.PageCount(pdfBytes)
 text, err := inspect.Text(pdfBytes)
 streams, err := inspect.DecodedStreams(pdfBytes)
 ```
+
+## PDF Content Disarm and Reconstruction
+
+Use `github.com/cssbruno/gopdfkit/pdfcdr` when an uploaded PDF must cross a
+reconstruction boundary before being opened or stored:
+
+```go
+import "github.com/cssbruno/gopdfkit/pdfcdr"
+
+clean, err := pdfcdr.Sanitize(input)
+if err != nil {
+	return err
+}
+```
+
+`input` can be a path, byte slice, reader, or parsed `*importpdf.Source`.
+`SanitizeFile` provides the corresponding atomic file-to-file workflow.
 
 ## Errors
 

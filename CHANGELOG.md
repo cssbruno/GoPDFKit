@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.13.0 - 2026-07-11
+
+Minor release adding PDF Content Disarm and Reconstruction support and lower
+allocation PDF reconstruction paths.
+
+### Added
+
+- Added the `pdfcdr` package with bounded PDF reconstruction that removes
+  actions, JavaScript, annotations, attachments, metadata, and unreachable
+  objects while preserving page content and rendering resources.
+- Added CDR file and context-aware APIs, benchmark coverage, nesting-limit
+  tests, and fuzz coverage for the PDF value sanitizer.
+
+### Changed
+
+- Added borrowed page-content and resource accessors to avoid redundant copies
+  during reconstruction.
+- Reduced CDR reconstruction allocations by reusing sanitized objects,
+  avoiding unnecessary reference sorting, and preallocating final output.
+
 ## v0.12.3 - 2026-07-11
 
 Compliance-baseline follow-up to the v0.12.2 security hardening release.
