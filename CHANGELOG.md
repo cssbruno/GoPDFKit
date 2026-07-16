@@ -1,12 +1,19 @@
 # Changelog
 
-## Unreleased
+## v0.13.1 - 2026-07-15
+
+Patch release fixing PDF CDR rendering-resource reconstruction across a wider
+range of valid producer output.
 
 ### Fixed
 
 - Fixed PDF CDR reconstruction of non-sequential rendering-resource references,
   preventing fonts, images, and form XObjects from becoming invalid after
   sanitization.
+- Distinguished real PDF stream markers from `stream` text used in strings or
+  names while continuing to support delimiter-adjacent stream markers.
+- Preserved producer-defined names inside direct and indirect rendering-resource
+  dictionaries without weakening inline action removal.
 
 ## v0.13.0 - 2026-07-11
 

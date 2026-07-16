@@ -1270,7 +1270,7 @@ func (doc *Source) parseStreamContext(ctx context.Context, body []byte) (pdfDict
 	if body == nil {
 		body = []byte{}
 	}
-	streamPos := bytes.Index(body, []byte("stream"))
+	streamPos := findPDFStreamKeyword(body)
 	if streamPos < 0 {
 		return nil, nil, errors.New("stream marker not found")
 	}
@@ -1720,7 +1720,7 @@ func RewriteIndirectRefs(data []byte, refMap map[ObjRef]int) []byte {
 	if data == nil {
 		return []byte{}
 	}
-	streamPos := bytes.Index(data, []byte("stream"))
+	streamPos := findPDFStreamKeyword(data)
 	if streamPos < 0 {
 		return rewriteIndirectRefsInSection(data, refMap)
 	}
@@ -1824,11 +1824,40 @@ func pdfObjectReferenceSection(body []byte) []byte {
 	if body == nil {
 		return []byte{}
 	}
-	streamPos := bytes.Index(body, []byte("stream"))
+	streamPos := findPDFStreamKeyword(body)
 	if streamPos < 0 {
 		return body
 	}
 	return body[:streamPos]
+}
+
+func findPDFStreamKeyword(data []byte) int {
+	for pos := 0; pos < len(data); {
+		switch data[pos] {
+		case '(':
+			pos = skipPDFLiteralString(data, pos)
+			continue
+		case '<':
+			if pos+1 < len(data) && data[pos+1] == '<' {
+				pos += 2
+				continue
+			}
+			pos = skipPDFHexString(data, pos)
+			continue
+		case '%':
+			pos = skipToNextPDFLine(data, pos)
+			continue
+		}
+		end := pos + len("stream")
+		if hasPDFWord(data, pos, "stream") &&
+			(pos == 0 || isPDFSpace(data[pos-1]) || data[pos-1] == '>') &&
+			end < len(data) &&
+			(data[end] == '\r' || data[end] == '\n') {
+			return pos
+		}
+		pos++
+	}
+	return -1
 }
 
 func readPDFIntToken(data []byte, pos int) (value int, isInt bool, next int, ok bool) {
