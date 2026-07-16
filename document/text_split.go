@@ -25,7 +25,7 @@ func (f *Document) SplitLines(txt []byte, w float64) [][]byte {
 		return nil
 	}
 	lines := [][]byte{}
-	wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
+	wmax := math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize)
 	s := txt
 	if bytes.Contains(s, []byte("\r")) {
 		s = bytes.ReplaceAll(s, []byte("\r"), []byte{})
@@ -38,10 +38,14 @@ func (f *Document) SplitLines(txt []byte, w float64) [][]byte {
 	sep := -1
 	i := 0
 	j := 0
-	l := 0
+	l := 0.0
+	wordSpacing := f.wordSpacingFontUnits()
 	for i < nb {
 		c := s[i]
-		l += f.currentFontRuneWidth(rune(c))
+		l += float64(f.currentFontRuneWidth(rune(c)))
+		if c == ' ' {
+			l += wordSpacing
+		}
 		if c == ' ' || c == '\t' || c == '\n' {
 			sep = i
 		}
@@ -76,7 +80,7 @@ func (f *Document) SplitText(txt string, w float64) (lines []string) {
 	if !f.requireCurrentFont("measuring text") {
 		return nil
 	}
-	wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
+	wmax := math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize)
 	nb := len(txt)
 	for nb > 0 && txt[nb-1] == '\n' {
 		nb--
@@ -87,14 +91,18 @@ func (f *Document) SplitText(txt string, w float64) (lines []string) {
 	sepInclude := false
 	i := 0
 	j := 0
-	l := 0
+	l := 0.0
+	wordSpacing := f.wordSpacingFontUnits()
 	for i < nb {
 		c, size := utf8.DecodeRuneInString(txt[i:])
 		if size <= 0 {
 			break
 		}
 		next := i + size
-		l += f.currentFontRuneWidth(c)
+		l += float64(f.currentFontRuneWidth(c))
+		if c == ' ' {
+			l += wordSpacing
+		}
 		if unicode.IsSpace(c) {
 			sep = i
 			sepSize = size
@@ -140,7 +148,7 @@ func (f *Document) SplitTextCount(txt string, w float64) int {
 	if !f.requireCurrentFont("measuring text") {
 		return 0
 	}
-	wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
+	wmax := math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize)
 	nb := len(txt)
 	for nb > 0 && txt[nb-1] == '\n' {
 		nb--
@@ -150,7 +158,8 @@ func (f *Document) SplitTextCount(txt string, w float64) int {
 	sepSize := 1
 	i := 0
 	j := 0
-	l := 0
+	l := 0.0
+	wordSpacing := f.wordSpacingFontUnits()
 	count := 0
 	for i < nb {
 		c, size := utf8.DecodeRuneInString(txt[i:])
@@ -158,7 +167,10 @@ func (f *Document) SplitTextCount(txt string, w float64) int {
 			break
 		}
 		next := i + size
-		l += f.currentFontRuneWidth(c)
+		l += float64(f.currentFontRuneWidth(c))
+		if c == ' ' {
+			l += wordSpacing
+		}
 		if unicode.IsSpace(c) {
 			sep = i
 			sepSize = size
@@ -195,7 +207,7 @@ func (f *Document) SplitLineCount(txt []byte, w float64) int {
 	if !f.requireCurrentFont("measuring text") {
 		return 0
 	}
-	wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
+	wmax := math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize)
 	s := txt
 	if bytes.Contains(s, []byte("\r")) {
 		s = bytes.ReplaceAll(s, []byte("\r"), []byte{})
@@ -208,11 +220,15 @@ func (f *Document) SplitLineCount(txt []byte, w float64) int {
 	sep := -1
 	i := 0
 	j := 0
-	l := 0
+	l := 0.0
+	wordSpacing := f.wordSpacingFontUnits()
 	count := 0
 	for i < nb {
 		c := s[i]
-		l += f.currentFontRuneWidth(rune(c))
+		l += float64(f.currentFontRuneWidth(rune(c)))
+		if c == ' ' {
+			l += wordSpacing
+		}
 		if c == ' ' || c == '\t' || c == '\n' {
 			sep = i
 		}

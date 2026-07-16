@@ -67,7 +67,11 @@ func OpenWithOptionsContext(ctx context.Context, source any, options ImportOptio
 		if src == nil {
 			return nil, errors.New("PDF import source is nil")
 		}
-		return src, nil
+		options, err := normalizeImportOptions(options)
+		if err != nil {
+			return nil, err
+		}
+		return src.withOptions(options)
 	case string:
 		return OpenFileWithOptionsContext(ctx, src, options)
 	case []byte:

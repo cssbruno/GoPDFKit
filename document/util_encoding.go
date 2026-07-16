@@ -26,11 +26,12 @@ func utf8toutf16(s string, withBOM ...bool) string {
 	}
 	for _, r := range s {
 		if r <= 0xFFFF {
-			res = append(res, byte(r>>8), byte(r))
+			res = appendUTF16BECodeUnit(res, r)
 			continue
 		}
 		r1, r2 := utf16.EncodeRune(r)
-		res = append(res, byte(r1>>8), byte(r1), byte(r2>>8), byte(r2))
+		res = appendUTF16BECodeUnit(res, r1)
+		res = appendUTF16BECodeUnit(res, r2)
 	}
 	return string(res)
 }
@@ -45,15 +46,12 @@ func appendEscapedUTF16BE(dst []byte, s string, withBOM bool, usedRunes map[int]
 			usedRunes[int(r)] = int(r)
 		}
 		if r <= 0xFFFF {
-			dst = appendEscapedPDFLiteralByte(dst, byte(r>>8))
-			dst = appendEscapedPDFLiteralByte(dst, byte(r))
+			dst = appendEscapedUTF16BECodeUnit(dst, r)
 			continue
 		}
 		r1, r2 := utf16.EncodeRune(r)
-		dst = appendEscapedPDFLiteralByte(dst, byte(r1>>8))
-		dst = appendEscapedPDFLiteralByte(dst, byte(r1))
-		dst = appendEscapedPDFLiteralByte(dst, byte(r2>>8))
-		dst = appendEscapedPDFLiteralByte(dst, byte(r2))
+		dst = appendEscapedUTF16BECodeUnit(dst, r1)
+		dst = appendEscapedUTF16BECodeUnit(dst, r2)
 	}
 	return dst
 }
@@ -73,17 +71,23 @@ func appendEscapedUTF16BEReverse(dst []byte, s string, withBOM bool, usedRunes m
 			usedRunes[int(r)] = int(r)
 		}
 		if r <= 0xFFFF {
-			dst = appendEscapedPDFLiteralByte(dst, byte(r>>8))
-			dst = appendEscapedPDFLiteralByte(dst, byte(r))
+			dst = appendEscapedUTF16BECodeUnit(dst, r)
 			continue
 		}
 		r1, r2 := utf16.EncodeRune(r)
-		dst = appendEscapedPDFLiteralByte(dst, byte(r1>>8))
-		dst = appendEscapedPDFLiteralByte(dst, byte(r1))
-		dst = appendEscapedPDFLiteralByte(dst, byte(r2>>8))
-		dst = appendEscapedPDFLiteralByte(dst, byte(r2))
+		dst = appendEscapedUTF16BECodeUnit(dst, r1)
+		dst = appendEscapedUTF16BECodeUnit(dst, r2)
 	}
 	return dst
+}
+
+func appendUTF16BECodeUnit(dst []byte, value rune) []byte {
+	return append(dst, byte(value>>8), byte(value)) // #nosec G115 -- Deliberate big-endian packing of a validated UTF-16 code unit.
+}
+
+func appendEscapedUTF16BECodeUnit(dst []byte, value rune) []byte {
+	dst = appendEscapedPDFLiteralByte(dst, byte(value>>8)) // #nosec G115 -- Deliberate high byte of a validated UTF-16 code unit.
+	return appendEscapedPDFLiteralByte(dst, byte(value))   // #nosec G115 -- Deliberate low byte of a validated UTF-16 code unit.
 }
 
 func appendEscapedPDFLiteralByte(dst []byte, b byte) []byte {
@@ -110,7 +114,7 @@ func repClosure(m map[rune]byte) func(string) string {
 		var ok bool
 		for _, r := range str {
 			if r < 0x80 {
-				ch = byte(r)
+				ch = byte(r) // #nosec G115 -- The branch proves this rune is a single-byte ASCII value.
 			} else {
 				ch, ok = m[r]
 				if !ok {

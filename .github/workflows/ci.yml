@@ -9,10 +9,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -25,23 +30,50 @@ jobs:
           go-version-file: tools/go.mod
           cache: true
 
-      - name: Check
-        run: make check
+      - name: Check formatting and module files
+        shell: bash
+        run: |
+          make fmt-check
+          go mod tidy -diff
+          go mod verify
+          cd tools
+          go mod tidy -diff
+          go mod verify
 
-      - name: Check nested Go modules
-        run: make modules
+      - name: Check repository command contracts
+        shell: bash
+        run: |
+          make release-version
+          mismatch=v0.0.0
+          if [ "$(sed -n '1p' VERSION)" = "$mismatch" ]; then
+            mismatch=v0.0.1
+          fi
+          if make release-version VERSION="$mismatch"; then
+            echo "release-version accepted VERSION mismatch" >&2
+            exit 1
+          fi
+          make clean
+          git diff --exit-code
 
-      - name: Check coverage floors
-        run: make coverage-check
+      - name: Test
+        run: |
+          make coverage-check
+          go test ./cmd/... ./internal/...
 
       - name: Static analysis
-        run: make lint
+        run: |
+          make lint
+          make nilaway
 
       - name: Security analysis
         run: make gosec
 
-      - name: Race test
-        run: make race
+      - name: Race test shared-state packages
+        run: go test -race ./document ./importpdf
 
       - name: Vulnerability check
+        if: github.event_name != 'pull_request'
         run: make govulncheck
+
+      - name: Cross-build Windows
+        run: GOOS=windows GOARCH=amd64 go build ./...

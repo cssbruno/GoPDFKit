@@ -49,13 +49,16 @@ jobs:
         shell: bash
         run: git checkout --detach "refs/tags/${VERSION}"
 
-      - name: Release check
-        run: make release-check VERSION="${VERSION}"
+      - name: Verify release version and tests
+        run: make release-version test VERSION="${VERSION}"
 
       - name: Install compliance dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y colord-data
+          sudo apt-get install -y colord-data poppler-utils
+
+      - name: Verify representative PDFs with Poppler
+        run: make pdf-reader-smoke
 
       - name: Start Arlington checker
         env:

@@ -43,7 +43,12 @@ func (f *Document) endPDFStream() {
 
 func (f *Document) putstream(b []byte) {
 	if f.protect.encrypted {
-		f.protect.rc4(uint32(f.n), &b)
+		encrypted := append([]byte(nil), b...)
+		if err := f.protect.rc4(f.n, &encrypted); err != nil {
+			f.SetError(err)
+			return
+		}
+		b = encrypted
 	}
 	f.beginPDFStream()
 	f.outbytes(b)

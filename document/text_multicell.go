@@ -23,7 +23,23 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 	if w == 0 {
 		w = f.w - f.rMargin - f.x
 	}
-	wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
+	wmax := math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize)
+	originalWordSpacing := f.ws
+	restoreWordSpacing := func() {
+		if f.ws == originalWordSpacing {
+			return
+		}
+		if f.err != nil {
+			f.ws = originalWordSpacing
+			return
+		}
+		f.SetWordSpacing(originalWordSpacing)
+	}
+	defer restoreWordSpacing()
+	wrapWordSpacing := 0.0
+	if alignStr != "J" {
+		wrapWordSpacing = f.wordSpacingFontUnits()
+	}
 	s := txtStr
 	if strings.Contains(s, "\r") {
 		s = strings.ReplaceAll(s, "\r", "")
@@ -68,8 +84,8 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 	sepInclude := false
 	i := 0
 	j := 0
-	l := 0
-	ls := 0
+	l := 0.0
+	ls := 0.0
 	ns := 0
 	nl := 1
 	for i < nb {
@@ -86,10 +102,7 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 			c = rune(s[i])
 		}
 		if c == '\n' {
-			if f.ws > 0 {
-				f.ws = 0
-				f.out("0 Tw")
-			}
+			restoreWordSpacing()
 			if f.isCurrentUTF8 {
 				newAlignStr := alignStr
 				if newAlignStr == "J" {
@@ -114,17 +127,13 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 			}
 			continue
 		}
-		var charWidth int
-		if f.isCurrentUTF8 {
-			charWidth = f.currentFontRuneWidth(c)
-		} else {
-			charWidth = f.currentFontRuneWidth(c)
-		}
+		charWidth := float64(f.currentFontRuneWidth(c))
 		l += charWidth
 		if c == ' ' {
+			l += wrapWordSpacing
 			sep = i
 			sepInclude = false
-			ls = l - charWidth
+			ls = l - charWidth - wrapWordSpacing
 			ns++
 		} else if f.isCurrentUTF8 && isChinese(c) {
 			sep = i
@@ -136,10 +145,7 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 				if i == j {
 					i = next
 				}
-				if f.ws > 0 {
-					f.ws = 0
-					f.out("0 Tw")
-				}
+				restoreWordSpacing()
 				f.CellFormat(w, h, s[j:i], b, 2, alignStr, fill, 0, "")
 			} else {
 				lineEnd := sep
@@ -148,12 +154,11 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 					lineEnd = sep + sepSize
 				}
 				if alignStr == "J" {
+					lineWordSpacing := 0.0
 					if ns > 1 {
-						f.ws = float64((wmax-ls)/1000) * f.fontSize / float64(ns-1)
-					} else {
-						f.ws = 0
+						lineWordSpacing = (wmax - ls) / 1000 * f.fontSize / float64(ns-1)
 					}
-					f.outf("%.3f Tw", f.ws*f.k)
+					f.SetWordSpacing(lineWordSpacing)
 				}
 				f.CellFormat(w, h, s[j:lineEnd], b, 2, alignStr, fill, 0, "")
 				if f.isCurrentUTF8 {
@@ -176,10 +181,7 @@ func (f *Document) MultiCell(w, h float64, txtStr, borderStr, alignStr string, f
 			i = next
 		}
 	}
-	if f.ws > 0 {
-		f.ws = 0
-		f.out("0 Tw")
-	}
+	restoreWordSpacing()
 	if len(borderStr) > 0 && strings.Contains(borderStr, "B") {
 		b += "B"
 	}

@@ -48,14 +48,6 @@ go run ./examples/utf8-font
 go run ./examples/watermark-pdf
 ```
 
-The `external-qr-code` example is a separate module because it intentionally
-uses a barcode dependency outside GoPDFKit:
-
-```sh
-cd examples/external-qr-code
-go run .
-```
-
 ## Output Index
 
 | Workflow | Command | Output |
@@ -100,7 +92,6 @@ go run .
 | Thumbnail | `go run ./examples/thumbnail` | `thumbnail.pdf` |
 | UTF-8 font | `go run ./examples/utf8-font` | `utf8-font.pdf` |
 | Watermark | `go run ./examples/watermark-pdf` | `watermarked.pdf` |
-| External QR code module | `cd examples/external-qr-code && go run .` | `qr-code.pdf` |
 
 ## Feature Gaps
 

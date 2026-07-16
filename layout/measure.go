@@ -77,24 +77,36 @@ func (m BlockMeasurement) CanStart(availableHeight float64) bool {
 	return m.MinHeight <= availableHeight
 }
 
+// RequiredStartHeight reports the vertical space needed to start this block.
+// When next is supplied, KeepWithNext includes enough space to start the next
+// block as well. It intentionally does not require the whole next block unless
+// that block is itself kept together.
+func (m BlockMeasurement) RequiredStartHeight(next *BlockMeasurement) float64 {
+	required := m.MinHeight
+	if required <= 0 || m.KeepTogether {
+		required = m.Height
+	}
+	if m.KeepWithNext && next != nil {
+		if withNext := m.Height + next.RequiredStartHeight(nil); withNext > required {
+			required = withNext
+		}
+	}
+	return required
+}
+
 // ShouldMoveToNextPage reports whether the block should move before drawing.
 func (m BlockMeasurement) ShouldMoveToNextPage(availableHeight float64) bool {
 	if m.BreakBefore {
 		return true
 	}
-	if m.KeepTogether {
-		return !m.Fits(availableHeight)
-	}
-	return !m.CanStart(availableHeight)
+	return m.RequiredStartHeight(nil) > availableHeight
 }
 
 // MeasureBlocks estimates a sequence of blocks.
 func MeasureBlocks(ctx MeasureContext, blocks []Block) []BlockMeasurement {
+	blocks = NormalizeBlocks(blocks)
 	measures := make([]BlockMeasurement, 0, len(blocks))
 	for _, block := range blocks {
-		if block == nil {
-			continue
-		}
 		measures = append(measures, MeasureBlock(ctx, block))
 	}
 	return measures
@@ -102,7 +114,8 @@ func MeasureBlocks(ctx MeasureContext, blocks []Block) []BlockMeasurement {
 
 // MeasureBlock estimates the layout footprint for one block.
 func MeasureBlock(ctx MeasureContext, block Block) BlockMeasurement {
-	if block == nil {
+	block, ok := NormalizeBlock(block)
+	if !ok {
 		return BlockMeasurement{}
 	}
 	switch b := block.(type) {
@@ -123,7 +136,7 @@ func MeasureBlock(ctx MeasureContext, block Block) BlockMeasurement {
 	case QRVerificationBlock:
 		return measureQRVerificationBlock(ctx, b)
 	case NoteBoxBlock:
-		return measureContainerBlock(ctx, b.DocumentBlockKind(), b.Body, b.Box)
+		return measureNoteBoxBlock(ctx, b)
 	case SectionBlock:
 		return measureSectionBlock(ctx, b)
 	case ClauseBlock:
@@ -133,6 +146,19 @@ func MeasureBlock(ctx MeasureContext, block Block) BlockMeasurement {
 	default:
 		return BlockMeasurement{Kind: block.DocumentBlockKind(), Width: ctx.Width}
 	}
+}
+
+func measureNoteBoxBlock(ctx MeasureContext, block NoteBoxBlock) BlockMeasurement {
+	children := make([]Block, 0, len(block.Body)+1)
+	if strings.TrimSpace(block.Title) != "" {
+		children = append(children, HeadingBlock{
+			Level:    4,
+			Segments: []TextSegment{{Text: block.Title}},
+			Style:    block.EffectiveStyle(),
+		})
+	}
+	children = append(children, block.Body...)
+	return measureContainerBlock(ctx, block.DocumentBlockKind(), children, block.EffectiveBox())
 }
 
 func measureParagraphBlock(ctx MeasureContext, block ParagraphBlock) BlockMeasurement {
@@ -351,30 +377,49 @@ func measureQRVerificationBlock(ctx MeasureContext, block QRVerificationBlock) B
 
 func measureSectionBlock(ctx MeasureContext, block SectionBlock) BlockMeasurement {
 	box := block.EffectiveBox()
-	childCtx := ctx
-	childCtx.Width = InnerWidth(ctx.Width, box)
-	titleHeight := 0.0
+	body := measureContainerBlock(ctx, block.DocumentBlockKind(), block.Blocks, box)
+	var title BlockMeasurement
 	if strings.TrimSpace(block.Title) != "" {
-		titleHeight = ResolvedLineHeight(ctx.DefaultStyle)
+		title = measureHeadingBlock(ctx, HeadingBlock{
+			Level:    2,
+			Segments: []TextSegment{{Text: block.Title}},
+		})
 	}
-	measure := measureBlockSequence(childCtx, block.Blocks)
-	measure.Kind = block.DocumentBlockKind()
-	measure.Width = ctx.Width
-	measure.Height += titleHeight + VerticalSpacing(box.Margin) + VerticalSpacing(box.Padding) + BorderVertical(box.Border)
-	measure.MinHeight += titleHeight + box.Padding.Top + BorderVertical(box.Border)
+
+	measure := body
+	measure.Height += title.Height
+	if title.Height > 0 {
+		measure.MinHeight = title.RequiredStartHeight(nil)
+		if block.KeepTitleWithBody && len(body.ChildMeasures) > 0 {
+			measure.MinHeight = title.Height + body.RequiredStartHeight(nil)
+		}
+	}
 	measure.KeepTogether = box.KeepTogether
-	measure.KeepWithNext = box.KeepWithNext
-	measure.Splittable = !box.KeepTogether
+	if measure.KeepTogether {
+		measure.MinHeight = measure.Height
+	}
 	return measure
 }
 
 func measureClauseBlock(ctx MeasureContext, block ClauseBlock) BlockMeasurement {
 	box := block.EffectiveBox()
 	measure := measureContainerBlock(ctx, block.DocumentBlockKind(), block.Blocks, box)
+	titleText := strings.TrimSpace(strings.TrimSpace(block.Number + " " + block.Title))
+	if titleText != "" {
+		title := measureHeadingBlock(ctx, HeadingBlock{
+			Level:    3,
+			Segments: []TextSegment{{Text: titleText}},
+		})
+		measure.Height += title.Height
+		measure.MinHeight = title.Height + measure.RequiredStartHeight(nil)
+	}
 	measure.BreakBefore = block.BreakBefore
 	measure.BreakAfter = block.BreakAfter
 	measure.KeepTogether = block.KeepTogether || box.KeepTogether
 	measure.Splittable = !measure.KeepTogether
+	if measure.KeepTogether {
+		measure.MinHeight = measure.Height
+	}
 	return measure
 }
 
@@ -399,7 +444,11 @@ func measureBlockSequence(ctx MeasureContext, blocks []Block) BlockMeasurement {
 	for i, child := range children {
 		total += child.Height
 		if i == 0 {
-			minHeight = child.MinHeight
+			if len(children) > 1 {
+				minHeight = child.RequiredStartHeight(&children[1])
+			} else {
+				minHeight = child.RequiredStartHeight(nil)
+			}
 		}
 	}
 	return BlockMeasurement{

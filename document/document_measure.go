@@ -88,7 +88,7 @@ func applyPDFTextStyle(pdf *Document, style layout.TextStyle) pdfTextStyleState 
 	if style.StrikeThrough {
 		fontStyle += "S"
 	}
-	pdf.SetFont(family, fontStyle, size)
+	setFontForMeasurement(pdf, family, fontStyle, size)
 	pdf.strikeout = style.StrikeThrough
 	return state
 }
@@ -102,7 +102,17 @@ func restorePDFTextStyle(pdf *Document, state pdfTextStyleState) {
 	if size <= 0 {
 		size = 12
 	}
-	pdf.SetFont(family, state.style, size)
+	setFontForMeasurement(pdf, family, state.style, size)
 	pdf.underline = state.underline
 	pdf.strikeout = state.strikeout
+}
+
+// setFontForMeasurement selects font metrics without writing a font-selection
+// operator into the current page. Measurement may populate the document's font
+// resource map, but it must not mutate rendered page content.
+func setFontForMeasurement(pdf *Document, family, style string, size float64) {
+	page := pdf.page
+	pdf.page = 0
+	defer func() { pdf.page = page }()
+	pdf.SetFont(family, style, size)
 }

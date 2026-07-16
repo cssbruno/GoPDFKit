@@ -259,15 +259,15 @@ func writeFileAtomically(fileStr string, syncOutput bool, write func(io.Writer) 
 		_ = pdfFile.Close()
 		return err
 	}
+	if err := pdfFile.Chmod(mode); err != nil {
+		_ = pdfFile.Close()
+		return err
+	}
 	if syncOutput {
 		if err := pdfFile.Sync(); err != nil {
 			_ = pdfFile.Close()
 			return err
 		}
-	}
-	if err := pdfFile.Chmod(mode); err != nil {
-		_ = pdfFile.Close()
-		return err
 	}
 	if err := pdfFile.Close(); err != nil {
 		return err
@@ -276,6 +276,11 @@ func writeFileAtomically(fileStr string, syncOutput bool, write func(io.Writer) 
 		return err
 	}
 	removeTemp = false
+	if syncOutput {
+		if err := syncOutputDirectory(dir); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

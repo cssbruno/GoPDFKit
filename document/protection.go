@@ -7,6 +7,7 @@ import (
 	"crypto/md5" // #nosec G501 -- The isolated legacy PDF RC4 compatibility algorithm requires MD5.
 	"crypto/rand"
 	"crypto/rc4" // #nosec G503 -- This file is explicitly limited to legacy PDF RC4 compatibility.
+	"fmt"
 	"io"
 )
 
@@ -36,25 +37,24 @@ type protectType struct {
 	padding       []byte
 	encryptionKey []byte
 	objNum        int
-	rc4cipher     *rc4.Cipher
-	rc4n          uint32 // Object number associated with the RC4 cipher.
 }
 
-func (p *protectType) rc4(n uint32, buf *[]byte) {
-	if p.rc4cipher == nil || p.rc4n != n {
-		var key [10]byte
-		p.objectKey(n, &key)
-		p.rc4cipher, _ = rc4.NewCipher(key[:]) // #nosec G405 -- Required by the legacy PDF standard-security algorithm.
-		p.rc4n = n
+func (p *protectType) rc4(n int, buf *[]byte) error {
+	if n < 0 || n > 0xFFFFFF {
+		return fmt.Errorf("legacy PDF encryption object number out of range: %d", n)
 	}
-	p.rc4cipher.XORKeyStream(*buf, *buf)
+	var key [10]byte
+	p.objectKey(n, &key)
+	cipher, _ := rc4.NewCipher(key[:]) // #nosec G405 -- Required by the legacy PDF standard-security algorithm.
+	cipher.XORKeyStream(*buf, *buf)
+	return nil
 }
 
-func (p *protectType) objectKey(n uint32, key *[10]byte) {
+func (p *protectType) objectKey(n int, key *[10]byte) {
 	var buf [32]byte
 	input := append(buf[:0], p.encryptionKey...)
-	input = append(input, byte(n), byte(n>>8), byte(n>>16), 0, 0)
-	sum := md5.Sum(input) // #nosec G401 -- Required by the legacy PDF standard-security algorithm.
+	input = append(input, byte(n), byte(n>>8), byte(n>>16), 0, 0) // #nosec G115 -- PDF security keys encode the validated 24-bit object number as three bytes.
+	sum := md5.Sum(input)                                         // #nosec G401 -- Required by the legacy PDF standard-security algorithm.
 	copy(key[:], sum[:10])
 }
 

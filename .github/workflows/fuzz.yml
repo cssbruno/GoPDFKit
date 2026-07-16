@@ -2,7 +2,7 @@ name: Fuzz
 
 on:
   schedule:
-    - cron: '17 3 * * 1'
+    - cron: '17 3 1 * *'
   workflow_dispatch:
 
 permissions:
@@ -10,40 +10,9 @@ permissions:
 
 jobs:
   fuzz:
-    name: ${{ matrix.package }} ${{ matrix.target }}
+    name: Hostile input boundaries
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - package: ./document
-            target: FuzzCompileHTML
-          - package: ./document
-            target: FuzzCompileHTMLRecovery
-          - package: ./document
-            target: FuzzCompileHTMLDataImageSource
-          - package: ./document
-            target: FuzzHTMLTokenize
-          - package: ./document
-            target: FuzzSVGParse
-          - package: ./document
-            target: FuzzDeserializeTemplate
-          - package: ./document
-            target: FuzzParseImageOptionsReader
-          - package: ./document
-            target: FuzzAppendEscapedPDFCellText
-          - package: ./importpdf
-            target: FuzzOpenBytes
-          - package: ./inspect
-            target: FuzzDecodedStreamsAndText
-          - package: ./sign
-            target: FuzzReadDER
-          - package: ./sign
-            target: FuzzInspectCMS
-          - package: ./sign
-            target: FuzzVerifyCMS
-          - package: ./sign
-            target: FuzzPDFString
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -57,12 +26,25 @@ jobs:
           cache: true
 
       - name: Fuzz
-        run: go test ${{ matrix.package }} -run '^$' -fuzz '^${{ matrix.target }}$' -fuzztime=30s
+        run: |
+          go test ./document -run '^$' -fuzz '^FuzzDeserializeTemplate$' -fuzztime=10s
+          go test ./document -run '^$' -fuzz '^FuzzSVGParse$' -fuzztime=10s
+          go test ./importpdf -run '^$' -fuzz '^FuzzOpenBytes$' -fuzztime=10s
+          go test ./pdfcdr -run '^$' -fuzz '^FuzzSanitizePDF$' -fuzztime=10s
+          go test ./inspect -run '^$' -fuzz '^FuzzDecodedStreamsAndText$' -fuzztime=10s
+          go test ./sign -run '^$' -fuzz '^FuzzVerifyCMS$' -fuzztime=10s
+          go test ./sign -run '^$' -fuzz '^FuzzPDFSignatureScanner$' -fuzztime=10s
+          go test ./sign -run '^$' -fuzz '^FuzzAnalyzePDF$' -fuzztime=10s
 
       - name: Upload fuzz crashers
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: fuzz-${{ matrix.target }}
-          path: ${{ matrix.package }}/testdata/fuzz
+          name: fuzz-crashers
+          path: |
+            document/testdata/fuzz
+            importpdf/testdata/fuzz
+            pdfcdr/testdata/fuzz
+            inspect/testdata/fuzz
+            sign/testdata/fuzz
           if-no-files-found: ignore

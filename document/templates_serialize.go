@@ -606,7 +606,9 @@ func (w *templateBinaryWriter) writeBool(value bool) {
 }
 
 func (w *templateBinaryWriter) writeInt(value int) {
-	w.writeUint(uint64(int64(value)))
+	// Preserve the signed value's two's-complement bits in the established
+	// unsigned-varint wire format.
+	w.writeUint(uint64(int64(value))) // #nosec G115 -- Deliberate signed binary serialization; readInt validates the platform int range.
 }
 
 func (w *templateBinaryWriter) writeFloat(value float64) {
@@ -782,7 +784,17 @@ func (r *templateBinaryReader) readByte() byte {
 }
 
 func (r *templateBinaryReader) readInt() int {
-	return int(int64(r.readUint()))
+	value := r.readUint()
+	if r.err != nil {
+		return 0
+	}
+	signed := int64(value) // #nosec G115 -- Inverse of the documented two's-complement wire encoding above.
+	decoded := int(signed) // #nosec G115 -- The round-trip check below rejects values outside the platform int range.
+	if int64(decoded) != signed {
+		r.err = errors.New("serialized template integer exceeds platform range")
+		return 0
+	}
+	return decoded
 }
 
 func (r *templateBinaryReader) readFloat() float64 {
@@ -794,11 +806,11 @@ func (r *templateBinaryReader) readCount(max int, name string) int {
 	if r.err != nil {
 		return 0
 	}
-	if value > uint64(max) {
+	if max < 0 || value > uint64(max) { // #nosec G115 -- max is rejected when negative before its use as an unsigned bound.
 		r.err = fmt.Errorf("%s exceeds maximum size", name)
 		return 0
 	}
-	return int(value)
+	return int(value) // #nosec G115 -- value is bounded by the non-negative platform int max above.
 }
 
 func (r *templateBinaryReader) readUint() uint64 {

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,6 +54,130 @@ func TestSanitizeRemovesActiveDocumentStructures(t *testing.T) {
 	}
 	if page.ObjectCount() != 2 {
 		t.Fatalf("reconstructed page object count = %d, want the resources and font objects", page.ObjectCount())
+	}
+}
+
+func TestSanitizeIsIdempotent(t *testing.T) {
+	first, err := Sanitize(activeSourcePDF(t))
+	if err != nil {
+		t.Fatalf("first Sanitize() error = %v", err)
+	}
+	second, err := Sanitize(first)
+	if err != nil {
+		t.Fatalf("second Sanitize() error = %v", err)
+	}
+	if !bytes.Equal(first, second) {
+		t.Fatal("Sanitize() output changed on a second pass")
+	}
+}
+
+func TestSanitizePreservesTrailingContentLineBreaks(t *testing.T) {
+	for name, content := range map[string][]byte{
+		"single LF":         []byte("BT (one) Tj ET\n"),
+		"single CRLF":       []byte("BT (one) Tj ET\r\n"),
+		"multiple LF":       []byte("BT (one) Tj ET\n\n\n"),
+		"multiple CRLF":     []byte("BT (one) Tj ET\r\n\r\n"),
+		"mixed line breaks": []byte("BT (one) Tj ET\r\n\n\r\n"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			first, err := Sanitize(pageContentSourcePDF(t, content))
+			if err != nil {
+				t.Fatalf("first Sanitize() error = %v", err)
+			}
+			source, err := importpdf.OpenBytes(first)
+			if err != nil {
+				t.Fatalf("OpenBytes() error = %v", err)
+			}
+			page, err := source.Page(1, "MediaBox")
+			if err != nil {
+				t.Fatalf("Page() error = %v", err)
+			}
+			wrapped, err := page.ContentWithError()
+			if err != nil {
+				t.Fatalf("ContentWithError() error = %v", err)
+			}
+			got, err := standalonePageContent(wrapped)
+			if err != nil {
+				t.Fatalf("standalonePageContent() error = %v", err)
+			}
+			if !bytes.Equal(got, content) {
+				t.Fatalf("reconstructed content = %q, want %q", got, content)
+			}
+			second, err := Sanitize(first)
+			if err != nil {
+				t.Fatalf("second Sanitize() error = %v", err)
+			}
+			if !bytes.Equal(first, second) {
+				t.Fatal("Sanitize() changed trailing line breaks on a second pass")
+			}
+		})
+	}
+}
+
+func TestSanitizeDeduplicatesSharedResourcesAcrossPages(t *testing.T) {
+	for name, test := range map[string]struct {
+		source      []byte
+		objectCount int
+	}{
+		"same source objects":      {source: sharedResourceSourcePDF(t, 2), objectCount: 8},
+		"identical source bodies":  {source: equivalentResourceSourcePDF(t), objectCount: 8},
+		"identical direct objects": {source: twoPageSourcePDF(t), objectCount: 7},
+	} {
+		t.Run(name, func(t *testing.T) {
+			clean, err := Sanitize(test.source)
+			if err != nil {
+				t.Fatalf("Sanitize() error = %v", err)
+			}
+			if got := bytes.Count(clean, []byte(" 0 obj\n")); got != test.objectCount {
+				t.Fatalf("reconstructed object count = %d, want %d shared objects", got, test.objectCount)
+			}
+			again, err := Sanitize(clean)
+			if err != nil {
+				t.Fatalf("second Sanitize() error = %v", err)
+			}
+			if !bytes.Equal(clean, again) {
+				t.Fatal("shared-resource reconstruction changed on a second pass")
+			}
+		})
+	}
+}
+
+func TestSanitizeSharedResourceBudgetsCountUniqueObjects(t *testing.T) {
+	root, err := sanitizePDFObject([]byte(sharedResourceRootBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	font, err := sanitizePDFObject([]byte(sharedFontBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Both source references and their deterministic output IDs are one digit,
+	// so rewriting the reference does not change the retained byte count.
+	uniqueResourceBytes := int64(len(root) + len(font))
+	source := sharedResourceSourcePDF(t, 2)
+	if _, err := SanitizeContext(context.Background(), source, Options{
+		MaxResourceBytes: uniqueResourceBytes,
+		MaxObjects:       8,
+	}); err != nil {
+		t.Fatalf("SanitizeContext() with one-copy budgets error = %v", err)
+	}
+	for name, options := range map[string]Options{
+		"resource bytes": {MaxResourceBytes: uniqueResourceBytes - 1},
+		"object count":   {MaxObjects: 7},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := SanitizeContext(context.Background(), source, options)
+			if !errors.Is(err, ErrLimitExceeded) {
+				t.Fatalf("SanitizeContext() error = %v, want ErrLimitExceeded", err)
+			}
+		})
+	}
+}
+
+func TestSanitizeRejectsResourceRoleChangesAcrossPages(t *testing.T) {
+	_, err := Sanitize(crossPageResourceRolePDF(t))
+	if err == nil || !strings.Contains(err.Error(), "both as a resource-name dictionary and as an ordinary object") {
+		t.Fatalf("Sanitize() error = %v, want cross-page resource-role rejection", err)
 	}
 }
 
@@ -172,6 +297,109 @@ func TestSanitizeRejectsUnsupportedInput(t *testing.T) {
 	}
 }
 
+func TestSanitizeRejectsActiveResourceObjects(t *testing.T) {
+	for name, body := range map[string]string{
+		"PostScript XObject": "<< /Type /XObject /Subt#79pe /P#53 /Length 0 >>\nstream\n\nendstream",
+		"Reference XObject":  "<< /Type /XObject /Subtype /Form /BBox [0 0 10 10] /R#65f << /#46 (external.pdf) /Page 1 >> /Length 0 >>\nstream\n\nendstream",
+		"external stream":    "<< /Type /XObject /Subtype /Form /BBox [0 0 10 10] /#46 (external.bin) /Length 0 >>\nstream\n\nendstream",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := Sanitize(activeResourcePDF(t, body))
+			if err == nil {
+				t.Fatal("Sanitize() error = nil, want active resource rejection")
+			}
+		})
+	}
+}
+
+func TestSanitizeRejectsTokensAfterResourceStream(t *testing.T) {
+	source := activeResourcePDF(t, "<< /Type /XObject /Subtype /Form /BBox [0 0 10 10] /Length 3 >>\nstream\nabc\nendstream\n/JavaScript true\nendstream")
+	_, err := Sanitize(source)
+	if err == nil || !strings.Contains(err.Error(), "unexpected bytes after PDF endstream") {
+		t.Fatalf("Sanitize() error = %v, want trailing stream-token rejection", err)
+	}
+}
+
+func TestSanitizeRejectsAmbiguousResourceObjectRole(t *testing.T) {
+	source := resourceGraphPDF(t,
+		"<< /Font 5 0 R /XObject << /Same 5 0 R >> >>",
+		"<< /F1 6 0 R >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	)
+	_, err := Sanitize(source)
+	if err == nil || !strings.Contains(err.Error(), "both as a resource-name dictionary and as an ordinary object") {
+		t.Fatalf("Sanitize() error = %v, want ambiguous resource-role rejection", err)
+	}
+}
+
+func TestSanitizeDoesNotReinterpretProducerResourceNames(t *testing.T) {
+	source := resourceGraphPDF(t,
+		"<< /Font 5 0 R >>",
+		"<< /XObject 6 0 R >>",
+		"<< /Type /XObject /Subtype /PS /Length 0 >>\nstream\n\nendstream",
+	)
+	if _, err := Sanitize(source); err == nil || !strings.Contains(err.Error(), "PostScript") {
+		t.Fatalf("Sanitize() error = %v, want nested PostScript resource rejection", err)
+	}
+}
+
+func TestSanitizeAggregateLimits(t *testing.T) {
+	source := activeSourcePDF(t)
+	for name, options := range map[string]Options{
+		"decoded bytes":  {MaxDecodedBytes: 1},
+		"resource bytes": {MaxResourceBytes: 1},
+		"output bytes":   {MaxOutputBytes: 100},
+		"object count":   {MaxObjects: 2},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := SanitizeContext(context.Background(), source, options)
+			if !errors.Is(err, ErrLimitExceeded) {
+				t.Fatalf("SanitizeContext() error = %v, want ErrLimitExceeded", err)
+			}
+		})
+	}
+}
+
+func TestSanitizeLimitsAreAggregateAcrossPages(t *testing.T) {
+	t.Run("decoded bytes", func(t *testing.T) {
+		_, err := SanitizeContext(context.Background(), twoPageSourcePDF(t), Options{MaxDecodedBytes: 5})
+		if !errors.Is(err, ErrLimitExceeded) {
+			t.Fatalf("SanitizeContext() error = %v, want aggregate ErrLimitExceeded", err)
+		}
+	})
+	t.Run("distinct resource bytes", func(t *testing.T) {
+		first, err := sanitizePDFObject([]byte("<< /ProcSet [/PDF] >>"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		second, err := sanitizePDFObject([]byte("<< /ProcSet [/Text] >>"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		limit := max(len(first), len(second))
+		_, err = SanitizeContext(context.Background(), twoPageDistinctResourcesPDF(t), Options{MaxResourceBytes: int64(limit)})
+		if !errors.Is(err, ErrLimitExceeded) {
+			t.Fatalf("SanitizeContext() error = %v, want aggregate ErrLimitExceeded", err)
+		}
+	})
+}
+
+func TestSanitizeAppliesLimitsToExistingSource(t *testing.T) {
+	data := activeSourcePDF(t)
+	source, err := importpdf.OpenBytes(data)
+	if err != nil {
+		t.Fatalf("OpenBytes() error = %v", err)
+	}
+	_, err = SanitizeContext(context.Background(), source, Options{MaxSourceBytes: 1})
+	if !errors.Is(err, importpdf.ErrSourceTooLarge) {
+		t.Fatalf("SanitizeContext() source-size error = %v, want ErrSourceTooLarge", err)
+	}
+	_, err = SanitizeContext(context.Background(), source, Options{MaxReferencedObjects: 1})
+	if err == nil || !strings.Contains(err.Error(), "referenced object count exceeds") {
+		t.Fatalf("SanitizeContext() referenced-object error = %v, want referenced-object limit", err)
+	}
+}
+
 func activeSourcePDF(t testing.TB) []byte {
 	t.Helper()
 	builder := &pdfBuilder{}
@@ -188,6 +416,188 @@ func activeSourcePDF(t testing.TB) []byte {
 	builder.set(ids[6], []byte("<< /Type /Action /S /JavaScript /JS (app.alert) >>"))
 	builder.set(ids[7], []byte("<< /Type /Metadata /Subtype /XML /Length 11 >>\nstream\n<xml></xml>\nendstream"))
 	builder.set(ids[8], []byte("<< /Type /Annot /Subtype /Link /A 7 0 R /Rect [0 0 1 1] >>"))
+	data, err := builder.bytes(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func activeResourcePDF(t testing.TB, resourceBody string) []byte {
+	t.Helper()
+	builder := &pdfBuilder{}
+	ids := make([]int, 5)
+	for i := range ids {
+		ids[i] = builder.reserve()
+	}
+	builder.set(ids[0], []byte("<< /Type /Catalog /Pages 2 0 R >>"))
+	builder.set(ids[1], []byte("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"))
+	builder.set(ids[2], []byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /XObject << /R1 5 0 R >> >> /Contents 4 0 R >>"))
+	builder.set(ids[3], pdfStreamBody([]byte("/R1 Do")))
+	builder.set(ids[4], []byte(resourceBody))
+	data, err := builder.bytes(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func resourceGraphPDF(t testing.TB, resources string, objectBodies ...string) []byte {
+	t.Helper()
+	builder := &pdfBuilder{}
+	ids := make([]int, 4+len(objectBodies))
+	for i := range ids {
+		ids[i] = builder.reserve()
+	}
+	builder.set(ids[0], []byte("<< /Type /Catalog /Pages 2 0 R >>"))
+	builder.set(ids[1], []byte("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"))
+	builder.set(ids[2], []byte(fmt.Sprintf(
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources %s /Contents 4 0 R >>",
+		resources,
+	)))
+	builder.set(ids[3], pdfStreamBody(nil))
+	for i, body := range objectBodies {
+		builder.set(ids[4+i], []byte(body))
+	}
+	data, err := builder.bytes(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func twoPageSourcePDF(t testing.TB) []byte {
+	t.Helper()
+	builder := &pdfBuilder{}
+	ids := make([]int, 6)
+	for i := range ids {
+		ids[i] = builder.reserve()
+	}
+	builder.set(ids[0], []byte("<< /Type /Catalog /Pages 2 0 R >>"))
+	builder.set(ids[1], []byte("<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>"))
+	builder.set(ids[2], []byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources <<>> /Contents 5 0 R >>"))
+	builder.set(ids[3], []byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources <<>> /Contents 6 0 R >>"))
+	builder.set(ids[4], pdfStreamBody([]byte("q Q")))
+	builder.set(ids[5], pdfStreamBody([]byte("q Q")))
+	data, err := builder.bytes(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func pageContentSourcePDF(t testing.TB, content []byte) []byte {
+	t.Helper()
+	builder := &pdfBuilder{}
+	ids := make([]int, 4)
+	for i := range ids {
+		ids[i] = builder.reserve()
+	}
+	builder.set(ids[0], []byte("<< /Type /Catalog /Pages 2 0 R >>"))
+	builder.set(ids[1], []byte("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"))
+	builder.set(ids[2], []byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources <<>> /Contents 4 0 R >>"))
+	builder.set(ids[3], pdfStreamBody(content))
+	data, err := builder.bytes(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func twoPageDistinctResourcesPDF(t testing.TB) []byte {
+	t.Helper()
+	builder := &pdfBuilder{}
+	ids := make([]int, 6)
+	for i := range ids {
+		ids[i] = builder.reserve()
+	}
+	builder.set(ids[0], []byte("<< /Type /Catalog /Pages 2 0 R >>"))
+	builder.set(ids[1], []byte("<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>"))
+	builder.set(ids[2], []byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /ProcSet [/PDF] >> /Contents 5 0 R >>"))
+	builder.set(ids[3], []byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /ProcSet [/Text] >> /Contents 6 0 R >>"))
+	builder.set(ids[4], pdfStreamBody([]byte("q Q")))
+	builder.set(ids[5], pdfStreamBody([]byte("q Q")))
+	data, err := builder.bytes(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+const (
+	sharedResourceRootBody = "<< /Font << /F1 8 0 R >> >>"
+	sharedFontBody         = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+)
+
+func sharedResourceSourcePDF(t testing.TB, pages int) []byte {
+	t.Helper()
+	if pages != 1 && pages != 2 {
+		t.Fatalf("sharedResourceSourcePDF pages = %d, want 1 or 2", pages)
+	}
+	builder := &pdfBuilder{}
+	ids := make([]int, 8)
+	for i := range ids {
+		ids[i] = builder.reserve()
+		builder.set(ids[i], []byte("null"))
+	}
+	kids := "3 0 R"
+	if pages == 2 {
+		kids += " 4 0 R"
+	}
+	builder.set(ids[0], []byte("<< /Type /Catalog /Pages 2 0 R >>"))
+	builder.set(ids[1], []byte(fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d >>", kids, pages)))
+	builder.set(ids[2], []byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources 7 0 R /Contents 5 0 R >>"))
+	if pages == 2 {
+		builder.set(ids[3], []byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources 7 0 R /Contents 6 0 R >>"))
+	}
+	builder.set(ids[4], pdfStreamBody([]byte("BT /F1 12 Tf (one) Tj ET")))
+	builder.set(ids[5], pdfStreamBody([]byte("BT /F1 12 Tf (two) Tj ET")))
+	builder.set(ids[6], []byte(sharedResourceRootBody))
+	builder.set(ids[7], []byte(sharedFontBody))
+	data, err := builder.bytes(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func equivalentResourceSourcePDF(t testing.TB) []byte {
+	t.Helper()
+	builder := &pdfBuilder{}
+	ids := make([]int, 8)
+	for i := range ids {
+		ids[i] = builder.reserve()
+	}
+	builder.set(ids[0], []byte("<< /Type /Catalog /Pages 2 0 R >>"))
+	builder.set(ids[1], []byte("<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>"))
+	builder.set(ids[2], []byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /Font << /F1 7 0 R >> >> /Contents 5 0 R >>"))
+	builder.set(ids[3], []byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /Font << /F1 8 0 R >> >> /Contents 6 0 R >>"))
+	builder.set(ids[4], pdfStreamBody([]byte("BT /F1 12 Tf (one) Tj ET")))
+	builder.set(ids[5], pdfStreamBody([]byte("BT /F1 12 Tf (two) Tj ET")))
+	builder.set(ids[6], []byte(sharedFontBody))
+	builder.set(ids[7], []byte(sharedFontBody))
+	data, err := builder.bytes(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func crossPageResourceRolePDF(t testing.TB) []byte {
+	t.Helper()
+	builder := &pdfBuilder{}
+	ids := make([]int, 8)
+	for i := range ids {
+		ids[i] = builder.reserve()
+	}
+	builder.set(ids[0], []byte("<< /Type /Catalog /Pages 2 0 R >>"))
+	builder.set(ids[1], []byte("<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>"))
+	builder.set(ids[2], []byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /Font 7 0 R >> /Contents 5 0 R >>"))
+	builder.set(ids[3], []byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources 7 0 R /Contents 6 0 R >>"))
+	builder.set(ids[4], pdfStreamBody(nil))
+	builder.set(ids[5], pdfStreamBody(nil))
+	builder.set(ids[6], []byte("<< /F1 8 0 R >>"))
+	builder.set(ids[7], []byte(sharedFontBody))
 	data, err := builder.bytes(context.Background(), 1)
 	if err != nil {
 		t.Fatal(err)

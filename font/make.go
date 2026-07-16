@@ -240,6 +240,11 @@ func fillInfoFromOpenTypeMetrics(info *fontInfoType, otf OpenType, msgWriter io.
 		wd = info.Desc.MissingWidth
 		if encList[j].name != ".notdef" {
 			uv := encList[j].uv
+			if uv < 0 || uv > 0xffff {
+				_, _ = fmt.Fprintf(msgWriter, "Character %s has unsupported Unicode value U+%X\n", encList[j].name, uv)
+				info.Widths[j] = wd
+				continue
+			}
 			pos, ok := otf.Chars[uint16(uv)]
 			if ok && int(pos) < len(otf.Widths) {
 				wd = round(k * float64(otf.Widths[pos]))

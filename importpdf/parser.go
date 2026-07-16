@@ -56,7 +56,10 @@ type PageRef struct {
 	resources            []byte
 	content              []byte
 	contentErr           error
-	contentOnce          sync.Once
+	contentMu            sync.Mutex
+	contentLoading       bool
+	contentReady         bool
+	contentWait          chan struct{}
 	source               *Source
 	sourcePage           sourcePage
 	box                  pdfBox
@@ -107,7 +110,8 @@ func (p *PageRef) Content() []byte {
 		return nil
 	}
 	p.ensureContent()
-	return append([]byte(nil), p.content...)
+	content, _ := p.contentState()
+	return append([]byte(nil), content...)
 }
 
 // ContentErr reports the lazy content-loading error, if any.
@@ -116,7 +120,8 @@ func (p *PageRef) ContentErr() error {
 		return nil
 	}
 	p.ensureContent()
-	return p.contentErr
+	_, err := p.contentState()
+	return err
 }
 
 // ContentWithError returns a copy of the imported page content stream bytes and
@@ -126,10 +131,11 @@ func (p *PageRef) ContentWithError() ([]byte, error) {
 		return nil, nil
 	}
 	p.ensureContent()
-	if p.contentErr != nil {
-		return nil, p.contentErr
+	content, err := p.contentState()
+	if err != nil {
+		return nil, err
 	}
-	return append([]byte(nil), p.content...), nil
+	return append([]byte(nil), content...), nil
 }
 
 // ContentWithContext returns a copy of the imported page content stream bytes,
@@ -141,14 +147,17 @@ func (p *PageRef) ContentWithContext(ctx context.Context) ([]byte, error) {
 	if err := importContextErr(ctx); err != nil {
 		return nil, err
 	}
-	p.ensureContentContext(ctx)
-	if p.contentErr != nil {
-		return nil, p.contentErr
+	if err := p.ensureContentContext(ctx); err != nil {
+		return nil, err
+	}
+	content, err := p.contentState()
+	if err != nil {
+		return nil, err
 	}
 	if err := importContextErr(ctx); err != nil {
 		return nil, err
 	}
-	return append([]byte(nil), p.content...), nil
+	return append([]byte(nil), content...), nil
 }
 
 // ContentBorrowedWithContext returns the page content without copying it. The
@@ -161,41 +170,82 @@ func (p *PageRef) ContentBorrowedWithContext(ctx context.Context) ([]byte, error
 	if err := importContextErr(ctx); err != nil {
 		return nil, err
 	}
-	p.ensureContentContext(ctx)
-	if p.contentErr != nil {
-		return nil, p.contentErr
+	if err := p.ensureContentContext(ctx); err != nil {
+		return nil, err
+	}
+	content, err := p.contentState()
+	if err != nil {
+		return nil, err
 	}
 	if err := importContextErr(ctx); err != nil {
 		return nil, err
 	}
-	return p.content, nil
+	return content, nil
 }
 
 func (p *PageRef) ensureContent() {
-	p.ensureContentContext(context.Background())
+	_ = p.ensureContentContext(context.Background())
 }
 
-func (p *PageRef) ensureContentContext(ctx context.Context) {
-	if p == nil || len(p.content) > 0 || p.source == nil {
-		return
+func (p *PageRef) ensureContentContext(ctx context.Context) error {
+	if p == nil {
+		return nil
 	}
-	if err := importContextErr(ctx); err != nil {
-		return
-	}
-	p.contentOnce.Do(func() {
+	for {
 		if err := importContextErr(ctx); err != nil {
-			p.contentErr = err
-			return
+			return err
 		}
+		p.contentMu.Lock()
+		if p.contentReady || len(p.content) > 0 || p.source == nil {
+			p.contentMu.Unlock()
+			return nil
+		}
+		if p.contentLoading {
+			wait := p.contentWait
+			var done <-chan struct{}
+			if ctx != nil {
+				done = ctx.Done()
+			}
+			p.contentMu.Unlock()
+			select {
+			case <-wait:
+				continue
+			case <-done:
+				return importContextErr(ctx)
+			}
+		}
+		p.contentLoading = true
+		p.contentWait = make(chan struct{})
+		wait := p.contentWait
+		p.contentMu.Unlock()
+
 		p.source.mu.Lock()
-		defer p.source.mu.Unlock()
 		content, err := p.source.pageContentContext(ctx, p.sourcePage)
-		if err != nil {
+		p.source.mu.Unlock()
+
+		p.contentMu.Lock()
+		if err == nil {
+			p.content = wrapImportedPageContent(content, p.box)
+			p.contentErr = nil
+			p.contentReady = true
+		} else if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			p.contentErr = err
-			return
+			p.contentReady = true
 		}
-		p.content = wrapImportedPageContent(content, p.box)
-	})
+		p.contentLoading = false
+		close(wait)
+		p.contentMu.Unlock()
+		return err
+	}
+}
+
+func (p *PageRef) contentState() ([]byte, error) {
+	if p == nil {
+		return nil, nil
+	}
+	p.contentMu.Lock()
+	defer p.contentMu.Unlock()
+	return p.content, p.contentErr
 }
 
 // EncodedContent returns a preserved encoded content stream and its PDF filter
@@ -329,16 +379,71 @@ type pdfValue struct {
 type pdfDict map[string]pdfValue
 
 type Source struct {
-	mu         sync.Mutex
-	data       []byte
-	readerAt   io.ReaderAt
-	readerSize int64
-	offsets    map[ObjRef]int
-	cache      map[ObjRef][]byte
-	trailer    pdfDict
-	root       ObjRef
-	pages      []sourcePage
-	limits     ImportOptions
+	mu          sync.Mutex
+	data        []byte
+	readerAt    io.ReaderAt
+	readerSize  int64
+	offsets     map[ObjRef]int
+	xrefSeen    map[int]bool
+	xrefEntries int
+	cache       map[ObjRef][]byte
+	resolving   map[ObjRef]bool
+	trailer     pdfDict
+	root        ObjRef
+	pages       []sourcePage
+	limits      ImportOptions
+}
+
+// ForEachObjectBorrowedContext calls fn for every in-use classic-xref object
+// in file-offset order. Object bodies are immutable slices owned by Source;
+// callers must not modify or retain them after Source is no longer in use.
+// This low-level traversal is intended for inspection and reconstruction code
+// that must account for objects outside the page-reachable graph.
+func (doc *Source) ForEachObjectBorrowedContext(ctx context.Context, fn func(ObjRef, []byte) error) error {
+	if doc == nil || fn == nil {
+		return nil
+	}
+	if err := importContextErr(ctx); err != nil {
+		return err
+	}
+	doc.mu.Lock()
+	refs := make([]ObjRef, 0, len(doc.offsets))
+	for ref := range doc.offsets {
+		refs = append(refs, ref)
+	}
+	sort.Slice(refs, func(i, j int) bool {
+		left, right := doc.offsets[refs[i]], doc.offsets[refs[j]]
+		if left == right {
+			if refs[i].num == refs[j].num {
+				return refs[i].gen < refs[j].gen
+			}
+			return refs[i].num < refs[j].num
+		}
+		return left < right
+	})
+	objects := make([]Object, 0, len(refs))
+	for _, ref := range refs {
+		if err := importContextErr(ctx); err != nil {
+			doc.mu.Unlock()
+			return err
+		}
+		body, err := doc.objectBodyContext(ctx, ref)
+		if err != nil {
+			doc.mu.Unlock()
+			return err
+		}
+		objects = append(objects, Object{Ref: ref, Body: body})
+	}
+	doc.mu.Unlock()
+	for _, object := range objects {
+		if err := importContextErr(ctx); err != nil {
+			return err
+		}
+		if err := fn(object.Ref, object.Body); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // PageCount returns the number of importable pages in the source.
@@ -370,7 +475,47 @@ const (
 	maxReaderAtObjectBytes = 32 * 1024 * 1024
 	maxReaderAtTailBytes   = 1 * 1024 * 1024
 	maxReaderAtXrefBytes   = 16 * 1024 * 1024
+	maxObjectResolveDepth  = 128
 )
+
+func (doc *Source) withOptions(options ImportOptions) (*Source, error) {
+	if doc == nil {
+		return nil, errors.New("PDF import source is nil")
+	}
+	size := int64(len(doc.data))
+	if doc.data == nil {
+		size = doc.readerSize
+	}
+	if size > options.MaxSourceBytes {
+		return nil, ErrSourceTooLarge
+	}
+	if doc.limits.MaxSourceBytes > 0 && options.MaxSourceBytes > doc.limits.MaxSourceBytes {
+		options.MaxSourceBytes = doc.limits.MaxSourceBytes
+	}
+	if doc.limits.MaxReferencedObjects > 0 && options.MaxReferencedObjects > doc.limits.MaxReferencedObjects {
+		options.MaxReferencedObjects = doc.limits.MaxReferencedObjects
+	}
+	if doc.limits == options {
+		return doc, nil
+	}
+	// Parsing metadata is immutable after Open returns. Give a differently
+	// limited view its own object cache and resolution state so stricter limits
+	// do not mutate or race with the original Source.
+	return &Source{
+		data:        doc.data,
+		readerAt:    doc.readerAt,
+		readerSize:  doc.readerSize,
+		offsets:     doc.offsets,
+		xrefSeen:    doc.xrefSeen,
+		xrefEntries: doc.xrefEntries,
+		cache:       make(map[ObjRef][]byte),
+		resolving:   make(map[ObjRef]bool),
+		trailer:     doc.trailer,
+		root:        doc.root,
+		pages:       doc.pages,
+		limits:      options,
+	}, nil
+}
 
 type pdfBox struct {
 	llx, lly float64
@@ -386,10 +531,12 @@ func parseSourceWithOptionsContext(ctx context.Context, data []byte, options Imp
 		return nil, err
 	}
 	doc := &Source{
-		data:    data,
-		offsets: make(map[ObjRef]int),
-		cache:   make(map[ObjRef][]byte),
-		limits:  options,
+		data:      data,
+		offsets:   make(map[ObjRef]int),
+		xrefSeen:  make(map[int]bool),
+		cache:     make(map[ObjRef][]byte),
+		resolving: make(map[ObjRef]bool),
+		limits:    options,
 	}
 	start, err := findPDFStartXref(data)
 	if err != nil {
@@ -399,6 +546,9 @@ func parseSourceWithOptionsContext(ctx context.Context, data []byte, options Imp
 	for start > 0 {
 		if err := importContextErr(ctx); err != nil {
 			return nil, err
+		}
+		if start >= len(data) {
+			return nil, errors.New("PDF xref offset is invalid")
 		}
 		if seen[start] {
 			return nil, errors.New("PDF import found cyclic xref chain")
@@ -445,7 +595,9 @@ func parseSourceReaderAtWithOptionsContext(ctx context.Context, r io.ReaderAt, s
 		readerAt:   r,
 		readerSize: size,
 		offsets:    make(map[ObjRef]int),
+		xrefSeen:   make(map[int]bool),
 		cache:      make(map[ObjRef][]byte),
+		resolving:  make(map[ObjRef]bool),
 		limits:     options,
 	}
 	start, err := doc.findReaderAtStartXrefContext(ctx)
@@ -456,6 +608,9 @@ func parseSourceReaderAtWithOptionsContext(ctx context.Context, r io.ReaderAt, s
 	for start > 0 {
 		if err := importContextErr(ctx); err != nil {
 			return nil, err
+		}
+		if int64(start) >= size {
+			return nil, errors.New("PDF xref offset is invalid")
 		}
 		if seen[start] {
 			return nil, errors.New("PDF import found cyclic xref chain")
@@ -498,7 +653,7 @@ func findPDFStartXref(data []byte) (int, error) {
 	p := pos + len("startxref")
 	p = skipPDFSpace(data, p)
 	n, _, _, ok := readPDFIntToken(data, p)
-	if !ok {
+	if !ok || n <= 0 {
 		return 0, errors.New("PDF startxref offset is invalid")
 	}
 	return n, nil
@@ -516,6 +671,7 @@ func (doc *Source) parseXrefAtContext(ctx context.Context, offset int) (pdfDict,
 		return nil, 0, errors.New("PDF xref streams are not supported by the built-in importer")
 	}
 	p += len("xref")
+	tableSeen := make(map[int]bool)
 	for {
 		if err := importContextErr(ctx); err != nil {
 			return nil, 0, err
@@ -537,22 +693,26 @@ func (doc *Source) parseXrefAtContext(ctx context.Context, offset int) (pdfDict,
 			}
 			prev := 0
 			if prevValue, ok := value.dict["Prev"]; ok {
-				prev = int(math.Round(prevValue.number))
+				prev, err = pdfValueNonnegativeInt(prevValue)
+				if err != nil {
+					return nil, 0, fmt.Errorf("invalid PDF trailer Prev offset: %w", err)
+				}
 			}
 			return value.dict, prev, nil
 		}
 		startObj, _, next, ok := readPDFIntToken(doc.data, p)
-		if !ok {
+		if !ok || startObj < 0 {
 			return nil, 0, errors.New("invalid PDF xref subsection")
 		}
 		p = skipPDFSpace(doc.data, next)
 		count, _, next, ok := readPDFIntToken(doc.data, p)
-		if !ok || count < 0 {
+		if !ok || count < 0 || startObj > math.MaxInt-count {
 			return nil, 0, errors.New("invalid PDF xref subsection length")
 		}
-		if count > MaxXrefEntries || len(doc.offsets)+count > MaxXrefEntries {
+		if count > MaxXrefEntries-doc.xrefEntries {
 			return nil, 0, errors.New("PDF xref entry count exceeds maximum size")
 		}
+		doc.xrefEntries += count
 		p = next
 		for i := 0; i < count; i++ {
 			if err := importContextErr(ctx); err != nil {
@@ -560,12 +720,12 @@ func (doc *Source) parseXrefAtContext(ctx context.Context, offset int) (pdfDict,
 			}
 			p = skipPDFLineBreaks(doc.data, p)
 			entryOffset, _, next, ok := readPDFIntToken(doc.data, p)
-			if !ok {
+			if !ok || entryOffset < 0 {
 				return nil, 0, errors.New("invalid PDF xref entry")
 			}
 			p = skipPDFSpace(doc.data, next)
 			gen, _, next, ok := readPDFIntToken(doc.data, p)
-			if !ok {
+			if !ok || gen < 0 {
 				return nil, 0, errors.New("invalid PDF xref generation")
 			}
 			p = skipPDFSpace(doc.data, next)
@@ -574,11 +734,24 @@ func (doc *Source) parseXrefAtContext(ctx context.Context, offset int) (pdfDict,
 			}
 			status := doc.data[p]
 			p = skipToNextPDFLine(doc.data, p)
+			objectNumber := startObj + i
+			if tableSeen[objectNumber] {
+				return nil, 0, fmt.Errorf("PDF xref table repeats object %d", objectNumber)
+			}
+			tableSeen[objectNumber] = true
 			if status == 'n' {
-				ref := ObjRef{num: startObj + i, gen: gen}
-				if _, exists := doc.offsets[ref]; !exists {
-					doc.offsets[ref] = entryOffset
+				if entryOffset >= len(doc.data) {
+					return nil, 0, errors.New("invalid PDF xref entry offset")
 				}
+			} else if status != 'f' {
+				return nil, 0, errors.New("invalid PDF xref status")
+			}
+			if doc.xrefSeen[objectNumber] {
+				continue
+			}
+			doc.xrefSeen[objectNumber] = true
+			if status == 'n' {
+				doc.offsets[ObjRef{num: objectNumber, gen: gen}] = entryOffset
 			}
 		}
 	}
@@ -603,8 +776,11 @@ func (doc *Source) findReaderAtStartXrefContext(ctx context.Context) (int, error
 }
 
 func (doc *Source) parseReaderAtXrefAtContext(ctx context.Context, offset int) (pdfDict, int, error) {
+	if offset < 0 || int64(offset) >= doc.readerSize {
+		return nil, 0, errors.New("PDF xref offset is invalid")
+	}
 	chunkSize := maxReaderAtXrefBytes
-	if remain := int(doc.readerSize) - offset; remain < chunkSize {
+	if remain := int(doc.readerSize - int64(offset)); remain < chunkSize {
 		chunkSize = remain
 	}
 	if chunkSize <= 0 {
@@ -619,6 +795,7 @@ func (doc *Source) parseReaderAtXrefAtContext(ctx context.Context, offset int) (
 		return nil, 0, errors.New("PDF xref streams are not supported by the built-in importer")
 	}
 	p += len("xref")
+	tableSeen := make(map[int]bool)
 	for {
 		if err := importContextErr(ctx); err != nil {
 			return nil, 0, err
@@ -640,22 +817,26 @@ func (doc *Source) parseReaderAtXrefAtContext(ctx context.Context, offset int) (
 			}
 			prev := 0
 			if prevValue, ok := value.dict["Prev"]; ok {
-				prev = int(math.Round(prevValue.number))
+				prev, err = pdfValueNonnegativeInt(prevValue)
+				if err != nil {
+					return nil, 0, fmt.Errorf("invalid PDF trailer Prev offset: %w", err)
+				}
 			}
 			return value.dict, prev, nil
 		}
 		startObj, _, next, ok := readPDFIntToken(data, p)
-		if !ok {
+		if !ok || startObj < 0 {
 			return nil, 0, errors.New("invalid PDF xref subsection")
 		}
 		p = skipPDFSpace(data, next)
 		count, _, next, ok := readPDFIntToken(data, p)
-		if !ok || count < 0 {
+		if !ok || count < 0 || startObj > math.MaxInt-count {
 			return nil, 0, errors.New("invalid PDF xref subsection length")
 		}
-		if count > MaxXrefEntries || len(doc.offsets)+count > MaxXrefEntries {
+		if count > MaxXrefEntries-doc.xrefEntries {
 			return nil, 0, errors.New("PDF xref entry count exceeds maximum size")
 		}
+		doc.xrefEntries += count
 		p = next
 		for i := 0; i < count; i++ {
 			if err := importContextErr(ctx); err != nil {
@@ -663,12 +844,12 @@ func (doc *Source) parseReaderAtXrefAtContext(ctx context.Context, offset int) (
 			}
 			p = skipPDFLineBreaks(data, p)
 			entryOffset, _, next, ok := readPDFIntToken(data, p)
-			if !ok {
+			if !ok || entryOffset < 0 {
 				return nil, 0, errors.New("invalid PDF xref entry")
 			}
 			p = skipPDFSpace(data, next)
 			gen, _, next, ok := readPDFIntToken(data, p)
-			if !ok {
+			if !ok || gen < 0 {
 				return nil, 0, errors.New("invalid PDF xref generation")
 			}
 			p = skipPDFSpace(data, next)
@@ -677,11 +858,24 @@ func (doc *Source) parseReaderAtXrefAtContext(ctx context.Context, offset int) (
 			}
 			status := data[p]
 			p = skipToNextPDFLine(data, p)
+			objectNumber := startObj + i
+			if tableSeen[objectNumber] {
+				return nil, 0, fmt.Errorf("PDF xref table repeats object %d", objectNumber)
+			}
+			tableSeen[objectNumber] = true
 			if status == 'n' {
-				ref := ObjRef{num: startObj + i, gen: gen}
-				if _, exists := doc.offsets[ref]; !exists {
-					doc.offsets[ref] = entryOffset
+				if int64(entryOffset) >= doc.readerSize {
+					return nil, 0, errors.New("invalid PDF xref entry offset")
 				}
+			} else if status != 'f' {
+				return nil, 0, errors.New("invalid PDF xref status")
+			}
+			if doc.xrefSeen[objectNumber] {
+				continue
+			}
+			doc.xrefSeen[objectNumber] = true
+			if status == 'n' {
+				doc.offsets[ObjRef{num: objectNumber, gen: gen}] = entryOffset
 			}
 		}
 	}
@@ -703,7 +897,7 @@ func (doc *Source) loadPagesContext(ctx context.Context) error {
 	if !ok {
 		return errors.New("PDF catalog does not contain a page tree")
 	}
-	return doc.walkPageTreeContext(ctx, pagesRef, pdfPageInherited{}, 0, make(map[ObjRef]bool))
+	return doc.walkPageTreeContext(ctx, pagesRef, pdfPageInherited{}, 0, make(map[ObjRef]bool), make(map[ObjRef]bool))
 }
 
 type pdfPageInherited struct {
@@ -711,7 +905,7 @@ type pdfPageInherited struct {
 	boxes     map[string]pdfValue
 }
 
-func (doc *Source) walkPageTreeContext(ctx context.Context, ref ObjRef, inherited pdfPageInherited, depth int, visiting map[ObjRef]bool) error {
+func (doc *Source) walkPageTreeContext(ctx context.Context, ref ObjRef, inherited pdfPageInherited, depth int, visiting, seen map[ObjRef]bool) error {
 	if err := importContextErr(ctx); err != nil {
 		return err
 	}
@@ -721,6 +915,10 @@ func (doc *Source) walkPageTreeContext(ctx context.Context, ref ObjRef, inherite
 	if visiting[ref] {
 		return errors.New("PDF page tree contains a cycle")
 	}
+	if seen[ref] {
+		return errors.New("PDF page tree contains a repeated object")
+	}
+	seen[ref] = true
 	visiting[ref] = true
 	defer func() { visiting[ref] = false }()
 
@@ -789,7 +987,7 @@ func (doc *Source) walkPageTreeContext(ctx context.Context, ref ObjRef, inherite
 		if !ok {
 			return errors.New("PDF page tree contains a non-reference kid")
 		}
-		if err := doc.walkPageTreeContext(ctx, kidRef, nextInherited, depth+1, visiting); err != nil {
+		if err := doc.walkPageTreeContext(ctx, kidRef, nextInherited, depth+1, visiting, seen); err != nil {
 			return err
 		}
 	}
@@ -950,7 +1148,10 @@ func wrapImportedPageContent(content []byte, box pdfBox) []byte {
 		fmt.Fprintf(&out, "1 0 0 1 %.5f %.5f cm\n", -box.llx, -box.lly)
 	}
 	out.Write(content)
-	if len(content) > 0 && content[len(content)-1] != '\n' {
+	// Always add a wrapper-owned delimiter for non-empty content. Consumers
+	// that remove this private q/Q wrapper can then strip exactly this byte
+	// without guessing whether a trailing newline belonged to the source.
+	if len(content) > 0 {
 		out.WriteByte('\n')
 	}
 	out.WriteString("Q")
@@ -1002,6 +1203,17 @@ func (doc *Source) objectBodyContext(ctx context.Context, ref ObjRef) ([]byte, e
 	if body, ok := doc.cache[ref]; ok {
 		return body, nil
 	}
+	if doc.resolving == nil {
+		doc.resolving = make(map[ObjRef]bool)
+	}
+	if doc.resolving[ref] {
+		return nil, fmt.Errorf("PDF indirect object resolution contains a cycle at %d %d R", ref.num, ref.gen)
+	}
+	if len(doc.resolving) >= maxObjectResolveDepth {
+		return nil, errors.New("PDF indirect object resolution exceeds maximum depth")
+	}
+	doc.resolving[ref] = true
+	defer delete(doc.resolving, ref)
 	offset, ok := doc.offsets[ref]
 	if !ok {
 		return nil, fmt.Errorf("PDF object %d %d R was not found", ref.num, ref.gen)
@@ -1198,11 +1410,11 @@ func (doc *Source) skipObjectStreamContext(ctx context.Context, ref ObjRef, data
 func (doc *Source) pdfStreamLengthContext(ctx context.Context, dict pdfDict) (int, bool, error) {
 	value, ok := dict["Length"]
 	if !ok {
-		return 0, false, nil
+		return 0, false, errors.New("PDF stream dictionary does not contain Length")
 	}
 	if value.kind == pdfValueNumber {
-		length := int(math.Round(value.number))
-		if length < 0 || float64(length) != value.number {
+		length, err := pdfValueNonnegativeInt(value)
+		if err != nil {
 			return 0, false, errors.New("PDF stream length is invalid")
 		}
 		return length, true, nil
@@ -1223,8 +1435,8 @@ func (doc *Source) pdfStreamLengthContext(ctx context.Context, dict pdfDict) (in
 	if value.kind != pdfValueNumber {
 		return 0, false, errors.New("PDF stream length is invalid")
 	}
-	length := int(math.Round(value.number))
-	if length < 0 || float64(length) != value.number {
+	length, err := pdfValueNonnegativeInt(value)
+	if err != nil {
 		return 0, false, errors.New("PDF stream length is invalid")
 	}
 	return length, true, nil
@@ -1284,35 +1496,14 @@ func (doc *Source) parseStreamContext(ctx context.Context, body []byte) (pdfDict
 	} else if start < len(body) && (body[start] == '\n' || body[start] == '\r') {
 		start++
 	}
-	length := -1
-	if lengthValue, ok := dict["Length"]; ok {
-		if lengthValue.kind == pdfValueNumber {
-			length = int(math.Round(lengthValue.number))
-		} else if ref, ok := pdfValueAsRef(lengthValue); ok {
-			body, err := doc.objectBodyContext(ctx, ref)
-			if err != nil {
-				return nil, nil, err
-			}
-			parser := newPDFValueParserContext(ctx, body)
-			value, err := parser.parseValue()
-			if err != nil {
-				return nil, nil, err
-			}
-			if value.kind == pdfValueNumber {
-				length = int(math.Round(value.number))
-			}
-		}
+	length, known, err := doc.pdfStreamLengthContext(ctx, dict)
+	if err != nil {
+		return nil, nil, err
 	}
-	if length >= 0 && start+length <= len(body) {
-		return dict, body[start : start+length], nil
+	if !known || start > len(body) || length > len(body)-start {
+		return nil, nil, errors.New("PDF stream length exceeds object bounds")
 	}
-	end := bytes.Index(body[start:], []byte("endstream"))
-	if end < 0 {
-		return nil, nil, errors.New("endstream marker not found")
-	}
-	stream := body[start : start+end]
-	stream = bytes.TrimRight(stream, "\r\n")
-	return dict, stream, nil
+	return dict, body[start : start+length], nil
 }
 
 func decodePDFStream(dict pdfDict, stream []byte) ([]byte, error) {
@@ -1323,7 +1514,13 @@ func decodePDFStreamContext(ctx context.Context, dict pdfDict, stream []byte) ([
 	if err := importContextErr(ctx); err != nil {
 		return nil, err
 	}
-	filters := pdfStreamFilters(dict["Filter"])
+	if parms, ok := dict["DecodeParms"]; ok && parms.kind != pdfValueNull {
+		return nil, errors.New("PDF stream DecodeParms are not supported")
+	}
+	filters, err := pdfStreamFilters(dict["Filter"])
+	if err != nil {
+		return nil, err
+	}
 	if len(filters) == 0 {
 		if len(stream) > MaxDecodedStreamBytes {
 			return nil, errors.New("PDF stream exceeds maximum size")
@@ -1340,7 +1537,10 @@ func preservedPDFStreamFilter(dict pdfDict) (string, bool) {
 	if _, ok := dict["DecodeParms"]; ok {
 		return "", false
 	}
-	filters := pdfStreamFilters(dict["Filter"])
+	filters, err := pdfStreamFilters(dict["Filter"])
+	if err != nil {
+		return "", false
+	}
 	if len(filters) != 1 {
 		return "", false
 	}
@@ -1374,20 +1574,28 @@ func uncompressStreamContext(ctx context.Context, data []byte, limit int) ([]byt
 	return out.Bytes(), nil
 }
 
-func pdfStreamFilters(value pdfValue) []string {
+func pdfStreamFilters(value pdfValue) ([]string, error) {
+	if len(value.raw) == 0 && value.kind == pdfValueRaw {
+		return nil, nil
+	}
 	switch value.kind {
 	case pdfValueName:
-		return []string{value.name}
+		return []string{value.name}, nil
 	case pdfValueArray:
 		filters := make([]string, 0, len(value.array))
 		for _, item := range value.array {
-			if item.kind == pdfValueName {
-				filters = append(filters, item.name)
+			if item.kind != pdfValueName {
+				return nil, errors.New("PDF stream Filter array contains a non-name value")
 			}
+			filters = append(filters, item.name)
 		}
-		return filters
+		return filters, nil
+	case pdfValueNull:
+		return nil, nil
+	case pdfValueRef:
+		return nil, errors.New("indirect PDF stream Filter values are not supported")
 	default:
-		return nil
+		return nil, errors.New("PDF stream Filter is invalid")
 	}
 }
 
@@ -1592,7 +1800,11 @@ func (p *pdfValueParser) parseName() (pdfValue, error) {
 	for p.pos < len(p.data) && !isPDFDelimiter(p.data[p.pos]) && !isPDFSpace(p.data[p.pos]) {
 		p.pos++
 	}
-	return pdfValue{kind: pdfValueName, name: string(p.data[start:p.pos])}, nil
+	name, err := decodePDFName(p.data[start:p.pos])
+	if err != nil {
+		return pdfValue{}, err
+	}
+	return pdfValue{kind: pdfValueName, name: name}, nil
 }
 
 func (p *pdfValueParser) parseNumberOrRef() (pdfValue, error) {
@@ -1600,19 +1812,21 @@ func (p *pdfValueParser) parseNumberOrRef() (pdfValue, error) {
 		return pdfValue{}, err
 	}
 	start := p.pos
-	first, firstIsInt, next, ok := readPDFNumberToken(p.data, p.pos)
+	_, firstIsInt, next, ok := readPDFNumberToken(p.data, p.pos)
 	if !ok {
 		return pdfValue{}, errors.New("PDF number expected")
 	}
 	if firstIsInt {
 		save := next
+		firstInt, _, _, firstOK := readPDFIntToken(p.data, p.pos)
 		next = skipPDFSpace(p.data, next)
-		second, secondIsInt, afterSecond, ok := readPDFNumberToken(p.data, next)
-		if ok && secondIsInt {
+		_, secondIsInt, afterSecond, ok := readPDFNumberToken(p.data, next)
+		secondInt, _, _, secondOK := readPDFIntToken(p.data, next)
+		if firstOK && ok && secondIsInt && secondOK {
 			afterSecond = skipPDFSpace(p.data, afterSecond)
-			if afterSecond < len(p.data) && p.data[afterSecond] == 'R' && isPDFBoundary(p.data, afterSecond+1) {
+			if firstInt >= 0 && secondInt >= 0 && afterSecond < len(p.data) && p.data[afterSecond] == 'R' && isPDFBoundary(p.data, afterSecond+1) {
 				p.pos = afterSecond + 1
-				return pdfValue{kind: pdfValueRef, ref: ObjRef{num: int(first), gen: int(second)}}, nil
+				return pdfValue{kind: pdfValueRef, ref: ObjRef{num: firstInt, gen: secondInt}}, nil
 			}
 		}
 		p.pos = save
@@ -1861,11 +2075,28 @@ func findPDFStreamKeyword(data []byte) int {
 }
 
 func readPDFIntToken(data []byte, pos int) (value int, isInt bool, next int, ok bool) {
-	number, isInt, next, ok := readPDFNumberToken(data, pos)
-	if !ok || !isInt {
+	if pos < 0 || pos >= len(data) {
 		return 0, false, pos, false
 	}
-	return int(number), true, next, true
+	start := pos
+	if data[pos] == '+' || data[pos] == '-' {
+		pos++
+	}
+	digitStart := pos
+	for pos < len(data) && isPDFDigit(data[pos]) {
+		pos++
+	}
+	if pos == digitStart || (pos < len(data) && data[pos] == '.') {
+		return 0, false, start, false
+	}
+	if !isPDFBoundary(data, pos) {
+		return 0, false, start, false
+	}
+	number, err := strconv.ParseInt(string(data[start:pos]), 10, 0)
+	if err != nil {
+		return 0, false, start, false
+	}
+	return int(number), true, pos, true
 }
 
 func readPDFNumberToken(data []byte, pos int) (value float64, isInt bool, next int, ok bool) {
@@ -1967,11 +2198,59 @@ func skipPDFHexString(data []byte, pos int) int {
 }
 
 func hasPDFWord(data []byte, pos int, word string) bool {
-	end := pos + len(word)
-	if pos < 0 || end > len(data) {
+	if pos < 0 || pos > len(data) || len(word) > len(data)-pos {
 		return false
 	}
+	end := pos + len(word)
 	return bytes.Equal(data[pos:end], []byte(word)) && isPDFBoundary(data, end)
+}
+
+func pdfValueNonnegativeInt(value pdfValue) (int, error) {
+	if value.kind != pdfValueNumber || len(value.raw) == 0 {
+		return 0, errors.New("integer value expected")
+	}
+	n, _, next, ok := readPDFIntToken(value.raw, 0)
+	if !ok || next != len(value.raw) || n < 0 {
+		return 0, errors.New("non-negative integer value expected")
+	}
+	return n, nil
+}
+
+func decodePDFName(raw []byte) (string, error) {
+	decoded := make([]byte, 0, len(raw))
+	for i := 0; i < len(raw); i++ {
+		if raw[i] != '#' {
+			decoded = append(decoded, raw[i])
+			continue
+		}
+		if i+2 >= len(raw) {
+			return "", errors.New("PDF name contains an invalid escape")
+		}
+		hi, ok := pdfHexValue(raw[i+1])
+		if !ok {
+			return "", errors.New("PDF name contains an invalid escape")
+		}
+		lo, ok := pdfHexValue(raw[i+2])
+		if !ok {
+			return "", errors.New("PDF name contains an invalid escape")
+		}
+		decoded = append(decoded, hi<<4|lo)
+		i += 2
+	}
+	return string(decoded), nil
+}
+
+func pdfHexValue(ch byte) (byte, bool) {
+	switch {
+	case ch >= '0' && ch <= '9':
+		return ch - '0', true
+	case ch >= 'A' && ch <= 'F':
+		return ch - 'A' + 10, true
+	case ch >= 'a' && ch <= 'f':
+		return ch - 'a' + 10, true
+	default:
+		return 0, false
+	}
 }
 
 func isPDFBoundary(data []byte, pos int) bool {

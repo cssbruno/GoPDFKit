@@ -63,3 +63,27 @@ func TestGetInfoFromType1RejectsMalformedAFMCharacterRecord(t *testing.T) {
 		t.Fatalf("getInfoFromType1() error = %v, want malformed character record", err)
 	}
 }
+
+func TestOpenTypeMetricsRejectsUnicodeValuesOutsideBMP(t *testing.T) {
+	t.Parallel()
+
+	encodings := encListType{}
+	for i := range encodings {
+		encodings[i] = encType{uv: -1, name: ".notdef"}
+	}
+	encodings[0] = encType{uv: 0x10000, name: "outside-bmp"}
+	font := OpenType{
+		UnitsPerEm: 1000,
+		Widths:     []uint16{500, 900},
+		Chars:      map[uint16]uint16{0: 1},
+	}
+	var info fontInfoType
+	var messages bytes.Buffer
+	fillInfoFromOpenTypeMetrics(&info, font, &messages, encodings)
+	if got := info.Widths[0]; got != 500 {
+		t.Fatalf("width for unsupported Unicode value = %d, want missing width 500", got)
+	}
+	if !strings.Contains(messages.String(), "unsupported Unicode value") {
+		t.Fatalf("messages = %q, want unsupported Unicode diagnostic", messages.String())
+	}
+}

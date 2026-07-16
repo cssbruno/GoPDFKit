@@ -154,6 +154,19 @@ func (p *svgPathNormalizer) point(args []float64, pos int, relative bool) (float
 func (p *svgPathNormalizer) append(rawCmd byte, args []float64) error {
 	cmd := svgPathCommandUpper(rawCmd)
 	relative := svgPathCommandRelative(rawCmd)
+	if cmd == 'Z' {
+		if len(args) != 0 {
+			return errors.New("SVG close-path command does not accept arguments")
+		}
+		p.segs = append(p.segs, svgSegment('Z'))
+		p.x, p.y = p.startX, p.startY
+		p.prevCmd = cmd
+		return nil
+	}
+	requiredArgs, ok := svgPathCommandArgCount(rawCmd)
+	if !ok || len(args) != requiredArgs {
+		return fmt.Errorf("SVG path command %c requires %d arguments, got %d", rawCmd, requiredArgs, len(args))
+	}
 	switch cmd {
 	case 'M':
 		p.x, p.y = p.point(args, 0, relative)
@@ -221,9 +234,6 @@ func (p *svgPathNormalizer) append(rawCmd byte, args []float64) error {
 			return err
 		}
 		p.x, p.y = endX, endY
-	case 'Z':
-		p.segs = append(p.segs, svgSegment('Z'))
-		p.x, p.y = p.startX, p.startY
 	}
 	p.prevCmd = cmd
 	return nil

@@ -116,11 +116,15 @@ var utf8SubsetCache = struct {
 	sync.Mutex
 	entries map[utf8SubsetCacheKey]utf8SubsetCacheValue
 	order   []utf8SubsetCacheKey
+	bytes   int64
 }{
 	entries: make(map[utf8SubsetCacheKey]utf8SubsetCacheValue),
 }
 
-const maxUTF8SubsetCacheEntries = 32
+const (
+	maxUTF8SubsetCacheEntries = 32
+	maxUTF8SubsetCacheBytes   = 32 * 1024 * 1024
+)
 
 type tableDescription struct {
 	name     string
@@ -218,7 +222,7 @@ func (utf *utf8FontFile) parseFile() error {
 	utf.Ascent = 0
 	utf.Descent = 0
 	utf.hasUnicodeCMap = false
-	codeType := uint32(utf.readUint32())
+	codeType := utf.readUint32()
 	if utf.fileReader.err != nil {
 		return utf.fileReader.err
 	}
@@ -335,11 +339,7 @@ func (utf *utf8FontFile) seekTable(name string, offsetInTable int) int {
 
 func (utf *utf8FontFile) readInt16() int16 {
 	s := utf.fileReader.Read(2)
-	a := (int16(s[0]) << 8) + int16(s[1])
-	if (int(a) & (1 << 15)) == 0 {
-		a = int16(int(a) - (1 << 16))
-	}
-	return a
+	return int16(binary.BigEndian.Uint16(s)) // #nosec G115 -- Deliberate two's-complement interpretation of a signed SFNT field.
 }
 
 func (utf *utf8FontFile) getUint16(pos int) int {
@@ -349,8 +349,17 @@ func (utf *utf8FontFile) getUint16(pos int) int {
 }
 
 func (utf *utf8FontFile) patchBytes(stream []byte, offset int, value []byte) []byte {
-	if offset < 0 || offset+len(value) > len(stream) {
+	if stream == nil {
+		if offset != 0 || len(value) != 0 {
+			utf.fileReader.err = errors.New("font table patch out of range")
+		}
+		return stream
+	}
+	if offset < 0 || offset > len(stream) || len(value) > len(stream)-offset {
 		utf.fileReader.err = errors.New("font table patch out of range")
+		return stream
+	}
+	if len(value) == 0 {
 		return stream
 	}
 	copy(stream[offset:offset+len(value)], value)
@@ -362,7 +371,11 @@ func (utf *utf8FontFile) insertUint16(stream []byte, offset int, value int) []by
 		utf.fileReader.err = errors.New("font table uint16 patch out of range")
 		return stream
 	}
-	binary.BigEndian.PutUint16(stream[offset:], uint16(value))
+	if value < 0 || value > math.MaxUint16 {
+		utf.fileReader.err = errors.New("font table uint16 value out of range")
+		return stream
+	}
+	binary.BigEndian.PutUint16(stream[offset:], uint16(value)) // #nosec G115 -- Explicitly bounded to uint16 above.
 	return stream
 }
 
@@ -447,7 +460,7 @@ func (utf *utf8FontFile) parseNAMETable() int {
 			var currentNameSb343 strings.Builder
 			for size > 0 {
 				char := utf.readUint16()
-				currentNameSb343.WriteRune(rune(char))
+				currentNameSb343.WriteRune(rune(char)) // #nosec G115 -- readUint16 returns a valid Unicode BMP code unit.
 				size--
 			}
 			currentName += currentNameSb343.String()
@@ -855,13 +868,19 @@ func (utf *utf8FontFile) staticTablesFromParsedFont() (*utf8StaticTables, error)
 }
 
 // GenerateCutFont builds a font subset containing only the runes in usedRunes.
-func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
-	cacheKey := utf.subsetCacheKey(usedRunes)
-	if cached, ok := lookupUTF8SubsetCache(cacheKey); ok {
-		utf.CodeSymbolDictionary = cloneIntMap(cached.codeSymbolDictionary)
-		utf.LastRune = cached.lastRune
-		utf.fileReader.err = nil
-		return append([]byte(nil), cached.data...)
+// Shared caching is reserved for documents that explicitly use
+// ResourceCacheShared; document-local and disabled policies do not retain
+// request-scoped font subsets in package state.
+func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int, useSharedCache bool) []byte {
+	var cacheKey utf8SubsetCacheKey
+	if useSharedCache {
+		cacheKey = utf.subsetCacheKey(usedRunes)
+		if cached, ok := lookupUTF8SubsetCache(cacheKey); ok {
+			utf.CodeSymbolDictionary = cloneIntMap(cached.codeSymbolDictionary)
+			utf.LastRune = cached.lastRune
+			utf.fileReader.err = nil
+			return append([]byte(nil), cached.data...)
+		}
 	}
 	utf.fileReader.readerPosition = 0
 	utf.outTablesData = make(map[string][]byte)
@@ -1059,7 +1078,7 @@ func (utf *utf8FontFile) GenerateCutFont(usedRunes map[int]int) []byte {
 	utf.setOutTable("OS/2", os2Data)
 
 	out := utf.assembleTables()
-	if utf.fileReader.err == nil && len(out) > 0 {
+	if useSharedCache && utf.fileReader.err == nil && len(out) > 0 {
 		storeUTF8SubsetCache(cacheKey, utf8SubsetCacheValue{
 			data:                 append([]byte(nil), out...),
 			codeSymbolDictionary: cloneIntMap(utf.CodeSymbolDictionary),
@@ -1080,7 +1099,7 @@ func (utf *utf8FontFile) subsetCacheKey(usedRunes map[int]int) utf8SubsetCacheKe
 	var hash uint64
 	var hash2 uint64
 	for _, char := range usedRunes {
-		mixed := mixUTF8SubsetRune(uint64(char))
+		mixed := mixUTF8SubsetRune(uint64(char)) // #nosec G115 -- Cache hashing deliberately preserves the rune's integer bit pattern.
 		hash += mixed
 		hash2 ^= bits.RotateLeft64(mixed, int(mixed&63))
 	}
@@ -1102,18 +1121,30 @@ func lookupUTF8SubsetCache(key utf8SubsetCacheKey) (utf8SubsetCacheValue, bool) 
 }
 
 func storeUTF8SubsetCache(key utf8SubsetCacheKey, value utf8SubsetCacheValue) {
+	valueBytes := utf8SubsetCacheValueBytes(value)
+	if valueBytes > maxUTF8SubsetCacheBytes {
+		return
+	}
 	utf8SubsetCache.Lock()
 	defer utf8SubsetCache.Unlock()
-	if _, ok := utf8SubsetCache.entries[key]; !ok {
+	if previous, ok := utf8SubsetCache.entries[key]; ok {
+		utf8SubsetCache.bytes -= utf8SubsetCacheValueBytes(previous)
+	} else {
 		utf8SubsetCache.order = append(utf8SubsetCache.order, key)
 	}
 	utf8SubsetCache.entries[key] = value
-	for len(utf8SubsetCache.order) > maxUTF8SubsetCacheEntries {
+	utf8SubsetCache.bytes += valueBytes
+	for len(utf8SubsetCache.order) > maxUTF8SubsetCacheEntries || utf8SubsetCache.bytes > maxUTF8SubsetCacheBytes {
 		oldest := utf8SubsetCache.order[0]
 		copy(utf8SubsetCache.order, utf8SubsetCache.order[1:])
 		utf8SubsetCache.order = utf8SubsetCache.order[:len(utf8SubsetCache.order)-1]
+		utf8SubsetCache.bytes -= utf8SubsetCacheValueBytes(utf8SubsetCache.entries[oldest])
 		delete(utf8SubsetCache.entries, oldest)
 	}
+}
+
+func utf8SubsetCacheValueBytes(value utf8SubsetCacheValue) int64 {
+	return int64(len(value.data)) + int64(len(value.codeSymbolDictionary))*16
 }
 
 func cloneIntMap(in map[int]int) map[int]int {
@@ -1385,8 +1416,8 @@ func (utf *utf8FontFile) assembleTables() []byte {
 	checksum := utf.generateChecksum(answer)
 	checksum = utf.calcInt32([2]int{0xB1B0, 0xAFBA}, checksum)
 	var checksumAdjustment [4]byte
-	binary.BigEndian.PutUint16(checksumAdjustment[0:2], uint16(checksum[0]))
-	binary.BigEndian.PutUint16(checksumAdjustment[2:4], uint16(checksum[1]))
+	binary.BigEndian.PutUint16(checksumAdjustment[0:2], uint16(checksum[0])) // #nosec G115 -- SFNT checksum arithmetic stores the low 16-bit half.
+	binary.BigEndian.PutUint16(checksumAdjustment[2:4], uint16(checksum[1])) // #nosec G115 -- SFNT checksum arithmetic stores the low 16-bit half.
 	answer = utf.patchBytes(answer, (begin + 8), checksumAdjustment[:])
 	return answer
 }
@@ -1396,11 +1427,11 @@ func unpackUint16(data []byte) int {
 }
 
 func appendUint16BE(dst []byte, n int) []byte {
-	return append(dst, byte(n>>8), byte(n))
+	return append(dst, byte(n>>8), byte(n)) // #nosec G115 -- Deliberate low-16-bit SFNT field packing.
 }
 
 func appendUint32BE(dst []byte, n int) []byte {
-	return append(dst, byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
+	return append(dst, byte(n>>24), byte(n>>16), byte(n>>8), byte(n)) // #nosec G115 -- Deliberate low-32-bit SFNT field packing.
 }
 
 func keySortStrings(s map[string][]byte) []string {
@@ -1445,6 +1476,6 @@ func UTF8CutFont(inBuf []byte, cutset string) (outBuf []byte) {
 	for i, r := range cutset {
 		runes[i] = int(r)
 	}
-	outBuf = f.GenerateCutFont(runes)
+	outBuf = f.GenerateCutFont(runes, true)
 	return
 }

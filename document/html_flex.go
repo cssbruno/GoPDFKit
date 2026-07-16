@@ -4,6 +4,7 @@
 package document
 
 import (
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -605,9 +606,7 @@ func htmlFlexItemsMainSize(items []htmlFlexItem, gap float64) float64 {
 
 func (html *HTML) flexLines(items []htmlFlexItem, contentWd float64, style htmlFlexStyle, fallback CSSColorType, cssRules []htmlCSSRule, ancestors []HTMLSegmentType) []htmlFlexLine {
 	if style.direction == "row-reverse" {
-		for i, j := 0, len(items)-1; i < j; i, j = i+1, j-1 {
-			items[i], items[j] = items[j], items[i]
-		}
+		slices.Reverse(items)
 	}
 	if contentWd <= 0 {
 		return nil

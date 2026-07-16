@@ -1,5 +1,56 @@
 # Changelog
 
+## v0.14.0 - 2026-07-16
+
+### Security
+
+- Hardened classic-xref parsing against integer overflow, cumulative xref
+  exhaustion, stale-generation resurrection, cyclic indirect lengths, missing
+  or out-of-bounds stream lengths, malformed filter chains, duplicate page-tree
+  nodes, and excessive indirect-object depth.
+- Restricted PDF signature discovery to signature values reachable through the
+  current catalog's AcroForm field tree, so names in comments, strings, stream
+  payloads, unrelated dictionaries, and unreferenced objects cannot be selected
+  as real fields; added generation-aware incremental-xref handling and rejected
+  underreported trailer sizes before allocating signature objects.
+- Made CDR reconstruction fail closed on active resource objects, ambiguous
+  resource roles, producer-name context confusion, malformed stream suffixes,
+  and cumulative resource/output limits. Shared resources are now retained and
+  budgeted once across pages.
+- Corrected legacy RC4 object encryption so every string and stream starts from
+  a fresh cipher state, and stopped encrypted stream output from mutating
+  caller-owned buffers.
+
+### Fixed
+
+- Corrected Symbol core-font metrics and BaseFont output, supplementary-rune
+  validation, finite word spacing, UTF-8 spacing arrays, `MultiCell` wrapping
+  and state restoration, and nil handling across HTML, image, SVG, font, and
+  template boundaries.
+- Unified typed-layout measurement and rendering for headers, kept block
+  chains, titled clauses, sections, note boxes, tables, and whitespace-only
+  titles; removed measurement-only PDF content commands while preserving the
+  visually rendered golden output.
+- Reworked stream inspection around actual live xref objects and declared
+  lengths, preventing stream payloads from being interpreted as indirect PDF
+  objects and avoiding repeated whole-file scans.
+- Made document, CDR, and signing file output sync the temporary file before
+  atomic rename and sync the containing directory on supported platforms.
+- Made CDR output byte-idempotent, including source content with LF, CRLF, or
+  repeated trailing line endings.
+
+### Changed
+
+- Added malformed-input and end-to-end regressions, whole-document CDR fuzzing,
+  signature-parser fuzzing, expanded coverage floors, NilAway in CI, a Windows
+  cross-build, strict release-version validation, and Poppler fixture smoke
+  tests. Consolidated recurring fuzzing and removed duplicate release and
+  platform test runs to reduce GitHub Actions usage.
+- Removed the stale generated-reference command and the nested external QR-code
+  example module; QR generation remains available through the main package.
+- Documented supported platforms, signing limitations, security reporting, and
+  the contributor verification workflow.
+
 ## v0.13.1 - 2026-07-15
 
 Patch release fixing PDF CDR rendering-resource reconstruction across a wider

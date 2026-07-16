@@ -80,23 +80,40 @@ func Text(data []byte) (string, error) {
 	return TextContext(context.Background(), data)
 }
 
-// TextContext extracts literal text operators from PDF content streams and
-// honors ctx during stream scanning and text tokenization.
+// TextContext extracts literal text operators from page content streams and
+// honors ctx during page parsing and text tokenization. Non-page streams such
+// as metadata, fonts, images, and attachments are not treated as document text.
 func TextContext(ctx context.Context, data []byte) (string, error) {
 	if err := inspectContextErr(ctx); err != nil {
 		return "", err
 	}
-	streams, err := DecodedStreamsContext(ctx, data)
+	source, err := importpdf.OpenBytesWithOptionsContext(ctx, data, importpdf.ImportOptions{})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parse pdf text: %w", err)
 	}
 
 	var text strings.Builder
-	for _, stream := range streams {
+	totalBytes := 0
+	for pageNumber := 1; pageNumber <= source.PageCount(); pageNumber++ {
 		if err := inspectContextErr(ctx); err != nil {
 			return "", err
 		}
-		streamText, err := textFromContentStreamContext(ctx, stream)
+		if pageNumber > maxDecodedStreamCount {
+			return "", errors.New("pdf page content stream count exceeds maximum size")
+		}
+		page, err := source.PageContext(ctx, pageNumber, "MediaBox")
+		if err != nil {
+			return "", fmt.Errorf("parse pdf page %d: %w", pageNumber, err)
+		}
+		content, err := page.ContentBorrowedWithContext(ctx)
+		if err != nil {
+			return "", fmt.Errorf("parse pdf page %d: %w", pageNumber, err)
+		}
+		if len(content) > maxDecodedTotalBytes-totalBytes {
+			return "", errors.New("decoded pdf page contents exceed maximum size")
+		}
+		totalBytes += len(content)
+		streamText, err := textFromContentStreamContext(ctx, content)
 		if err != nil {
 			return "", err
 		}
@@ -156,49 +173,11 @@ func decodedStreamsContext(ctx context.Context, data []byte, maxStreamBytes, max
 	if maxStreamBytes < 0 || maxTotalBytes < 0 || maxStreams < 0 {
 		return nil, errors.New("pdf stream limits are invalid")
 	}
-	streams := make([][]byte, 0)
-	totalBytes := 0
-	searchFrom := 0
-
-	for {
-		if err := inspectContextErr(ctx); err != nil {
-			return nil, err
-		}
-		streamIdxRel := bytes.Index(data[searchFrom:], []byte("stream"))
-		if streamIdxRel < 0 {
-			return streams, nil
-		}
-
-		streamIdx := searchFrom + streamIdxRel
-		streamStart := streamIdx + len("stream")
-		if streamStart+1 < len(data) && data[streamStart] == '\r' && data[streamStart+1] == '\n' {
-			streamStart += 2
-		} else if streamStart < len(data) && (data[streamStart] == '\n' || data[streamStart] == '\r') {
-			streamStart++
-		}
-
-		endRel := bytes.Index(data[streamStart:], []byte("endstream"))
-		if endRel < 0 {
-			return nil, errors.New("pdf stream missing endstream")
-		}
-
-		streamEnd := streamStart + endRel
-		stream := bytes.TrimRight(data[streamStart:streamEnd], "\r\n")
-		if len(streams) >= maxStreams {
-			return nil, errors.New("pdf stream count exceeds maximum size")
-		}
-		decoded, err := decodeStreamWithLimitContext(ctx, streamDictionaryBytes(data[:streamIdx]), stream, maxStreamBytes)
-		if err != nil {
-			return nil, err
-		}
-		if len(decoded) > maxTotalBytes-totalBytes {
-			return nil, errors.New("decoded pdf streams exceed maximum size")
-		}
-
-		streams = append(streams, decoded)
-		totalBytes += len(decoded)
-		searchFrom = streamEnd + len("endstream")
+	source, err := importpdf.OpenBytesWithOptionsContext(ctx, data, importpdf.ImportOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("parse pdf streams: %w", err)
 	}
+	return scanDecodedStreamsContext(ctx, source, maxStreamBytes, maxTotalBytes, maxStreams)
 }
 
 func inspectContextErr(ctx context.Context) error {
@@ -206,18 +185,6 @@ func inspectContextErr(ctx context.Context) error {
 		return nil
 	}
 	return ctx.Err()
-}
-
-func streamDictionaryBytes(beforeStream []byte) []byte {
-	start := bytes.LastIndex(beforeStream, []byte("<<"))
-	if start < 0 {
-		return nil
-	}
-	return beforeStream[start:]
-}
-
-func decodeStreamContext(ctx context.Context, dict []byte, stream []byte) ([]byte, error) {
-	return decodeStreamWithLimitContext(ctx, dict, stream, maxDecodedStreamBytes)
 }
 
 func decodeStreamWithLimitContext(ctx context.Context, dict []byte, stream []byte, maxBytes int) ([]byte, error) {
@@ -234,31 +201,95 @@ func decodeStreamWithLimitContext(ctx context.Context, dict []byte, stream []byt
 }
 
 func hasFlateFilter(dict []byte) bool {
-	return containsPDFName(dict, "flatedecode") || containsPDFName(dict, "fl")
-}
-
-func containsPDFName(data []byte, name string) bool {
-	name = strings.ToLower(name)
-	for pos := 0; pos < len(data); pos++ {
-		if data[pos] != '/' {
-			continue
-		}
-
-		start := pos + 1
-		end := start
-		for end < len(data) && !isPDFDelimiter(data[end]) && !isPDFWhitespace(data[end]) {
-			end++
-		}
-		if strings.ToLower(string(data[start:end])) == name {
-			return true
-		}
-		pos = end
+	if hasNonNullDecodeParms(dict) {
+		return false
 	}
-	return false
+	pos := 0
+	depth := 0
+	found := false
+	flate := false
+	for {
+		token, ok := nextStreamToken(dict, pos)
+		if !ok {
+			return found && flate
+		}
+		pos = token.end
+		switch token.kind {
+		case streamTokenDictStart:
+			depth++
+		case streamTokenDictEnd:
+			depth--
+		case streamTokenName:
+			if depth != 1 || decodeStreamName(token.text) != "Filter" {
+				continue
+			}
+			if found {
+				return false
+			}
+			found = true
+			value, ok := nextStreamToken(dict, pos)
+			if !ok {
+				return false
+			}
+			if value.kind == streamTokenName {
+				flate = isFlateFilterName(value.text)
+				pos = value.end
+				continue
+			}
+			if value.kind != streamTokenArrayStart {
+				pos = value.end
+				continue
+			}
+			count := 0
+			valid := true
+			for {
+				value, ok = nextStreamToken(dict, value.end)
+				if !ok {
+					return false
+				}
+				if value.kind == streamTokenArrayEnd {
+					flate = valid && count == 1 && flate
+					pos = value.end
+					break
+				}
+				if value.kind != streamTokenName {
+					valid = false
+					continue
+				}
+				count++
+				flate = isFlateFilterName(value.text)
+			}
+		}
+	}
 }
 
-func inflateStreamContext(ctx context.Context, stream []byte) ([]byte, error) {
-	return inflateStreamWithLimitContext(ctx, stream, maxDecodedStreamBytes)
+func hasNonNullDecodeParms(dict []byte) bool {
+	pos := 0
+	depth := 0
+	for {
+		token, ok := nextStreamToken(dict, pos)
+		if !ok {
+			return false
+		}
+		pos = token.end
+		switch token.kind {
+		case streamTokenDictStart:
+			depth++
+		case streamTokenDictEnd:
+			depth--
+		case streamTokenName:
+			if depth != 1 || decodeStreamName(token.text) != "DecodeParms" {
+				continue
+			}
+			value, ok := nextStreamToken(dict, pos)
+			return !ok || value.kind != streamTokenWord || value.text != "null"
+		}
+	}
+}
+
+func isFlateFilterName(name string) bool {
+	name = decodeStreamName(name)
+	return name == "FlateDecode" || name == "Fl"
 }
 
 func inflateStreamWithLimitContext(ctx context.Context, stream []byte, maxBytes int) ([]byte, error) {
@@ -384,9 +415,12 @@ func isPDFTextStateOperator(word string) bool {
 }
 
 func lastTextToken(tokens []pdfTextToken) string {
-	for i := len(tokens) - 1; i >= 0; i-- {
-		if tokens[i].isText {
-			return tokens[i].text
+	if len(tokens) == 0 {
+		return ""
+	}
+	for i := len(tokens); i > 0; i-- {
+		if tokens[i-1].isText {
+			return tokens[i-1].text
 		}
 	}
 	return ""

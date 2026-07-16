@@ -244,17 +244,15 @@ func (r *documentRenderer) renderFooter() {
 }
 
 func (r *documentRenderer) renderBlocks(blocks []layout.Block) {
-	for _, block := range blocks {
-		r.renderBlock(block)
-		if r.pdf.err != nil {
-			return
-		}
-	}
+	blocks = layout.NormalizeBlocks(blocks)
+	r.renderBlocksWithMeasurements(blocks, layout.MeasureBlocks(r.measureContext(), blocks))
 }
 
 func (r *documentRenderer) renderBlocksWithMeasurements(blocks []layout.Block, measurements []layout.BlockMeasurement) {
+	blocks = layout.NormalizeBlocks(blocks)
 	for i, block := range blocks {
 		if i < len(measurements) {
+			r.moveKeptSequenceToNextPage(measurements[i:])
 			r.renderBlockMeasured(block, measurements[i], true)
 		} else {
 			r.renderBlock(block)
@@ -266,12 +264,7 @@ func (r *documentRenderer) renderBlocksWithMeasurements(blocks []layout.Block, m
 }
 
 func (r *documentRenderer) renderRepeatedBlocks(blocks []layout.Block) {
-	if len(blocks) == 0 {
-		r.renderBlocks(blocks)
-		return
-	}
-	measurements := layout.MeasureBlocks(r.measureContext(), blocks)
-	r.renderBlocksWithMeasurements(blocks, measurements)
+	r.renderBlocks(blocks)
 }
 
 func (r *documentRenderer) renderBlock(block layout.Block) {
@@ -279,7 +272,11 @@ func (r *documentRenderer) renderBlock(block layout.Block) {
 }
 
 func (r *documentRenderer) renderBlockMeasured(block layout.Block, measure layout.BlockMeasurement, measured bool) {
-	if block == nil || r.pdf.err != nil {
+	if r.pdf.err != nil {
+		return
+	}
+	block, ok := layout.NormalizeBlock(block)
+	if !ok {
 		return
 	}
 	if pageBreak, ok := block.(layout.PageBreakBlock); ok {
@@ -318,13 +315,13 @@ func (r *documentRenderer) renderBlockMeasured(block layout.Block, measure layou
 		r.renderQRVerification(b)
 	case layout.NoteBoxBlock:
 		r.renderBox(b.EffectiveBox(), func() {
-			if b.Title != "" {
+			if strings.TrimSpace(b.Title) != "" {
 				r.renderHeading(layout.HeadingBlock{Level: 4, Segments: []layout.TextSegment{{Text: b.Title}}, Style: b.EffectiveStyle()})
 			}
 			r.renderBlocks(b.Body)
 		})
 	case layout.SectionBlock:
-		if b.Title != "" {
+		if strings.TrimSpace(b.Title) != "" {
 			r.renderHeading(layout.HeadingBlock{Level: 2, Segments: []layout.TextSegment{{Text: b.Title}}})
 		}
 		r.renderBox(b.EffectiveBox(), func() { r.renderBlocks(b.Blocks) })
@@ -340,6 +337,53 @@ func (r *documentRenderer) renderBlockMeasured(block layout.Block, measure layou
 	if !r.renderingShell && measure.BreakAfter {
 		r.addPageWithTemplate()
 	}
+}
+
+func (r *documentRenderer) moveKeptSequenceToNextPage(sequence []layout.BlockMeasurement) {
+	if r.renderingShell || len(sequence) < 2 || sequence[0].BreakBefore || !sequence[0].KeepWithNext {
+		return
+	}
+	required := keptSequenceRequiredStartHeight(sequence)
+	if required <= r.availableHeight() {
+		return
+	}
+	// If the pair cannot fit on an otherwise empty page, moving it would only
+	// create a blank page and still fail to satisfy KeepWithNext.
+	pageCapacity := r.bodyCapacityForPage(r.pdf.page + 1)
+	if required <= pageCapacity {
+		r.addPageWithTemplate()
+	}
+}
+
+func keptSequenceRequiredStartHeight(sequence []layout.BlockMeasurement) float64 {
+	if len(sequence) == 0 {
+		return 0
+	}
+	current := sequence[0]
+	required := current.RequiredStartHeight(nil)
+	if current.KeepWithNext && len(sequence) > 1 {
+		if withNext := current.Height + keptSequenceRequiredStartHeight(sequence[1:]); withNext > required {
+			required = withNext
+		}
+	}
+	return required
+}
+
+func (r *documentRenderer) bodyCapacityForPage(page int) float64 {
+	headerHeight := 0.0
+	if header := r.template.HeaderForPage(page); header != nil {
+		for _, measurement := range layout.MeasureBlocks(r.measureContext(), header.Blocks) {
+			headerHeight += measurement.Height
+		}
+		if header.Height > headerHeight {
+			headerHeight = header.Height
+		}
+	}
+	capacity := r.pdf.h - r.pdf.tMargin - headerHeight - r.pdf.bMargin - r.template.FooterReservedHeightForPage(page)
+	if capacity < 0 {
+		return 0
+	}
+	return capacity
 }
 
 func (r *documentRenderer) addPageWithTemplate() {

@@ -3,7 +3,10 @@
 
 package document
 
-import "strings"
+import (
+	"errors"
+	"strings"
+)
 
 // htmlRenderSession owns the mutable stacks used during one compiled HTML
 // render. Keeping this state together makes nesting and cleanup explicit while
@@ -371,6 +374,10 @@ func (session *htmlRenderSession) writeImage(tokenIndex int, attrs map[string]st
 	}
 	info := html.pdf.RegisterImageOptions(name, options)
 	if html.pdf.err != nil {
+		return
+	}
+	if info == nil {
+		html.pdf.SetError(errors.New("image registration returned nil image info"))
 		return
 	}
 	wd, ht = htmlResolvedImageSize(info, html.pdf, wd, ht)

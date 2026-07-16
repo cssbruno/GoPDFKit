@@ -80,6 +80,79 @@ func TestMeasurePageBreakBlock(t *testing.T) {
 	}
 }
 
+func TestRequiredStartHeightIncludesKeptNextBlock(t *testing.T) {
+	current := BlockMeasurement{Height: 12, MinHeight: 8, KeepWithNext: true}
+	next := BlockMeasurement{Height: 20, MinHeight: 5}
+	if got := current.RequiredStartHeight(&next); got != 17 {
+		t.Fatalf("RequiredStartHeight(next) = %.2f, want 17", got)
+	}
+	next.KeepTogether = true
+	if got := current.RequiredStartHeight(&next); got != 32 {
+		t.Fatalf("RequiredStartHeight(kept next) = %.2f, want 32", got)
+	}
+}
+
+func TestMeasureClauseIncludesRenderedTitle(t *testing.T) {
+	ctx := NewMeasureContext(80, TextStyle{})
+	body := []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Clause body"}}}}
+	untitled := MeasureBlock(ctx, ClauseBlock{Blocks: body})
+	titled := MeasureBlock(ctx, ClauseBlock{Number: "1.", Title: "Scope", Blocks: body})
+	if titled.Height <= untitled.Height {
+		t.Fatalf("titled clause height = %g, want more than untitled height %g", titled.Height, untitled.Height)
+	}
+	if titled.MinHeight <= untitled.MinHeight {
+		t.Fatalf("titled clause minimum = %g, want title included above %g", titled.MinHeight, untitled.MinHeight)
+	}
+	kept := MeasureBlock(ctx, ClauseBlock{Number: "1.", Title: "Scope", Blocks: body, KeepTogether: true})
+	if kept.MinHeight != kept.Height {
+		t.Fatalf("kept clause minimum = %g, want full height %g", kept.MinHeight, kept.Height)
+	}
+}
+
+func TestMeasureNoteBoxUsesEffectiveBoxAndIncludesTitle(t *testing.T) {
+	ctx := NewMeasureContext(80, TextStyle{FontFamily: "Helvetica", FontSize: 10, LineHeight: 4})
+	box := BoxStyle{Padding: Spacing{Top: 3, Right: 4, Bottom: 5, Left: 4}}
+	body := []Block{ParagraphBlock{Segments: []TextSegment{{Text: "Body"}}}}
+	withReference := MeasureBlock(ctx, NoteBoxBlock{
+		Title:  "Notice",
+		Body:   body,
+		Box:    BoxStyle{Padding: Spacing{Top: 99}},
+		BoxRef: &box,
+	})
+	withValue := MeasureBlock(ctx, NoteBoxBlock{Title: "Notice", Body: body, Box: box})
+	withoutTitle := MeasureBlock(ctx, NoteBoxBlock{Body: body, Box: box})
+
+	if withReference.Height != withValue.Height || withReference.MinHeight != withValue.MinHeight {
+		t.Fatalf("BoxRef measurement = %#v, value measurement = %#v", withReference, withValue)
+	}
+	if withReference.Height <= withoutTitle.Height {
+		t.Fatalf("title height = %.2f, untitled = %.2f; title was not measured", withReference.Height, withoutTitle.Height)
+	}
+	if len(withReference.ChildMeasures) != 2 {
+		t.Fatalf("note child measurements = %d, want title and body", len(withReference.ChildMeasures))
+	}
+}
+
+func TestMeasureSectionKeepTitleWithBodyChangesStartRequirement(t *testing.T) {
+	ctx := NewMeasureContext(80, TextStyle{FontFamily: "Helvetica", FontSize: 10, LineHeight: 4})
+	box := BoxStyle{Padding: Spacing{Top: 3, Bottom: 5}}
+	base := SectionBlock{
+		Title:  "Section",
+		Blocks: []Block{ParagraphBlock{Segments: []TextSegment{{Text: "First body"}}}},
+		BoxRef: &box,
+	}
+	split := MeasureBlock(ctx, base)
+	base.KeepTitleWithBody = true
+	kept := MeasureBlock(ctx, base)
+
+	if kept.Height != split.Height {
+		t.Fatalf("kept section height = %.2f, split = %.2f; hint must not change geometry", kept.Height, split.Height)
+	}
+	if kept.MinHeight <= split.MinHeight {
+		t.Fatalf("kept section min height = %.2f, split = %.2f; want title/body start requirement", kept.MinHeight, split.MinHeight)
+	}
+}
+
 type fixedLineMeasurer struct {
 	lines int
 }

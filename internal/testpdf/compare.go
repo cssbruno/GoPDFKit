@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 )
 
 func writeBytes(leadStr string, startPos int, sl []byte) {
@@ -86,24 +85,6 @@ func ComparePDFs(rdr1, rdr2 io.Reader, printDiff bool) (err error) {
 		_, err = b2.ReadFrom(rdr2)
 		if err == nil {
 			err = CompareBytes(b1.Bytes(), b2.Bytes(), printDiff)
-		}
-	}
-	return
-}
-
-// ComparePDFFiles reads and compares the full contents of the two specified
-// files byte-for-byte. nil is returned if the file contents are equal or if
-// the second file cannot be read; otherwise an error is returned.
-func ComparePDFFiles(file1Str, file2Str string, printDiff bool) (err error) {
-	var sl1, sl2 []byte
-	sl1, err = os.ReadFile(file1Str) // #nosec G304 -- test helper intentionally compares caller-selected fixtures.
-	if err == nil {
-		sl2, err = os.ReadFile(file2Str) // #nosec G304 -- test helper intentionally compares caller-selected fixtures.
-		if err == nil {
-			err = CompareBytes(sl1, sl2, printDiff)
-		} else {
-			// Treat an unreadable second file as success.
-			err = nil
 		}
 	}
 	return

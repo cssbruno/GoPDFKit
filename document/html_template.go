@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	stdhtml "html"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -442,6 +443,9 @@ func htmlTemplateValue(values HTMLTemplateValues, key string) (any, bool) {
 }
 
 func renderCompiledHTMLTemplateValue(value any) (string, error) {
+	if value == nil {
+		return "", nil
+	}
 	switch v := value.(type) {
 	case HTMLTemplateRaw:
 		return "", errors.New("HTMLTemplateRaw is not supported by compiled HTML templates")
@@ -449,13 +453,18 @@ func renderCompiledHTMLTemplateValue(value any) (string, error) {
 		return "", errors.New("HTMLTemplateImage is not supported by compiled HTML templates; use a static <img> tag with a src placeholder")
 	case *HTMLTemplateImage:
 		return "", errors.New("HTMLTemplateImage is not supported by compiled HTML templates; use a static <img> tag with a src placeholder")
-	case nil:
-		return "", nil
 	case string:
 		return v, nil
 	case []byte:
 		return string(v), nil
 	case fmt.Stringer:
+		value := reflect.ValueOf(v)
+		switch value.Kind() {
+		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+			if value.IsNil() {
+				return "", nil
+			}
+		}
 		return v.String(), nil
 	default:
 		return fmt.Sprint(v), nil

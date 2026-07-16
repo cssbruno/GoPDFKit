@@ -6,6 +6,7 @@ package document
 import (
 	"bytes"
 	"encoding/base64"
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -126,6 +127,221 @@ func TestWriteDocumentPageBreakBlockAddsPage(t *testing.T) {
 	pdf.WriteDocument(doc)
 	if got := pdf.PageCount(); got != 2 {
 		t.Fatalf("PageCount() = %d, want 2", got)
+	}
+}
+
+func TestWriteDocumentAcceptsBuiltInBlockPointersAndSkipsTypedNil(t *testing.T) {
+	var nilParagraph *layout.ParagraphBlock
+	heading := &layout.HeadingBlock{Level: 2, Segments: []layout.TextSegment{{Text: "pointer heading"}}}
+	pageBreak := &layout.PageBreakBlock{After: true}
+	paragraph := &layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "pointer paragraph"}}}
+	pdf := MustNew()
+	pdf.SetCompression(false)
+	doc := layout.NewLayoutDocument()
+	doc.Body = []layout.Block{nilParagraph, heading, pageBreak, paragraph}
+
+	pdf.WriteDocument(doc)
+	if err := pdf.Error(); err != nil {
+		t.Fatalf("WriteDocument() error = %v", err)
+	}
+	if pdf.PageCount() != 2 {
+		t.Fatalf("PageCount() = %d, want pointer PageBreakBlock to add page", pdf.PageCount())
+	}
+	var output bytes.Buffer
+	if err := pdf.Output(&output); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	for _, want := range []string{"pointer heading", "pointer paragraph"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("PDF output missing %q", want)
+		}
+	}
+}
+
+func TestTypedHeadingKeepWithNextMovesHeadingAndBodyTogether(t *testing.T) {
+	pdf := MustNew(WithCustomPageSize(Size{Wd: 90, Ht: 90}))
+	pdf.SetMargins(8, 8, 8)
+	pdf.SetAutoPageBreak(true, 8)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	renderer := documentRenderer{pdf: pdf}
+	blocks := []layout.Block{
+		layout.HeadingBlock{Level: 2, Segments: []layout.TextSegment{{Text: "kept heading"}}},
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "kept body"}}},
+	}
+	measures := layout.MeasureBlocks(renderer.measureContext(), blocks)
+	required := measures[0].RequiredStartHeight(&measures[1])
+	pdf.SetY(pdf.h - pdf.bMargin - required + 0.25)
+
+	renderer.renderBlocks(blocks)
+	if pdf.PageCount() != 2 {
+		t.Fatalf("PageCount() = %d, want heading/body moved to page 2", pdf.PageCount())
+	}
+	if page := pdf.pages[1].String(); strings.Contains(page, "kept heading") || strings.Contains(page, "kept body") {
+		t.Fatalf("page 1 contains kept sequence:\n%s", page)
+	}
+	if page := pdf.pages[2].String(); !strings.Contains(page, "kept heading") || !strings.Contains(page, "kept body") {
+		t.Fatalf("page 2 does not contain complete kept sequence:\n%s", page)
+	}
+}
+
+func TestKeepWithNextDoesNotCreatePageWhenHeaderLeavesTooLittleRoom(t *testing.T) {
+	pdf := MustNew(WithCustomPageSize(Size{Wd: 90, Ht: 90}))
+	pdf.SetMargins(8, 8, 8)
+	pdf.SetAutoPageBreak(true, 8)
+	pdf.AddPage()
+	pdf.SetY(75)
+	renderer := documentRenderer{
+		pdf: pdf,
+		template: layout.PageTemplate{Header: &layout.HeaderBlock{
+			Height: 40,
+		}},
+	}
+	current := layout.BlockMeasurement{Height: 40, MinHeight: 40, KeepTogether: true, KeepWithNext: true}
+	next := layout.BlockMeasurement{Height: 10, MinHeight: 10, KeepTogether: true}
+
+	renderer.moveKeptSequenceToNextPage([]layout.BlockMeasurement{current, next})
+	if pdf.PageCount() != 1 {
+		t.Fatalf("PageCount() = %d, want no header-only page for a pair that cannot fit", pdf.PageCount())
+	}
+}
+
+func TestKeepWithNextMovesEntireChain(t *testing.T) {
+	pdf := MustNew(WithCustomPageSize(Size{Wd: 90, Ht: 90}))
+	pdf.SetMargins(8, 8, 8)
+	pdf.SetAutoPageBreak(true, 8)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	renderer := documentRenderer{pdf: pdf}
+	blocks := []layout.Block{
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "chain A"}}, Box: layout.BoxStyle{KeepWithNext: true}},
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "chain B"}}, Box: layout.BoxStyle{KeepWithNext: true}},
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "chain C"}}},
+	}
+	measurements := layout.MeasureBlocks(renderer.measureContext(), blocks)
+	required := keptSequenceRequiredStartHeight(measurements)
+	if required <= measurements[0].RequiredStartHeight(&measurements[1]) {
+		t.Fatalf("chain requirement = %g, want more than immediate pair %g", required, measurements[0].RequiredStartHeight(&measurements[1]))
+	}
+	pdf.SetY(pdf.h - pdf.bMargin - required + 0.25)
+
+	renderer.renderBlocksWithMeasurements(blocks, measurements)
+	if pdf.PageCount() != 2 {
+		t.Fatalf("PageCount() = %d, want entire chain moved to page 2", pdf.PageCount())
+	}
+	for _, text := range []string{"chain A", "chain B", "chain C"} {
+		if strings.Contains(pdf.pages[1].String(), text) {
+			t.Fatalf("page 1 contains kept-chain text %q", text)
+		}
+		if !strings.Contains(pdf.pages[2].String(), text) {
+			t.Fatalf("page 2 is missing kept-chain text %q", text)
+		}
+	}
+}
+
+func TestBreakBeforeAndKeepWithNextAddOnlyOnePage(t *testing.T) {
+	pdf := MustNew(WithCustomPageSize(Size{Wd: 90, Ht: 90}))
+	pdf.SetMargins(8, 8, 8)
+	pdf.SetAutoPageBreak(true, 8)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.SetY(75)
+	renderer := documentRenderer{pdf: pdf}
+	blocks := []layout.Block{
+		layout.ClauseBlock{
+			Title:       "explicit break",
+			BreakBefore: true,
+			Box:         layout.BoxStyle{KeepWithNext: true},
+			Blocks:      []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "clause body"}}}},
+		},
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "following body"}}},
+	}
+
+	renderer.renderBlocks(blocks)
+	if pdf.PageCount() != 2 {
+		t.Fatalf("PageCount() = %d, want exactly one explicit page transition", pdf.PageCount())
+	}
+	if page := pdf.pages[2].String(); !strings.Contains(page, "explicit break") || !strings.Contains(page, "following body") {
+		t.Fatalf("page 2 does not contain the kept sequence:\n%s", page)
+	}
+}
+
+func TestTitledKeepTogetherClauseMovesBeforeRendering(t *testing.T) {
+	pdf := MustNew(WithCustomPageSize(Size{Wd: 90, Ht: 90}))
+	pdf.SetMargins(8, 8, 8)
+	pdf.SetAutoPageBreak(true, 8)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	renderer := documentRenderer{pdf: pdf}
+	clause := layout.ClauseBlock{
+		Number:       "2.",
+		Title:        "Measured title",
+		KeepTogether: true,
+		Blocks: []layout.Block{
+			layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "measured clause body"}}},
+		},
+	}
+	measurement := layout.MeasureBlock(renderer.measureContext(), clause)
+	pdf.SetY(pdf.h - pdf.bMargin - measurement.Height + 0.25)
+
+	renderer.renderBlocks([]layout.Block{clause})
+	if pdf.PageCount() != 2 {
+		t.Fatalf("PageCount() = %d, want titled kept clause moved to page 2", pdf.PageCount())
+	}
+	if page := pdf.pages[1].String(); strings.Contains(page, "Measured title") || strings.Contains(page, "measured clause body") {
+		t.Fatalf("page 1 contains part of the kept clause:\n%s", page)
+	}
+	if page := pdf.pages[2].String(); !strings.Contains(page, "Measured title") || !strings.Contains(page, "measured clause body") {
+		t.Fatalf("page 2 does not contain the complete kept clause:\n%s", page)
+	}
+}
+
+func TestWhitespaceOnlyContainerTitlesMatchUntitledMeasurement(t *testing.T) {
+	body := []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "body"}}}}
+	for _, blocks := range [][]layout.Block{
+		{layout.NoteBoxBlock{Title: "   \t", Body: body}},
+		{layout.SectionBlock{Title: "   \t", Blocks: body}},
+	} {
+		pdf := MustNew()
+		pdf.AddPage()
+		pdf.SetFont("Helvetica", "", 12)
+		renderer := documentRenderer{pdf: pdf}
+		startY := pdf.GetY()
+		measure := layout.MeasureBlock(renderer.measureContext(), blocks[0])
+		renderer.renderBlocks(blocks)
+		if got := pdf.GetY() - startY; math.Abs(got-measure.Height) > 0.001 {
+			t.Fatalf("rendered height = %g, measured height = %g for %T", got, measure.Height, blocks[0])
+		}
+	}
+}
+
+func TestTypedSectionKeepTitleWithBodyPreventsOrphanTitle(t *testing.T) {
+	pdf := MustNew(WithCustomPageSize(Size{Wd: 90, Ht: 90}))
+	pdf.SetMargins(8, 8, 8)
+	pdf.SetAutoPageBreak(true, 8)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	renderer := documentRenderer{pdf: pdf}
+	section := layout.SectionBlock{
+		Title:             "section title",
+		KeepTitleWithBody: true,
+		Blocks: []layout.Block{
+			layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "section body"}}},
+		},
+		Box: layout.BoxStyle{Padding: layout.Spacing{Top: 2, Bottom: 2}},
+	}
+	measure := layout.MeasureBlock(renderer.measureContext(), section)
+	pdf.SetY(pdf.h - pdf.bMargin - measure.MinHeight + 0.25)
+
+	renderer.renderBlock(section)
+	if pdf.PageCount() != 2 {
+		t.Fatalf("PageCount() = %d, want section moved to page 2", pdf.PageCount())
+	}
+	if page := pdf.pages[1].String(); strings.Contains(page, "section title") || strings.Contains(page, "section body") {
+		t.Fatalf("page 1 contains orphaned section content:\n%s", page)
+	}
+	if page := pdf.pages[2].String(); !strings.Contains(page, "section title") || !strings.Contains(page, "section body") {
+		t.Fatalf("page 2 does not contain section title and body:\n%s", page)
 	}
 }
 

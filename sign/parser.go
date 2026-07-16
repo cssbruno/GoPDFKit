@@ -48,11 +48,22 @@ type xrefEntry struct {
 	Offset     int
 }
 
+type effectiveXrefEntry struct {
+	Offset     int
+	Generation int
+	InUse      bool
+}
+
+type cachedIndirectValue struct {
+	data  []byte
+	start int
+}
+
 type pdfXrefResolver struct {
 	input          []byte
-	tables         []int
-	offsets        map[int]int
-	maxXrefEntries int
+	entries        map[int]effectiveXrefEntry
+	indirectValues map[pdfRef]cachedIndirectValue
+	maxObject      int
 }
 
 func analyzePDF(input []byte) (pdfContext, error) {
@@ -80,18 +91,21 @@ func analyzePDFContext(ctx context.Context, input []byte, maxXrefChain, maxXrefE
 	if err := signContextErr(ctx); err != nil {
 		return pdfContext{}, err
 	}
-	if encrypted, err := hasPDFNameContext(ctx, trailer, "/Encrypt"); err != nil {
+	if _, encrypted, err := findDictionaryEntryContext(ctx, trailer, "/Encrypt"); err != nil {
 		return pdfContext{}, err
 	} else if encrypted {
-		return pdfContext{}, errors.New("pdfsigning: encrypted PDFs are not supported")
+		return pdfContext{}, fmt.Errorf("%w: encrypted PDFs are not supported", ErrUnsupportedPDF)
 	}
-	size, root, err := parseTrailerContext(ctx, trailer, maxXrefEntries)
+	size, root, err := parseTrailerContext(ctx, trailer, maxXrefEntries, 3)
 	if err != nil {
 		return pdfContext{}, err
 	}
 	xref, err := newPDFXrefResolverContext(ctx, input, previousXref, maxXrefChain, maxXrefEntries)
 	if err != nil {
 		return pdfContext{}, err
+	}
+	if size <= xref.maxObject {
+		return pdfContext{}, fmt.Errorf("%w: trailer /Size %d does not cover xref object %d", ErrUnsupportedPDF, size, xref.maxObject)
 	}
 	page, err := findFirstPageContext(ctx, input, xref, root, 0)
 	if err != nil {
@@ -114,7 +128,7 @@ func newPDFXrefResolverContext(ctx context.Context, input []byte, offset, maxXre
 	if maxXrefEntries <= 0 || maxXrefEntries > maxPDFObjectCount {
 		return nil, errors.New("pdfsigning: xref entry limit must be positive")
 	}
-	resolver := &pdfXrefResolver{input: input, offsets: make(map[int]int), maxXrefEntries: maxXrefEntries}
+	resolver := &pdfXrefResolver{input: input, entries: make(map[int]effectiveXrefEntry), maxObject: -1}
 	seen := make(map[int]bool)
 	for {
 		if err := signContextErr(ctx); err != nil {
@@ -134,12 +148,16 @@ func newPDFXrefResolverContext(ctx context.Context, input []byte, offset, maxXre
 		if err != nil {
 			return nil, err
 		}
-		if encrypted, err := hasPDFNameContext(ctx, trailer, "/Encrypt"); err != nil {
+		if _, encrypted, err := findDictionaryEntryContext(ctx, trailer, "/Encrypt"); err != nil {
 			return nil, err
 		} else if encrypted {
-			return nil, errors.New("pdfsigning: encrypted PDFs are not supported")
+			return nil, fmt.Errorf("%w: encrypted PDFs are not supported", ErrUnsupportedPDF)
 		}
-		resolver.tables = append(resolver.tables, offset)
+		tableMax, err := resolver.loadXrefTableContext(ctx, input, offset, maxXrefEntries)
+		if err != nil {
+			return nil, err
+		}
+		resolver.maxObject = max(resolver.maxObject, tableMax)
 		prev, ok, err := parsePrevXrefContext(ctx, trailer)
 		if err != nil {
 			return nil, err
@@ -151,27 +169,21 @@ func newPDFXrefResolverContext(ctx context.Context, input []byte, offset, maxXre
 	}
 }
 
-func (resolver *pdfXrefResolver) objectOffsetContext(ctx context.Context, object int) (int, error) {
+func (resolver *pdfXrefResolver) objectOffsetContext(ctx context.Context, ref pdfRef) (int, error) {
 	if resolver == nil {
 		return 0, errors.New("pdfsigning: xref resolver not initialized")
 	}
-	if offset, ok := resolver.offsets[object]; ok {
-		return offset, nil
+	if err := signContextErr(ctx); err != nil {
+		return 0, err
 	}
-	for _, tableOffset := range resolver.tables {
-		if err := signContextErr(ctx); err != nil {
-			return 0, err
-		}
-		offset, ok, err := parseXrefTableObjectOffsetContext(ctx, resolver.input, tableOffset, object, resolver.maxXrefEntries)
-		if err != nil {
-			return 0, err
-		}
-		if ok {
-			resolver.offsets[object] = offset
-			return offset, nil
-		}
+	entry, present := resolver.entries[ref.Object]
+	if !present {
+		return 0, fmt.Errorf("pdfsigning: object %d %d not found in xref", ref.Object, ref.Generation)
 	}
-	return 0, fmt.Errorf("pdfsigning: object %d not found in xref", object)
+	if !entry.InUse || entry.Generation != ref.Generation {
+		return 0, fmt.Errorf("pdfsigning: object %d %d is free or has a different generation", ref.Object, ref.Generation)
+	}
+	return entry.Offset, nil
 }
 
 func findStartXref(input []byte) (int, error) {
@@ -191,7 +203,7 @@ func findStartXref(input []byte) (int, error) {
 	return value, nil
 }
 
-func parseTrailerContext(ctx context.Context, trailer []byte, maxXrefEntries int) (int, pdfRef, error) {
+func parseTrailerContext(ctx context.Context, trailer []byte, maxXrefEntries, reservedObjects int) (int, pdfRef, error) {
 	if err := signContextErr(ctx); err != nil {
 		return 0, pdfRef{}, err
 	}
@@ -206,11 +218,12 @@ func parseTrailerContext(ctx context.Context, trailer []byte, maxXrefEntries int
 	if !ok {
 		return 0, pdfRef{}, errors.New("pdfsigning: trailer /Size not found")
 	}
-	size, _, ok := parseLeadingInt(sizeValue, 0)
+	size, ok := parseExactNonnegativeInt(sizeValue)
 	if !ok {
 		return 0, pdfRef{}, errors.New("pdfsigning: invalid trailer /Size")
 	}
-	if size <= 0 || size > maxXrefEntries || size > maxPDFObjectCount {
+	if reservedObjects < 0 || maxXrefEntries <= reservedObjects || maxPDFObjectCount <= reservedObjects ||
+		size <= 0 || size > maxXrefEntries-reservedObjects || size > maxPDFObjectCount-reservedObjects {
 		return 0, pdfRef{}, fmt.Errorf("pdfsigning: unsupported trailer /Size %d", size)
 	}
 	root, ok, err := findReferenceContext(ctx, dict, "/Root")
@@ -238,11 +251,17 @@ func parsePrevXrefContext(ctx context.Context, trailer []byte) (int, bool, error
 	if !ok {
 		return 0, false, nil
 	}
-	prev, _, ok := parseLeadingInt(prevValue, 0)
+	prev, ok := parseExactNonnegativeInt(prevValue)
 	if !ok {
 		return 0, false, errors.New("pdfsigning: invalid trailer /Prev")
 	}
 	return prev, true, nil
+}
+
+func parseExactNonnegativeInt(value []byte) (int, bool) {
+	pos := skipPDFSpaces(value, 0)
+	parsed, end, ok := parseLeadingInt(value, pos)
+	return parsed, ok && skipPDFSpaces(value, end) == len(value)
 }
 
 func preservedTrailerEntries(trailer []byte) (string, error) {
@@ -277,11 +296,11 @@ func trailerDictionaryContext(ctx context.Context, trailer []byte) ([]byte, erro
 	if err := signContextErr(ctx); err != nil {
 		return nil, err
 	}
-	start, err := indexBytesContext(ctx, trailer, []byte("<<"))
-	if err != nil {
-		return nil, err
+	start := skipPDFSpaces(trailer, 0)
+	if hasPDFKeywordAt(trailer, start, "trailer") {
+		start = skipPDFSpaces(trailer, start+len("trailer"))
 	}
-	if start < 0 {
+	if start+1 >= len(trailer) || trailer[start] != '<' || trailer[start+1] != '<' {
 		return nil, errors.New("pdfsigning: trailer dictionary not found")
 	}
 	end, err := findDictionaryEndContext(ctx, trailer[start:])
@@ -292,22 +311,110 @@ func trailerDictionaryContext(ctx context.Context, trailer []byte) ([]byte, erro
 }
 
 func trailerEntryValueContext(ctx context.Context, dict []byte, key string) ([]byte, bool, error) {
-	idx, err := findPDFNameContext(ctx, dict, key)
-	if err != nil {
-		return nil, false, err
-	}
-	if idx < 0 {
-		return nil, false, nil
-	}
-	valueStart := skipPDFSpaces(dict, idx+len(key))
-	if valueStart >= len(dict) {
-		return nil, false, fmt.Errorf("pdfsigning: trailer %s value missing", key)
-	}
-	valueEnd, err := pdfValueEndContext(ctx, dict, valueStart)
+	entry, ok, err := findDictionaryEntryContext(ctx, dict, key)
 	if err != nil {
 		return nil, false, fmt.Errorf("pdfsigning: invalid trailer %s value: %w", key, err)
 	}
-	return bytes.TrimSpace(dict[valueStart:valueEnd]), true, nil
+	if !ok {
+		return nil, false, nil
+	}
+	return bytes.TrimSpace(dict[entry.ValueStart:entry.ValueEnd]), true, nil
+}
+
+type pdfDictionaryEntry struct {
+	KeyStart   int
+	KeyEnd     int
+	ValueStart int
+	ValueEnd   int
+}
+
+// findDictionaryEntryContext finds a direct entry in the outer dictionary.
+// It deliberately does not match names in nested dictionaries, strings, hex
+// strings, or comments. Duplicate keys are rejected because selecting one of
+// two security-sensitive values would create parser ambiguity.
+func findDictionaryEntryContext(ctx context.Context, input []byte, key string) (pdfDictionaryEntry, bool, error) {
+	if len(key) < 2 || key[0] != '/' {
+		return pdfDictionaryEntry{}, false, errors.New("pdfsigning: invalid dictionary key")
+	}
+	pos := skipPDFSpaces(input, 0)
+	if hasPDFKeywordAt(input, pos, "trailer") {
+		pos = skipPDFSpaces(input, pos+len("trailer"))
+	}
+	if pos+1 >= len(input) || input[pos] != '<' || input[pos+1] != '<' {
+		return pdfDictionaryEntry{}, false, errors.New("pdfsigning: dictionary start not found")
+	}
+	dictEnd, err := findDictionaryEndContext(ctx, input[pos:])
+	if err != nil {
+		return pdfDictionaryEntry{}, false, err
+	}
+	limit := pos + dictEnd - 2
+	pos += 2
+	var result pdfDictionaryEntry
+	found := false
+	for {
+		if err := signContextErr(ctx); err != nil {
+			return pdfDictionaryEntry{}, false, err
+		}
+		pos = skipPDFSpaces(input, pos)
+		if pos >= limit {
+			break
+		}
+		if input[pos] != '/' {
+			return pdfDictionaryEntry{}, false, errors.New("pdfsigning: dictionary key is not a name")
+		}
+		decodedKey, keyEnd, err := decodePDFNameToken(input, pos)
+		if err != nil {
+			return pdfDictionaryEntry{}, false, err
+		}
+		valueStart := skipPDFSpaces(input, keyEnd)
+		if valueStart >= limit {
+			return pdfDictionaryEntry{}, false, fmt.Errorf("pdfsigning: dictionary %s value missing", decodedKey)
+		}
+		valueEnd, err := pdfValueEndContext(ctx, input, valueStart)
+		if err != nil {
+			return pdfDictionaryEntry{}, false, fmt.Errorf("pdfsigning: dictionary %s value: %w", decodedKey, err)
+		}
+		if valueEnd > limit {
+			return pdfDictionaryEntry{}, false, fmt.Errorf("pdfsigning: dictionary %s value exceeds dictionary", decodedKey)
+		}
+		if decodedKey == key {
+			if found {
+				return pdfDictionaryEntry{}, false, fmt.Errorf("pdfsigning: duplicate dictionary key %s", key)
+			}
+			result = pdfDictionaryEntry{KeyStart: pos, KeyEnd: keyEnd, ValueStart: valueStart, ValueEnd: valueEnd}
+			found = true
+		}
+		pos = valueEnd
+	}
+	return result, found, nil
+}
+
+func decodePDFNameToken(input []byte, start int) (string, int, error) {
+	if start < 0 || start >= len(input) || input[start] != '/' {
+		return "", start, errors.New("pdfsigning: PDF name start not found")
+	}
+	decoded := make([]byte, 1, 16)
+	decoded[0] = '/'
+	pos := start + 1
+	for pos < len(input) && isPDFNameChar(input[pos]) {
+		value := input[pos]
+		if value == '#' {
+			if pos+2 >= len(input) {
+				return "", start, errors.New("pdfsigning: truncated PDF name escape")
+			}
+			high, highOK := pdfHexDigit(input[pos+1])
+			low, lowOK := pdfHexDigit(input[pos+2])
+			if !highOK || !lowOK {
+				return "", start, errors.New("pdfsigning: invalid PDF name escape")
+			}
+			value = high<<4 | low
+			pos += 3
+		} else {
+			pos++
+		}
+		decoded = append(decoded, value)
+	}
+	return string(decoded), pos, nil
 }
 
 func pdfValueEndContext(ctx context.Context, input []byte, start int) (int, error) {
@@ -318,6 +425,9 @@ func pdfValueEndContext(ctx context.Context, input []byte, start int) (int, erro
 		return 0, errors.New("value missing")
 	}
 	switch input[start] {
+	case '/':
+		_, end, err := decodePDFNameToken(input, start)
+		return end, err
 	case '[':
 		end, err := findArrayEndContext(ctx, input[start:])
 		if err != nil {
@@ -391,24 +501,25 @@ func xrefTrailerContext(ctx context.Context, input []byte, offset int) ([]byte, 
 	if offset < 0 || offset >= len(input) {
 		return nil, errors.New("pdfsigning: xref offset outside PDF")
 	}
-	rest := input[offset:]
-	trailerStart, err := indexBytesContext(ctx, rest, []byte("trailer"))
-	if err != nil {
-		return nil, err
+	if !bytes.HasPrefix(input[offset:], []byte("xref")) {
+		return nil, fmt.Errorf("%w: only classic xref tables are supported", ErrUnsupportedPDF)
 	}
-	if trailerStart < 0 {
-		return nil, errors.New("pdfsigning: xref trailer not found")
+	for pos := offset + len("xref"); pos < len(input); {
+		if err := signContextErr(ctx); err != nil {
+			return nil, err
+		}
+		line, next := nextPDFLine(input, pos)
+		pos = next
+		if !bytes.Equal(bytes.TrimSpace(line), []byte("trailer")) {
+			continue
+		}
+		dict, err := trailerDictionaryContext(ctx, input[pos:])
+		if err != nil {
+			return nil, err
+		}
+		return dict, nil
 	}
-	trailerStart += offset
-	afterTrailer := input[trailerStart:]
-	startxref, err := indexBytesContext(ctx, afterTrailer, []byte("startxref"))
-	if err != nil {
-		return nil, err
-	}
-	if startxref < 0 {
-		return afterTrailer, nil
-	}
-	return afterTrailer[:startxref], nil
+	return nil, errors.New("pdfsigning: xref trailer not found")
 }
 
 func indexBytesContext(ctx context.Context, input, needle []byte) (int, error) {
@@ -455,11 +566,79 @@ func parseXrefTable(input []byte, offset int) (map[int]int, error) {
 	return parseXrefTableContext(context.Background(), input, offset, DefaultMaxXrefEntries)
 }
 
-func parseXrefTableContext(ctx context.Context, input []byte, offset, maxXrefEntries int) (map[int]int, error) {
+func (resolver *pdfXrefResolver) loadXrefTableContext(ctx context.Context, input []byte, offset, maxXrefEntries int) (int, error) {
+	if offset < 0 || offset >= len(input) {
+		return -1, errors.New("pdfsigning: xref offset outside PDF")
+	}
 	if !bytes.HasPrefix(input[offset:], []byte("xref")) {
-		return nil, errors.New("pdfsigning: only classic xref tables are supported")
+		return -1, fmt.Errorf("%w: only classic xref tables are supported", ErrUnsupportedPDF)
+	}
+	maximum := -1
+	totalEntries := 0
+	seenObjects := make(map[int]struct{})
+	for pos := offset + len("xref"); pos < len(input); {
+		if err := signContextErr(ctx); err != nil {
+			return -1, err
+		}
+		line, next := nextPDFLine(input, pos)
+		pos = next
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		if bytes.Equal(line, []byte("trailer")) {
+			return maximum, nil
+		}
+		first, nextInt, ok := parseLeadingInt(line, 0)
+		if !ok {
+			return -1, errors.New("pdfsigning: invalid xref subsection")
+		}
+		count, end, ok := parseLeadingInt(line, skipPDFSpaces(line, nextInt))
+		if !ok || skipPDFSpaces(line, end) != len(line) {
+			return -1, errors.New("pdfsigning: invalid xref subsection")
+		}
+		if err := validateXrefSubsection(first, count, &totalEntries, maxXrefEntries); err != nil {
+			return -1, err
+		}
+		if count > 0 {
+			maximum = max(maximum, first+count-1)
+		}
+		for n := 0; n < count; n++ {
+			if pos >= len(input) {
+				return -1, errors.New("pdfsigning: truncated xref subsection")
+			}
+			entry, next := nextPDFLine(input, pos)
+			pos = next
+			objectOffset, generation, status, ok := parseXrefEntry(entry)
+			if !ok {
+				return -1, errors.New("pdfsigning: invalid xref entry")
+			}
+			objectNumber := first + n
+			if _, duplicate := seenObjects[objectNumber]; duplicate {
+				return -1, fmt.Errorf("pdfsigning: duplicate xref entry for object %d", objectNumber)
+			}
+			seenObjects[objectNumber] = struct{}{}
+			if _, resolvedByNewerRevision := resolver.entries[objectNumber]; !resolvedByNewerRevision {
+				resolver.entries[objectNumber] = effectiveXrefEntry{
+					Offset:     objectOffset,
+					Generation: generation,
+					InUse:      status == 'n',
+				}
+			}
+		}
+	}
+	return -1, errors.New("pdfsigning: xref trailer not found")
+}
+
+func parseXrefTableContext(ctx context.Context, input []byte, offset, maxXrefEntries int) (map[int]int, error) {
+	if offset < 0 || offset >= len(input) {
+		return nil, errors.New("pdfsigning: xref offset outside PDF")
+	}
+	if !bytes.HasPrefix(input[offset:], []byte("xref")) {
+		return nil, fmt.Errorf("%w: only classic xref tables are supported", ErrUnsupportedPDF)
 	}
 	var offsets map[int]int
+	seenObjects := make(map[int]struct{})
 	totalEntries := 0
 	pos := offset + len("xref")
 	for pos < len(input) {
@@ -479,8 +658,8 @@ func parseXrefTableContext(ctx context.Context, input []byte, offset, maxXrefEnt
 		if !ok {
 			return nil, errors.New("pdfsigning: invalid xref subsection")
 		}
-		count, _, ok := parseLeadingInt(line, skipPDFSpaces(line, nextInt))
-		if !ok {
+		count, end, ok := parseLeadingInt(line, skipPDFSpaces(line, nextInt))
+		if !ok || skipPDFSpaces(line, end) != len(line) {
 			return nil, errors.New("pdfsigning: invalid xref subsection")
 		}
 		if err := validateXrefSubsection(first, count, &totalEntries, maxXrefEntries); err != nil {
@@ -498,15 +677,17 @@ func parseXrefTableContext(ctx context.Context, input []byte, offset, maxXrefEnt
 			}
 			entry, next := nextPDFLine(input, pos)
 			pos = next
-			if len(entry) < 18 {
+			objectNumber := first + n
+			if _, duplicate := seenObjects[objectNumber]; duplicate {
+				return nil, fmt.Errorf("pdfsigning: duplicate xref entry for object %d", objectNumber)
+			}
+			seenObjects[objectNumber] = struct{}{}
+			objectOffset, _, status, ok := parseXrefEntry(entry)
+			if !ok {
 				return nil, errors.New("pdfsigning: invalid xref entry")
 			}
-			if entry[17] == 'n' {
-				objectOffset, ok := parseXrefEntryOffset(entry)
-				if !ok {
-					return nil, errors.New("pdfsigning: invalid xref entry offset")
-				}
-				offsets[first+n] = objectOffset
+			if status == 'n' {
+				offsets[objectNumber] = objectOffset
 			}
 		}
 	}
@@ -514,77 +695,6 @@ func parseXrefTableContext(ctx context.Context, input []byte, offset, maxXrefEnt
 		offsets = make(map[int]int)
 	}
 	return offsets, nil
-}
-
-func parseXrefTableObjectOffsetContext(ctx context.Context, input []byte, offset, targetObject, maxXrefEntries int) (int, bool, error) {
-	if !bytes.HasPrefix(input[offset:], []byte("xref")) {
-		return 0, false, errors.New("pdfsigning: only classic xref tables are supported")
-	}
-	pos := offset + len("xref")
-	totalEntries := 0
-	for pos < len(input) {
-		if err := signContextErr(ctx); err != nil {
-			return 0, false, err
-		}
-		line, next := nextPDFLine(input, pos)
-		pos = next
-		line = bytes.TrimSpace(line)
-		if len(line) == 0 {
-			continue
-		}
-		if bytes.Equal(line, []byte("trailer")) {
-			break
-		}
-		first, nextInt, ok := parseLeadingInt(line, 0)
-		if !ok {
-			return 0, false, errors.New("pdfsigning: invalid xref subsection")
-		}
-		count, _, ok := parseLeadingInt(line, skipPDFSpaces(line, nextInt))
-		if !ok {
-			return 0, false, errors.New("pdfsigning: invalid xref subsection")
-		}
-		if err := validateXrefSubsection(first, count, &totalEntries, maxXrefEntries); err != nil {
-			return 0, false, err
-		}
-		if targetObject < first || targetObject >= first+count {
-			for n := 0; n < count; n++ {
-				if err := signContextErr(ctx); err != nil {
-					return 0, false, err
-				}
-				if pos >= len(input) {
-					return 0, false, errors.New("pdfsigning: truncated xref subsection")
-				}
-				_, pos = nextPDFLine(input, pos)
-			}
-			continue
-		}
-		targetIndex := targetObject - first
-		for n := 0; n < count; n++ {
-			if err := signContextErr(ctx); err != nil {
-				return 0, false, err
-			}
-			if pos >= len(input) {
-				return 0, false, errors.New("pdfsigning: truncated xref subsection")
-			}
-			entry, next := nextPDFLine(input, pos)
-			pos = next
-			if n != targetIndex {
-				continue
-			}
-			if len(entry) < 18 {
-				return 0, false, errors.New("pdfsigning: invalid xref entry")
-			}
-			if entry[17] != 'n' {
-				return 0, false, nil
-			}
-			objectOffset, ok := parseXrefEntryOffset(entry)
-			if !ok {
-				return 0, false, errors.New("pdfsigning: invalid xref entry offset")
-			}
-			return objectOffset, true, nil
-		}
-	}
-	return 0, false, nil
 }
 
 func validateXrefSubsection(first, count int, total *int, maxEntries int) error {
@@ -595,23 +705,20 @@ func validateXrefSubsection(first, count int, total *int, maxEntries int) error 
 	return nil
 }
 
-func parseXrefEntryOffset(entry []byte) (int, bool) {
-	if len(entry) >= 10 {
-		offset := 0
-		for _, c := range entry[:10] {
-			if c < '0' || c > '9' {
-				return parseLeadingXrefEntryOffset(entry)
-			}
-			offset = offset*10 + int(c-'0')
-		}
-		return offset, true
+func parseXrefEntry(entry []byte) (int, int, byte, bool) {
+	offset, next, ok := parseLeadingInt(entry, 0)
+	if !ok {
+		return 0, 0, 0, false
 	}
-	return parseLeadingXrefEntryOffset(entry)
-}
-
-func parseLeadingXrefEntryOffset(entry []byte) (int, bool) {
-	objectOffset, _, ok := parseLeadingInt(entry, 0)
-	return objectOffset, ok
+	generation, next, ok := parseLeadingInt(entry, skipPDFSpaces(entry, next))
+	if !ok || generation > 65535 {
+		return 0, 0, 0, false
+	}
+	statusPos := skipPDFSpaces(entry, next)
+	if statusPos >= len(entry) || (entry[statusPos] != 'n' && entry[statusPos] != 'f') || skipPDFSpaces(entry, statusPos+1) != len(entry) {
+		return 0, 0, 0, false
+	}
+	return offset, generation, entry[statusPos], true
 }
 
 func nextPDFLine(input []byte, pos int) ([]byte, int) {
@@ -633,7 +740,7 @@ func findFirstPageContext(ctx context.Context, input []byte, xref *pdfXrefResolv
 	if depth > 32 {
 		return pdfRef{}, errors.New("pdfsigning: page tree is too deep")
 	}
-	offset, err := xref.objectOffsetContext(ctx, ref.Object)
+	offset, err := xref.objectOffsetContext(ctx, ref)
 	if err != nil {
 		return pdfRef{}, err
 	}
@@ -641,13 +748,21 @@ func findFirstPageContext(ctx context.Context, input []byte, xref *pdfXrefResolv
 	if err != nil {
 		return pdfRef{}, err
 	}
-	if bytes.Contains(dict, []byte("/Type /Page")) && !bytes.Contains(dict, []byte("/Type /Pages")) {
+	typeEntry, hasType, err := findDictionaryEntryContext(ctx, dict, "/Type")
+	if err != nil {
+		return pdfRef{}, err
+	}
+	if hasType && pdfNameValueEquals(dict[typeEntry.ValueStart:typeEntry.ValueEnd], "/Page") {
 		return ref, nil
 	}
-	if pages, ok := findReference(dict, "/Pages"); ok {
+	if pages, ok, err := findReferenceContext(ctx, dict, "/Pages"); err != nil {
+		return pdfRef{}, err
+	} else if ok {
 		return findFirstPageContext(ctx, input, xref, pages, depth+1)
 	}
-	if kid, ok := findFirstKid(dict); ok {
+	if kid, ok, err := findFirstKidContext(ctx, dict); err != nil {
+		return pdfRef{}, err
+	} else if ok {
 		return findFirstPageContext(ctx, input, xref, kid, depth+1)
 	}
 	return pdfRef{}, errors.New("pdfsigning: first page not found")
@@ -658,35 +773,46 @@ func readObjectDict(input []byte, ref pdfRef, offset int) ([]byte, error) {
 }
 
 func readObjectDictContext(ctx context.Context, input []byte, ref pdfRef, offset int) ([]byte, error) {
+	dict, _, err := readObjectDictPositionContext(ctx, input, ref, offset)
+	return dict, err
+}
+
+func readObjectDictPositionContext(ctx context.Context, input []byte, ref pdfRef, offset int) ([]byte, int, error) {
 	if err := signContextErr(ctx); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if offset < 0 || offset >= len(input) {
-		return nil, errors.New("pdfsigning: object offset outside PDF")
+		return nil, 0, errors.New("pdfsigning: object offset outside PDF")
 	}
-	end, err := indexBytesContext(ctx, input[offset:], []byte("endobj"))
+	objectNumber, next, ok := parseLeadingInt(input, offset)
+	if !ok {
+		return nil, 0, errors.New("pdfsigning: object header not found")
+	}
+	pos := skipPDFSpaces(input, next)
+	generation, next, ok := parseLeadingInt(input, pos)
+	if !ok {
+		return nil, 0, errors.New("pdfsigning: object generation not found")
+	}
+	pos = skipPDFSpaces(input, next)
+	if !hasPDFKeywordAt(input, pos, "obj") {
+		return nil, 0, errors.New("pdfsigning: object header marker not found")
+	}
+	if objectNumber != ref.Object || generation != ref.Generation {
+		return nil, 0, fmt.Errorf("pdfsigning: xref points to object %d %d, want %d %d", objectNumber, generation, ref.Object, ref.Generation)
+	}
+	start := skipPDFSpaces(input, pos+len("obj"))
+	if start+1 >= len(input) || input[start] != '<' || input[start+1] != '<' {
+		return nil, 0, errors.New("pdfsigning: object dictionary not found")
+	}
+	dictEnd, err := findDictionaryEndContext(ctx, input[start:])
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	if end < 0 {
-		return nil, errors.New("pdfsigning: object terminator not found")
+	endobj := skipPDFSpaces(input, start+dictEnd)
+	if !hasPDFKeywordAt(input, endobj, "endobj") {
+		return nil, 0, errors.New("pdfsigning: object terminator not found after dictionary")
 	}
-	object := input[offset : offset+end]
-	if err := validateObjectHeader(object, ref); err != nil {
-		return nil, err
-	}
-	start, err := indexBytesContext(ctx, object, []byte("<<"))
-	if err != nil {
-		return nil, err
-	}
-	if start < 0 {
-		return nil, errors.New("pdfsigning: object dictionary not found")
-	}
-	dictEnd, err := findDictionaryEndContext(ctx, object[start:])
-	if err != nil {
-		return nil, err
-	}
-	return object[start : start+dictEnd], nil
+	return input[start : start+dictEnd], start, nil
 }
 
 func validateObjectHeader(object []byte, ref pdfRef) error {
@@ -823,11 +949,15 @@ func addDictEntries(dict []byte, entries ...pdfDictEntry) ([]byte, error) {
 	insert := make([]pdfDictEntry, 0, len(entries))
 	extra := 0
 	for _, entry := range entries {
-		if findPDFName(dict, entry.key) >= 0 {
+		_, exists, err := findDictionaryEntryContext(context.Background(), dict, entry.key)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
 			if entry.skipExisting {
 				continue
 			}
-			return nil, fmt.Errorf("pdfsigning: existing %s dictionaries are not supported yet", entry.key)
+			return nil, fmt.Errorf("%w: existing %s dictionaries are not supported", ErrUnsupportedPDF, entry.key)
 		}
 		insert = append(insert, entry)
 		extra += len(entry.key) + len(entry.value) + 3
@@ -853,13 +983,16 @@ func addDictEntries(dict []byte, entries ...pdfDictEntry) ([]byte, error) {
 }
 
 func addAnnotation(dict []byte, annotationRef string) ([]byte, error) {
-	idx := findPDFName(dict, "/Annots")
-	if idx < 0 {
+	entry, exists, err := findDictionaryEntryContext(context.Background(), dict, "/Annots")
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
 		return addDictEntry(dict, "/Annots", "["+annotationRef+"]")
 	}
-	arrayStart := skipPDFSpaces(dict, idx+len("/Annots"))
+	arrayStart := entry.ValueStart
 	if arrayStart >= len(dict) || dict[arrayStart] != '[' {
-		return nil, errors.New("pdfsigning: referenced /Annots arrays are not supported yet")
+		return nil, fmt.Errorf("%w: referenced /Annots arrays are not supported", ErrUnsupportedPDF)
 	}
 	arrayEnd, err := findArrayEnd(dict[arrayStart:])
 	if err != nil {
@@ -880,14 +1013,14 @@ func findReference(dict []byte, key string) (pdfRef, bool) {
 }
 
 func findReferenceContext(ctx context.Context, dict []byte, key string) (pdfRef, bool, error) {
-	idx, err := findPDFNameContext(ctx, dict, key)
+	entry, exists, err := findDictionaryEntryContext(ctx, dict, key)
 	if err != nil {
 		return pdfRef{}, false, err
 	}
-	if idx < 0 {
+	if !exists {
 		return pdfRef{}, false, nil
 	}
-	valueStart := skipPDFSpaces(dict, idx+len(key))
+	valueStart := entry.ValueStart
 	obj, next, ok := parseLeadingInt(dict, valueStart)
 	if !ok {
 		return pdfRef{}, false, nil
@@ -904,28 +1037,36 @@ func findReferenceContext(ctx context.Context, dict []byte, key string) (pdfRef,
 }
 
 func findFirstKid(dict []byte) (pdfRef, bool) {
-	idx := findPDFName(dict, "/Kids")
-	if idx < 0 {
-		return pdfRef{}, false
+	ref, ok, _ := findFirstKidContext(context.Background(), dict)
+	return ref, ok
+}
+
+func findFirstKidContext(ctx context.Context, dict []byte) (pdfRef, bool, error) {
+	entry, exists, err := findDictionaryEntryContext(ctx, dict, "/Kids")
+	if err != nil {
+		return pdfRef{}, false, err
 	}
-	pos := skipPDFSpaces(dict, idx+len("/Kids"))
+	if !exists {
+		return pdfRef{}, false, nil
+	}
+	pos := entry.ValueStart
 	if pos >= len(dict) || dict[pos] != '[' {
-		return pdfRef{}, false
+		return pdfRef{}, false, nil
 	}
 	pos = skipPDFSpaces(dict, pos+1)
 	obj, next, ok := parseLeadingInt(dict, pos)
 	if !ok {
-		return pdfRef{}, false
+		return pdfRef{}, false, nil
 	}
 	gen, next, ok := parseLeadingInt(dict, skipPDFSpaces(dict, next))
 	if !ok {
-		return pdfRef{}, false
+		return pdfRef{}, false, nil
 	}
 	refMarker := skipPDFSpaces(dict, next)
 	if refMarker >= len(dict) || dict[refMarker] != 'R' || !isPDFTokenEnd(dict, refMarker+1) {
-		return pdfRef{}, false
+		return pdfRef{}, false, nil
 	}
-	return pdfRef{Object: obj, Generation: gen}, true
+	return pdfRef{Object: obj, Generation: gen}, true, nil
 }
 
 func findArrayEnd(input []byte) (int, error) {
@@ -940,6 +1081,7 @@ func findArrayEndContext(ctx context.Context, input []byte) (int, error) {
 	inString := false
 	stringDepth := 0
 	inHex := false
+	inComment := false
 	escaped := false
 	for i := 0; i < len(input); i++ {
 		if i%1024 == 0 {
@@ -948,6 +1090,12 @@ func findArrayEndContext(ctx context.Context, input []byte) (int, error) {
 			}
 		}
 		b := input[i]
+		if inComment {
+			if b == '\r' || b == '\n' {
+				inComment = false
+			}
+			continue
+		}
 		if inString {
 			if escaped {
 				escaped = false
@@ -974,6 +1122,8 @@ func findArrayEndContext(ctx context.Context, input []byte) (int, error) {
 			continue
 		}
 		switch b {
+		case '%':
+			inComment = true
 		case '(':
 			inString = true
 			stringDepth = 0
@@ -1030,127 +1180,67 @@ func findStringEndContext(ctx context.Context, input []byte) (int, error) {
 	return 0, errors.New("pdfsigning: string end not found")
 }
 
-func findPDFName(input []byte, name string) int {
-	idx, _ := findPDFNameContext(context.Background(), input, name)
-	return idx
-}
-
-func findPDFNameContext(ctx context.Context, input []byte, name string) (int, error) {
-	start := 0
-	for {
-		if err := signContextErr(ctx); err != nil {
-			return -1, err
-		}
-		idx, err := indexPDFNameContext(ctx, input, name, start)
-		if err != nil {
-			return -1, err
-		}
-		if idx < 0 {
-			return -1, nil
-		}
-		if isPDFNameBoundary(input, idx, len(name)) {
-			return idx, nil
-		}
-		start = idx + len(name)
+func matchPDFNameToken(input []byte, name string) (int, bool) {
+	if len(input) == 0 || input[0] != '/' || len(name) < 2 || name[0] != '/' {
+		return 0, false
 	}
-}
-
-func hasPDFNameContext(ctx context.Context, input []byte, name string) (bool, error) {
-	idx, err := findPDFNameContext(ctx, input, name)
-	return idx >= 0, err
-}
-
-func countPDFName(input []byte, name string) int {
-	count := 0
-	start := 0
-	for {
-		idx := indexPDFName(input, name, start)
-		if idx < 0 {
-			return count
-		}
-		if isPDFNameBoundary(input, idx, len(name)) {
-			count++
-		}
-		start = idx + len(name)
-	}
-}
-
-func findLastPDFName(input []byte, name string) int {
-	end := len(input)
-	for {
-		idx := lastIndexPDFName(input[:end], name)
-		if idx < 0 {
-			return -1
-		}
-		if isPDFNameBoundary(input, idx, len(name)) {
-			return idx
-		}
-		end = idx
-	}
-}
-
-func indexPDFName(input []byte, name string, start int) int {
-	idx, _ := indexPDFNameContext(context.Background(), input, name, start)
-	return idx
-}
-
-func indexPDFNameContext(ctx context.Context, input []byte, name string, start int) (int, error) {
-	if name == "" || start >= len(input) {
-		return -1, nil
-	}
-	for i := start; i+len(name) <= len(input); i++ {
-		if (i-start)%1024 == 0 {
-			if err := signContextErr(ctx); err != nil {
-				return -1, err
+	rawPos := 1
+	namePos := 1
+	for rawPos < len(input) && isPDFNameChar(input[rawPos]) {
+		decoded := input[rawPos]
+		if decoded == '#' {
+			if rawPos+2 >= len(input) {
+				return 0, false
 			}
+			high, highOK := pdfHexDigit(input[rawPos+1])
+			low, lowOK := pdfHexDigit(input[rawPos+2])
+			if !highOK || !lowOK {
+				return 0, false
+			}
+			decoded = high<<4 | low
+			rawPos += 3
+		} else {
+			rawPos++
 		}
-		if input[i] != name[0] {
-			continue
+		if namePos >= len(name) || decoded != name[namePos] {
+			return 0, false
 		}
-		if matchPDFName(input[i:], name) {
-			return i, nil
-		}
+		namePos++
 	}
-	return -1, nil
+	return rawPos, namePos == len(name)
 }
 
-func lastIndexPDFName(input []byte, name string) int {
-	if name == "" || len(name) > len(input) {
-		return -1
+func pdfHexDigit(value byte) (byte, bool) {
+	switch {
+	case value >= '0' && value <= '9':
+		return value - '0', true
+	case value >= 'a' && value <= 'f':
+		return value - 'a' + 10, true
+	case value >= 'A' && value <= 'F':
+		return value - 'A' + 10, true
+	default:
+		return 0, false
 	}
-	for i := len(input) - len(name); i >= 0; i-- {
-		if input[i] != name[0] {
-			continue
-		}
-		if matchPDFName(input[i:], name) {
-			return i
-		}
-	}
-	return -1
-}
-
-func matchPDFName(input []byte, name string) bool {
-	if len(input) < len(name) {
-		return false
-	}
-	for i := 0; i < len(name); i++ {
-		if input[i] != name[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func isPDFNameBoundary(input []byte, idx, length int) bool {
-	if idx > 0 && isPDFNameChar(input[idx-1]) {
-		return false
-	}
-	after := idx + length
-	return after >= len(input) || !isPDFNameChar(input[after])
 }
 
 func isPDFNameChar(b byte) bool {
 	return b > 0x20 && !pdfDelimiter[b]
+}
+
+func pdfNameValueEquals(value []byte, name string) bool {
+	valueStart := skipPDFSpaces(value, 0)
+	length, ok := matchPDFNameToken(value[valueStart:], name)
+	return ok && skipPDFSpaces(value, valueStart+length) == len(value)
+}
+
+func hasPDFKeywordAt(input []byte, pos int, keyword string) bool {
+	if pos < 0 || pos+len(keyword) > len(input) || !bytes.Equal(input[pos:pos+len(keyword)], []byte(keyword)) {
+		return false
+	}
+	if pos > 0 && !isPDFTokenEnd(input, pos-1) {
+		return false
+	}
+	return isPDFTokenEnd(input, pos+len(keyword))
 }
 
 func skipPDFSpaces(input []byte, pos int) int {
@@ -1158,6 +1248,10 @@ func skipPDFSpaces(input []byte, pos int) int {
 		switch input[pos] {
 		case 0, '\t', '\n', '\f', '\r', ' ':
 			pos++
+		case '%':
+			for pos < len(input) && input[pos] != '\r' && input[pos] != '\n' {
+				pos++
+			}
 		default:
 			return pos
 		}

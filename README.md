@@ -3,7 +3,7 @@
 [![CI][badge-ci]][ci]
 [![MIT licensed][badge-mit]][license]
 [![GoDoc][badge-doc]][godoc]
-<img src="https://raw.githubusercontent.com/cssbruno/gopdfkit/master/assets/static/image/gopher_pdf.png" alt="GoPDFKit gopher" width="160">
+<img src="https://raw.githubusercontent.com/cssbruno/gopdfkit/main/assets/static/image/gopher_pdf.png" alt="GoPDFKit gopher" width="160">
 ## Benchmark Snapshot
 
 Local benchmark run on `Apple M2` with 8 logical CPUs. Results below are from:
@@ -103,6 +103,11 @@ Ownership rules and the public-surface policy are documented in
 ```shell
 go get github.com/cssbruno/gopdfkit@latest
 ```
+
+GoPDFKit requires Go 1.26.5 or newer within the supported Go toolchain. The
+library is pure Go; CI runs the test suite on Linux and cross-builds for
+Windows. Other Go-supported platforms may compile but are not part of the
+compatibility guarantee.
 
 ## Quick Start
 
@@ -262,8 +267,10 @@ against vulnerabilities in a downstream viewer or in image/font decoders.
 
 Imported page support is intentionally narrow: classic xref-table PDFs,
 unencrypted documents, and pages whose content streams are unfiltered or
-FlateDecode-compressed. PDFs that use xref streams or object streams are
-reported as unsupported.
+FlateDecode-compressed. Streams require a valid, bounded direct or indirect
+`/Length`; unsupported filter chains and non-null decode parameters fail
+closed. PDFs that use xref streams or object streams are reported as
+unsupported.
 
 Password protection applies to newly generated output. The permission flags are
 advisory because PDF readers decide how strictly to enforce them.
@@ -339,7 +346,6 @@ Runnable examples live under [`examples/`][examples]. They write PDFs to
 | UTF-8 font | `go run ./examples/utf8-font` | `utf8-font.pdf` |
 | Signing | `go run ./examples/sign-pdf` | `signed.pdf` |
 | Rendering gallery | `go run ./examples/rendering-gallery` | many generated PDFs |
-| External QR code module | `cd examples/external-qr-code && go run .` | `qr-code.pdf` |
 
 Use `Document.RegisterQRCodePNG` for QR-code verification blocks.
 
@@ -349,7 +355,7 @@ Use `Document.RegisterQRCodePNG` for QR-code verification blocks.
 document   main PDF generation API
 layout     typed block model, geometry, pagination, and measurement primitives
 font       font parsing and JSON font definition generation
-importpdf  small wrappers around imported-page APIs
+importpdf  bounded classic-xref parser and imported-page object resolver
 inspect    lightweight PDF structure, stream, page, and text inspection
 pdfcdr     PDF Content Disarm and Reconstruction
 sign       CMS-first PDF signing and signature verification
@@ -359,7 +365,6 @@ Useful repository directories:
 
 ```text
 cmd/fontmaker          font definition generator
-cmd/list               generated-reference listing utility
 examples/              runnable examples
 assets/static/         checked-in fonts, images, and text fixtures
 assets/generated/pdf/  generated PDFs
@@ -513,6 +518,16 @@ traversal to `sign.DefaultMaxXrefChainLength`, and declared/scanned xref entries
 to `sign.DefaultMaxXrefEntries`. Set the corresponding fields in `sign.Options`
 to apply smaller application limits.
 
+Standalone signing intentionally accepts a narrow source-PDF subset: unencrypted
+classic-xref PDFs with a direct page annotation array and no existing AcroForm.
+Xref/object streams, encrypted input, existing form dictionaries, and indirect
+`/Annots` arrays return an error matching `sign.ErrUnsupportedPDF`. These inputs
+are rejected rather than partially rewritten. Verification helpers inspect only
+signature values reachable through the current catalog's AcroForm field tree;
+unreferenced signature dictionaries are ignored. They select the latest
+supported signature revision; use `ExtractSingleSignature` when exactly one
+signature is required.
+
 Serialized template decoding rejects trailing data and applies both per-node
 and aggregate limits. `TemplateDecodeOptions` exposes `MaxNodes`,
 `MaxTotalImages`, and `MaxTotalPages` for applications that need tighter
@@ -558,6 +573,18 @@ if err != nil {
 
 `input` can be a path, byte slice, reader, or parsed `*importpdf.Source`.
 `SanitizeFile` provides the corresponding atomic file-to-file workflow.
+Zero-value `pdfcdr.Options` still apply bounded defaults for source size,
+referenced objects, pages, decoded content, retained resources, output size,
+and object count. The resource budgets count each retained shared object once,
+not once per page. Sanitization is byte-idempotent for supported input, so a
+second pass produces the same output. Unsupported or ambiguous PDF syntax is
+rejected instead of copied through.
+
+CDR removes document actions, annotations, forms, JavaScript, embedded files,
+external references, metadata, and unreachable objects. It preserves page
+painting commands and reachable fonts, images, color spaces, patterns, and
+other rendering resources. This is a structural reconstruction guarantee, not
+malware detection or a substitute for isolating the downstream PDF viewer.
 
 ## Errors
 
@@ -640,4 +667,4 @@ Dave Barnes, Brigham Thompson, Joe Westcott, and Benoit KUGLER.
 [examples]: examples
 [fpdf-site]: http://www.fpdf.org/
 [godoc]: https://pkg.go.dev/github.com/cssbruno/gopdfkit
-[license]: https://raw.githubusercontent.com/cssbruno/gopdfkit/master/LICENSE
+[license]: https://raw.githubusercontent.com/cssbruno/gopdfkit/main/LICENSE

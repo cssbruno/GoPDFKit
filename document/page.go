@@ -260,6 +260,7 @@ func (f *Document) addPageFormatRotation(orientationStr string, size Size, rotat
 		style += "S"
 	}
 	fontsize := f.fontSizePt
+	ws := f.ws
 	lw := f.lineWidth
 	dc := f.color.draw
 	fc := f.color.fill
@@ -276,6 +277,10 @@ func (f *Document) addPageFormatRotation(orientationStr string, size Size, rotat
 		f.endpage()
 	}
 	f.beginpage(orientationStr, size, rotation)
+	f.ws = 0
+	if ws != 0 {
+		f.SetWordSpacing(ws)
+	}
 	f.outf("%d J", f.capStyle)
 	f.outf("%d j", f.joinStyle)
 	f.lineWidth = lw
@@ -327,6 +332,9 @@ func (f *Document) addPageFormatRotation(orientationStr string, size Size, rotat
 	}
 	f.color.text = tc
 	f.colorFlag = cf
+	if f.ws != ws {
+		f.SetWordSpacing(ws)
+	}
 }
 
 // AddPage adds a new page to the document. If a page is already present, the

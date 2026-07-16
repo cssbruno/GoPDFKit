@@ -86,18 +86,16 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 	if f.y+h > f.pageBreakTrigger && !f.inHeader && !f.inFooter && f.acceptPageBreak() {
 		x := f.x
 		ws := f.ws
-		if ws > 0 {
-			f.ws = 0
-			f.out("0 Tw")
+		if ws != 0 {
+			f.SetWordSpacing(0)
 		}
 		f.addPageFormatRotation(f.curOrientation, f.curPageSize, f.curRotation)
 		if f.err != nil {
 			return
 		}
 		f.x = x
-		if ws > 0 {
-			f.ws = ws
-			f.outf("%.3f Tw", ws*k)
+		if ws != 0 {
+			f.SetWordSpacing(ws)
 		}
 	}
 	if w == 0 {
@@ -146,7 +144,7 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 		textWidthSet := false
 		getTextWidth := func() float64 {
 			if !textWidthSet {
-				textWidth = f.GetStringWidth(txtStr)
+				textWidth = f.textWidthWithWordSpacing(txtStr)
 				textWidthSet = true
 			}
 			return textWidth
@@ -189,7 +187,8 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 				justifyText = reverseText(justifyText)
 			}
 			t, justify := utf8JustificationWords(justifyText)
-			if justify {
+			manualWordSpacing := f.ws != 0 && strings.Contains(justifyText, " ")
+			if justify || manualWordSpacing {
 				txtStr = justifyText
 				wmax := int(math.Ceil((w - 2*f.cMargin) * 1000 / f.fontSize))
 				space := appendEscapedUTF16BE(nil, " ", false, f.currentFont.usedRunes)
@@ -198,7 +197,10 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 				s = appendPDFNumberSpace(s, (f.x+dx)*k, 2)
 				s = appendPDFNumberSpace(s, (f.h-(f.y+.5*h+.3*f.fontSize))*k, 2)
 				s = append(s, "Td ["...)
-				shift := float64((wmax - strSize)) / float64(len(t)-1)
+				shift := f.wordSpacingFontUnits()
+				if alignStr == "J" && justify {
+					shift = float64(wmax-strSize) / float64(len(t)-1)
+				}
 				numt := len(t)
 				var smallEncodedWords [4]struct {
 					word    string
@@ -237,8 +239,7 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 					}
 					return dst
 				}
-				for i := range numt {
-					tx := t[i]
+				for i, tx := range t {
 					s = append(s, '(')
 					s = appendEncodedWord(s, tx)
 					s = append(s, ") "...)
@@ -249,7 +250,13 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 						s = append(s, ") "...)
 					}
 				}
-				s = append(s, "] TJ ET"...)
+				s = append(s, "] TJ ET "...)
+				s = appendPDFNumberSpace(s, f.ws*k, 5)
+				s = append(s, "Tw"...)
+				if alignStr == "J" && justify {
+					textWidth = w - 2*f.cMargin
+					textWidthSet = true
+				}
 				renderedJustified = true
 			}
 		}
@@ -272,22 +279,13 @@ func (f *Document) CellFormat(w, h float64, txtStr, borderStr string, ln int, al
 			}
 			s = append(s, ")Tj ET"...)
 		}
-		var decorationBlankCount int
-		decorationBlankCountSet := false
-		decorationWidth := func() float64 {
-			if !decorationBlankCountSet {
-				decorationBlankCount = blankCount(txtStr)
-				decorationBlankCountSet = true
-			}
-			return getTextWidth() + f.ws*float64(decorationBlankCount)
-		}
 		if f.underline {
 			s = append(s, ' ')
-			s = f.appendUnderlineRectWidth(s, f.x+dx, f.y+dy+.5*h+.3*f.fontSize, decorationWidth())
+			s = f.appendUnderlineRectWidth(s, f.x+dx, f.y+dy+.5*h+.3*f.fontSize, getTextWidth())
 		}
 		if f.strikeout {
 			s = append(s, ' ')
-			s = f.appendStrikeoutRectWidth(s, f.x+dx, f.y+dy+.5*h+.3*f.fontSize, decorationWidth())
+			s = f.appendStrikeoutRectWidth(s, f.x+dx, f.y+dy+.5*h+.3*f.fontSize, getTextWidth())
 		}
 		if f.colorFlag {
 			s = append(s, " Q"...)

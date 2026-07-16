@@ -144,7 +144,11 @@ func (html *HTML) WriteContext(ctx context.Context, lineHt float64, htmlStr stri
 // WriteCompiled renders a precompiled HTML fragment. Use CompileHTML when the
 // same HTML is rendered repeatedly across documents.
 func (html *HTML) WriteCompiled(lineHt float64, compiled *CompiledHTML) {
-	if compiled != nil && compiled.sourceBytes > html.maxHTMLBytes() {
+	if compiled == nil {
+		html.pdf.SetError(errors.New("compiled HTML is nil"))
+		return
+	}
+	if compiled.sourceBytes > html.maxHTMLBytes() {
 		html.pdf.SetError(ErrHTMLLimitExceeded)
 		return
 	}
@@ -489,18 +493,27 @@ func parseHTMLBoxLength(value string, pdf *Document, relative float64) (float64,
 	if err != nil || !isFiniteFloat(n) || n < 0 {
 		return 0, false
 	}
+	unitScale := 1.0
+	if pdf != nil {
+		unitScale = pdf.k
+		if !isFiniteFloat(unitScale) || unitScale <= 0 {
+			return 0, false
+		}
+	}
+	var result float64
 	switch unit {
 	case "pt":
-		return n / pdf.k, true
+		result = n / unitScale
 	case "mm":
-		return n * 72 / 25.4 / pdf.k, true
+		result = n * 72 / 25.4 / unitScale
 	case "cm":
-		return n * 72 / 2.54 / pdf.k, true
+		result = n * 72 / 2.54 / unitScale
 	case "in":
-		return n * 72 / pdf.k, true
+		result = n * 72 / unitScale
 	default:
-		return n * 72 / 96 / pdf.k, true
+		result = n * 72 / 96 / unitScale
 	}
+	return result, isFiniteFloat(result)
 }
 
 func isFiniteFloat(n float64) bool {

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -908,7 +909,7 @@ func (f *Document) putfonts() {
 				fontName := "utf8" + font.Name
 				usedRunes := font.usedRunes
 				delete(usedRunes, 0)
-				utf8FontStream := font.utf8File.GenerateCutFont(usedRunes)
+				utf8FontStream := font.utf8File.GenerateCutFont(usedRunes, f.resourceCachePolicy == ResourceCacheShared)
 				if font.utf8File.fileReader.err != nil {
 					f.err = font.utf8File.fileReader.err
 					return
@@ -976,8 +977,12 @@ func (f *Document) putfonts() {
 				f.endPDFObject()
 				cidToGidMap := make([]byte, 256*256*2)
 				for cc, glyph := range CodeSignDictionary {
-					cidToGidMap[cc*2] = byte(glyph >> 8)
-					cidToGidMap[cc*2+1] = byte(glyph & 0xFF)
+					if cc < 0 || cc > math.MaxUint16 || glyph < 0 || glyph > math.MaxUint16 {
+						f.err = errors.New("UTF-8 font CID-to-glyph mapping exceeds uint16 range")
+						return
+					}
+					cidToGidMap[cc*2] = byte(glyph >> 8)     // #nosec G115 -- Glyph is explicitly bounded to uint16 above.
+					cidToGidMap[cc*2+1] = byte(glyph & 0xFF) // #nosec G115 -- Glyph is explicitly bounded to uint16 above.
 				}
 				cidToGidMap = f.compressBytes(cidToGidMap)
 				if f.err != nil {

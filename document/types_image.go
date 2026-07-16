@@ -111,7 +111,7 @@ func hashImageString(h hash.Hash, tag byte, value string) {
 func hashImageInt(h hash.Hash, tag byte, value int) {
 	var scratch [9]byte
 	scratch[0] = tag
-	binary.BigEndian.PutUint64(scratch[1:], uint64(int64(value)))
+	binary.BigEndian.PutUint64(scratch[1:], uint64(int64(value))) // #nosec G115 -- Stable image hashes deliberately preserve signed int bits.
 	h.Write(scratch[:])
 }
 

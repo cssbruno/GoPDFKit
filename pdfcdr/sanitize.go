@@ -73,6 +73,13 @@ var removedObjectTypes = map[string]bool{
 	"XRef":         true,
 }
 
+var rejectedExternalKeys = map[string]bool{
+	"F":            true,
+	"FDecodeParms": true,
+	"FFilter":      true,
+	"Ref":          true,
+}
+
 // Values of these resource dictionary entries are keyed by names chosen by the
 // PDF producer. A rendering resource may legitimately be named /A, /F,
 // /OpenAction, or any other name that has structural meaning elsewhere.
@@ -93,6 +100,15 @@ type pdfValueScanner struct {
 	pos              int
 	depth            int
 	resourceNameRefs map[refKey]bool
+	normalRefCounts  map[refKey]int
+	rootLength       []byte
+	rootLengthSeen   bool
+}
+
+type sanitizedPDFObject struct {
+	value            []byte
+	resourceNameRefs map[refKey]bool
+	normalRefs       map[refKey]bool
 }
 
 func sanitizePDFObject(data []byte) ([]byte, error) {
@@ -101,22 +117,62 @@ func sanitizePDFObject(data []byte) ([]byte, error) {
 }
 
 func sanitizePDFObjectWithContext(data []byte, preserveKeys bool) ([]byte, map[refKey]bool, error) {
-	data = bytes.TrimSpace(data)
+	result, err := sanitizePDFObjectWithReferences(data, preserveKeys)
+	return result.value, result.resourceNameRefs, err
+}
+
+func sanitizePDFObjectWithReferences(data []byte, preserveKeys bool) (sanitizedPDFObject, error) {
 	if len(data) == 0 {
-		return []byte("null"), nil, nil
+		return sanitizedPDFObject{value: []byte("null")}, nil
 	}
-	scanner := &pdfValueScanner{data: data, resourceNameRefs: make(map[refKey]bool)}
+	scanner := &pdfValueScanner{
+		data:             data,
+		resourceNameRefs: make(map[refKey]bool),
+		normalRefCounts:  make(map[refKey]int),
+	}
 	value, end, drop, err := scanner.sanitizeValueWithDictionaryKeys(preserveKeys)
 	if err != nil {
-		return nil, nil, err
+		return sanitizedPDFObject{}, err
 	}
 	if drop {
-		return []byte("null"), nil, nil
+		return sanitizedPDFObject{value: []byte("null")}, nil
 	}
-	// Preserve a stream body byte-for-byte. It is not a PDF value and parsing
-	// it as one could mistake arbitrary image or font bytes for syntax.
-	value = append(value, data[end:]...)
-	return value, scanner.resourceNameRefs, nil
+	tail := &pdfValueScanner{data: data, pos: end}
+	tail.skipSpace()
+	if tail.pos < len(data) {
+		// Preserve a validated stream suffix byte-for-byte. It is not a PDF
+		// value and parsing it as one could mistake image or font bytes for
+		// syntax, but arbitrary trailing bytes must never be accepted as a
+		// stream implicitly.
+		if err := validatePDFStreamSuffix(data, tail.pos, scanner.rootLength, scanner.rootLengthSeen); err != nil {
+			return sanitizedPDFObject{}, err
+		}
+		value = append(value, data[end:]...)
+	}
+	// Classify references from the sanitized value rather than the hostile
+	// source. References in entries that were removed above must not remain
+	// reachable or create false role conflicts.
+	classifier := &pdfValueScanner{
+		data:             value,
+		resourceNameRefs: make(map[refKey]bool),
+		normalRefCounts:  make(map[refKey]int),
+	}
+	if _, _, drop, err := classifier.sanitizeValueWithDictionaryKeys(preserveKeys); err != nil {
+		return sanitizedPDFObject{}, fmt.Errorf("classify sanitized PDF references: %w", err)
+	} else if drop {
+		return sanitizedPDFObject{}, errors.New("sanitized PDF value retained an active object")
+	}
+	normalRefs := make(map[refKey]bool, len(classifier.normalRefCounts))
+	for ref, count := range classifier.normalRefCounts {
+		if count > 0 {
+			normalRefs[ref] = true
+		}
+	}
+	return sanitizedPDFObject{
+		value:            value,
+		resourceNameRefs: classifier.resourceNameRefs,
+		normalRefs:       normalRefs,
+	}, nil
 }
 
 func (s *pdfValueScanner) sanitizeValue() ([]byte, int, bool, error) {
@@ -151,7 +207,11 @@ func (s *pdfValueScanner) sanitizeValueWithDictionaryKeys(preserveKeys bool) ([]
 		}
 		end = indirectReferenceEnd(s.data, start, end)
 		s.pos = end
-		return append([]byte(nil), s.data[start:end]...), end, false, nil
+		value := append([]byte(nil), s.data[start:end]...)
+		if ref, ok := singleIndirectRefKey(value); ok {
+			s.normalRefCounts[ref]++
+		}
+		return value, end, false, nil
 	}
 }
 
@@ -183,21 +243,65 @@ func (s *pdfValueScanner) sanitizeDict(preserveKeys bool) ([]byte, int, bool, er
 		keyTokenStart := s.pos
 		keyStart := s.pos + 1
 		keyEnd := s.nameEnd()
-		key := string(s.data[keyStart:keyEnd])
+		key, err := canonicalPDFName(s.data[keyStart:keyEnd])
+		if err != nil {
+			return nil, s.pos, false, err
+		}
 		keyBytes := append([]byte(nil), s.data[keyTokenStart:keyEnd]...)
 		s.pos = keyEnd
 		valueStart := s.pos
-		preserveChildKeys := resourceNameDictionaryKeys[key]
+		// Once a dictionary is known to contain producer-chosen resource names,
+		// none of those names are structural even if one happens to be /Font,
+		// /XObject, or another resource-category spelling.
+		preserveChildKeys := !preserveKeys && resourceNameDictionaryKeys[key]
 		value, _, valueDrop, err := s.sanitizeValueWithDictionaryKeys(preserveChildKeys)
 		if err != nil {
 			return nil, s.pos, false, fmt.Errorf("PDF dictionary key /%s: %w", key, err)
 		}
+		if s.depth == 1 && key == "Length" {
+			if s.rootLengthSeen {
+				return nil, s.pos, false, errors.New("PDF stream dictionary contains duplicate Length entries")
+			}
+			s.rootLengthSeen = true
+			s.rootLength = append([]byte(nil), value...)
+		}
 		if preserveChildKeys {
 			if ref, ok := singleIndirectRefKey(value); ok {
 				s.resourceNameRefs[ref] = true
+				if count := s.normalRefCounts[ref]; count <= 1 {
+					delete(s.normalRefCounts, ref)
+				} else {
+					s.normalRefCounts[ref] = count - 1
+				}
 			}
 		}
-		valueIsAction := pdfValueIsName(s.data, valueStart, removedActionNames)
+		valueIsAction, err := pdfValueIsName(s.data, valueStart, removedActionNames)
+		if err != nil {
+			return nil, s.pos, false, fmt.Errorf("PDF dictionary key /%s: %w", key, err)
+		}
+		if !preserveKeys && rejectedExternalKeys[key] {
+			return nil, s.pos, false, fmt.Errorf("disallowed PDF external resource key /%s", key)
+		}
+		if !preserveKeys && key == "Subtype" {
+			if _, indirect := singleIndirectRefKey(value); indirect {
+				return nil, s.pos, false, errors.New("indirect PDF /Subtype values are not allowed")
+			}
+			postScript, err := pdfValueIsName(s.data, valueStart, map[string]bool{"PS": true})
+			if err != nil {
+				return nil, s.pos, false, fmt.Errorf("PDF dictionary key /Subtype: %w", err)
+			}
+			if postScript {
+				return nil, s.pos, false, errors.New("disallowed PostScript XObject")
+			}
+		}
+		if !preserveKeys && (key == "Type" || key == "S") {
+			if _, indirect := singleIndirectRefKey(value); indirect {
+				return nil, s.pos, false, fmt.Errorf("indirect PDF /%s values are not allowed", key)
+			}
+		}
+		if !preserveKeys && (key == "Filter" || key == "DecodeParms") && len(indirectRefKeys(value)) > 0 {
+			return nil, s.pos, false, fmt.Errorf("indirect PDF /%s values are not allowed", key)
+		}
 		if (!preserveKeys && removedPDFKeys[key]) || valueDrop || valueIsAction {
 			if !preserveKeys && (key == "Type" || key == "S") {
 				dropDict = true
@@ -206,7 +310,11 @@ func (s *pdfValueScanner) sanitizeDict(preserveKeys bool) ([]byte, int, bool, er
 		}
 		// /Type /Action is an action dictionary even when a producer uses a
 		// non-standard action key that is not in removedPDFKeys.
-		if !preserveKeys && key == "Type" && pdfValueIsName(s.data, valueStart, removedObjectTypes) {
+		removedType, err := pdfValueIsName(s.data, valueStart, removedObjectTypes)
+		if err != nil {
+			return nil, s.pos, false, fmt.Errorf("PDF dictionary key /Type: %w", err)
+		}
+		if !preserveKeys && key == "Type" && removedType {
 			dropDict = true
 			continue
 		}
@@ -329,15 +437,160 @@ func (s *pdfValueScanner) hexStringEnd() (int, error) {
 	return s.pos, errors.New("unterminated PDF hex string")
 }
 
-func pdfValueIsName(data []byte, start int, names map[string]bool) bool {
+func pdfValueIsName(data []byte, start int, names map[string]bool) (bool, error) {
 	s := &pdfValueScanner{data: data, pos: start}
 	s.skipSpace()
 	if s.pos >= len(data) || data[s.pos] != '/' {
-		return false
+		return false, nil
 	}
 	nameStart := s.pos + 1
 	nameEnd := s.nameEnd()
-	return names[string(data[nameStart:nameEnd])]
+	name, err := canonicalPDFName(data[nameStart:nameEnd])
+	if err != nil {
+		return false, err
+	}
+	return names[name], nil
+}
+
+func canonicalPDFName(raw []byte) (string, error) {
+	decoded := make([]byte, 0, len(raw))
+	for i := 0; i < len(raw); i++ {
+		if raw[i] != '#' {
+			decoded = append(decoded, raw[i])
+			continue
+		}
+		if i+2 >= len(raw) {
+			return "", errors.New("PDF name contains an invalid escape")
+		}
+		hi, ok := pdfHexValue(raw[i+1])
+		if !ok {
+			return "", errors.New("PDF name contains an invalid escape")
+		}
+		lo, ok := pdfHexValue(raw[i+2])
+		if !ok {
+			return "", errors.New("PDF name contains an invalid escape")
+		}
+		decoded = append(decoded, hi<<4|lo)
+		i += 2
+	}
+	return string(decoded), nil
+}
+
+func pdfHexValue(ch byte) (byte, bool) {
+	switch {
+	case ch >= '0' && ch <= '9':
+		return ch - '0', true
+	case ch >= 'A' && ch <= 'F':
+		return ch - 'A' + 10, true
+	case ch >= 'a' && ch <= 'f':
+		return ch - 'a' + 10, true
+	default:
+		return 0, false
+	}
+}
+
+func validatePDFStreamSuffix(data []byte, pos int, lengthValue []byte, lengthSeen bool) error {
+	if pos < 0 || pos > len(data)-len("stream") || string(data[pos:pos+len("stream")]) != "stream" {
+		return errors.New("unexpected bytes after PDF value")
+	}
+	pos += len("stream")
+	if pos+1 < len(data) && data[pos] == '\r' && data[pos+1] == '\n' {
+		pos += 2
+	} else if pos < len(data) && (data[pos] == '\r' || data[pos] == '\n') {
+		pos++
+	} else {
+		return errors.New("PDF stream marker is not followed by a line break")
+	}
+	if !lengthSeen {
+		return errors.New("PDF stream dictionary does not contain Length")
+	}
+	length, direct, err := directPDFStreamLength(lengthValue)
+	if err != nil {
+		return err
+	}
+	var end int
+	if direct {
+		if length > len(data)-pos {
+			return errors.New("PDF stream length exceeds object bounds")
+		}
+		end = skipPDFLineBreaks(data, pos+length)
+		if !hasPDFToken(data, end, "endstream") {
+			return errors.New("PDF stream length does not end at endstream")
+		}
+	} else {
+		end = firstPDFEndstream(data, pos)
+	}
+	if end < 0 {
+		return errors.New("PDF stream is missing endstream")
+	}
+	after := end + len("endstream")
+	tail := &pdfValueScanner{data: data, pos: after}
+	tail.skipSpace()
+	if tail.pos != len(data) {
+		return errors.New("unexpected bytes after PDF endstream")
+	}
+	return nil
+}
+
+func directPDFStreamLength(value []byte) (int, bool, error) {
+	if _, indirect := singleIndirectRefKey(value); indirect {
+		return 0, false, nil
+	}
+	value = bytes.TrimSpace(value)
+	if len(value) == 0 {
+		return 0, false, errors.New("PDF stream Length is not a nonnegative integer or indirect reference")
+	}
+	if value[0] == '+' {
+		value = value[1:]
+	}
+	if len(value) == 0 {
+		return 0, false, errors.New("PDF stream Length is invalid")
+	}
+	maximum := int(^uint(0) >> 1)
+	length := 0
+	for _, ch := range value {
+		if !pdfDigit(ch) {
+			return 0, false, errors.New("PDF stream Length is not a nonnegative integer or indirect reference")
+		}
+		digit := int(ch - '0')
+		if length > (maximum-digit)/10 {
+			return 0, false, errors.New("PDF stream Length is invalid")
+		}
+		length = length*10 + digit
+	}
+	return length, true, nil
+}
+
+func skipPDFLineBreaks(data []byte, pos int) int {
+	for pos < len(data) {
+		switch data[pos] {
+		case '\r':
+			pos++
+			if pos < len(data) && data[pos] == '\n' {
+				pos++
+			}
+		case '\n':
+			pos++
+		default:
+			return pos
+		}
+	}
+	return pos
+}
+
+func firstPDFEndstream(data []byte, start int) int {
+	for pos := start; pos <= len(data)-len("endstream"); {
+		relative := bytes.Index(data[pos:], []byte("endstream"))
+		if relative < 0 {
+			return -1
+		}
+		pos += relative
+		if hasPDFToken(data, pos, "endstream") && (pos == start || pdfSpace(data[pos-1])) {
+			return pos
+		}
+		pos++
+	}
+	return -1
 }
 
 type refKey struct {

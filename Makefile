@@ -12,7 +12,6 @@ NILAWAY := $(TOOLS_BIN)/nilaway
 GOSEC := $(TOOLS_BIN)/gosec
 GOVULNCHECK := $(TOOLS_BIN)/govulncheck
 BENCHSTAT := $(TOOLS_BIN)/benchstat
-GOSEC_EXCLUDES ?= G115
 COMPLIANCE_OUT ?= artifacts/compliance
 GENERATION_CORE_BENCH ?= BenchmarkGeneration(BaselineNoCompliance.*Concurrent40|TextConcurrent40|LongTextConcurrent40|UTF8Text.*Concurrent40|TextCompressionLevelConcurrent40|Images.*Concurrent40|SVGConcurrent40|TemplatesConcurrent40|ImportedPDFPagesConcurrent40|ProtectionConcurrent40|AttachmentsConcurrent40|HTMLLargeTableCompiled|HTMLWideTableCompiled)$
 BENCH ?= BenchmarkGenerationHTMLLargeTableCompiled$
@@ -25,7 +24,7 @@ PROFILE_BENCHTIME ?= 10s
 ALLOC_PROFILE_BENCHTIME ?= 20x
 TRACE_BENCHTIME ?= 1s
 
-.PHONY: all documentation cov coverage-check test race vet fmt-check check modules tools tools-clean benchstat lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget profile profile-cpu profile-alloc profile-block profile-mutex profile-trace compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate clean
+.PHONY: all documentation cov coverage-check test race vet fmt-check check modules tools tools-clean benchstat lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget profile profile-cpu profile-alloc profile-block profile-mutex profile-trace compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate pdf-reader-smoke clean
 
 cov : all
 	go test $(GO_PACKAGES) -coverprofile=coverage && go tool cover -html=coverage -o=coverage.html
@@ -81,24 +80,25 @@ lint : $(GOLANGCI_LINT)
 lin : lint
 
 nilaway : $(NILAWAY)
-	GOTOOLCHAIN="$(TOOLCHAIN)" "$(NILAWAY)" $(GO_PACKAGES)
+	GOTOOLCHAIN="$(TOOLCHAIN)" "$(NILAWAY)" -exclude-test-files $(GO_PACKAGES)
 
 gosec : $(GOSEC)
-	GOTOOLCHAIN="$(TOOLCHAIN)" "$(GOSEC)" -exclude="$(GOSEC_EXCLUDES)" $(GO_PACKAGES)
+	GOTOOLCHAIN="$(TOOLCHAIN)" "$(GOSEC)" $(GO_PACKAGES)
 
 gosev : gosec
 
 govulncheck : $(GOVULNCHECK)
 	GOTOOLCHAIN="$(TOOLCHAIN)" "$(GOVULNCHECK)" $(GO_PACKAGES)
 
-quality : check coverage-check lint gosec govulncheck
+quality : check coverage-check lint nilaway gosec govulncheck
 
 release-version :
 	@test -n "$(VERSION)" || (echo "VERSION is required, for example VERSION=v0.1.0" && exit 1)
-	@case "$(VERSION)" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "VERSION must look like vMAJOR.MINOR.PATCH, got $(VERSION)" && exit 1 ;; esac
+	@printf '%s\n' "$(VERSION)" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$$' || (echo "VERSION must look like vMAJOR.MINOR.PATCH, got $(VERSION)" && exit 1)
+	@test "$$(sed -n '1p' VERSION)" = "$(VERSION)" || (echo "VERSION file does not match requested release $(VERSION)" && exit 1)
 	@grep -q "^## $(VERSION)" CHANGELOG.md || (echo "CHANGELOG.md is missing section $(VERSION)" && exit 1)
 
-release-check : release-version check modules race coverage-check lint gosec govulncheck build
+release-check : release-version check modules race coverage-check lint nilaway gosec govulncheck build
 
 release-notes : release-version
 	@awk -v version="$(VERSION)" 'BEGIN { found = 0 } /^## / { if (found) exit; if ($$2 == version) found = 1 } found { print } END { if (!found) exit 1 }' CHANGELOG.md
@@ -165,6 +165,9 @@ compliance-baseline-check :
 compliance-regenerate :
 	COMPLIANCE_OUT="$(COMPLIANCE_OUT)" SRGB_ICC="$(SRGB_ICC)" VERAPDF="$(VERAPDF)" PDFUA_CHECKER="$(PDFUA_CHECKER)" ARLINGTON_CHECKER="$(ARLINGTON_CHECKER)" ARLINGTON_URL="$(ARLINGTON_URL)" ARLINGTON_PROFILE="$(ARLINGTON_PROFILE)" ARLINGTON_REPORT_DIR="$(ARLINGTON_REPORT_DIR)" REQUIRE_COMPLIANCE_TOOLS="$(REQUIRE_COMPLIANCE_TOOLS)" sh tools/compliance-regenerate.sh
 
+pdf-reader-smoke :
+	sh tools/pdf-reader-smoke.sh
+
 clean :
 	rm -f coverage.html coverage
-	rm -f assets/generated/pdf/*.pdf
+	rm -rf artifacts

@@ -178,7 +178,7 @@ func (f *Document) applyExternalImageMask(info *ImageInfo, maskPath string, opti
 			r, g, b, a := color.RGBA()
 			gray := (299*r + 587*g + 114*b) / 1000
 			gray = gray * a / 0xffff
-			raw.WriteByte(byte(gray >> 8))
+			raw.WriteByte(byte(gray >> 8)) // #nosec G115 -- RGBA normalization guarantees the high component is in [0,255].
 		}
 	}
 	info.smask = f.compressBytes(raw.Bytes())

@@ -20,7 +20,13 @@ type tokenCheck struct {
 }
 
 func main() {
-	paths, err := expandArgs(os.Args[1:])
+	args := os.Args
+	if len(args) > 1 {
+		args = args[1:]
+	} else {
+		args = nil
+	}
+	paths, err := expandArgs(args)
 	if err != nil {
 		exitErr(err)
 	}
@@ -60,15 +66,27 @@ func checkPDF(path string) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", path, err)
 	}
-	text := string(data)
-	base := filepath.Base(path)
-	if strings.Contains(base, "pdfua2") {
-		return checkPDFUA2(path, text)
-	}
+	return checkPDFText(path, filepath.Base(path), string(data))
+}
+
+func checkPDFText(path, base, text string) error {
+	matchedProfile := false
 	if strings.Contains(base, "pdfa4") {
-		return checkPDFA4(path, text)
+		matchedProfile = true
+		if err := checkPDFA4(path, text); err != nil {
+			return err
+		}
 	}
-	return checkCommon(path, text)
+	if strings.Contains(base, "pdfua2") {
+		matchedProfile = true
+		if err := checkPDFUA2(path, text); err != nil {
+			return err
+		}
+	}
+	if !matchedProfile {
+		return checkCommon(path, text)
+	}
+	return nil
 }
 
 func checkCommon(path, text string) error {

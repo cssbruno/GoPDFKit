@@ -8,7 +8,11 @@ root intentionally contains no facade package.
 
 - `document` owns PDF construction and the compatibility facade.
 - `layout` owns renderer-independent public document models and measurement.
-- `importpdf`, `inspect`, `sign`, and `font` remain independent capabilities.
+- `importpdf` owns the bounded classic-xref parser and imported-page model.
+- `inspect` and `pdfcdr` consume `importpdf`; inspection reports source
+  structure, while CDR creates a new document from a constrained safe subset.
+- `sign` owns classic-xref incremental signing and CMS verification, and
+  `font` owns standalone font-definition generation.
 - `internal/layoutgeom` owns pure geometry shared by typed and HTML renderers.
 
 Lower-level packages must not import `document`. This keeps the dependency graph
@@ -36,6 +40,12 @@ A `Document` is a mutable, single-owner build session and is not safe for
 concurrent calls. Create one document per independently generated PDF.
 `CompiledHTML`, `ImageCache`, and `FontCache` are the reusable cross-document
 inputs and carry their own concurrency guarantees.
+
+An opened `importpdf.Source` is immutable after parsing. Concurrent page
+resolution is supported and serialized around its bounded object cache;
+`PageRef` also coordinates lazy content decoding so cancellation does not
+poison later retries. Package-level inspection, CDR, and signing operations do
+not share mutable document state between calls.
 
 Each compiled HTML render creates a private render session that owns its style,
 element, and list stacks. Render-local state must not be added to `CompiledHTML`

@@ -52,6 +52,9 @@ var (
 	ErrMissingSigner = errors.New("pdfsigning: signer is required")
 	// ErrMissingCertificate is returned when no signing certificate is configured.
 	ErrMissingCertificate = errors.New("pdfsigning: certificate is required")
+	// ErrUnsupportedPDF is returned when a source PDF uses a structure that the
+	// intentionally narrow signing parser cannot preserve safely.
+	ErrUnsupportedPDF = errors.New("pdfsigning: unsupported PDF structure")
 )
 
 // Options configures a PDF signature.
@@ -408,7 +411,7 @@ func buildIncrementContext(cancelCtx context.Context, ctx pdfContext, options pr
 	if err := signContextErr(cancelCtx); err != nil {
 		return signingIncrement{}, err
 	}
-	rootOffset, err := ctx.Xref.objectOffsetContext(cancelCtx, ctx.Root.Object)
+	rootOffset, err := ctx.Xref.objectOffsetContext(cancelCtx, ctx.Root)
 	if err != nil {
 		return signingIncrement{}, fmt.Errorf("read root object: %w", err)
 	}
@@ -416,7 +419,7 @@ func buildIncrementContext(cancelCtx context.Context, ctx pdfContext, options pr
 	if err != nil {
 		return signingIncrement{}, fmt.Errorf("read root object: %w", err)
 	}
-	pageOffset, err := ctx.Xref.objectOffsetContext(cancelCtx, ctx.Page.Object)
+	pageOffset, err := ctx.Xref.objectOffsetContext(cancelCtx, ctx.Page)
 	if err != nil {
 		return signingIncrement{}, fmt.Errorf("read page object: %w", err)
 	}
@@ -606,10 +609,17 @@ func writeFilePrivate(outputPath string, data []byte) error {
 		_ = tmp.Close()
 		return err
 	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, outputPath)
+	if err := os.Rename(tmpName, outputPath); err != nil {
+		return err
+	}
+	return syncOutputDirectory(dir)
 }
 
 func pdfString(value string) string {

@@ -234,6 +234,9 @@ func (f *Document) RegisterImageOptionsError(fileStr string, options ImageOption
 	if f.err != nil {
 		return nil, f.err
 	}
+	if registered == nil {
+		return nil, errors.New("image cache registration returned nil image info")
+	}
 	if len(registered.smask) > 0 {
 		f.requirePDFVersion("1.4")
 	}

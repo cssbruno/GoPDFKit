@@ -111,10 +111,20 @@ func (c *SourceCache) evictLocked() {
 		var oldestKey sourceFileCacheKey
 		var oldestEntry *sourceFileCacheEntry
 		for key, entry := range c.files {
+			if entry == nil {
+				delete(c.files, key)
+				continue
+			}
 			if oldestEntry == nil || entry.used < oldestEntry.used {
 				oldestKey = key
 				oldestEntry = entry
 			}
+		}
+		if oldestEntry == nil {
+			// The cache only stores non-nil entries, but recover a consistent
+			// empty state if an invariant violation is observed.
+			c.bytes = 0
+			return
 		}
 		delete(c.files, oldestKey)
 		c.bytes -= oldestEntry.size

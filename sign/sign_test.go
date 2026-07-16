@@ -150,6 +150,10 @@ func TestExtractSignatureAndEmbedDetachedCMS(t *testing.T) {
 	if extracted.MaxSignatureBytes() < len(extracted.CMS) {
 		t.Fatalf("MaxSignatureBytes() = %d, CMS len = %d", extracted.MaxSignatureBytes(), len(extracted.CMS))
 	}
+	if _, err := ExtractByteRange(signedPDF); err != nil {
+		t.Fatalf("ExtractByteRange(after extract) error = %v", err)
+	}
+	inputBeforeCMS := sha256.Sum256(signedPDF)
 
 	cms, err := CreateCMS(extracted.SignedContent, CMSOptions{
 		Signer:          signer,
@@ -160,6 +164,12 @@ func TestExtractSignatureAndEmbedDetachedCMS(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("CreateCMS() error = %v", err)
+	}
+	if got := sha256.Sum256(signedPDF); got != inputBeforeCMS {
+		t.Fatal("CreateCMS() mutated its PDF input")
+	}
+	if _, err := ExtractByteRange(signedPDF); err != nil {
+		t.Fatalf("ExtractByteRange(before embed) error = %v", err)
 	}
 
 	embedded, err := EmbedDetachedCMS(signedPDF, cms)
@@ -258,7 +268,16 @@ func TestByteRangeHelpersAndExtractSingleSignature(t *testing.T) {
 }
 
 func TestExtractSingleSignatureRejectsAmbiguousByteRanges(t *testing.T) {
-	pdf := []byte("%PDF-1.7\n1 0 obj\n<< /ByteRange [ 0 10 20 10 ] /Contents<00> >>\nendobj\n2 0 obj\n<< /ByteRange [ 0 10 20 10 ] /Contents<00> >>\nendobj\n")
+	pdf := minimalClassicPDF(
+		"<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+		"<< /Fields [5 0 R 7 0 R] >>",
+		"<< /FT /Sig /V 6 0 R >>",
+		"<< /Type /Sig /ByteRange [0 10 20 10] /Contents <00> >>",
+		"<< /FT /Sig /V 8 0 R >>",
+		"<< /Type /Sig /ByteRange [0 10 20 10] /Contents <00> >>",
+	)
 
 	if count := SignatureCount(pdf); count != 2 {
 		t.Fatalf("SignatureCount() = %d, want 2", count)
@@ -267,6 +286,414 @@ func TestExtractSingleSignatureRejectsAmbiguousByteRanges(t *testing.T) {
 	_, err := ExtractSingleSignature(pdf)
 	if err == nil || !strings.Contains(err.Error(), "ambiguous ByteRange markers") {
 		t.Fatalf("ExtractSingleSignature() error = %v, want ambiguous ByteRange error", err)
+	}
+}
+
+func TestVerifyRejectsCryptographicallyValidUnreferencedSignature(t *testing.T) {
+	cert, signer := testSigner(t)
+	truststore := x509.NewCertPool()
+	truststore.AddCert(cert)
+	signedPDF, err := Bytes(testPDFBytes(t), Options{
+		Signer:      signer,
+		Certificate: cert,
+		SigningTime: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("Bytes() error = %v", err)
+	}
+	extracted, err := ExtractSignature(signedPDF)
+	if err != nil {
+		t.Fatalf("ExtractSignature() error = %v", err)
+	}
+	hidden := bytes.Replace(append([]byte(nil), signedPDF...), []byte("/AcroForm"), []byte("/Unused__"), 1)
+	if bytes.Equal(hidden, signedPDF) {
+		t.Fatal("test setup did not remove the catalog AcroForm reference")
+	}
+	content := signedContent(hidden, extracted.ByteRange)
+	cms, err := CreateCMS(content, CMSOptions{
+		Signer:          signer,
+		Certificate:     cert,
+		DigestAlgorithm: crypto.SHA256,
+		Detached:        true,
+		SigningTime:     time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("CreateCMS() error = %v", err)
+	}
+	hexStart := extracted.ContentsStart + 1
+	hexEnd := extracted.ContentsEnd - 1
+	if hex.EncodedLen(len(cms)) > hexEnd-hexStart {
+		t.Fatal("test CMS does not fit the signature placeholder")
+	}
+	written := hex.Encode(hidden[hexStart:hexEnd], cms)
+	for i := hexStart + written; i < hexEnd; i++ {
+		hidden[i] = '0'
+	}
+	if result, err := VerifyDetachedCMS(cms, content, truststore); err != nil || !result.ValidSignature || !result.TrustedSigner {
+		t.Fatalf("hidden CMS setup is not cryptographically valid: result=%#v err=%v", result, err)
+	}
+	if got := SignatureCount(hidden); got != 0 {
+		t.Fatalf("SignatureCount(hidden) = %d, want 0", got)
+	}
+	if _, err := ExtractSignature(hidden); err == nil || !strings.Contains(err.Error(), "ByteRange not found") {
+		t.Fatalf("ExtractSignature(hidden) error = %v, want ByteRange not found", err)
+	}
+	if _, err := Verify(hidden, truststore); err == nil {
+		t.Fatal("Verify() accepted a cryptographically valid but unreachable signature dictionary")
+	}
+}
+
+func TestExtractByteRangeRequiresItsOwnContentsGap(t *testing.T) {
+	build := func(lastLength int) []byte {
+		return minimalClassicPDF(
+			"<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+			"<< /Fields [5 0 R] >>",
+			"<< /FT /Sig /V 6 0 R >>",
+			fmt.Sprintf("<< /Type /Sig /ByteRange [%020d %020d %020d %020d] /Contents <00> >>", 0, 1, 2, lastLength),
+		)
+	}
+	pdf := build(0)
+	pdf = build(len(pdf) - 2)
+	_, err := ExtractByteRange(pdf)
+	if err == nil || !strings.Contains(err.Error(), "does not select its signature Contents") {
+		t.Fatalf("ExtractByteRange() error = %v, want Contents association error", err)
+	}
+}
+
+func TestSignatureDiscoveryTraversesInheritedFieldsAndDirectValues(t *testing.T) {
+	pdf := minimalClassicPDF(
+		"<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+		"<< /Fields 5 0 R >>",
+		"[6 0 R]",
+		"<< /FT /Sig /Kids [7 0 R] >>",
+		"<< /V << /Type /Sig /ByteRange [0 1 2 0] /Contents <00> >> >>",
+	)
+	if got := SignatureCount(pdf); got != 1 {
+		t.Fatalf("SignatureCount() = %d, want 1 for inherited /FT and direct /V", got)
+	}
+}
+
+func TestSignatureDiscoveryAllowsOmittedTypeButRejectsConflictingType(t *testing.T) {
+	build := func(signature string, extraObjects ...string) []byte {
+		objects := []string{
+			"<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+			"<< /Fields [5 0 R] >>",
+			"<< /FT /Sig /V 6 0 R >>",
+			signature,
+		}
+		return minimalClassicPDF(append(objects, extraObjects...)...)
+	}
+	withoutType := build("<< /ByteRange [0 1 2 0] /Contents <00> >>")
+	if got := SignatureCount(withoutType); got != 1 {
+		t.Fatalf("SignatureCount(without /Type) = %d, want 1", got)
+	}
+	nullType := build("<< /Type null /ByteRange [0 1 2 0] /Contents <00> >>")
+	if got := SignatureCount(nullType); got != 1 {
+		t.Fatalf("SignatureCount(/Type null) = %d, want 1", got)
+	}
+	conflictingType := build("<< /Type /Action /ByteRange [0 1 2 0] /Contents <00> >>")
+	if got := SignatureCount(conflictingType); got != 0 {
+		t.Fatalf("SignatureCount(conflicting /Type) = %d, want 0", got)
+	}
+	indirectType := build("<< /Type 7 0 R /ByteRange [0 1 2 0] /Contents <00> >>", "/S#69g")
+	if _, err := scanSignatureDictionaries(indirectType); err == nil || !strings.Contains(err.Error(), "invalid signature /Type") {
+		t.Fatalf("scanSignatureDictionaries(indirect /Type) error = %v, want invalid signature /Type", err)
+	}
+}
+
+func TestSignatureDiscoveryTreatsNullTraversalEntriesAsAbsent(t *testing.T) {
+	tests := []struct {
+		name string
+		pdf  []byte
+		want int
+	}{
+		{
+			name: "direct null catalog AcroForm",
+			pdf: minimalClassicPDF(
+				"<< /Type /Catalog /Pages 2 0 R /AcroForm null >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+			),
+		},
+		{
+			name: "indirect null catalog AcroForm",
+			pdf: minimalClassicPDF(
+				"<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+				"null",
+			),
+		},
+		{
+			name: "direct null AcroForm Fields",
+			pdf: minimalClassicPDF(
+				"<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+				"<< /Fields null >>",
+			),
+		},
+		{
+			name: "indirect null AcroForm Fields",
+			pdf: minimalClassicPDF(
+				"<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+				"<< /Fields 5 0 R >>",
+				"null",
+			),
+		},
+		{
+			name: "direct null Kids keeps terminal field and sibling",
+			pdf: minimalClassicPDF(
+				"<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+				"<< /Fields [5 0 R 6 0 R] >>",
+				"<< /FT /Sig /V 7 0 R /Kids null >>",
+				"<< /FT /Sig /V 8 0 R >>",
+				"<< /ByteRange [0 1 2 0] /Contents <00> >>",
+				"<< /ByteRange [0 1 2 0] /Contents <00> >>",
+			),
+			want: 2,
+		},
+		{
+			name: "indirect null Kids keeps terminal field and sibling",
+			pdf: minimalClassicPDF(
+				"<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+				"<< /Fields [5 0 R 6 0 R] >>",
+				"<< /FT /Sig /V 7 0 R /Kids 9 0 R >>",
+				"<< /FT /Sig /V 8 0 R >>",
+				"<< /ByteRange [0 1 2 0] /Contents <00> >>",
+				"<< /ByteRange [0 1 2 0] /Contents <00> >>",
+				"null",
+			),
+			want: 2,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			signatures, err := scanSignatureDictionaries(test.pdf)
+			if err != nil {
+				t.Fatalf("scanSignatureDictionaries() error = %v", err)
+			}
+			if len(signatures) != test.want {
+				t.Fatalf("len(signatures) = %d, want %d", len(signatures), test.want)
+			}
+		})
+	}
+}
+
+func TestSignatureDiscoverySkipsNullValuesAndKeepsLaterSignatures(t *testing.T) {
+	pdf := minimalClassicPDF(
+		"<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+		"<< /Fields [5 0 R 6 0 R 7 0 R] >>",
+		"<< /FT /Sig /V null >>",
+		"<< /FT /Sig /V 9 0 R >>",
+		"<< /FT /Sig /V 8 0 R >>",
+		"<< /ByteRange [0 1 2 0] /Contents <00> >>",
+		"null",
+	)
+	if got := SignatureCount(pdf); got != 1 {
+		t.Fatalf("SignatureCount() = %d, want 1 after direct and indirect null fields", got)
+	}
+}
+
+func TestSignatureDiscoveryInheritsValueIndependentlyFromFieldType(t *testing.T) {
+	build := func(fields string, fieldObjects ...string) []byte {
+		objects := []string{
+			"<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+			"<< /Fields [" + fields + "] >>",
+		}
+		return minimalClassicPDF(append(objects, fieldObjects...)...)
+	}
+	tests := []struct {
+		name           string
+		pdf            []byte
+		wantSignatures int
+		wantObject     int
+	}{
+		{
+			name: "parent value child type",
+			pdf: build("5 0 R",
+				"<< /V 7 0 R /Kids [6 0 R] >>",
+				"<< /FT /Sig >>",
+				"<< /ByteRange [0 1 2 0] /Contents <00> >>",
+			),
+			wantSignatures: 1,
+		},
+		{
+			name: "direct null child value inherits parent value",
+			pdf: build("5 0 R",
+				"<< /V 7 0 R /Kids [6 0 R] >>",
+				"<< /FT /Sig /V null >>",
+				"<< /ByteRange [0 1 2 0] /Contents <00> >>",
+			),
+			wantSignatures: 1,
+			wantObject:     7,
+		},
+		{
+			name: "indirect null child value inherits parent value",
+			pdf: build("5 0 R",
+				"<< /V 7 0 R /Kids [6 0 R] >>",
+				"<< /FT /Sig /V 8 0 R >>",
+				"<< /ByteRange [0 1 2 0] /Contents <00> >>",
+				"null",
+			),
+			wantSignatures: 1,
+			wantObject:     7,
+		},
+		{
+			name: "direct null field type inherits parent type",
+			pdf: build("5 0 R",
+				"<< /FT /Sig /V 7 0 R /Kids [6 0 R] >>",
+				"<< /FT null >>",
+				"<< /ByteRange [0 1 2 0] /Contents <00> >>",
+			),
+			wantSignatures: 1,
+			wantObject:     7,
+		},
+		{
+			name: "indirect null field type inherits parent type",
+			pdf: build("5 0 R",
+				"<< /FT /Sig /V 7 0 R /Kids [6 0 R] >>",
+				"<< /FT 8 0 R >>",
+				"<< /ByteRange [0 1 2 0] /Contents <00> >>",
+				"null",
+			),
+			wantSignatures: 1,
+			wantObject:     7,
+		},
+		{
+			name: "dictionary child override",
+			pdf: build("5 0 R",
+				"<< /V /Bogus /Kids [6 0 R] >>",
+				"<< /FT /Sig /V 7 0 R >>",
+				"<< /ByteRange [0 1 2 0] /Contents <00> >>",
+			),
+			wantSignatures: 1,
+		},
+		{
+			name: "child value overrides signature parent",
+			pdf: build("5 0 R",
+				"<< /FT /Sig /V 7 0 R /Kids [6 0 R] >>",
+				"<< /V 8 0 R >>",
+				"<< /ByteRange [0 1 2 0] /Contents <00> >>",
+				"<< /ByteRange [0 1 2 0] /Contents <00> >>",
+			),
+			wantSignatures: 1,
+			wantObject:     8,
+		},
+		{
+			name: "indirect signature type",
+			pdf: build("5 0 R",
+				"<< /FT 7 0 R /V 6 0 R >>",
+				"<< /ByteRange [0 1 2 0] /Contents <00> >>",
+				"/S#69g",
+			),
+			wantSignatures: 1,
+		},
+		{
+			name: "indirect conflicting type override",
+			pdf: build("5 0 R",
+				"<< /FT /Sig /Kids [6 0 R] >>",
+				"<< /FT 8 0 R /V 7 0 R >>",
+				"<< /ByteRange [0 1 2 0] /Contents <00> >>",
+				"/Tx",
+			),
+			wantSignatures: 0,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			signatures, err := scanSignatureDictionaries(test.pdf)
+			if err != nil {
+				t.Fatalf("scanSignatureDictionaries() error = %v", err)
+			}
+			if len(signatures) != test.wantSignatures {
+				t.Fatalf("len(signatures) = %d, want %d", len(signatures), test.wantSignatures)
+			}
+			if test.wantObject != 0 && len(signatures) == 1 {
+				marker := []byte(fmt.Sprintf("%d 0 obj\n", test.wantObject))
+				objectStart := bytes.Index(test.pdf, marker)
+				if objectStart < 0 {
+					t.Fatalf("test object %d not found", test.wantObject)
+				}
+				wantStart := objectStart + len(marker)
+				if signatures[0].Start != wantStart {
+					t.Fatalf("signature start = %d, want child override object start %d", signatures[0].Start, wantStart)
+				}
+			}
+		})
+	}
+}
+
+func TestSignatureDiscoveryRejectsMalformedNonNullValue(t *testing.T) {
+	pdf := minimalClassicPDF(
+		"<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+		"<< /Fields [5 0 R] >>",
+		"<< /FT /Sig /V /Bogus >>",
+	)
+	if _, err := ExtractSignature(pdf); err == nil || !strings.Contains(err.Error(), "invalid signature field /V") {
+		t.Fatalf("ExtractSignature() error = %v, want invalid /V error", err)
+	}
+}
+
+func TestSignatureDiscoveryRejectsCyclicFieldTrees(t *testing.T) {
+	pdf := minimalClassicPDF(
+		"<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
+		"<< /Fields [5 0 R] >>",
+		"<< /FT /Sig /Kids [5 0 R] >>",
+	)
+	if _, err := ExtractSignature(pdf); err == nil || !strings.Contains(err.Error(), "cycle or duplicate") {
+		t.Fatalf("ExtractSignature() error = %v, want cyclic field-tree error", err)
+	}
+}
+
+func TestVerificationIgnoresSignatureNamesOutsideSignatureDictionaries(t *testing.T) {
+	cert, signer := testSigner(t)
+	truststore := x509.NewCertPool()
+	truststore.AddCert(cert)
+	fake := "<< /Type /Sig /ByteRange [0 1 2 3] /Contents <00> >>"
+	directPayload := fake + "\n"
+	directStream := fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", len(directPayload), directPayload)
+	indirectPayload := "embedded endstream token\n" + fake + "\n"
+	indirectStream := "<< /Length 6 0 R >>\nstream\n" + indirectPayload + "endstream"
+	input := minimalClassicPDF(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Note ("+fake+") % "+fake+"\n >>",
+		directStream,
+		indirectStream,
+		fmt.Sprintf("%d", len(indirectPayload)),
+		"<< /ByteRange [0 1 2 3] /Contents <00> >>",
+	)
+
+	signedPDF, err := Bytes(input, Options{Signer: signer, Certificate: cert, SigningTime: time.Now().UTC()})
+	if err != nil {
+		t.Fatalf("Bytes() error = %v", err)
+	}
+	if got := SignatureCount(signedPDF); got != 1 {
+		t.Fatalf("SignatureCount() = %d, want 1", got)
+	}
+	if _, err := Verify(signedPDF, truststore); err != nil {
+		t.Fatalf("Verify() error = %v", err)
 	}
 }
 
@@ -870,11 +1297,6 @@ func TestSigningScannersHonorContextInsideLoops(t *testing.T) {
 	input := []byte("<<" + strings.Repeat("/LongName 1 ", 4096))
 	if _, err := findDictionaryEndContext(ctx, input); !errors.Is(err, context.Canceled) {
 		t.Fatalf("findDictionaryEndContext() error = %v, want context.Canceled", err)
-	}
-
-	ctx = &errAfterContext{Context: context.Background(), remaining: 1}
-	if _, err := findPDFNameContext(ctx, []byte(strings.Repeat("/Other 1 ", 4096)), "/Missing"); !errors.Is(err, context.Canceled) {
-		t.Fatalf("findPDFNameContext() error = %v, want context.Canceled", err)
 	}
 
 	ctx = &errAfterContext{Context: context.Background(), remaining: 1}

@@ -93,10 +93,7 @@ func (f *Document) SetFont(familyStr, styleStr string, size float64) {
 		}
 		_, ok = f.coreFonts[familyStr]
 		if ok {
-			if familyStr == "symbol" {
-				familyStr = "zapfdingbats"
-			}
-			if familyStr == "zapfdingbats" {
+			if familyStr == "symbol" || familyStr == "zapfdingbats" {
 				styleStr = ""
 			}
 			fontKey = familyStr + styleStr

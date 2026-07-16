@@ -5,6 +5,7 @@ package layout
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 	"unicode"
@@ -41,9 +42,11 @@ func NewDocumentModel(title string, blocks ...Block) *LayoutDocument {
 	return doc
 }
 
-// AddBlock appends a non-nil block to the document body.
+// AddBlock appends a non-nil block to the document body. Built-in block
+// pointers are stored in their canonical value form; typed nils are ignored.
 func (d *LayoutDocument) AddBlock(block Block) {
-	if block == nil {
+	block, ok := NormalizeBlock(block)
+	if !ok {
 		return
 	}
 	d.Body = append(d.Body, block)
@@ -112,10 +115,71 @@ const (
 )
 
 // Block identifies a supported shared document block. Rendering and
-// measurement accept the concrete block types declared by this package;
-// implementations from other packages are reported as unsupported.
+// measurement accept the concrete block values declared by this package and
+// non-nil pointers to them. Implementations from other packages are reported
+// as unsupported by the built-in renderer.
 type Block interface {
 	DocumentBlockKind() BlockKind
+}
+
+// NormalizeBlock returns the canonical value form of a block. The built-in
+// block pointers are accepted for caller convenience and copied to values;
+// slice, byte, and style-reference fields retain their documented ownership
+// semantics. Nil interfaces and typed nils are treated alike and return
+// ok=false. Implementations from other packages pass through unchanged and
+// remain subject to renderer support.
+func NormalizeBlock(block Block) (_ Block, ok bool) {
+	if block == nil {
+		return nil, false
+	}
+	value := reflect.ValueOf(block)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		if value.IsNil() {
+			return nil, false
+		}
+	}
+
+	switch block := block.(type) {
+	case *ParagraphBlock:
+		return *block, true
+	case *HeadingBlock:
+		return *block, true
+	case *ListBlock:
+		return *block, true
+	case *TableBlock:
+		return *block, true
+	case *ImageBlock:
+		return *block, true
+	case *SignatureRowBlock:
+		return *block, true
+	case *MetadataGridBlock:
+		return *block, true
+	case *QRVerificationBlock:
+		return *block, true
+	case *NoteBoxBlock:
+		return *block, true
+	case *SectionBlock:
+		return *block, true
+	case *ClauseBlock:
+		return *block, true
+	case *PageBreakBlock:
+		return *block, true
+	default:
+		return block, true
+	}
+}
+
+// NormalizeBlocks removes nil blocks and converts built-in block pointers to
+// value snapshots while preserving order.
+func NormalizeBlocks(blocks []Block) []Block {
+	normalized := make([]Block, 0, len(blocks))
+	for _, block := range blocks {
+		if block, ok := NormalizeBlock(block); ok {
+			normalized = append(normalized, block)
+		}
+	}
+	return normalized
 }
 
 // DocumentColor stores an optional RGB color.

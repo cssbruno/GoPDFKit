@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-output=$(go test ./document ./importpdf ./inspect ./sign -cover)
+output=$(go test ./document ./importpdf ./inspect ./sign ./pdfcdr ./layout ./font -cover)
 printf '%s\n' "$output"
 
 printf '%s\n' "$output" | awk '
@@ -10,6 +10,9 @@ BEGIN {
 	minimum["github.com/cssbruno/gopdfkit/importpdf"] = 60
 	minimum["github.com/cssbruno/gopdfkit/inspect"] = 55
 	minimum["github.com/cssbruno/gopdfkit/sign"] = 70
+	minimum["github.com/cssbruno/gopdfkit/pdfcdr"] = 80
+	minimum["github.com/cssbruno/gopdfkit/layout"] = 45
+	minimum["github.com/cssbruno/gopdfkit/font"] = 65
 }
 $1 == "ok" {
 	pkg = $2

@@ -822,15 +822,7 @@ func htmlTableLayoutRows(rows []htmlTableRow) []htmlTableLayoutRow {
 			rowspan := cell.rowspan
 			endCol := col + colspan
 			if endCol > len(occupied) {
-				oldLen := len(occupied)
-				if cap(occupied) < endCol {
-					next := make([]int, endCol)
-					copy(next, occupied)
-					occupied = next
-				} else {
-					occupied = occupied[:endCol]
-					clear(occupied[oldLen:])
-				}
+				occupied = append(occupied, make([]int, endCol-len(occupied))...)
 			}
 			layoutRow.cells = append(layoutRow.cells, htmlTableCellPlacement{cellIndex: cellIndex, row: rowIndex, col: col, colspan: colspan, rowspan: rowspan})
 			for j := col; j < endCol; j++ {

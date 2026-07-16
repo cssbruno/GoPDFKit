@@ -89,6 +89,23 @@ func TestMeasureTextRestoresPDFFontState(t *testing.T) {
 	}
 }
 
+func TestMeasureTextDoesNotWritePageContent(t *testing.T) {
+	pdf := MustNew()
+	pdf.SetFont("Courier", "I", 10)
+	pdf.AddPage()
+	before := pdf.pages[pdf.page].String()
+	ctx := newMeasureContext(pdf, 25)
+
+	_ = layout.MeasureBlock(ctx, layout.ParagraphBlock{
+		Segments: []layout.TextSegment{{Text: "styled"}},
+		Style:    layout.TextStyle{FontFamily: "Helvetica", FontSize: 14, Bold: true},
+	})
+
+	if after := pdf.pages[pdf.page].String(); after != before {
+		t.Fatalf("measurement wrote page content:\nbefore: %q\nafter:  %q", before, after)
+	}
+}
+
 func TestMeasureHeadingKeepsWithNext(t *testing.T) {
 	pdf := MustNew()
 	pdf.SetFont("Helvetica", "", 12)

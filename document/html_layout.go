@@ -83,6 +83,9 @@ func htmlBlockHasBoxStyle(el HTMLSegmentType, cssRules []htmlCSSRule, ancestors 
 	if htmlHasBoxEdgeDeclaration(decl, "padding") || htmlHasBoxEdgeDeclaration(decl, "margin") || htmlHasBreakDeclaration(decl) || htmlHasBorderDeclaration(decl) {
 		return true
 	}
+	if shadow := strings.TrimSpace(decl["box-shadow"]); shadow != "" && !strings.EqualFold(shadow, "none") {
+		return true
+	}
 	style := htmlBlockBoxFromDeclarations(el, decl, nil, 0)
 	return style.border.enabled || style.background.Set || style.radius.hasAny() || style.shadow.enabled || style.padding.hasAny() || style.margin.hasAny() || style.breakBefore || style.breakAfter || style.breakInsideAvoid
 }
@@ -90,6 +93,9 @@ func htmlBlockHasBoxStyle(el HTMLSegmentType, cssRules []htmlCSSRule, ancestors 
 func (html *HTML) blockHasBoxStyle(el HTMLSegmentType, cssRules []htmlCSSRule, ancestors ...HTMLSegmentType) bool {
 	decl := html.elementDeclarations(el, cssRules, ancestors...)
 	if htmlHasBoxEdgeDeclaration(decl, "padding") || htmlHasBoxEdgeDeclaration(decl, "margin") || htmlHasBreakDeclaration(decl) || htmlHasBorderDeclaration(decl) {
+		return true
+	}
+	if shadow := strings.TrimSpace(decl["box-shadow"]); shadow != "" && !strings.EqualFold(shadow, "none") {
 		return true
 	}
 	style := htmlBlockBoxFromDeclarations(el, decl, nil, 0)

@@ -2,7 +2,9 @@
 // Copyright (c) 2026 cssBruno
 
 // Command compliance-fixtures generates candidate PDFs for external standards
-// validators. The generated files are intentionally small and deterministic.
+// validators. Unsigned fixtures use deterministic document metadata. Signed
+// fixtures intentionally use fresh fixture-only key material, so their bytes
+// differ between runs even though their document structure is stable.
 package main
 
 import (
@@ -240,7 +242,7 @@ func complianceTaggedHTMLFragment() string {
 }
 
 func baseDocument(fontPath, boldFontPath string) *document.Document {
-	pdf := document.MustNew()
+	pdf := document.MustNew(document.WithDeterministicOutput())
 	pdf.SetCompression(false)
 	pdf.SetCatalogSort(true)
 	pdf.AddUTF8Font("DejaVu", "", fontPath)

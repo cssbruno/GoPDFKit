@@ -21,7 +21,7 @@ func (f *Document) Text(x, y float64, txtStr string) {
 	reverseUTF8 := utf8Text && f.isRTL
 	if f.isCurrentUTF8 {
 		if f.isRTL {
-			x -= f.GetStringWidth(txtStr)
+			x -= f.textWidthWithWordSpacing(txtStr)
 		}
 	}
 	buf := make([]byte, 0, len(txtStr)*2+len(f.color.text.str)+96)
@@ -33,17 +33,27 @@ func (f *Document) Text(x, y float64, txtStr string) {
 	buf = append(buf, "BT "...)
 	buf = appendPDFNumberSpace(buf, x*f.k, 2)
 	buf = appendPDFNumberSpace(buf, (f.h-y)*f.k, 2)
-	buf = append(buf, "Td ("...)
-	if utf8Text {
-		if reverseUTF8 {
-			buf = appendEscapedUTF16BEReverse(buf, txtStr, false, f.currentFont.usedRunes)
-		} else {
-			buf = appendEscapedUTF16BE(buf, txtStr, false, f.currentFont.usedRunes)
-		}
+	buf = append(buf, "Td "...)
+	if utf8Text && f.ws != 0 && strings.Contains(txtStr, " ") {
+		buf = append(buf, "0 Tw "...)
+		buf = f.appendWordSpacedUTF8Text(buf, txtStr, reverseUTF8)
+		buf = append(buf, " ET "...)
+		buf = appendPDFNumberSpace(buf, f.ws*f.k, 5)
+		buf = append(buf, "Tw"...)
 	} else {
-		buf = appendEscapedPDFCellText(buf, txtStr)
+		buf = append(buf, '(')
+		if utf8Text {
+			if reverseUTF8 {
+				buf = appendEscapedUTF16BEReverse(buf, txtStr, false, f.currentFont.usedRunes)
+			} else {
+				buf = appendEscapedUTF16BE(buf, txtStr, false, f.currentFont.usedRunes)
+			}
+		} else {
+			buf = appendEscapedPDFCellText(buf, txtStr)
+		}
+		buf = append(buf, ") Tj"...)
+		buf = append(buf, " ET"...)
 	}
-	buf = append(buf, ") Tj ET"...)
 	if f.underline && txtStr != "" {
 		buf = append(buf, ' ')
 		buf = f.appendUnderlineRect(buf, x, y, txtStr)
@@ -58,11 +68,50 @@ func (f *Document) Text(x, y float64, txtStr string) {
 	f.outTaggedContent(buf, tag)
 }
 
-// SetWordSpacing sets spacing between words of following text. See the
-// WriteAligned() example for a demonstration of its use.
+func (f *Document) appendWordSpacedUTF8Text(buf []byte, text string, reverse bool) []byte {
+	if reverse {
+		text = reverseText(text)
+	}
+	shift := -f.wordSpacingFontUnits()
+	buf = append(buf, '[')
+	for {
+		space := strings.IndexByte(text, ' ')
+		if space < 0 {
+			buf = append(buf, '(')
+			buf = appendEscapedUTF16BE(buf, text, false, f.currentFont.usedRunes)
+			buf = append(buf, ')')
+			break
+		}
+		buf = append(buf, '(')
+		buf = appendEscapedUTF16BE(buf, text[:space+1], false, f.currentFont.usedRunes)
+		buf = append(buf, ") "...)
+		buf = appendPDFNumberSpace(buf, shift, 5)
+		text = text[space+1:]
+	}
+	return append(buf, "] TJ"...)
+}
+
+// SetWordSpacing sets the spacing, in document units, added after ASCII space
+// characters in following text. The value must be finite; negative values
+// tighten spacing. The setting is preserved across page transitions, and text
+// layout and splitting account for it. GetStringWidth continues to report font
+// metric width only and therefore excludes this extra spacing. See the
+// WriteAligned example for a demonstration of its use.
 func (f *Document) SetWordSpacing(space float64) {
+	if f.err != nil {
+		return
+	}
+	scaledSpace := space * f.k
+	if !finiteNumbers(space, scaledSpace) {
+		f.SetErrorf("invalid word spacing: must be finite and within the supported numeric range")
+		return
+	}
+	f.ws = space
+	if f.state != documentStatePageOpen {
+		return
+	}
 	var scratch [32]byte
-	buf := appendPDFNumber(scratch[:0], space*f.k, 5)
+	buf := appendPDFNumber(scratch[:0], scaledSpace, 5)
 	buf = append(buf, " Tw"...)
 	f.outbytes(buf)
 }
@@ -99,7 +148,7 @@ func (f *Document) write(h float64, txtStr string, link int, linkStr string) {
 	}
 	if f.isCurrentUTF8 {
 		if s == " " {
-			f.x += f.GetStringWidth(s)
+			f.x += f.textWidthWithWordSpacing(s)
 			return
 		}
 		f.writeUTF8(h, s, link, linkStr, w, wmax)
@@ -111,6 +160,7 @@ func (f *Document) write(h float64, txtStr string, link int, linkStr string) {
 	j := 0
 	l := 0.0
 	nl := 1
+	wordSpacing := f.wordSpacingFontUnits()
 	for i < nb {
 		c := rune(s[i])
 		if c == '\n' {
@@ -129,6 +179,7 @@ func (f *Document) write(h float64, txtStr string, link int, linkStr string) {
 		}
 		if c == ' ' {
 			sep = i
+			l += wordSpacing
 		}
 		l += float64(f.currentFontRuneWidth(c))
 		if l > wmax {
@@ -174,6 +225,7 @@ func (f *Document) writeUTF8(h float64, s string, link int, linkStr string, w, w
 	j := 0
 	l := 0.0
 	nl := 1
+	wordSpacing := f.wordSpacingFontUnits()
 	for i < len(s) {
 		c, size := utf8.DecodeRuneInString(s[i:])
 		if size <= 0 {
@@ -196,6 +248,7 @@ func (f *Document) writeUTF8(h float64, s string, link int, linkStr string, w, w
 		}
 		if c == ' ' {
 			sep = i
+			l += wordSpacing
 		}
 		l += float64(f.currentFontRuneWidth(c))
 		if l > wmax {
@@ -293,7 +346,7 @@ func (f *Document) WriteAligned(width, lineHeight float64, textStr, alignStr str
 		}
 	}
 	for _, lineStr := range lines {
-		lineWidth := f.GetStringWidth(lineStr)
+		lineWidth := f.textWidthWithWordSpacing(lineStr)
 		switch alignStr {
 		case "C":
 			f.SetLeftMargin(lMargin + ((width - lineWidth) / 2))
@@ -341,7 +394,10 @@ func (f *Document) textstring(s string) string {
 func (f *Document) appendTextString(buf []byte, s string) []byte {
 	if f.protect.encrypted {
 		b := []byte(s)
-		f.protect.rc4(uint32(f.n), &b)
+		if err := f.protect.rc4(f.n, &b); err != nil {
+			f.SetError(err)
+			return buf
+		}
 		s = string(b)
 	}
 	buf = append(buf, '(')
@@ -379,6 +435,17 @@ func blankCount(str string) (count int) {
 	return
 }
 
+func (f *Document) wordSpacingFontUnits() float64 {
+	if f.fontSize == 0 {
+		return 0
+	}
+	return f.ws * 1000 / f.fontSize
+}
+
+func (f *Document) textWidthWithWordSpacing(text string) float64 {
+	return f.GetStringWidth(text) + f.ws*float64(blankCount(text))
+}
+
 // SetUnderlineThickness accepts a multiplier for adjusting the text underline
 // thickness, defaulting to 1. See SetUnderlineThickness example.
 func (f *Document) SetUnderlineThickness(thickness float64) {
@@ -386,7 +453,7 @@ func (f *Document) SetUnderlineThickness(thickness float64) {
 }
 
 func (f *Document) appendUnderlineRect(buf []byte, x, y float64, txt string) []byte {
-	return f.appendUnderlineRectWidth(buf, x, y, f.GetStringWidth(txt)+f.ws*float64(blankCount(txt)))
+	return f.appendUnderlineRectWidth(buf, x, y, f.textWidthWithWordSpacing(txt))
 }
 
 func (f *Document) appendUnderlineRectWidth(buf []byte, x, y, width float64) []byte {
@@ -396,7 +463,7 @@ func (f *Document) appendUnderlineRectWidth(buf []byte, x, y, width float64) []b
 }
 
 func (f *Document) appendStrikeoutRect(buf []byte, x, y float64, txt string) []byte {
-	return f.appendStrikeoutRectWidth(buf, x, y, f.GetStringWidth(txt)+f.ws*float64(blankCount(txt)))
+	return f.appendStrikeoutRectWidth(buf, x, y, f.textWidthWithWordSpacing(txt))
 }
 
 func (f *Document) appendStrikeoutRectWidth(buf []byte, x, y, width float64) []byte {
