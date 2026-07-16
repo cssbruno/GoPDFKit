@@ -56,6 +56,84 @@ func TestSanitizeRemovesActiveDocumentStructures(t *testing.T) {
 	}
 }
 
+func TestSanitizeRewritesRenderingResourceReferences(t *testing.T) {
+	clean, err := Sanitize(nonSequentialResourcePDF(t))
+	if err != nil {
+		t.Fatalf("Sanitize() error = %v", err)
+	}
+	pageSource, err := importpdf.OpenBytes(clean)
+	if err != nil {
+		t.Fatalf("reconstructed PDF cannot be imported: %v", err)
+	}
+	page, err := pageSource.Page(1, "MediaBox")
+	if err != nil {
+		t.Fatalf("reconstructed page resources cannot be resolved: %v", err)
+	}
+	if page.ObjectCount() != 2 {
+		t.Fatalf("reconstructed page object count = %d, want the resources and font objects", page.ObjectCount())
+	}
+}
+
+func TestSanitizeRewritesReferencesAfterStreamText(t *testing.T) {
+	for name, marker := range map[string]string{
+		"literal string": "(stream)",
+		"PDF name":       "/stream",
+	} {
+		t.Run(name, func(t *testing.T) {
+			clean, err := Sanitize(resourcePDFWithStreamText(t, marker))
+			if err != nil {
+				t.Fatalf("Sanitize() error = %v", err)
+			}
+			pageSource, err := importpdf.OpenBytes(clean)
+			if err != nil {
+				t.Fatalf("reconstructed PDF cannot be imported: %v", err)
+			}
+			page, err := pageSource.Page(1, "MediaBox")
+			if err != nil {
+				t.Fatalf("reconstructed page resources cannot be resolved: %v", err)
+			}
+			if page.ObjectCount() != 3 {
+				t.Fatalf("reconstructed page object count = %d, want resources, font, and descriptor objects", page.ObjectCount())
+			}
+		})
+	}
+}
+
+func TestSanitizePreservesRenderingResourceNames(t *testing.T) {
+	for _, indirect := range []bool{false, true} {
+		name := "direct"
+		if indirect {
+			name = "indirect"
+		}
+		t.Run(name, func(t *testing.T) {
+			clean, err := Sanitize(resourceNamesMatchingRemovedKeysPDF(t, indirect))
+			if err != nil {
+				t.Fatalf("Sanitize() error = %v", err)
+			}
+			pageSource, err := importpdf.OpenBytes(clean)
+			if err != nil {
+				t.Fatalf("reconstructed PDF cannot be imported: %v", err)
+			}
+			page, err := pageSource.Page(1, "MediaBox")
+			if err != nil {
+				t.Fatalf("reconstructed page resources cannot be resolved: %v", err)
+			}
+			var resources bytes.Buffer
+			if err := page.ForEachObjectBorrowed(func(_ importpdf.ObjRef, body []byte) error {
+				resources.Write(body)
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			for _, resourceName := range []string{"/A ", "/F ", "/OpenAction "} {
+				if !bytes.Contains(resources.Bytes(), []byte(resourceName)) {
+					t.Fatalf("reconstructed resources = %q, want rendering resource name %s", resources.Bytes(), resourceName)
+				}
+			}
+		})
+	}
+}
+
 func TestSanitizeContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -110,6 +188,72 @@ func activeSourcePDF(t testing.TB) []byte {
 	builder.set(ids[6], []byte("<< /Type /Action /S /JavaScript /JS (app.alert) >>"))
 	builder.set(ids[7], []byte("<< /Type /Metadata /Subtype /XML /Length 11 >>\nstream\n<xml></xml>\nendstream"))
 	builder.set(ids[8], []byte("<< /Type /Annot /Subtype /Link /A 7 0 R /Rect [0 0 1 1] >>"))
+	data, err := builder.bytes(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func nonSequentialResourcePDF(t testing.TB) []byte {
+	t.Helper()
+	builder := &pdfBuilder{}
+	ids := make([]int, 9)
+	for i := range ids {
+		ids[i] = builder.reserve()
+		builder.set(ids[i], []byte("null"))
+	}
+	builder.set(ids[0], []byte("<< /Type /Catalog /Pages 2 0 R >>"))
+	builder.set(ids[1], []byte("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"))
+	builder.set(ids[2], []byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /Font << /F1 9 0 R >> >> /Contents 4 0 R >>"))
+	builder.set(ids[3], pdfStreamBody([]byte("BT /F1 12 Tf 10 10 Td (resource reference) Tj ET")))
+	builder.set(ids[8], []byte("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"))
+	data, err := builder.bytes(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func resourcePDFWithStreamText(t testing.TB, marker string) []byte {
+	t.Helper()
+	builder := &pdfBuilder{}
+	ids := make([]int, 10)
+	for i := range ids {
+		ids[i] = builder.reserve()
+		builder.set(ids[i], []byte("null"))
+	}
+	builder.set(ids[0], []byte("<< /Type /Catalog /Pages 2 0 R >>"))
+	builder.set(ids[1], []byte("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"))
+	builder.set(ids[2], []byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /Font << /F1 9 0 R >> >> /Contents 4 0 R >>"))
+	builder.set(ids[3], pdfStreamBody([]byte("BT /F1 12 Tf 10 10 Td (stream text) Tj ET")))
+	builder.set(ids[8], []byte("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Marker "+marker+" /FontDescriptor 10 0 R >>"))
+	builder.set(ids[9], []byte("<< /Type /FontDescriptor /FontName /Helvetica >>"))
+	data, err := builder.bytes(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func resourceNamesMatchingRemovedKeysPDF(t testing.TB, indirect bool) []byte {
+	t.Helper()
+	builder := &pdfBuilder{}
+	ids := make([]int, 9)
+	for i := range ids {
+		ids[i] = builder.reserve()
+		builder.set(ids[i], []byte("null"))
+	}
+	builder.set(ids[0], []byte("<< /Type /Catalog /Pages 2 0 R >>"))
+	builder.set(ids[1], []byte("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"))
+	resources := "<< /Font << /A 9 0 R /F 9 0 R /OpenAction 9 0 R >> >>"
+	if indirect {
+		resources = "<< /Font 8 0 R >>"
+		builder.set(ids[7], []byte("<< /A 9 0 R /F 9 0 R /OpenAction 9 0 R >>"))
+	}
+	builder.set(ids[2], []byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources "+resources+" /Contents 4 0 R >>"))
+	builder.set(ids[3], pdfStreamBody([]byte("BT /A 12 Tf 10 10 Td (A) Tj /F 12 Tf (F) Tj /OpenAction 12 Tf (O) Tj ET")))
+	builder.set(ids[8], []byte("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"))
 	data, err := builder.bytes(context.Background(), 1)
 	if err != nil {
 		t.Fatal(err)

@@ -253,9 +253,14 @@ func reachableObjects(resources []byte, objects map[importpdf.ObjRef][]byte) ([]
 	for ref := range objects {
 		byKey[refKey{objectNumber: ref.ObjectNumber(), generation: ref.Generation()}] = ref
 	}
+	_, resourceNameRefs, err := sanitizePDFObjectWithContext(resources, false)
+	if err != nil {
+		return nil, err
+	}
 	queue := indirectRefKeys(resources)
-	seen := make(map[importpdf.ObjRef]bool, len(queue))
-	result := make([]reachableObject, 0, len(objects))
+	processed := make(map[importpdf.ObjRef]bool, len(queue))
+	processedWithNames := make(map[importpdf.ObjRef]bool, len(queue))
+	resultByRef := make(map[importpdf.ObjRef][]byte, len(objects))
 	for len(queue) > 0 {
 		key := queue[0]
 		queue = queue[1:]
@@ -263,24 +268,29 @@ func reachableObjects(resources []byte, objects map[importpdf.ObjRef][]byte) ([]
 		if !ok {
 			return nil, fmt.Errorf("referenced object %d %d R is missing", key.objectNumber, key.generation)
 		}
-		if seen[ref] {
+		preserveKeys := resourceNameRefs[key]
+		if processed[ref] && (processedWithNames[ref] || !preserveKeys) {
 			continue
 		}
-		seen[ref] = true
 		body, ok := objects[ref]
 		if !ok {
 			return nil, fmt.Errorf("referenced object %s is missing", ref)
 		}
-		sanitized, err := sanitizePDFObject(body)
+		sanitized, childResourceNameRefs, err := sanitizePDFObjectWithContext(body, preserveKeys)
 		if err != nil {
 			return nil, fmt.Errorf("object %s: %w", ref, err)
 		}
-		result = append(result, reachableObject{ref: ref, body: sanitized})
-		for _, child := range indirectRefKeys(sanitized) {
-			if !seen[byKey[child]] {
-				queue = append(queue, child)
-			}
+		processed[ref] = true
+		processedWithNames[ref] = preserveKeys
+		resultByRef[ref] = sanitized
+		for child := range childResourceNameRefs {
+			resourceNameRefs[child] = true
 		}
+		queue = append(queue, indirectRefKeys(sanitized)...)
+	}
+	result := make([]reachableObject, 0, len(resultByRef))
+	for ref, body := range resultByRef {
+		result = append(result, reachableObject{ref: ref, body: body})
 	}
 	sort.Slice(result, func(i, j int) bool {
 		if result[i].ref.ObjectNumber() == result[j].ref.ObjectNumber() {
