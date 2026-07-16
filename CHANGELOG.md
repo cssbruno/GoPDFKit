@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Fixed PDF CDR reconstruction of non-sequential rendering-resource references,
+  preventing fonts, images, and form XObjects from becoming invalid after
+  sanitization.
+
 ## v0.13.0 - 2026-07-11
 
 Minor release adding PDF Content Disarm and Reconstruction support and lower

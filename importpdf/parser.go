@@ -1775,10 +1775,12 @@ func findPDFIndirectRefs(data []byte) []foundPDFRef {
 			p = skipPDFLiteralString(data, p)
 			continue
 		case '<':
-			if p+1 < len(data) && data[p+1] != '<' {
-				p = skipPDFHexString(data, p)
+			if p+1 < len(data) && data[p+1] == '<' {
+				p += 2
 				continue
 			}
+			p = skipPDFHexString(data, p)
+			continue
 		case '%':
 			p = skipToNextPDFLine(data, p)
 			continue
@@ -1787,7 +1789,7 @@ func findPDFIndirectRefs(data []byte) []foundPDFRef {
 			p++
 			continue
 		}
-		if p > 0 && !isPDFBoundary(data, p) {
+		if p > 0 && !isPDFSpace(data[p-1]) && !isPDFDelimiter(data[p-1]) {
 			p++
 			continue
 		}
