@@ -2818,14 +2818,12 @@ as completed behavior.
   structure elements and 23 marked streams (Document/Table/TR/TH/TD/P), plus 9
   reading-order and 18 role marks on page 1 over a 360x192 WASM preview, with
   clean browser logs.
-- [x] Show break ledger and typed experiments. Exact causal break decisions
-  now label their retained triggering or preceding fragment and are exposed
-  in the page inspector. Studio also runs the bounded compiler-owned typed
-  characterization corpus, caches it by exact source/plan revision, and shows
-  fixture outcomes and their causal break ledgers without browser layout
-  ([typed experiment endpoint](cmd/paper-studio/studio_experiments.go),
+- [x] Show the break ledger in the page inspector. Exact causal break
+  decisions label their retained triggering or preceding fragment. The bounded
+  compiler-owned typed characterization corpus remains available through its
+  exact-revision test endpoint, but its internal fixture dump is not exposed in
+  the Studio UI ([typed experiment endpoint](cmd/paper-studio/studio_experiments.go),
   [controller](cmd/paper-studio/web/studio.js),
-  [model](cmd/paper-studio/web/typed-experiment-model.js),
   [Go evidence](cmd/paper-studio/main_test.go),
   [model tests](cmd/paper-studio/js_test/typed_experiment_model_test.cjs)).
 - [x] Show data binding and style-token provenance. Explain and Inspect responses

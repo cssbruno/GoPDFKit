@@ -62,7 +62,8 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		!bytes.Contains(response.Body, []byte(`src="/instance-model.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/inspection-model.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/provenance-model.js"`)) ||
-		!bytes.Contains(response.Body, []byte(`src="/typed-experiment-model.js"`)) ||
+		bytes.Contains(response.Body, []byte(`experiments-disclosure`)) ||
+		bytes.Contains(response.Body, []byte(`src="/typed-experiment-model.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/review-model.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/tag-model.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/syntax-model.js"`)) ||

@@ -36,10 +36,6 @@ const state = {
   tagsLoading: false,
   tagError: '',
   verificationStale: false,
-  typedExperiments: null,
-  typedExperimentsRevision: '',
-  typedExperimentsLoading: false,
-  typedExperimentsError: '',
   delivery: null,
   deliveryRevision: '',
   deliveryLoading: false,
@@ -131,9 +127,6 @@ async function performRefresh({quiet = false} = {}) {
       state.pdfTags = null;
       state.pdfTagsRevision = '';
       state.tagError = '';
-      state.typedExperiments = null;
-      state.typedExperimentsRevision = '';
-      state.typedExperimentsError = '';
       state.delivery = null;
       state.deliveryRevision = '';
       state.deliveryError = '';
@@ -146,7 +139,6 @@ async function performRefresh({quiet = false} = {}) {
       await loadResources(workspace.revision);
       await loadAuthoring(workspace.revision);
       await loadReview(workspace.revision);
-      loadTypedExperiments(workspace.revision);
       loadDeliveryStatus(workspace.revision);
       if (workspace.pages) await showPage(state.page);
       if (workspace.pages && app.dataset.mode === 'accessibility') await loadPDFTags();
@@ -274,80 +266,8 @@ function renderWorkspace() {
   renderReviewContract();
   renderReviewNotes();
   renderPageSetup();
-  renderTypedExperiments();
   renderDelivery();
   renderStatus();
-}
-
-async function loadTypedExperiments(revision) {
-  if (!revision || state.typedExperimentsLoading || state.typedExperimentsRevision === revision) return;
-  state.typedExperimentsLoading = true;
-  state.typedExperimentsError = '';
-  renderTypedExperiments();
-  const scenario = state.scenario ? `&scenario=${encodeURIComponent(state.scenario)}` : '';
-  try {
-    const payload = await api(`/api/typed-experiments?revision=${encodeURIComponent(revision)}${scenario}`);
-    if (revision !== state.revision) return;
-    state.typedExperiments = PaperStudioTypedExperimentModel.normalize(payload, revision);
-    state.typedExperimentsRevision = revision;
-  } catch (error) {
-    if (error.status !== 409 && revision === state.revision) state.typedExperimentsError = error.message;
-  } finally {
-    if (revision === state.revision) state.typedExperimentsLoading = false;
-    renderTypedExperiments();
-  }
-}
-
-function renderTypedExperiments() {
-  const target = $('#typed-experiments');
-  const status = $('#typed-experiment-status');
-  if (!target || !status) return;
-  target.replaceChildren();
-  if (state.typedExperimentsLoading) {
-    status.textContent = 'Running';
-    target.innerHTML = '<span class="quiet">Running the bounded typed corpus…</span>';
-    return;
-  }
-  if (state.typedExperimentsError) {
-    status.textContent = 'Unavailable';
-    target.textContent = `Typed experiments unavailable · ${state.typedExperimentsError}`;
-    return;
-  }
-  if (!state.typedExperiments) {
-    status.textContent = 'Not loaded';
-    target.innerHTML = '<span class="quiet">No typed experiment result for this revision.</span>';
-    return;
-  }
-  const summary = PaperStudioTypedExperimentModel.summary(state.typedExperiments);
-  status.textContent = `${summary.planned}/${summary.total} planned`;
-  const summaryLine = document.createElement('div');
-  summaryLine.className = 'typed-experiment-summary';
-  summaryLine.textContent = `${summary.total} fixtures · ${summary.planned} planned · ${summary.rejected} bounded outcomes`;
-  target.append(summaryLine);
-  for (const fixture of state.typedExperiments.fixtures) {
-    const row = document.createElement('article');
-    row.className = `typed-experiment is-${fixture.outcome}`;
-    const heading = document.createElement('div');
-    heading.className = 'typed-experiment-heading';
-    const name = document.createElement('strong');
-    name.textContent = fixture.name;
-    const outcome = document.createElement('span');
-    outcome.className = 'typed-experiment-outcome';
-    outcome.textContent = fixture.outcome;
-    heading.append(name, outcome);
-    row.append(heading);
-    const meta = document.createElement('div');
-    meta.className = 'typed-experiment-meta';
-    meta.textContent = `${fixture.pages} page${fixture.pages === 1 ? '' : 's'} · raster ${fixture.rasterStatus}`;
-    row.append(meta);
-    for (const decision of fixture.breaks) {
-      const breakLine = document.createElement('div');
-      breakLine.className = 'typed-experiment-break';
-      breakLine.textContent = `Break · ${decision.label}`;
-      row.append(breakLine);
-    }
-    target.append(row);
-  }
 }
 
 async function loadDeliveryStatus(revision) {

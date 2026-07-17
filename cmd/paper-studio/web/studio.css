@@ -233,12 +233,7 @@ button { color: inherit; }
 .provenance-heading { padding: 7px 8px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid #e2e0d8; }
 .provenance-item { padding: 7px 8px; overflow-wrap: anywhere; font: 10px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; border-bottom: 1px solid #e8e6df; }
 .provenance-item:last-child { border-bottom: 0; }
-.typed-experiments { display: grid; gap: 8px; padding: 10px 12px 12px; max-height: 360px; overflow: auto; }
-.typed-experiment-summary, .typed-experiment-meta, .typed-experiment-break, .break-ledger-item { color: var(--muted); font-size: 11px; line-height: 1.35; }
-.typed-experiment { display: grid; gap: 3px; border: 1px solid var(--hairline); border-radius: 8px; padding: 7px 8px; background: #faf9f5; }
-.typed-experiment-heading { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
-.typed-experiment-outcome { color: var(--accent); font-size: 10px; text-transform: uppercase; }
-.typed-experiment-break, .break-ledger-item { border-left: 2px solid var(--accent); padding-left: 7px; }
+.break-ledger-item { color: var(--muted); font-size: 11px; line-height: 1.35; border-left: 2px solid var(--accent); padding-left: 7px; }
 .break-ledger { display: grid; gap: 5px; margin: 12px 10px 14px; padding-top: 10px; border-top: 1px solid var(--hairline); }
 .issues-heading { border-top: 1px solid var(--hairline); }
 .app.has-no-plan .overlay-disclosure { display: none; }
