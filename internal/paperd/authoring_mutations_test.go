@@ -40,6 +40,35 @@ func TestPaperInsertTemplateUsesOneJournalPatchAndPreservesTrivia(t *testing.T) 
 	}
 }
 
+func TestPaperInsertTemplatePaletteCoversTypedPrimitivesAndComponents(t *testing.T) {
+	for _, template := range []string{"paragraph", "heading", "list", "row", "column", "page-break"} {
+		workspace := mustWorkspace(t, Limits{})
+		guard, _, _ := mutationGuard(t, workspace, authoringMutationFixture, "@body", "palette-"+template, CapabilityEdit)
+		result, err := workspace.PaperInsertTemplate(PaperInsertTemplateRequest{Guard: guard, Template: template, ID: "@new-" + template})
+		if err != nil {
+			t.Fatalf("template %s: %v", template, err)
+		}
+		if !result.Edit.Applied || !result.Semantic.AfterCompileOK || len(result.Edit.Diff.Patches) != 1 {
+			t.Fatalf("template %s result = %#v", template, result)
+		}
+	}
+
+	source := "document @report:\n" +
+		"  component @card:\n" +
+		"    paragraph:\n" +
+		"      text: \"Card\"\n" +
+		"  page @sheet:\n" +
+		"    body @body:\n" +
+		"      paragraph @copy:\n" +
+		"        text: \"Body\"\n"
+	workspace := mustWorkspace(t, Limits{})
+	guard, _, _ := mutationGuard(t, workspace, source, "@body", "palette-component", CapabilityEdit)
+	result, err := workspace.PaperInsertTemplate(PaperInsertTemplateRequest{Guard: guard, Template: "component", Component: "@card", ID: "@card-instance"})
+	if err != nil || !result.Semantic.AfterCompileOK || !strings.Contains(result.Revision.Source, "use @card-instance:") || !strings.Contains(result.Revision.Source, "component: \"@card\"") {
+		t.Fatalf("component template = %v result=%#v\nsource=%s", err, result, result.Revision.Source)
+	}
+}
+
 func TestPaperCreateScenarioUsesCompilerSchemaAndStressPreset(t *testing.T) {
 	workspace := mustWorkspace(t, Limits{})
 	guard, _, _ := mutationGuard(t, workspace, authoringMutationFixture, "@report", "create-scenario", CapabilityEdit)

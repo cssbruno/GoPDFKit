@@ -21,6 +21,12 @@ const state = {
   authoring: null,
   authoringDraft: {operation: 'template'},
   authoringFeedback: null,
+  reviewContract: null,
+  review: null,
+  reviewRevision: '',
+  reviewLoading: false,
+  reviewError: '',
+  breakPolicy: 'hard',
   pageSetupDraft: null,
   pageSetupFeedback: null,
   loading: false,
@@ -30,6 +36,14 @@ const state = {
   tagsLoading: false,
   tagError: '',
   verificationStale: false,
+  typedExperiments: null,
+  typedExperimentsRevision: '',
+  typedExperimentsLoading: false,
+  typedExperimentsError: '',
+  delivery: null,
+  deliveryRevision: '',
+  deliveryLoading: false,
+  deliveryError: '',
   poll: null,
 };
 
@@ -41,6 +55,7 @@ const inspectionLayer = $('#inspection-layer');
 const overlapPicker = $('#overlap-picker');
 const selectionLayer = $('#selection-layer');
 const canvasScroll = $('#canvas-scroll');
+let reviewLasso = null;
 
 function previewRevisionLocked() {
   return PaperStudioMutationGate.revisionsLocked(
@@ -59,6 +74,8 @@ function setPreviewStale(stale) {
   renderVerificationState();
   renderEditControls();
   renderAuthoringControls();
+  renderReviewContract();
+  renderReviewNotes();
   renderPageSetup();
   renderResources();
   document.querySelectorAll('.font-replacement-apply').forEach((button) => { button.disabled = visualMutationsLocked(); });
@@ -114,11 +131,23 @@ async function performRefresh({quiet = false} = {}) {
       state.pdfTags = null;
       state.pdfTagsRevision = '';
       state.tagError = '';
+      state.typedExperiments = null;
+      state.typedExperimentsRevision = '';
+      state.typedExperimentsError = '';
+      state.delivery = null;
+      state.deliveryRevision = '';
+      state.deliveryError = '';
+      state.review = null;
+      state.reviewRevision = '';
+      state.reviewError = '';
       closeOverlapPicker();
       state.page = Math.min(Math.max(1, state.page), Math.max(1, workspace.pages));
       renderWorkspace();
       await loadResources(workspace.revision);
       await loadAuthoring(workspace.revision);
+      await loadReview(workspace.revision);
+      loadTypedExperiments(workspace.revision);
+      loadDeliveryStatus(workspace.revision);
       if (workspace.pages) await showPage(state.page);
       if (workspace.pages && app.dataset.mode === 'accessibility') await loadPDFTags();
     } else if (!quiet) {
@@ -145,6 +174,52 @@ async function loadAuthoring(revision) {
     if (error.status !== 409 && revision === state.revision) state.authoring = null;
   }
   renderAuthoringControls();
+}
+
+async function loadReview(revision, force = false) {
+  if (!revision || state.reviewLoading || (!force && state.reviewRevision === revision)) return;
+  state.reviewLoading = true;
+  state.reviewError = '';
+  renderReviewNotes();
+  const scenario = state.scenario ? `&scenario=${encodeURIComponent(state.scenario)}` : '';
+  try {
+    const payload = await api(`/api/review?revision=${encodeURIComponent(revision)}&source_revision=${encodeURIComponent(state.workspace?.source_revision || '')}${scenario}`);
+    if (revision !== state.revision) return;
+    state.review = PaperStudioReviewModel.normalizeReview(payload, state.workspace);
+    state.reviewRevision = revision;
+  } catch (error) {
+    if (error.status !== 409 && revision === state.revision) state.reviewError = error.message;
+  } finally {
+    if (revision === state.revision) state.reviewLoading = false;
+    renderReviewNotes();
+  }
+}
+
+async function submitReview(kind, body = '', rect = null) {
+  const selection = state.editSelection;
+  if (visualMutationsLocked() || !state.workspace || !selection) return;
+  let payload;
+  try {
+    payload = kind === 'comment'
+      ? PaperStudioReviewModel.commentPayload(state.workspace, selection.target, state.page, body, 'local-user')
+      : PaperStudioReviewModel.annotationPayload(state.workspace, selection.target, state.page, body, rect || undefined);
+  } catch (error) {
+    state.reviewError = error.message;
+    renderReviewNotes();
+    return;
+  }
+  state.reviewLoading = true;
+  renderReviewNotes();
+  try {
+    await api('/api/review', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(payload)});
+    state.reviewLoading = false;
+    await loadReview(state.revision, true);
+  } catch (error) {
+    state.reviewError = error.status === 409 ? 'Review state is stale · refresh and try again' : error.message;
+  } finally {
+    state.reviewLoading = false;
+    renderReviewNotes();
+  }
 }
 
 async function loadResources(revision) {
@@ -196,8 +271,145 @@ function renderWorkspace() {
   renderBaseline(workspace.baseline || {status: 'none'});
   reconcileEditSelection();
   renderAuthoringControls();
+  renderReviewContract();
+  renderReviewNotes();
   renderPageSetup();
+  renderTypedExperiments();
+  renderDelivery();
   renderStatus();
+}
+
+async function loadTypedExperiments(revision) {
+  if (!revision || state.typedExperimentsLoading || state.typedExperimentsRevision === revision) return;
+  state.typedExperimentsLoading = true;
+  state.typedExperimentsError = '';
+  renderTypedExperiments();
+  const scenario = state.scenario ? `&scenario=${encodeURIComponent(state.scenario)}` : '';
+  try {
+    const payload = await api(`/api/typed-experiments?revision=${encodeURIComponent(revision)}${scenario}`);
+    if (revision !== state.revision) return;
+    state.typedExperiments = PaperStudioTypedExperimentModel.normalize(payload, revision);
+    state.typedExperimentsRevision = revision;
+  } catch (error) {
+    if (error.status !== 409 && revision === state.revision) state.typedExperimentsError = error.message;
+  } finally {
+    if (revision === state.revision) state.typedExperimentsLoading = false;
+    renderTypedExperiments();
+  }
+}
+
+function renderTypedExperiments() {
+  const target = $('#typed-experiments');
+  const status = $('#typed-experiment-status');
+  if (!target || !status) return;
+  target.replaceChildren();
+  if (state.typedExperimentsLoading) {
+    status.textContent = 'Running';
+    target.innerHTML = '<span class="quiet">Running the bounded typed corpus…</span>';
+    return;
+  }
+  if (state.typedExperimentsError) {
+    status.textContent = 'Unavailable';
+    target.textContent = `Typed experiments unavailable · ${state.typedExperimentsError}`;
+    return;
+  }
+  if (!state.typedExperiments) {
+    status.textContent = 'Not loaded';
+    target.innerHTML = '<span class="quiet">No typed experiment result for this revision.</span>';
+    return;
+  }
+  const summary = PaperStudioTypedExperimentModel.summary(state.typedExperiments);
+  status.textContent = `${summary.planned}/${summary.total} planned`;
+  const summaryLine = document.createElement('div');
+  summaryLine.className = 'typed-experiment-summary';
+  summaryLine.textContent = `${summary.total} fixtures · ${summary.planned} planned · ${summary.rejected} bounded outcomes`;
+  target.append(summaryLine);
+  for (const fixture of state.typedExperiments.fixtures) {
+    const row = document.createElement('article');
+    row.className = `typed-experiment is-${fixture.outcome}`;
+    const heading = document.createElement('div');
+    heading.className = 'typed-experiment-heading';
+    const name = document.createElement('strong');
+    name.textContent = fixture.name;
+    const outcome = document.createElement('span');
+    outcome.className = 'typed-experiment-outcome';
+    outcome.textContent = fixture.outcome;
+    heading.append(name, outcome);
+    row.append(heading);
+    const meta = document.createElement('div');
+    meta.className = 'typed-experiment-meta';
+    meta.textContent = `${fixture.pages} page${fixture.pages === 1 ? '' : 's'} · raster ${fixture.rasterStatus}`;
+    row.append(meta);
+    for (const decision of fixture.breaks) {
+      const breakLine = document.createElement('div');
+      breakLine.className = 'typed-experiment-break';
+      breakLine.textContent = `Break · ${decision.label}`;
+      row.append(breakLine);
+    }
+    target.append(row);
+  }
+}
+
+async function loadDeliveryStatus(revision) {
+  if (!revision || state.deliveryLoading || state.deliveryRevision === revision) return;
+  state.deliveryLoading = true;
+  state.deliveryError = '';
+  renderDelivery();
+  const scenario = state.scenario ? `&scenario=${encodeURIComponent(state.scenario)}` : '';
+  try {
+    const payload = await api(`/api/delivery?revision=${encodeURIComponent(revision)}${scenario}`);
+    if (revision !== state.revision) return;
+    state.delivery = payload;
+    state.deliveryRevision = revision;
+  } catch (error) {
+    if (error.status !== 409 && revision === state.revision) state.deliveryError = error.message;
+  } finally {
+    if (revision === state.revision) state.deliveryLoading = false;
+    renderDelivery();
+  }
+}
+
+function renderDelivery() {
+  const status = $('#delivery-status');
+  const summary = $('#delivery-summary');
+  const actions = $('#delivery-actions');
+  if (!status || !summary || !actions) return;
+  actions.replaceChildren();
+  if (state.deliveryLoading) {
+    status.textContent = 'Inspecting…';
+    summary.textContent = 'Running exact preflight and final-PDF verification…';
+    return;
+  }
+  if (state.deliveryError) {
+    status.textContent = 'Unavailable';
+    summary.textContent = state.deliveryError;
+    return;
+  }
+  const delivery = state.delivery;
+  if (!delivery) {
+    status.textContent = 'Not inspected';
+    summary.textContent = 'Preflight, final PDF verification, export, and publish are separate statuses.';
+    return;
+  }
+  const preflight = delivery.preflight || {};
+  const verification = delivery.pdf_verification || {};
+  const exportStatus = delivery.export || {};
+  const publish = delivery.publish || {};
+  status.textContent = verification.status === 'verified' ? 'Ready to export' : preflight.status;
+  summary.textContent = `Preflight ${preflight.status} · PDF ${verification.status} · Export ${exportStatus.status} · Publish ${publish.status}`;
+  if (exportStatus.status === 'ready') {
+    const link = document.createElement('a');
+    link.className = 'delivery-export';
+    const scenario = state.scenario ? `&scenario=${encodeURIComponent(state.scenario)}` : '';
+    link.href = `/api/export.pdf?revision=${encodeURIComponent(state.revision)}${scenario}`;
+    link.textContent = 'Export verified PDF';
+    link.setAttribute('download', '');
+    actions.append(link);
+  }
+  const publishLine = document.createElement('span');
+  publishLine.className = 'delivery-publish';
+  publishLine.textContent = `Publish: ${publish.reason || 'separate authorized capability'}`;
+  actions.append(publishLine);
 }
 
 function renderPageSetup() {
@@ -317,9 +529,14 @@ function renderAuthoringControls() {
   form.append(authoringSelect('Action', available, draft.operation, value => { draft.operation=value; renderAuthoringControls(); }));
   if (draft.operation === 'template') {
     const targets=metadata.templateTargets.map(item=>item.id); draft.target=targets.includes(draft.target)?draft.target:targets[0];
-    const targetKind=metadata.templateTargets.find(item=>item.id===draft.target)?.kind; const choices=targetKind==='document'?['page']:['paragraph','section'];
+    const targetKind=metadata.templateTargets.find(item=>item.id===draft.target)?.kind;
+    const choices=targetKind==='document'?['page']:targetKind==='body'?['paragraph','heading','list','row','column','page-break',...(metadata.components.length?'component':[]),'section']:['paragraph','heading',...(metadata.components.length?'component':[])];
     draft.template=choices.includes(draft.template)?draft.template:choices[0]; draft.id=draft.id|| (draft.template==='page'?'@sheet':'@new-content');
-    form.append(authoringSelect('Inside',targets,draft.target,value=>{draft.target=value;renderAuthoringControls();}),authoringSelect('Template',choices,draft.template,value=>{draft.template=value;renderAuthoringControls();}),authoringInput('Readable ID',draft.id,value=>draft.id=value));
+    form.append(authoringSelect('Inside',targets,draft.target,value=>{draft.target=value;renderAuthoringControls();}),authoringSelect('Palette',choices,draft.template,value=>{draft.template=value;renderAuthoringControls();}),authoringInput('Readable ID',draft.id,value=>draft.id=value));
+    if (draft.template === 'component') {
+      draft.component=metadata.components.includes(draft.component)?draft.component:metadata.components[0];
+      form.append(authoringSelect('Component',metadata.components,draft.component,value=>{draft.component=value;}));
+    }
   } else if (draft.operation === 'binding') {
     const targets=metadata.bindingTargets.map(item=>item.id); const paths=metadata.schemas.flatMap(schema=>schema.fields.map(field=>field.path));
     draft.target=targets.includes(draft.target)?draft.target:targets[0]; draft.path=paths.includes(draft.path)?draft.path:paths[0];
@@ -341,6 +558,154 @@ function authoringSelect(labelText, values, selected, change) {
 
 function authoringInput(labelText, value, change) {
   const field=document.createElement('label');field.className='edit-field';const caption=document.createElement('span');caption.textContent=labelText;const input=document.createElement('input');input.type='text';input.value=value;input.maxLength=128;input.disabled=visualMutationsLocked();input.addEventListener('input',()=>change(input.value));field.append(caption,input);return field;
+}
+
+function renderReviewNotes() {
+  const target = $('#review-notes');
+  const status = $('#review-notes-status');
+  if (!target || !status) return;
+  target.replaceChildren();
+  if (state.reviewLoading) {
+    status.textContent = 'Saving…';
+    target.innerHTML = '<span class="quiet">Loading exact review metadata…</span>';
+    return;
+  }
+  if (state.reviewError) {
+    status.textContent = 'Unavailable';
+    target.textContent = state.reviewError;
+    return;
+  }
+  const review = state.review;
+  const count = (review?.comments?.length || 0) + (review?.annotations?.length || 0);
+  status.textContent = `${count} note${count === 1 ? '' : 's'}`;
+  if (review?.reference) {
+    const reference = document.createElement('div');
+    reference.className = 'review-reference';
+    reference.textContent = `Calibrated ${review.reference.kind} · page ${review.reference.page} · ${review.reference.digest.slice(0, 12)}…`;
+    target.append(reference);
+  }
+  for (const item of [...(review?.annotations || []), ...(review?.comments || [])]) {
+    const row = document.createElement('article');
+    row.className = `review-note is-${item.body ? 'comment' : 'annotation'}`;
+    const heading = document.createElement('strong');
+    heading.textContent = `${item.target} · page ${item.page}`;
+    const stateLabel = document.createElement('span');
+    stateLabel.className = item.resolved ? 'review-note-state is-resolved' : 'review-note-state';
+    stateLabel.textContent = item.resolved ? 'resolved' : 'unresolved';
+    row.append(heading, stateLabel);
+    const body = document.createElement('div');
+    body.textContent = item.body || item.note || item.label || 'Pinned annotation';
+    row.append(body);
+    target.append(row);
+  }
+  const selection = state.editSelection;
+  if (!selection) {
+    const empty = document.createElement('span');
+    empty.className = 'quiet';
+    empty.textContent = count ? 'Select an authored node to add another note.' : 'Select an authored node to pin a coordinate annotation or comment.';
+    target.append(empty);
+    return;
+  }
+  const lassoHint = document.createElement('div');
+  lassoHint.className = 'quiet';
+  lassoHint.textContent = 'Shift-drag the exact page to store a page-coordinate lasso with its affine transform.';
+  target.append(lassoHint);
+  const form = document.createElement('form');
+  form.className = 'review-note-form';
+  const input = document.createElement('textarea');
+  input.rows = 2;
+  input.maxLength = 4096;
+  input.placeholder = `Comment on ${selection.target}`;
+  input.setAttribute('aria-label', `Comment on ${selection.target}`);
+  const actions = document.createElement('div');
+  actions.className = 'review-note-actions';
+  const comment = document.createElement('button');
+  comment.type = 'submit';
+  comment.className = 'edit-commit';
+  comment.textContent = 'Add comment';
+  const annotation = document.createElement('button');
+  annotation.type = 'button';
+  annotation.className = 'edit-secondary';
+  annotation.textContent = 'Pin selection';
+  annotation.addEventListener('click', () => submitReview('annotation', input.value));
+  actions.append(comment, annotation);
+  form.append(input, actions);
+  form.addEventListener('submit', (event) => { event.preventDefault(); submitReview('comment', input.value); });
+  target.append(form);
+}
+
+function renderReviewContract() {
+  const target = $('#review-contract');
+  const status = $('#review-contract-status');
+  if (!target || !status) return;
+  target.replaceChildren();
+  const selection = state.editSelection;
+  const model = globalThis.PaperStudioReviewModel;
+  if (!selection || !model) {
+    status.textContent = 'Select a node';
+    const empty = document.createElement('div');
+    empty.className = 'review-contract-empty';
+    empty.textContent = 'Select a source node to see whether it is authored, bound, repeated, invoked, or a slot fill.';
+    target.append(empty);
+    return;
+  }
+  const description = model.describe(selection.node, state.workspace?.ast?.root);
+  const radius = model.blastRadius(selection.node, state.workspace?.ast?.root);
+  status.textContent = description.title;
+  const heading = document.createElement('div');
+  heading.className = 'review-contract-heading';
+  const title = document.createElement('span');
+  title.textContent = `${description.title} · ${selection.target}`;
+  const mode = document.createElement('span');
+  mode.className = 'review-contract-mode';
+  mode.textContent = description.mode;
+  heading.append(title, mode);
+  target.append(heading);
+  const detail = document.createElement('div');
+  detail.className = 'review-contract-detail';
+  detail.textContent = description.detail;
+  target.append(detail);
+  const dropTargets = model.dropTargets(state.workspace?.ast?.root);
+  if (dropTargets.length) {
+    const dropList = document.createElement('div');
+    dropList.className = 'review-contract-list';
+    for (const drop of dropTargets.slice(0, 8)) {
+      const item = document.createElement('div');
+      item.className = 'review-contract-item';
+      item.innerHTML = '<span></span><small></small>';
+      item.querySelector('span').textContent = drop.slot ? `${drop.target} · slot ${drop.slot}` : `${drop.target} · ${drop.kind}`;
+      item.querySelector('small').textContent = drop.accepts.join(' · ');
+      dropList.append(item);
+    }
+    target.append(dropList);
+  }
+  if (description.binding) {
+    const binding = document.createElement('div');
+    binding.className = 'review-contract-item';
+    binding.innerHTML = '<span>Fixture source</span><small></small>';
+    binding.querySelector('small').textContent = description.binding;
+    target.append(binding);
+  }
+  if (radius.scope === 'shared') {
+    const warning = document.createElement('div');
+    warning.className = 'review-contract-warning';
+    warning.textContent = `Shared blast radius · ${radius.count} invocation${radius.count === 1 ? '' : 's'} will observe this change.`;
+    target.append(warning);
+    const list = document.createElement('div');
+    list.className = 'review-contract-list';
+    for (const id of radius.targets.slice(0, 8)) {
+      const item = document.createElement('div');
+      item.className = 'review-contract-item';
+      item.innerHTML = `<span>${id}</span><small>affected</small>`;
+      list.append(item);
+    }
+    target.append(list);
+  } else if (radius.scope === 'local') {
+    const local = document.createElement('div');
+    local.className = 'review-contract-item';
+    local.innerHTML = '<span>Blast radius</span><small>one authored target</small>';
+    target.append(local);
+  }
 }
 
 function renderSource(source, issues = []) {
@@ -781,6 +1146,7 @@ async function showPage(page) {
     });
     renderSelectionRects();
     renderInspectionOverlays();
+    renderPageInspectionEvidence();
     closeOverlapPicker();
     renderStatus();
   } catch (error) {
@@ -916,7 +1282,7 @@ function renderPageInspectionEvidence() {
   }));
   const repeated = fragmentInstances.filter(entry => entry.repeated).length;
   const tableSummary = tableCells.length || gridTracks.length ? `${tableCells.length} cells · ${gridTracks.length} tracks` : 'None';
-  const provenance = globalThis.PaperStudioProvenanceModel?.forFragments(target.provenance, fragments) || {bindings: [], styleTokens: []};
+  const provenance = globalThis.PaperStudioProvenanceModel?.forFragments(target.provenance, fragments) || {bindings: [], styleTokens: [], computedStyles: []};
   renderInspectorRows([
     ['Page', `${state.page} of ${state.workspace?.pages || state.page}`],
     ['Regions', regions.join(', ') || 'Body'],
@@ -924,10 +1290,32 @@ function renderPageInspectionEvidence() {
     ['Tables', tableSummary],
     ['Bindings', provenance.bindings.length ? `${provenance.bindings.length} paths` : 'None'],
     ['Style tokens', provenance.styleTokens.length ? `${provenance.styleTokens.length} properties` : 'None'],
+    ['Computed style', provenance.computedStyles.length ? `${provenance.computedStyles.length} nodes` : 'None'],
     ['Reading', `${(target.reading_order || []).length} entries`],
     ['Overlays', state.overlays.size ? [...state.overlays].join(', ') : 'None'],
   ], 'Page');
   renderProvenance({provenance: target.provenance, fragments});
+  renderBreakLedger(target);
+}
+
+function renderBreakLedger(target) {
+  const breaks = target?.breaks || [];
+  if (!breaks.length) return;
+  const section = document.createElement('section');
+  section.className = 'break-ledger';
+  const heading = document.createElement('div');
+  heading.className = 'provenance-heading';
+  heading.textContent = `Break ledger · ${breaks.length}`;
+  section.append(heading);
+  for (const entry of breaks) {
+    const decision = entry.decision || {};
+    const row = document.createElement('div');
+    row.className = 'break-ledger-item';
+    const reason = String(decision.reason || 'break').replaceAll('_', ' ');
+    row.textContent = `${decision.from_page || '?'} → ${decision.to_page || '?'} · ${reason} · trigger ${decision.triggering_fragment || decision.preceding_fragment || 'none'}`;
+    section.append(row);
+  }
+  $('#inspector-content').append(section);
 }
 
 function renderSelectionRects({reveal = false} = {}) {
@@ -955,7 +1343,7 @@ function renderSelectionRects({reveal = false} = {}) {
 }
 
 async function hitPage(event) {
-  if (previewRevisionLocked()) return;
+  if (event.shiftKey || previewRevisionLocked()) return;
   const revision = state.revision;
   const meta = state.activePageMeta;
   if (!meta) return;
@@ -982,6 +1370,51 @@ async function hitPage(event) {
   } catch (error) {
     if (error.status === 409) await refresh(); else showFailure(error);
   }
+}
+
+function reviewPagePoint(event) {
+  const meta = state.activePageMeta;
+  const bounds = pageImage.getBoundingClientRect();
+  const viewBox = meta?.viewBox || [0, 0, bounds.width, bounds.height];
+  return {
+    x: viewBox[0] + ((event.clientX - bounds.left) / Math.max(1, bounds.width)) * viewBox[2],
+    y: viewBox[1] + ((event.clientY - bounds.top) / Math.max(1, bounds.height)) * viewBox[3],
+  };
+}
+
+function updateReviewLasso(event) {
+  if (!reviewLasso) return;
+  const left = Math.min(reviewLasso.start.clientX, event.clientX);
+  const top = Math.min(reviewLasso.start.clientY, event.clientY);
+  const width = Math.abs(event.clientX - reviewLasso.start.clientX);
+  const height = Math.abs(event.clientY - reviewLasso.start.clientY);
+  const bounds = selectionLayer.getBoundingClientRect();
+  reviewLasso.element.style.left = `${left - bounds.left}px`;
+  reviewLasso.element.style.top = `${top - bounds.top}px`;
+  reviewLasso.element.style.width = `${width}px`;
+  reviewLasso.element.style.height = `${height}px`;
+}
+
+function beginReviewLasso(event) {
+  if (!event.shiftKey || previewRevisionLocked() || !state.editSelection || !state.activePageMeta) return;
+  event.preventDefault();
+  const element = document.createElement('div');
+  element.className = 'review-lasso';
+  selectionLayer.append(element);
+  reviewLasso = {start: {clientX: event.clientX, clientY: event.clientY, point: reviewPagePoint(event)}, element};
+  pageImage.setPointerCapture?.(event.pointerId);
+}
+
+function finishReviewLasso(event) {
+  if (!reviewLasso) return;
+  event.preventDefault();
+  const start = reviewLasso.start;
+  const end = reviewPagePoint(event);
+  const element = reviewLasso.element;
+  const rect = {x: Math.min(start.point.x, end.x), y: Math.min(start.point.y, end.y), width: Math.abs(end.x - start.point.x), height: Math.abs(end.y - start.point.y)};
+  reviewLasso = null;
+  element.remove();
+  if (rect.width > 0 && rect.height > 0) submitReview('annotation', 'Shift-drag selection', rect);
 }
 
 async function selectHitFragment(result, fragment) {
@@ -1100,7 +1533,7 @@ function renderProvenance(value) {
   const model = globalThis.PaperStudioProvenanceModel;
   if (!model) return;
   const selected = model.forFragments(value?.provenance, value?.fragments || []);
-  if (!selected.bindings.length && !selected.styleTokens.length) return;
+  if (!selected.bindings.length && !selected.styleTokens.length && !selected.computedStyles.length) return;
   const section = document.createElement('section');
   section.className = 'provenance-evidence';
   const heading = document.createElement('div');
@@ -1117,6 +1550,12 @@ function renderProvenance(value) {
     const item = document.createElement('div');
     item.className = 'provenance-item';
     item.textContent = `Token · ${model.tokenLabel(token)}`;
+    section.append(item);
+  }
+  for (const style of selected.computedStyles) {
+    const item = document.createElement('div');
+    item.className = 'provenance-item';
+    item.textContent = `Style · ${model.computedStyleLabel(style)}`;
     section.append(item);
   }
   target.append(section);
@@ -1146,6 +1585,8 @@ function selectEditableTarget(target) {
   state.editDraft = null;
   state.editFeedback = null;
   renderEditControls();
+  renderReviewContract();
+  renderReviewNotes();
 }
 
 function reconcileEditSelection() {
@@ -1153,6 +1594,8 @@ function reconcileEditSelection() {
     state.editSelection = PaperStudioEditModel.findSelection(state.workspace?.ast?.root, state.editSelection.target);
   }
   renderEditControls();
+  renderReviewContract();
+  renderReviewNotes();
 }
 
 function renderEditControls() {
@@ -1198,25 +1641,37 @@ function renderEditControls() {
     valueSpec.choices = PaperStudioEditModel.flowDestinations(state.editSelection).map((node) => node.id);
   }
   const valueField = studioValueField(valueSpec);
+  let breakPolicyField = null;
+  if (state.editSelection.node.kind === 'page-break' && globalThis.PaperStudioReviewModel) {
+    const policies = globalThis.PaperStudioReviewModel.pageBreakPolicies();
+    breakPolicyField = studioSelect('Break policy', policies.map(policy => policy.value), state.breakPolicy);
+    breakPolicyField.select.addEventListener('change', () => {
+      state.breakPolicy = breakPolicyField.select.value;
+      renderEditControls();
+    });
+  }
   const submit = document.createElement('button');
   submit.type = 'submit';
   submit.className = 'edit-commit';
   submit.textContent = state.committing ? 'Committing…' : 'Apply exact patch';
   submit.disabled = visualMutationsLocked();
-  form.append(operationField.label, propertyField.label, valueField.label, submit);
+  form.append(operationField.label, propertyField.label);
+  if (breakPolicyField) form.append(breakPolicyField.label);
+  form.append(valueField.label, submit);
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (visualMutationsLocked()) return;
     let payload;
     try {
       payload = PaperStudioEditModel.buildPayload(state.workspace, state.editSelection, operation, property, valueField.input.value);
+      if (state.editSelection.node.kind === 'page-break') payload.break_policy = state.breakPolicy;
     } catch (error) {
       state.editFeedback = {tone: 'error', text: error.message};
       renderEditControls();
       return;
     }
     state.committing = true;
-    state.editFeedback = {tone: 'working', text: 'Committing against exact revisions…'};
+    state.editFeedback = globalThis.PaperStudioReviewModel?.optimisticFeedback(`${operation} ${property}`) || {tone: 'working', text: 'Speculative preview · exact patch pending server confirmation'};
     app.classList.add('is-committing');
     renderEditControls();
     try {
@@ -1446,6 +1901,10 @@ $('#zoom-value').addEventListener('keydown', event => {
   event.currentTarget.blur();
 });
 pageImage.addEventListener('click', hitPage);
+pageImage.addEventListener('pointerdown', beginReviewLasso);
+pageImage.addEventListener('pointermove', updateReviewLasso);
+pageImage.addEventListener('pointerup', finishReviewLasso);
+pageImage.addEventListener('pointercancel', finishReviewLasso);
 window.addEventListener('keydown', (event) => {
   if (event.target.matches('pre')) return;
   if (event.key === 'ArrowLeft') showPage(state.page - 1);

@@ -10,6 +10,7 @@ import (
 	"github.com/cssbruno/gopdfkit/internal/papercompile"
 	"github.com/cssbruno/gopdfkit/internal/paperlang"
 	"github.com/cssbruno/gopdfkit/internal/papertheme"
+	"github.com/cssbruno/gopdfkit/layout"
 )
 
 // PaperPlanSourceSpan identifies the authored source range that caused one
@@ -58,12 +59,24 @@ type PaperPlanStyleTokenProvenance struct {
 	TokenChain []PaperPlanTokenStep `json:"token_chain"`
 }
 
+// PaperPlanComputedStyleProvenance is the resolved, renderer-independent
+// style attached to one readable source block. It is exact compiler output,
+// not browser-computed CSS.
+type PaperPlanComputedStyleProvenance struct {
+	Node      string              `json:"node,omitempty"`
+	Kind      string              `json:"kind"`
+	Source    PaperPlanSourceSpan `json:"source"`
+	TextStyle *layout.TextStyle   `json:"text_style,omitempty"`
+	BoxStyle  *layout.BoxStyle    `json:"box_style,omitempty"`
+}
+
 // PaperPlanProvenance is a bounded, deterministic source projection attached
 // to Explain responses. It contains paths and declarations, never scenario
 // values or raw resource bytes.
 type PaperPlanProvenance struct {
-	Bindings    []PaperPlanBindingProvenance    `json:"bindings,omitempty"`
-	StyleTokens []PaperPlanStyleTokenProvenance `json:"style_tokens,omitempty"`
+	Bindings       []PaperPlanBindingProvenance       `json:"bindings,omitempty"`
+	StyleTokens    []PaperPlanStyleTokenProvenance    `json:"style_tokens,omitempty"`
+	ComputedStyles []PaperPlanComputedStyleProvenance `json:"computed_styles,omitempty"`
 }
 
 // Provenance returns detached binding and style-token evidence for this exact
@@ -74,8 +87,9 @@ func (p PaperPlan) Provenance() (PaperPlanProvenance, error) {
 		return PaperPlanProvenance{}, fmt.Errorf("document: empty paper plan")
 	}
 	result := PaperPlanProvenance{
-		Bindings:    make([]PaperPlanBindingProvenance, 0),
-		StyleTokens: make([]PaperPlanStyleTokenProvenance, 0),
+		Bindings:       make([]PaperPlanBindingProvenance, 0),
+		StyleTokens:    make([]PaperPlanStyleTokenProvenance, 0),
+		ComputedStyles: make([]PaperPlanComputedStyleProvenance, 0),
 	}
 	for _, node := range p.mapping.Nodes {
 		if node.BindingPath == "" {
@@ -98,6 +112,18 @@ func (p PaperPlan) Provenance() (PaperPlanProvenance, error) {
 			Consumer: paperLangSourceSpan(property.ConsumerSpan), TokenChain: chain,
 		})
 	}
+	for _, style := range p.mapping.ComputedStyles {
+		entry := PaperPlanComputedStyleProvenance{Node: style.NodeID, Kind: string(style.NodeKind), Source: paperLangSourceSpan(style.Source)}
+		if style.TextStyle != nil {
+			copy := *style.TextStyle
+			entry.TextStyle = &copy
+		}
+		if style.BoxStyle != nil {
+			copy := *style.BoxStyle
+			entry.BoxStyle = &copy
+		}
+		result.ComputedStyles = append(result.ComputedStyles, entry)
+	}
 	return result, nil
 }
 
@@ -105,6 +131,7 @@ func clonePaperCompileMapping(input papercompile.CompileMapping) papercompile.Co
 	result := papercompile.CompileMapping{
 		Nodes:           append([]papercompile.NodeMapping(nil), input.Nodes...),
 		ThemeProperties: make([]papercompile.ThemePropertyMapping, len(input.ThemeProperties)),
+		ComputedStyles:  make([]papercompile.ComputedStyleMapping, len(input.ComputedStyles)),
 	}
 	for index, property := range input.ThemeProperties {
 		result.ThemeProperties[index] = property
@@ -113,6 +140,17 @@ func clonePaperCompileMapping(input papercompile.CompileMapping) papercompile.Co
 			result.ThemeProperties[index].Provenance.Chain[stepIndex] = papertheme.TokenStep{
 				Theme: step.Theme, Scope: append([]string(nil), step.Scope...), Token: step.Token, Source: step.Source,
 			}
+		}
+	}
+	for index, style := range input.ComputedStyles {
+		result.ComputedStyles[index] = style
+		if style.TextStyle != nil {
+			copy := *style.TextStyle
+			result.ComputedStyles[index].TextStyle = &copy
+		}
+		if style.BoxStyle != nil {
+			copy := *style.BoxStyle
+			result.ComputedStyles[index].BoxStyle = &copy
 		}
 	}
 	return result

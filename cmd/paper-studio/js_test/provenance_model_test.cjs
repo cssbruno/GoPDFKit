@@ -13,10 +13,12 @@ test('filters exact binding and token provenance by retained fragment source key
       {node: '@message', property: 'size-token', theme: 'print', token: 'body-size', value: '11pt', token_chain: [{theme: 'print', token: 'body-size'}]},
       {node: '@other', property: 'color-token', theme: 'print', token: 'ink', value: '#000000'},
     ],
+    computed_styles: [{node: '@message', kind: 'paragraph', text_style: {font_family: 'Courier', font_size: 11}}],
   };
   assert.deepEqual(model.forFragments(provenance, [{source_identity: {key: '@message'}}]), {
     bindings: [provenance.bindings[0]],
     styleTokens: [provenance.style_tokens[0]],
+    computedStyles: [provenance.computed_styles[0]],
   });
 });
 
@@ -24,6 +26,8 @@ test('keeps anonymous provenance visible for a page-wide inspection', () => {
   const normalized = model.forFragments({bindings: [{path: '@invoice.total'}], style_tokens: [{property: 'size-token'}]}, []);
   assert.equal(normalized.bindings.length, 1);
   assert.equal(normalized.styleTokens.length, 1);
+  assert.equal(normalized.computedStyles.length, 0);
   assert.match(model.bindingLabel(normalized.bindings[0]), /@invoice\.total/);
   assert.match(model.tokenLabel({node: '@message', property: 'size-token', theme: 'print', token: 'size', value: '11pt', token_chain: [{theme: 'print', token: 'size'}, {theme: 'base', token: 'size'}]}), /print:size → base:size/);
+  assert.match(model.computedStyleLabel({node: '@message', kind: 'paragraph', text_style: {font_family: 'Courier', font_size: 11}}), /font Courier/);
 });

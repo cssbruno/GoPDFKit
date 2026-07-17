@@ -44,6 +44,7 @@ type studioAuthoringResponse struct {
 	Schemas         []studioSchemaChoice    `json:"schemas"`
 	Scenarios       []string                `json:"scenarios"`
 	StressPresets   []string                `json:"stress_presets"`
+	Components      []string                `json:"components"`
 }
 
 func (s *studioServer) handleAuthoring(w http.ResponseWriter, r *http.Request) {
@@ -75,7 +76,7 @@ func buildStudioAuthoringResponse(snapshot *studioSnapshot, ast paperlang.AST) s
 	response := studioAuthoringResponse{
 		FormatVersion: 1, Revision: snapshot.revision, SourceRevision: studioSourceRevision(snapshot.source),
 		PlanHash: snapshot.plan.Hash(), Scenario: snapshot.scenario, StressPresets: []string{"empty", "typical", "stress"},
-		TemplateTargets: []studioAuthoringTarget{}, BindingTargets: []studioAuthoringTarget{}, Schemas: []studioSchemaChoice{}, Scenarios: []string{},
+		TemplateTargets: []studioAuthoringTarget{}, BindingTargets: []studioAuthoringTarget{}, Schemas: []studioSchemaChoice{}, Scenarios: []string{}, Components: []string{},
 	}
 	hasPage := false
 	var walk func(*paperlang.Node)
@@ -94,6 +95,9 @@ func buildStudioAuthoringResponse(snapshot *studioSnapshot, ast paperlang.AST) s
 		}
 		if node.ID != "" && (node.Kind == paperlang.NodeParagraph || node.Kind == paperlang.NodeHeading || node.Kind == paperlang.NodeUse) {
 			response.BindingTargets = append(response.BindingTargets, studioAuthoringTarget{ID: node.ID, Kind: string(node.Kind)})
+		}
+		if node.ID != "" && node.Kind == paperlang.NodeComponent {
+			response.Components = append(response.Components, node.ID)
 		}
 		for _, member := range node.Members {
 			walk(member.Node)
@@ -120,6 +124,7 @@ func buildStudioAuthoringResponse(snapshot *studioSnapshot, ast paperlang.AST) s
 		}
 	}
 	sort.Strings(response.Scenarios)
+	sort.Strings(response.Components)
 	return response
 }
 

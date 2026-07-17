@@ -18,6 +18,7 @@
       schemas: Object.freeze((payload.schemas || []).map(schema => Object.freeze({name: schema.name, fields: Object.freeze((schema.fields || []).map(Object.freeze))}))),
       scenarios: Object.freeze([...(payload.scenarios || [])]),
       presets: Object.freeze([...(payload.stress_presets || [])]),
+      components: Object.freeze([...(payload.components || [])]),
     });
   }
 
@@ -28,9 +29,12 @@
     const base = {source_revision: workspace.source_revision, plan_revision: workspace.revision, scenario: workspace.scenario || '', operation: draft.operation, property: ''};
     if (draft.operation === 'template') {
       const target = metadata.templateTargets.find(item => item.id === draft.target);
-      const validTemplate = draft.template === 'page' ? target?.kind === 'document' : ['paragraph', 'section'].includes(draft.template) && ['body', 'row', 'column'].includes(target?.kind);
+      const validTemplate = draft.template === 'page' ? target?.kind === 'document' :
+        ['paragraph', 'heading', 'list', 'row', 'column', 'page-break', 'component', 'section'].includes(draft.template) &&
+        ['body', 'row', 'column'].includes(target?.kind) &&
+        (draft.template !== 'component' || metadata.components.includes(draft.component));
       if (!target || !validTemplate || !readableID(draft.id)) throw new Error('Choose a compatible template target, shape, and readable @id');
-      return {...base, target: draft.target, template: draft.template, id: draft.id};
+      return {...base, target: draft.target, template: draft.template, id: draft.id, ...(draft.template === 'component' ? {component: draft.component} : {})};
     }
     if (draft.operation === 'binding') {
       const schema = metadata.schemas.find(item => item.fields.some(field => field.path === draft.path));

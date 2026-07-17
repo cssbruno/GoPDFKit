@@ -13,9 +13,10 @@ import (
 )
 
 type PaperInsertTemplateRequest struct {
-	Guard    PaperMutationGuard `json:"guard"`
-	Template string             `json:"template"`
-	ID       string             `json:"id"`
+	Guard     PaperMutationGuard `json:"guard"`
+	Template  string             `json:"template"`
+	ID        string             `json:"id"`
+	Component string             `json:"component,omitempty"`
 }
 
 // PaperInsertTemplate inserts one closed, typed starter shape beneath an
@@ -54,6 +55,38 @@ func (w *Workspace) PaperInsertTemplate(request PaperInsertTemplateRequest) (Pap
 		}}
 	case "paragraph":
 		node = paperedit.NodeSpec{Kind: paperlang.NodeParagraph, ID: request.ID, Properties: []paperedit.PropertySpec{{Name: "text", Value: paperedit.StringValue("New content")}}}
+	case "heading":
+		node = paperedit.NodeSpec{Kind: paperlang.NodeHeading, ID: request.ID, Properties: []paperedit.PropertySpec{
+			{Name: "level", Value: paperedit.NumberValue(2)},
+			{Name: "text", Value: paperedit.StringValue("New heading")},
+		}}
+	case "list":
+		value := paperedit.StringValue("New item")
+		node = paperedit.NodeSpec{Kind: paperlang.NodeList, ID: request.ID, Children: []paperedit.NodeSpec{
+			{Kind: paperlang.NodeItem, Children: []paperedit.NodeSpec{{Kind: paperlang.NodeText, Value: &value}}},
+		}}
+	case "row", "column":
+		base := strings.TrimPrefix(request.ID, "@")
+		if len(base) > 220 {
+			return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_ID", "template ID is too long for derived readable child IDs", ErrInvalidQuery)
+		}
+		kind := paperlang.NodeRow
+		if request.Template == "column" {
+			kind = paperlang.NodeColumn
+		}
+		node = paperedit.NodeSpec{Kind: kind, ID: request.ID, Children: []paperedit.NodeSpec{
+			{Kind: paperlang.NodeParagraph, ID: "@" + base + "-copy", Properties: []paperedit.PropertySpec{{Name: "text", Value: paperedit.StringValue("New content")}}},
+		}}
+	case "page-break":
+		node = paperedit.NodeSpec{Kind: paperlang.NodePageBreak, ID: request.ID}
+	case "component":
+		if !validAuthorityNodeID(request.Component) {
+			return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_COMPONENT", "component template requires a readable component reference", ErrInvalidQuery)
+		}
+		if _, err := uniqueComponentDefinition(revision.parsed.AST.Root, request.Component); err != nil {
+			return PaperMutationResult{}, err
+		}
+		node = paperedit.NodeSpec{Kind: paperlang.NodeUse, ID: request.ID, Properties: []paperedit.PropertySpec{{Name: "component", Value: paperedit.StringValue(request.Component)}}}
 	case "section":
 		base := strings.TrimPrefix(request.ID, "@")
 		if len(base) > 220 {
@@ -64,7 +97,7 @@ func (w *Workspace) PaperInsertTemplate(request PaperInsertTemplateRequest) (Pap
 			{Kind: paperlang.NodeParagraph, ID: "@" + base + "-body", Properties: []paperedit.PropertySpec{{Name: "text", Value: paperedit.StringValue("New content")}}},
 		}}
 	default:
-		return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE", "template must be page, paragraph, or section", ErrInvalidQuery)
+		return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE", "template must be page, paragraph, heading, list, row, column, page-break, component, or section", ErrInvalidQuery)
 	}
 	return w.applyPaperMutation("insert_template", request.Guard, opened, revision,
 		[]string{request.Guard.Target}, []paperedit.Operation{paperedit.InsertNode{Parent: request.Guard.Target, Node: node}}, "INVALID_TEMPLATE_RESULT")

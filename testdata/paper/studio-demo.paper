@@ -13,6 +13,7 @@ document @studio-demo:
         level: 1
         style: "@title"
         text: "A document you can inspect"
+        font: "Courier"
       paragraph @intro:
         style: "@body"
         text: "Every visible mark comes from the immutable Paper display plan. Click the page to trace its source and layout decision."
@@ -23,7 +24,7 @@ document @studio-demo:
       paragraph @body-copy:
         style: "@code"
         text: "Source -> semantic tree -> planner -> display list -> preview and PDF."
-      page-break:
+      page-break @chapter-two:
       heading @second-page:
         level: 2
         style: "@second-page"

@@ -48,10 +48,12 @@ type studioEditRequest struct {
 	Path           string   `json:"path,omitempty"`
 	Required       *bool    `json:"required,omitempty"`
 	Template       string   `json:"template,omitempty"`
+	Component      string   `json:"component,omitempty"`
 	ID             string   `json:"id,omitempty"`
 	NewParent      string   `json:"new_parent,omitempty"`
 	Schema         string   `json:"schema,omitempty"`
 	Preset         string   `json:"preset,omitempty"`
+	BreakPolicy    string   `json:"break_policy,omitempty"`
 }
 
 type studioEditAuthorization struct {
@@ -71,6 +73,7 @@ type studioEditResponse struct {
 	PlanRevision         string                  `json:"plan_revision"`
 	Applied              bool                    `json:"applied"`
 	PatchCount           int                     `json:"patch_count"`
+	ReviewIntent         string                  `json:"review_intent,omitempty"`
 	Authorization        studioEditAuthorization `json:"authorization"`
 }
 
@@ -268,13 +271,14 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 		BeforeSourceRevision: request.SourceRevision, SourceRevision: studioSourceRevision(after.source),
 		BeforePlanRevision: request.PlanRevision, PlanRevision: after.revision,
 		Applied: mutation.Edit.Applied, PatchCount: len(mutation.Edit.Diff.Patches),
+		ReviewIntent: request.BreakPolicy,
 		Authorization: studioEditAuthorization{Actor: mutation.Authorization.Actor, Allowed: mutation.Authorization.Allowed,
 			Effects: append([]paperd.AuthorizationEffect(nil), mutation.Authorization.Effects...)},
 	}, nil
 }
 
 func validateStudioEditRequest(request studioEditRequest) error {
-	fields := []string{request.SourceRevision, request.PlanRevision, request.Scenario, request.Operation, request.Target, request.Property, request.Color, request.Kind, request.Text, request.Split, request.Path, request.Template, request.ID, request.NewParent, request.Schema, request.Preset}
+	fields := []string{request.SourceRevision, request.PlanRevision, request.Scenario, request.Operation, request.Target, request.Property, request.Color, request.Kind, request.Text, request.Split, request.Path, request.Template, request.Component, request.ID, request.NewParent, request.Schema, request.Preset, request.BreakPolicy}
 	for _, field := range fields {
 		if len(field) > studioEditFieldLimit || !utf8.ValidString(field) {
 			return fmt.Errorf("%w: edit field exceeds its bound", errStudioInvalidEdit)
@@ -298,6 +302,9 @@ func validateStudioEditRequest(request studioEditRequest) error {
 	if request.Operation == "flow" && (request.NewParent == "" || request.NewParent[0] != '@') {
 		return fmt.Errorf("%w: flow operation requires a readable destination @id", errStudioInvalidEdit)
 	}
+	if request.BreakPolicy != "" && request.BreakPolicy != "hard" && request.BreakPolicy != "keep-with-next" && request.BreakPolicy != "avoid-orphan" {
+		return fmt.Errorf("%w: break policy is outside the closed Studio vocabulary", errStudioInvalidEdit)
+	}
 	return nil
 }
 
@@ -306,7 +313,7 @@ func applyStudioSemanticMutation(workspace *paperd.Workspace, guard paperd.Paper
 		return workspace.PaperSetBinding(paperd.PaperSetBindingRequest{Guard: guard, Path: request.Path, Required: request.Required})
 	}
 	if request.Operation == "template" {
-		return workspace.PaperInsertTemplate(paperd.PaperInsertTemplateRequest{Guard: guard, Template: request.Template, ID: request.ID})
+		return workspace.PaperInsertTemplate(paperd.PaperInsertTemplateRequest{Guard: guard, Template: request.Template, ID: request.ID, Component: request.Component})
 	}
 	if request.Operation == "scenario-create" {
 		return workspace.PaperCreateScenario(paperd.PaperCreateScenarioRequest{Guard: guard, Name: request.ID, Schema: request.Schema, Preset: request.Preset})

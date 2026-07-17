@@ -304,9 +304,54 @@ func TestPaperStudioAuthoringMetadataAndJournaledCreateToConnectFlow(t *testing.
 	if !strings.Contains(afterScenario.Source, "scenario @stress:") || !strings.Contains(afterScenario.Source, "value @total: 999999.99") {
 		t.Fatalf("scenario source:\n%s", afterScenario.Source)
 	}
+	delivery := studioRequest(t, handler, http.MethodGet, "/api/delivery?revision="+afterScenario.Revision, nil, "")
+	if delivery.StatusCode != http.StatusOK || !strings.Contains(string(delivery.Body), `"status":"verified"`) || !strings.Contains(string(delivery.Body), `"publish":{"status":"separate_authorized_capability"`) {
+		t.Fatalf("create-to-deliver status = %d %s", delivery.StatusCode, delivery.Body)
+	}
+	export := studioRequest(t, handler, http.MethodGet, "/api/export.pdf?revision="+afterScenario.Revision, nil, "")
+	if export.StatusCode != http.StatusOK || export.Header.Get("Content-Type") != "application/pdf" || len(export.Body) < 64 || !bytes.HasPrefix(export.Body, []byte("%PDF")) {
+		t.Fatalf("create-to-deliver export = %d %q %d", export.StatusCode, export.Header, len(export.Body))
+	}
 	oldMetadata := studioRequest(t, handler, http.MethodGet, "/api/authoring?revision="+before.Revision, nil, "")
 	if oldMetadata.StatusCode != http.StatusConflict {
 		t.Fatalf("stale metadata = %d %s", oldMetadata.StatusCode, oldMetadata.Body)
+	}
+}
+
+func TestPaperStudioTypedPaletteInsertsPrimitiveAndComponentInstances(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "palette.paper")
+	source := "document @report:\n" +
+		"  component @card:\n" +
+		"    paragraph:\n" +
+		"      text: \"Card\"\n" +
+		"  page @sheet:\n" +
+		"    body @body:\n" +
+		"      paragraph @copy:\n" +
+		"        text: \"Body\"\n"
+	if err := os.WriteFile(file, []byte(source), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	studio, err := newStudioServer(file, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := studio.routes()
+	before := fetchStudioWorkspace(t, handler)
+	metadataResponse := studioRequest(t, handler, http.MethodGet, "/api/authoring?revision="+before.Revision, nil, "")
+	if metadataResponse.StatusCode != http.StatusOK || !strings.Contains(string(metadataResponse.Body), `"@card"`) {
+		t.Fatalf("component palette metadata = %d %s", metadataResponse.StatusCode, metadataResponse.Body)
+	}
+	request := map[string]any{
+		"source_revision": before.SourceRevision, "plan_revision": before.Revision,
+		"operation": "template", "target": "@body", "template": "component", "component": "@card", "id": "@card-instance",
+	}
+	response := postStudioJSON(t, handler, "/api/edit", request)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("component palette edit = %d %s", response.StatusCode, response.Body)
+	}
+	after := fetchStudioWorkspace(t, handler)
+	if !strings.Contains(after.Source, "use @card-instance:") || !strings.Contains(after.Source, "component: \"@card\"") {
+		t.Fatalf("component palette source =\n%s", after.Source)
 	}
 }
 

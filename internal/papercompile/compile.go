@@ -60,6 +60,18 @@ type NodeMapping struct {
 type CompileMapping struct {
 	Nodes           []NodeMapping          `json:"nodes,omitempty"`
 	ThemeProperties []ThemePropertyMapping `json:"theme_properties,omitempty"`
+	ComputedStyles  []ComputedStyleMapping `json:"computed_styles,omitempty"`
+}
+
+// ComputedStyleMapping retains the exact resolved style values attached to a
+// readable source block. It is a detached compiler projection for inspectors;
+// it does not expose scenario data or renderer-owned geometry.
+type ComputedStyleMapping struct {
+	NodeID    string             `json:"node_id,omitempty"`
+	NodeKind  paperlang.NodeKind `json:"node_kind"`
+	Source    paperlang.Span     `json:"source"`
+	TextStyle *layout.TextStyle  `json:"text_style,omitempty"`
+	BoxStyle  *layout.BoxStyle   `json:"box_style,omitempty"`
 }
 
 // ThemePropertyMapping preserves the exact resolved token chain behind one
@@ -549,6 +561,7 @@ func (c *compiler) compileCanvas(node *paperlang.Node) {
 		c.add("PAPER_COMPILE_CANVAS_EMPTY", "canvas requires at least one anchor", "add an explicitly sized anchor child", node.HeaderSpan)
 	}
 	c.result.Document.Body = append(c.result.Document.Body, block)
+	c.recordComputedStyle(node, bodyIndex)
 }
 
 func (c *compiler) compileCanvasAnchor(node *paperlang.Node) layout.CanvasItem {
@@ -1008,6 +1021,7 @@ func (c *compiler) compileRowColumn(node *paperlang.Node) {
 		c.add("PAPER_COMPILE_ROW_COLUMN_ITEMS", fmt.Sprintf("%s has no compilable children", node.Kind), "add one or more paragraph or heading children", node.HeaderSpan)
 	}
 	c.result.Document.Body = append(c.result.Document.Body, block)
+	c.recordComputedStyle(node, bodyIndex)
 }
 
 func (c *compiler) compileRowColumnItem(node *paperlang.Node) (layout.RowColumnItem, []*paperlang.Node) {
@@ -1152,6 +1166,7 @@ func (c *compiler) compileList(node *paperlang.Node) {
 		c.add("PAPER_COMPILE_LIST_ITEMS", "list has no compilable items", "add one or more item nodes containing text", node.HeaderSpan)
 	}
 	c.result.Document.Body = append(c.result.Document.Body, block)
+	c.recordComputedStyle(node, bodyIndex)
 }
 
 func (c *compiler) compileListItem(node *paperlang.Node, listStyle layout.TextStyle, bodyIndex, itemIndex int) (layout.ListItem, bool) {
@@ -1742,6 +1757,51 @@ func (c *compiler) typeError(property paperlang.Property, expected string) {
 
 func (c *compiler) mapNode(node *paperlang.Node, bodyIndex, segmentIndex int) {
 	c.mapNestedNode(node, bodyIndex, segmentIndex, -1)
+	c.recordComputedStyle(node, bodyIndex)
+}
+
+func (c *compiler) recordComputedStyle(node *paperlang.Node, bodyIndex int) {
+	if node == nil || node.ID == "" || bodyIndex < 0 || bodyIndex >= len(c.result.Document.Body) {
+		return
+	}
+	textStyle, boxStyle, ok := computedBlockStyle(c.result.Document.Body[bodyIndex])
+	if !ok {
+		return
+	}
+	c.result.Mapping.ComputedStyles = append(c.result.Mapping.ComputedStyles, ComputedStyleMapping{
+		NodeID: node.ID, NodeKind: node.Kind, Source: node.Span, TextStyle: textStyle, BoxStyle: boxStyle,
+	})
+}
+
+func computedBlockStyle(block layout.Block) (*layout.TextStyle, *layout.BoxStyle, bool) {
+	copyText := func(style layout.TextStyle) *layout.TextStyle { return &style }
+	copyBox := func(style layout.BoxStyle) *layout.BoxStyle { return &style }
+	switch value := block.(type) {
+	case layout.ParagraphBlock:
+		return copyText(value.EffectiveStyle()), copyBox(value.EffectiveBox()), true
+	case layout.HeadingBlock:
+		return copyText(value.EffectiveStyle()), copyBox(value.EffectiveBox()), true
+	case layout.ListBlock:
+		return copyText(value.EffectiveStyle()), copyBox(value.EffectiveBox()), true
+	case layout.TableBlock:
+		return nil, copyBox(value.EffectiveBox()), true
+	case layout.ImageBlock:
+		return nil, copyBox(value.EffectiveBox()), true
+	case layout.SignatureRowBlock:
+		return nil, copyBox(value.EffectiveBox()), true
+	case layout.MetadataGridBlock:
+		return copyText(value.EffectiveStyle()), copyBox(value.EffectiveBox()), true
+	case layout.QRVerificationBlock:
+		return copyText(value.EffectiveStyle()), copyBox(value.EffectiveBox()), true
+	case layout.NoteBoxBlock:
+		return copyText(value.EffectiveStyle()), copyBox(value.EffectiveBox()), true
+	case layout.SectionBlock:
+		return nil, copyBox(value.EffectiveBox()), true
+	case layout.ClauseBlock:
+		return nil, copyBox(value.EffectiveBox()), true
+	default:
+		return nil, nil, false
+	}
 }
 
 func (c *compiler) mapNestedNode(node *paperlang.Node, bodyIndex, segmentIndex, nestedBlockIndex int) {

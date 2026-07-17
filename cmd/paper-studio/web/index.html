@@ -49,6 +49,11 @@
           <div id="tag-summary" class="tag-summary">Open Accessibility to inspect the serialized PDF.</div>
           <div id="tag-tree" class="tag-tree" role="tree" aria-label="Verified final PDF structure tree"></div>
         </section>
+        <section id="delivery-panel" class="delivery-panel" aria-label="Delivery status">
+          <div class="panel-heading"><span>Delivery</span><span id="delivery-status" class="quiet">Not inspected</span></div>
+          <div id="delivery-summary" class="delivery-summary">Preflight, final PDF verification, export, and publish are separate statuses.</div>
+          <div id="delivery-actions" class="delivery-actions"></div>
+        </section>
       </aside>
 
       <aside id="page-rail" class="page-rail" aria-label="Pages">
@@ -108,6 +113,18 @@
           <summary><span>Create content</span><span class="quiet">Optional</span></summary>
           <div id="authoring-controls" class="authoring-controls" aria-live="polite"></div>
         </details>
+        <details class="inspector-disclosure review-contract-disclosure">
+          <summary><span>Editing contract</span><span id="review-contract-status" class="quiet">Select a node</span></summary>
+          <div id="review-contract" class="review-contract" aria-live="polite"></div>
+        </details>
+        <details class="inspector-disclosure review-notes-disclosure">
+          <summary><span>Review notes</span><span id="review-notes-status" class="quiet">Loading</span></summary>
+          <div id="review-notes" class="review-notes" aria-live="polite"></div>
+        </details>
+        <details class="inspector-disclosure experiments-disclosure">
+          <summary><span>Break ledger &amp; typed experiments</span><span id="typed-experiment-status" class="quiet">Loading</span></summary>
+          <div id="typed-experiments" class="typed-experiments" aria-live="polite"></div>
+        </details>
         <div id="inspector-content" class="inspector-content">
           <div class="inspector-empty">Select a node or click the page to trace its source, semantics, and layout decision.</div>
         </div>
@@ -146,9 +163,11 @@
   <script src="/edit-model.js" defer></script>
   <script src="/resource-model.js" defer></script>
   <script src="/authoring-model.js" defer></script>
+  <script src="/review-model.js" defer></script>
   <script src="/instance-model.js" defer></script>
   <script src="/inspection-model.js" defer></script>
   <script src="/provenance-model.js" defer></script>
+  <script src="/typed-experiment-model.js" defer></script>
   <script src="/tag-model.js" defer></script>
   <script src="/syntax-model.js" defer></script>
   <script src="/page-setup-model.js" defer></script>
