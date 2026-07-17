@@ -1597,7 +1597,7 @@ async function selectSourceNode(node, row) {
     item.classList.toggle('is-selected', selected);
     item.setAttribute('aria-selected', String(selected));
   });
-  focusSourceLine(node.header_span?.start?.line || node.span?.start?.line || 1);
+  focusSourceLine(node.header_span?.start?.line || node.span?.start?.line || 1, {openSource: false});
   const selector = node.id ? {key: node.id} : {};
   if (!Object.keys(selector).length) {
     renderInspector(node, 'Source node');
@@ -1866,10 +1866,10 @@ function flatten(value, prefix = '', result = []) {
   return result;
 }
 
-function focusSourceLine(line) {
+function focusSourceLine(line, {openSource = true} = {}) {
   const source = $('#source');
   const lineHeight = parseFloat(getComputedStyle(source).lineHeight) || 19.8;
-  if (!['source', 'split'].includes(app.dataset.mode)) setMode('split');
+  if (openSource && !['source', 'split'].includes(app.dataset.mode)) setMode('split');
   const row = source.querySelector(`.source-line[data-line="${Number(line)}"]`);
   source.querySelectorAll('.source-line.is-focused').forEach(item => item.classList.remove('is-focused'));
   document.querySelectorAll('.issue.is-selected').forEach(item => item.classList.remove('is-selected'));
