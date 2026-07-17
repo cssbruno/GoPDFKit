@@ -203,6 +203,7 @@ func (s *studioServer) routes() http.Handler {
 	mux.HandleFunc("/api/authoring", s.handleAuthoring)
 	mux.HandleFunc("/api/typed-experiments", s.handleTypedExperiments)
 	mux.HandleFunc("/api/review", s.handleReview)
+	mux.HandleFunc("/api/review/reference", s.handleReviewReference)
 	mux.Handle("/", s.static)
 	return s.securityHeaders(mux)
 }

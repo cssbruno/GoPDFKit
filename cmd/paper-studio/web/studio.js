@@ -24,6 +24,8 @@ const state = {
   reviewContract: null,
   review: null,
   reviewRevision: '',
+  reviewOverlay: null,
+  reviewOverlayKey: '',
   reviewLoading: false,
   reviewError: '',
   breakPolicy: 'hard',
@@ -50,6 +52,7 @@ const state = {
 const $ = (selector) => document.querySelector(selector);
 const app = $('#app');
 const pageImage = $('#page-image');
+const referenceOverlay = $('#reference-overlay');
 const geometryImage = $('#geometry-image');
 const inspectionLayer = $('#inspection-layer');
 const overlapPicker = $('#overlap-picker');
@@ -139,6 +142,8 @@ async function performRefresh({quiet = false} = {}) {
       state.deliveryError = '';
       state.review = null;
       state.reviewRevision = '';
+      state.reviewOverlayKey = '';
+      discardReviewOverlay();
       state.reviewError = '';
       closeOverlapPicker();
       state.page = Math.min(Math.max(1, state.page), Math.max(1, workspace.pages));
@@ -187,10 +192,69 @@ async function loadReview(revision, force = false) {
     if (revision !== state.revision) return;
     state.review = PaperStudioReviewModel.normalizeReview(payload, state.workspace);
     state.reviewRevision = revision;
+    loadReviewOverlay(revision, state.page, true);
   } catch (error) {
     if (error.status !== 409 && revision === state.revision) state.reviewError = error.message;
   } finally {
     if (revision === state.revision) state.reviewLoading = false;
+    renderReviewNotes();
+  }
+}
+
+function renderReferenceOverlay() {
+  if (!referenceOverlay) return;
+  const item = state.reviewOverlay;
+  const visible = app.dataset.mode === 'reference' && item && item.page === state.page && item.revision === state.revision;
+  referenceOverlay.hidden = !visible;
+  if (!visible) return;
+  const transform = item.transform?.length === 6 && item.transform.every(Number.isFinite) ? item.transform : [1, 0, 0, 1, 0, 0];
+  referenceOverlay.style.transform = `matrix(${transform.join(',')})`;
+}
+
+function discardReviewOverlay() {
+  if (state.reviewOverlay?.url) {
+    URL.revokeObjectURL(state.reviewOverlay.url);
+    state.objectURLs.delete(state.reviewOverlay.url);
+  }
+  state.reviewOverlay = null;
+  if (referenceOverlay) {
+    referenceOverlay.hidden = true;
+    referenceOverlay.removeAttribute('src');
+  }
+}
+
+async function loadReviewOverlay(revision, page, force = false) {
+  if (!referenceOverlay) return;
+  const reference = state.review?.reference;
+  const digest = reference?.overlayDigest || '';
+  const key = `${revision}:${page}:${digest}`;
+  if (!digest || !reference || Number(reference.page) !== Number(page)) {
+    discardReviewOverlay();
+    state.reviewOverlayKey = key;
+    renderReferenceOverlay();
+    return;
+  }
+  if (!force && state.reviewOverlayKey === key && state.reviewOverlay) {
+    renderReferenceOverlay();
+    return;
+  }
+  state.reviewOverlayKey = key;
+  try {
+    const scenario = state.scenario ? `&scenario=${encodeURIComponent(state.scenario)}` : '';
+    const response = await api(`/api/review/reference?revision=${encodeURIComponent(revision)}&source_revision=${encodeURIComponent(state.sourceRevision)}&artifact=overlay${scenario}`);
+    const url = URL.createObjectURL(await response.blob());
+    state.objectURLs.add(url);
+    if (revision !== state.revision || state.review?.reference?.overlayDigest !== digest) {
+      URL.revokeObjectURL(url);
+      state.objectURLs.delete(url);
+      return;
+    }
+    discardReviewOverlay();
+    state.reviewOverlay = {url, page: Number(reference.page), revision, transform: [...(reference.transform || [])]};
+    referenceOverlay.src = url;
+    renderReferenceOverlay();
+  } catch (error) {
+    if (revision === state.revision && error.status !== 409) state.reviewError = error.message;
     renderReviewNotes();
   }
 }
@@ -578,11 +642,53 @@ function renderReviewNotes() {
   const review = state.review;
   const count = (review?.comments?.length || 0) + (review?.annotations?.length || 0);
   status.textContent = `${count} note${count === 1 ? '' : 's'}`;
+  if (review) {
+    const context = document.createElement('div');
+    context.className = 'review-reference';
+    context.textContent = `Scenario ${review.scenario || 'default'} · exact source/plan review`;
+    target.append(context);
+    if (review.accessibility) {
+      const check = document.createElement('div');
+      check.className = 'review-check';
+      const label = review.accessibility.status === 'verified' ? 'Accessibility verified' : review.accessibility.status === 'failed' ? 'Accessibility checks failed' : 'Accessibility checks unavailable';
+      check.textContent = `${label} · final serialized PDF`;
+      target.append(check);
+      for (const failure of review.accessibility.failures || []) {
+        const detail = document.createElement('div');
+        detail.className = 'review-reference';
+        detail.textContent = failure;
+        target.append(detail);
+      }
+    }
+  }
   if (review?.reference) {
     const reference = document.createElement('div');
     reference.className = 'review-reference';
     reference.textContent = `Calibrated ${review.reference.kind} · page ${review.reference.page} · ${review.reference.digest.slice(0, 12)}…`;
     target.append(reference);
+    const query = `?revision=${encodeURIComponent(state.revision)}&source_revision=${encodeURIComponent(state.sourceRevision)}`;
+    const artifact = document.createElement('a');
+    artifact.className = 'review-reference-link';
+    artifact.href = `/api/review/reference${query}`;
+    artifact.textContent = 'Open calibrated reference';
+    artifact.target = '_blank';
+    target.append(artifact);
+    if (review.reference.overlayDigest) {
+      const overlay = document.createElement('a');
+      overlay.className = 'review-reference-link';
+      overlay.href = `/api/review/reference${query}&artifact=overlay`;
+      overlay.textContent = 'Show calibrated overlay';
+      overlay.target = '_blank';
+      target.append(overlay);
+    }
+    if (review.reference.diffDigest) {
+      const diff = document.createElement('a');
+      diff.className = 'review-reference-link';
+      diff.href = `/api/review/reference${query}&artifact=diff`;
+      diff.textContent = `Open raster diff · ${review.reference.changedPixels} changed pixels`;
+      diff.target = '_blank';
+      target.append(diff);
+    }
   }
   for (const item of [...(review?.annotations || []), ...(review?.comments || [])]) {
     const row = document.createElement('article');
@@ -1137,6 +1243,7 @@ async function showPage(page) {
     if (revision !== state.revision) return;
     state.page = page;
     paintWASMPage(display);
+    loadReviewOverlay(revision, page);
     geometryImage.src = geometry.url;
     $('#page-label').textContent = `Page ${page} of ${state.workspace.pages}`;
     document.querySelectorAll('.thumbnail-page').forEach((button) => {
@@ -1781,6 +1888,8 @@ function focusSourceLine(line) {
 
 function setMode(mode) {
   app.dataset.mode = mode;
+  if (mode === 'reference') loadReviewOverlay(state.revision, state.page);
+  renderReferenceOverlay();
   document.querySelectorAll('.mode').forEach((button) => {
     const active = button.dataset.mode === mode;
     button.classList.toggle('is-active', active);

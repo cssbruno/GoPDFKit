@@ -3163,7 +3163,13 @@ as completed behavior.
   ([server](cmd/paper-studio/studio_review.go),
   [UI](cmd/paper-studio/web/studio.js),
   [persistence test](cmd/paper-studio/studio_review_test.go)).
-- [ ] Reference PDFs/images support calibrated overlay and diff.
+- [x] Reference PDFs/images support calibrated overlay and diff. Studio stores
+  bounded, digest-verified reference artifacts beside the review sidecar,
+  rasterizes PDF pages through the pinned Poppler verifier, emits deterministic
+  overlay/diff PNG artifacts, serves them only for the exact current source and
+  plan revisions, and renders the calibrated overlay in Reference mode
+  ([server](cmd/paper-studio/studio_review.go), [UI](cmd/paper-studio/web/studio.js),
+  [image/PDF/artifact tests](cmd/paper-studio/studio_review_test.go)).
 - [x] Comments survive formatting and ordinary movement. Comments are anchored
   to authored IDs rather than source offsets, persisted atomically beside the
   source, and reprojected as resolved/unresolved against the current AST after
@@ -3186,7 +3192,11 @@ as completed behavior.
   evidence remains bound to the retained candidate and exact acceptance path
   ([review implementation](internal/paperd/changeset_review.go),
   [tests](internal/paperd/changeset_review_test.go)).
-- [ ] Accessibility and scenario checks participate in review.
+- [x] Accessibility and scenario checks participate in review. Every exact
+  review response carries the selected scenario and an accessibility status
+  derived from independent inspection of the final serialized PDF; Review
+  surfaces both status and bounded failures ([server](cmd/paper-studio/studio_review.go),
+  [UI](cmd/paper-studio/web/studio.js), [scenario/review tests](cmd/paper-studio/studio_review_test.go)).
 
 ## 12. Stage 10 — Legacy engine deletion
 

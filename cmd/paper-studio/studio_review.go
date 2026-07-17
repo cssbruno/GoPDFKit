@@ -4,27 +4,38 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	_ "image/jpeg"
+	"image/png"
+	"io"
 	"math"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/internal/paperlang"
+	"github.com/cssbruno/gopdfkit/internal/pdfverify"
 )
 
 const (
 	studioReviewFormatVersion = 1
 	studioReviewBodyLimit     = 4096
 	studioReviewArtifactLimit = 100_000
+	studioReviewMaxBytes      = 8 << 20
 )
 
 // Review metadata deliberately lives beside the source instead of inside the
@@ -60,14 +71,18 @@ type studioReviewComment struct {
 }
 
 type studioReviewReference struct {
-	Kind       string    `json:"kind"`
-	Digest     string    `json:"digest"`
-	Page       uint32    `json:"page"`
-	Width      uint32    `json:"width"`
-	Height     uint32    `json:"height"`
-	Transform  []float64 `json:"transform"`
-	Calibrated bool      `json:"calibrated"`
-	CreatedAt  string    `json:"created_at"`
+	Kind          string    `json:"kind"`
+	Digest        string    `json:"digest"`
+	Page          uint32    `json:"page"`
+	Width         uint32    `json:"width"`
+	Height        uint32    `json:"height"`
+	Transform     []float64 `json:"transform"`
+	Calibrated    bool      `json:"calibrated"`
+	DiffStatus    string    `json:"diff_status,omitempty"`
+	ChangedPixels uint64    `json:"changed_pixels"`
+	OverlayDigest string    `json:"overlay_digest,omitempty"`
+	DiffDigest    string    `json:"diff_digest,omitempty"`
+	CreatedAt     string    `json:"created_at"`
 }
 
 type studioReviewSidecar struct {
@@ -78,14 +93,22 @@ type studioReviewSidecar struct {
 }
 
 type studioReviewResponse struct {
-	FormatVersion  uint16                   `json:"format_version"`
-	Revision       string                   `json:"revision"`
-	SourceRevision string                   `json:"source_revision"`
-	PlanHash       string                   `json:"plan_hash"`
-	Scenario       string                   `json:"scenario,omitempty"`
-	Annotations    []studioReviewAnnotation `json:"annotations"`
-	Comments       []studioReviewComment    `json:"comments"`
-	Reference      *studioReviewReference   `json:"reference,omitempty"`
+	FormatVersion  uint16                     `json:"format_version"`
+	Revision       string                     `json:"revision"`
+	SourceRevision string                     `json:"source_revision"`
+	PlanHash       string                     `json:"plan_hash"`
+	Scenario       string                     `json:"scenario,omitempty"`
+	Accessibility  *studioReviewAccessibility `json:"accessibility,omitempty"`
+	Annotations    []studioReviewAnnotation   `json:"annotations"`
+	Comments       []studioReviewComment      `json:"comments"`
+	Reference      *studioReviewReference     `json:"reference,omitempty"`
+}
+
+type studioReviewAccessibility struct {
+	Status   string   `json:"status"`
+	Evidence string   `json:"evidence"`
+	Passed   bool     `json:"passed"`
+	Failures []string `json:"failures,omitempty"`
 }
 
 type studioReviewMutation struct {
@@ -106,6 +129,7 @@ type studioReviewMutation struct {
 	Author          string    `json:"author,omitempty"`
 	ReferenceKind   string    `json:"reference_kind,omitempty"`
 	ReferenceDigest string    `json:"reference_digest,omitempty"`
+	ReferenceData   string    `json:"reference_data_base64,omitempty"`
 }
 
 func (s *studioServer) handleReview(w http.ResponseWriter, r *http.Request) {
@@ -130,7 +154,7 @@ func (s *studioServer) handleReview(w http.ResponseWriter, r *http.Request) {
 			writeStudioError(w, http.StatusUnprocessableEntity, err)
 			return
 		}
-		writeStudioJSON(w, http.StatusOK, projectStudioReview(snapshot, review))
+		writeStudioJSON(w, http.StatusOK, projectStudioReview(ctx, snapshot, review))
 		return
 	}
 	var mutation studioReviewMutation
@@ -149,7 +173,7 @@ func (s *studioServer) handleReview(w http.ResponseWriter, r *http.Request) {
 		writeStudioError(w, http.StatusUnprocessableEntity, err)
 		return
 	}
-	if err := applyReviewMutation(snapshot, &review, mutation); err != nil {
+	if err := s.applyReviewMutation(ctx, snapshot, &review, mutation); err != nil {
 		writeStudioError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -157,7 +181,7 @@ func (s *studioServer) handleReview(w http.ResponseWriter, r *http.Request) {
 		writeStudioError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeStudioJSON(w, http.StatusOK, projectStudioReview(snapshot, review))
+	writeStudioJSON(w, http.StatusOK, projectStudioReview(ctx, snapshot, review))
 }
 
 func validateReviewRevisions(snapshot *studioSnapshot, revision, sourceRevision string) error {
@@ -245,7 +269,7 @@ func validateReviewReference(mutation studioReviewMutation) error {
 
 func finiteReviewNumber(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }
 
-func applyReviewMutation(snapshot *studioSnapshot, review *studioReviewSidecar, mutation studioReviewMutation) error {
+func (s *studioServer) applyReviewMutation(ctx context.Context, snapshot *studioSnapshot, review *studioReviewSidecar, mutation studioReviewMutation) error {
 	review.FormatVersion = studioReviewFormatVersion
 	id, err := newReviewID(mutation.Kind, mutation.Target)
 	if err != nil {
@@ -267,9 +291,301 @@ func applyReviewMutation(snapshot *studioSnapshot, review *studioReviewSidecar, 
 		})
 		return nil
 	}
-	review.Reference = &studioReviewReference{Kind: mutation.ReferenceKind, Digest: mutation.ReferenceDigest, Page: mutation.Page, Width: uint32(mutation.Width), Height: uint32(mutation.Height), Transform: append([]float64(nil), mutation.Transform...), Calibrated: true, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
-	_ = snapshot
+	reference := &studioReviewReference{Kind: mutation.ReferenceKind, Digest: mutation.ReferenceDigest, Page: mutation.Page, Width: uint32(mutation.Width), Height: uint32(mutation.Height), Transform: append([]float64(nil), mutation.Transform...), Calibrated: true, DiffStatus: "not-run", CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	if mutation.ReferenceData != "" {
+		data, err := decodeReviewArtifact(mutation.ReferenceData)
+		if err != nil {
+			return err
+		}
+		actualDigest := sha256.Sum256(data)
+		if hex.EncodeToString(actualDigest[:]) != mutation.ReferenceDigest {
+			return errors.New("paper-studio: reference bytes do not match the declared digest")
+		}
+		if err := s.writeReviewArtifact(mutation.ReferenceDigest, data); err != nil {
+			return err
+		}
+		if mutation.ReferenceKind == "application/pdf" {
+			if !bytes.HasPrefix(data, []byte("%PDF-")) {
+				return errors.New("paper-studio: PDF reference does not have a PDF signature")
+			}
+			diff, overlay, width, height, changed, err := s.diffReviewPDF(ctx, snapshot, mutation.Page, data)
+			if err != nil {
+				return err
+			}
+			reference.Width, reference.Height, reference.ChangedPixels = width, height, changed
+			reference.DiffStatus = "verified"
+			overlayDigest := sha256.Sum256(overlay)
+			reference.OverlayDigest = hex.EncodeToString(overlayDigest[:])
+			if err := s.writeReviewArtifact(reference.OverlayDigest, overlay); err != nil {
+				return err
+			}
+			diffDigest := sha256.Sum256(diff)
+			reference.DiffDigest = hex.EncodeToString(diffDigest[:])
+			if err := s.writeReviewArtifact(reference.DiffDigest, diff); err != nil {
+				return err
+			}
+		} else {
+			diff, width, height, changed, err := s.diffReviewImage(ctx, snapshot, mutation.Page, data)
+			if err != nil {
+				return err
+			}
+			reference.Width, reference.Height, reference.ChangedPixels = width, height, changed
+			reference.DiffStatus = "verified"
+			reference.OverlayDigest = mutation.ReferenceDigest
+			diffDigest := sha256.Sum256(diff)
+			reference.DiffDigest = hex.EncodeToString(diffDigest[:])
+			if err := s.writeReviewArtifact(reference.DiffDigest, diff); err != nil {
+				return err
+			}
+		}
+	}
+	review.Reference = reference
 	return nil
+}
+
+func decodeReviewArtifact(encoded string) ([]byte, error) {
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, errors.New("paper-studio: reference artifact is not valid base64")
+	}
+	if len(data) == 0 || len(data) > studioReviewMaxBytes {
+		return nil, errors.New("paper-studio: reference artifact exceeds its bound")
+	}
+	return data, nil
+}
+
+func (s *studioServer) reviewArtifactPath(digest string) string {
+	return filepath.Join(s.reviewSidecarPath()+".assets", digest+".bin")
+}
+
+func (s *studioServer) writeReviewArtifact(digest string, data []byte) error {
+	if len(data) == 0 || len(data) > studioReviewMaxBytes || len(digest) != sha256.Size*2 {
+		return errors.New("paper-studio: review artifact is outside its bound")
+	}
+	decoded, err := hex.DecodeString(digest)
+	if err != nil || len(decoded) != sha256.Size {
+		return errors.New("paper-studio: review artifact digest is malformed")
+	}
+	actual := sha256.Sum256(data)
+	if !bytes.Equal(decoded, actual[:]) {
+		return errors.New("paper-studio: review artifact digest does not match its bytes")
+	}
+	directory := filepath.Dir(s.reviewArtifactPath(digest))
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return err
+	}
+	temporary, err := os.CreateTemp(directory, ".review-artifact-*.tmp")
+	if err != nil {
+		return err
+	}
+	temporaryName := temporary.Name()
+	defer os.Remove(temporaryName)
+	if err := temporary.Chmod(0o600); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if _, err := io.Copy(temporary, bytes.NewReader(data)); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryName, s.reviewArtifactPath(digest))
+}
+
+func (s *studioServer) readReviewArtifact(digest string) ([]byte, error) {
+	if len(digest) != sha256.Size*2 {
+		return nil, errors.New("paper-studio: review artifact digest is malformed")
+	}
+	if _, err := hex.DecodeString(digest); err != nil {
+		return nil, errors.New("paper-studio: review artifact digest is malformed")
+	}
+	data, err := os.ReadFile(s.reviewArtifactPath(digest))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > studioReviewMaxBytes {
+		return nil, errors.New("paper-studio: review artifact exceeds its bound")
+	}
+	actual := sha256.Sum256(data)
+	if hex.EncodeToString(actual[:]) != digest {
+		return nil, errors.New("paper-studio: stored review artifact failed digest verification")
+	}
+	return data, nil
+}
+
+func (s *studioServer) diffReviewImage(ctx context.Context, snapshot *studioSnapshot, page uint32, reference []byte) ([]byte, uint32, uint32, uint64, error) {
+	referenceImage, _, err := image.Decode(bytes.NewReader(reference))
+	if err != nil {
+		return nil, 0, 0, 0, fmt.Errorf("paper-studio: decode image reference: %w", err)
+	}
+	raster, err := snapshot.plan.CaptureRasterPages(ctx, document.DefaultPaperPlanRasterRequest())
+	if err != nil {
+		return nil, 0, 0, 0, fmt.Errorf("paper-studio: capture plan for reference diff: %w", err)
+	}
+	if page == 0 || int(page) > len(raster.Pages) {
+		return nil, 0, 0, 0, errors.New("paper-studio: reference page is absent from the exact plan")
+	}
+	actualImage, err := png.Decode(bytes.NewReader(raster.Pages[page-1].PNG))
+	if err != nil {
+		return nil, 0, 0, 0, fmt.Errorf("paper-studio: decode exact plan raster: %w", err)
+	}
+	return diffReviewImages(ctx, actualImage, referenceImage)
+}
+
+func (s *studioServer) diffReviewPDF(ctx context.Context, snapshot *studioSnapshot, page uint32, reference []byte) ([]byte, []byte, uint32, uint32, uint64, error) {
+	raster, err := snapshot.plan.CaptureRasterPages(ctx, document.DefaultPaperPlanRasterRequest())
+	if err != nil {
+		return nil, nil, 0, 0, 0, fmt.Errorf("paper-studio: capture plan for PDF reference diff: %w", err)
+	}
+	if page == 0 || int(page) > len(raster.Pages) {
+		return nil, nil, 0, 0, 0, errors.New("paper-studio: PDF reference page is absent from the exact plan")
+	}
+	dimensions := make([]image.Point, len(raster.Pages))
+	for index, planPage := range raster.Pages {
+		config, _, err := image.DecodeConfig(bytes.NewReader(planPage.PNG))
+		if err != nil {
+			return nil, nil, 0, 0, 0, fmt.Errorf("paper-studio: decode exact plan raster dimensions: %w", err)
+		}
+		dimensions[index] = image.Point{X: config.Width, Y: config.Height}
+	}
+	binary, err := exec.LookPath("pdftoppm")
+	if err != nil {
+		return nil, nil, 0, 0, 0, errors.New("paper-studio: PDF reference diff requires pdftoppm")
+	}
+	limits := pdfverify.DefaultLimits()
+	output, err := (pdfverify.PopplerRasterizer{
+		Binary: binary, Version: "26.05.0", TempRoot: filepath.Dir(s.reviewSidecarPath()),
+	}).Rasterize(ctx, reference, document.DefaultPaperPlanRasterRequest().DPI, dimensions, limits)
+	if err != nil {
+		return nil, nil, 0, 0, 0, fmt.Errorf("paper-studio: rasterize PDF reference with pinned renderer: %w", err)
+	}
+	if int(page) > len(output.Pages) {
+		return nil, nil, 0, 0, 0, errors.New("paper-studio: PDF reference raster omitted the requested page")
+	}
+	actualImage, err := png.Decode(bytes.NewReader(raster.Pages[page-1].PNG))
+	if err != nil {
+		return nil, nil, 0, 0, 0, fmt.Errorf("paper-studio: decode exact plan raster for PDF diff: %w", err)
+	}
+	referenceImage, err := png.Decode(bytes.NewReader(output.Pages[page-1]))
+	if err != nil {
+		return nil, nil, 0, 0, 0, fmt.Errorf("paper-studio: decode rasterized PDF reference: %w", err)
+	}
+	diff, width, height, changed, err := diffReviewImages(ctx, actualImage, referenceImage)
+	return diff, output.Pages[page-1], width, height, changed, err
+}
+
+func diffReviewImages(ctx context.Context, actualImage, referenceImage image.Image) ([]byte, uint32, uint32, uint64, error) {
+	if referenceImage.Bounds().Dx() != actualImage.Bounds().Dx() || referenceImage.Bounds().Dy() != actualImage.Bounds().Dy() {
+		return nil, 0, 0, 0, errors.New("paper-studio: reference image dimensions do not match the exact plan raster")
+	}
+	bounds := actualImage.Bounds()
+	diff := image.NewRGBA(bounds)
+	var changed uint64
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		if y&127 == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, 0, 0, 0, err
+			}
+		}
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			expected := color.RGBAModel.Convert(referenceImage.At(x, y)).(color.RGBA)
+			actual := color.RGBAModel.Convert(actualImage.At(x, y)).(color.RGBA)
+			delta := maxReviewChannel(absReviewChannel(expected.R, actual.R), maxReviewChannel(absReviewChannel(expected.G, actual.G), absReviewChannel(expected.B, actual.B)))
+			if delta != 0 {
+				changed++
+				diff.SetRGBA(x, y, color.RGBA{R: 255, G: 255 - delta/2, B: 0, A: 255})
+			} else {
+				diff.SetRGBA(x, y, color.RGBA{R: 255, G: 255, B: 255, A: 255})
+			}
+		}
+	}
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, diff); err != nil {
+		return nil, 0, 0, 0, err
+	}
+	return encoded.Bytes(), uint32(bounds.Dx()), uint32(bounds.Dy()), changed, nil
+}
+
+func absReviewChannel(left, right uint8) uint8 {
+	if left > right {
+		return left - right
+	}
+	return right - left
+}
+
+func maxReviewChannel(left, right uint8) uint8 {
+	if left > right {
+		return left
+	}
+	return right
+}
+
+func (s *studioServer) handleReviewReference(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), studioAPITimeout)
+	defer cancel()
+	snapshot, err := s.current(ctx, r.URL.Query().Get("scenario"))
+	if err != nil {
+		writeStudioError(w, http.StatusUnprocessableEntity, err)
+		return
+	}
+	if err := validateReviewRevisions(snapshot, r.URL.Query().Get("revision"), r.URL.Query().Get("source_revision")); err != nil {
+		writeStudioError(w, http.StatusConflict, err)
+		return
+	}
+	review, err := s.readReviewSidecar()
+	if err != nil || review.Reference == nil {
+		if errors.Is(err, os.ErrNotExist) || review.Reference == nil {
+			writeStudioError(w, http.StatusNotFound, errors.New("paper-studio: no calibrated review reference is retained"))
+		} else {
+			writeStudioError(w, http.StatusUnprocessableEntity, err)
+		}
+		return
+	}
+	digest := review.Reference.Digest
+	contentType := review.Reference.Kind
+	switch r.URL.Query().Get("artifact") {
+	case "":
+	case "overlay":
+		digest = review.Reference.OverlayDigest
+		if digest == "" {
+			writeStudioError(w, http.StatusNotFound, errors.New("paper-studio: calibrated reference overlay is not available"))
+			return
+		}
+		if contentType == "application/pdf" {
+			contentType = "image/png"
+		}
+	case "diff":
+		digest = review.Reference.DiffDigest
+		if digest == "" {
+			writeStudioError(w, http.StatusNotFound, errors.New("paper-studio: reference diff is not available"))
+			return
+		}
+		contentType = "image/png"
+	default:
+		writeStudioError(w, http.StatusBadRequest, errors.New("paper-studio: unknown review reference artifact"))
+		return
+	}
+	data, err := s.readReviewArtifact(digest)
+	if err != nil {
+		writeStudioError(w, http.StatusNotFound, err)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Paper-Plan-Revision", snapshot.revision)
+	w.Header().Set("X-Paper-Source-Revision", studioSourceRevision(snapshot.source))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }
 
 func newReviewID(kind, target string) (string, error) {
@@ -281,7 +597,7 @@ func newReviewID(kind, target string) (string, error) {
 	return "review-" + hex.EncodeToString(hash[:12]), nil
 }
 
-func projectStudioReview(snapshot *studioSnapshot, review studioReviewSidecar) studioReviewResponse {
+func projectStudioReview(ctx context.Context, snapshot *studioSnapshot, review studioReviewSidecar) studioReviewResponse {
 	projected := review
 	projected.FormatVersion = studioReviewFormatVersion
 	projected.Annotations = append([]studioReviewAnnotation(nil), review.Annotations...)
@@ -293,7 +609,32 @@ func projectStudioReview(snapshot *studioSnapshot, review studioReviewSidecar) s
 	for index := range projected.Comments {
 		projected.Comments[index].Resolved = reviewTargetExists(parsed.AST.Root, projected.Comments[index].Target)
 	}
-	return studioReviewResponse{FormatVersion: studioReviewFormatVersion, Revision: snapshot.revision, SourceRevision: studioSourceRevision(snapshot.source), PlanHash: snapshot.plan.Hash(), Scenario: snapshot.scenario, Annotations: projected.Annotations, Comments: projected.Comments, Reference: projected.Reference}
+	return studioReviewResponse{FormatVersion: studioReviewFormatVersion, Revision: snapshot.revision, SourceRevision: studioSourceRevision(snapshot.source), PlanHash: snapshot.plan.Hash(), Scenario: snapshot.scenario, Accessibility: inspectReviewAccessibility(ctx, snapshot), Annotations: projected.Annotations, Comments: projected.Comments, Reference: projected.Reference}
+}
+
+func inspectReviewAccessibility(ctx context.Context, snapshot *studioSnapshot) *studioReviewAccessibility {
+	result := &studioReviewAccessibility{Status: "unavailable", Evidence: "final_serialized_pdf"}
+	if snapshot == nil || snapshot.pages == 0 {
+		return result
+	}
+	pdf, err := renderStudioTaggedPDF(ctx, snapshot.plan)
+	if err != nil {
+		result.Failures = []string{"final PDF could not be serialized for accessibility review"}
+		return result
+	}
+	report, err := pdfverify.InspectTags(ctx, pdf, pdfverify.TagInspectionLimits{})
+	if err != nil {
+		result.Failures = []string{"final PDF tag inspection was unavailable"}
+		return result
+	}
+	result.Passed = report.Passed
+	if report.Passed {
+		result.Status = "verified"
+	} else {
+		result.Status = "failed"
+		result.Failures = append([]string(nil), report.Failures...)
+	}
+	return result
 }
 
 func reviewTargetExists(root *paperlang.Node, target string) bool {

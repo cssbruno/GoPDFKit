@@ -103,6 +103,7 @@ button { color: inherit; }
 .page-stage { position: relative; width: min(720px, calc(100vw - 560px)); margin: auto; transform-origin: top center; outline: none; transition: width .16s ease, opacity .15s ease; }
 .page-stage > img, .page-stage > canvas { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
 #page-image { position: relative; z-index: 1; border: 1px solid #c8c6be; background: var(--paper); box-shadow: 0 14px 35px rgba(31,32,36,.16), 0 2px 8px rgba(31,32,36,.09); cursor: crosshair; }
+.reference-overlay { position: absolute; inset: 0; z-index: 2; width: 100% !important; height: 100% !important; opacity: .44; transform-origin: 0 0; mix-blend-mode: multiply; pointer-events: none; }
 .geometry-image { position: absolute; inset: 0; z-index: 2; display: none !important; pointer-events: none; mix-blend-mode: multiply; }
 .app.show-geometry .geometry-image { display: block !important; }
 .app.is-stale #page-stage { opacity: .45; pointer-events: none; }
@@ -203,6 +204,9 @@ button { color: inherit; }
 .review-note-state { color: var(--warning); font-size: 8px; text-transform: uppercase; }
 .review-note-state.is-resolved { color: var(--success); }
 .review-reference { color: var(--muted); font: 9px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.review-check { color: var(--accent); font-size: 9px; line-height: 1.35; }
+.review-reference-link { color: var(--accent); font-size: 9px; text-decoration: none; }
+.review-reference-link:hover { text-decoration: underline; }
 .review-note-form { display: grid; gap: 6px; }
 .review-note-form textarea { width: 100%; box-sizing: border-box; resize: vertical; min-height: 42px; padding: 6px; border: 1px solid var(--hairline); border-radius: 4px; background: #fff; color: var(--ink); font: 10px/1.35 Inter, ui-sans-serif, sans-serif; }
 .review-note-actions { display: flex; gap: 6px; }

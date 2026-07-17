@@ -136,9 +136,11 @@
     return Object.freeze({
       revision: payload.revision,
       sourceRevision: payload.source_revision,
+      scenario: String(payload.scenario || ''),
+      accessibility: payload.accessibility ? Object.freeze({...payload.accessibility, failures: Object.freeze([...(payload.accessibility.failures || [])])}) : null,
       annotations: Object.freeze((payload.annotations || []).map((item) => Object.freeze({...item, transform: Object.freeze([...(item.transform || [])])}))),
       comments: Object.freeze((payload.comments || []).map((item) => Object.freeze({...item}))),
-      reference: payload.reference ? Object.freeze({...payload.reference, transform: Object.freeze([...(payload.reference.transform || [])])}) : null,
+      reference: payload.reference ? Object.freeze({...payload.reference, overlayDigest: String(payload.reference.overlay_digest || ''), diffDigest: String(payload.reference.diff_digest || ''), changedPixels: Number(payload.reference.changed_pixels || 0), transform: Object.freeze([...(payload.reference.transform || [])])}) : null,
     });
   }
 
