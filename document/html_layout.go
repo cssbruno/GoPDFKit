@@ -260,7 +260,7 @@ func htmlSerializeTokens(tokens []HTMLSegmentType) string {
 		switch token.Cat {
 		case 'O':
 			out.WriteByte('<')
-			out.WriteString(token.Str)
+			out.WriteString(htmlCanonicalSVGName(token.Str))
 			if len(token.Attr) > 0 {
 				keys := make([]string, 0, len(token.Attr))
 				for key := range token.Attr {
@@ -269,7 +269,7 @@ func htmlSerializeTokens(tokens []HTMLSegmentType) string {
 				sort.Strings(keys)
 				for _, key := range keys {
 					out.WriteByte(' ')
-					out.WriteString(key)
+					out.WriteString(htmlCanonicalSVGName(key))
 					out.WriteString(`="`)
 					out.WriteString(stdhtml.EscapeString(token.Attr[key]))
 					out.WriteByte('"')
@@ -278,13 +278,42 @@ func htmlSerializeTokens(tokens []HTMLSegmentType) string {
 			out.WriteByte('>')
 		case 'C':
 			out.WriteString("</")
-			out.WriteString(token.Str)
+			out.WriteString(htmlCanonicalSVGName(token.Str))
 			out.WriteByte('>')
 		case 'T':
 			out.WriteString(stdhtml.EscapeString(token.Str))
 		}
 	}
 	return out.String()
+}
+
+func htmlCanonicalSVGName(name string) string {
+	switch name {
+	case "lineargradient":
+		return "linearGradient"
+	case "radialgradient":
+		return "radialGradient"
+	case "clippath":
+		return "clipPath"
+	case "viewbox":
+		return "viewBox"
+	case "preserveaspectratio":
+		return "preserveAspectRatio"
+	case "gradientunits":
+		return "gradientUnits"
+	case "gradienttransform":
+		return "gradientTransform"
+	case "patternunits":
+		return "patternUnits"
+	case "patterncontentunits":
+		return "patternContentUnits"
+	case "patterntransform":
+		return "patternTransform"
+	case "clippathunits":
+		return "clipPathUnits"
+	default:
+		return name
+	}
 }
 
 func htmlCollectCSSRules(tokens []HTMLSegmentType) []htmlCSSRule {

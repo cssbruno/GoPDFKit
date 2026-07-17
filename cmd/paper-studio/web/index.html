@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Paper Studio</title>
+  <link rel="stylesheet" href="/studio.css">
+</head>
+<body>
+  <div id="app" class="app is-loading" data-mode="design">
+    <header class="topbar">
+      <div class="brand" aria-label="Paper Studio">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>Paper</span><strong>Studio</strong>
+      </div>
+      <div class="document-state">
+        <span id="file-name">Opening document…</span>
+        <span id="revision" class="revision">—</span>
+      </div>
+      <nav class="modes" aria-label="Workspace mode">
+        <button class="mode is-active" data-mode="design" aria-pressed="true">Design</button>
+        <button class="mode" data-mode="source" aria-pressed="false">Source</button>
+        <button class="mode" data-mode="split" aria-pressed="false">Split</button>
+        <button class="mode" data-mode="review" aria-pressed="false">Review</button>
+        <button class="mode" data-mode="accessibility" aria-pressed="false">Accessibility</button>
+        <button class="mode" data-mode="reference" aria-pressed="false">Reference</button>
+      </nav>
+      <div class="top-actions">
+        <button id="toggle-overlay" class="icon-button" aria-pressed="false" title="Toggle geometry overlay">Geometry</button>
+        <button id="refresh" class="primary-action">Refresh plan</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside id="left-panel" class="left-panel" aria-label="Document outline">
+        <div class="panel-heading">
+          <span>Outline</span>
+          <span id="node-count" class="quiet">0 nodes</span>
+        </div>
+        <div id="outline" class="outline" role="tree"></div>
+        <div class="panel-heading scenarios-heading">
+          <span>Scenarios</span>
+        </div>
+        <div id="scenarios" class="scenarios"><span class="quiet">No scenario selected</span></div>
+        <div class="panel-heading resources-heading"><span>Resources</span><span id="resource-count" class="quiet">0</span></div>
+        <div id="resources" class="resources" aria-live="polite"><span class="quiet">No catalog assets</span></div>
+      </aside>
+
+      <aside id="page-rail" class="page-rail" aria-label="Pages">
+        <div class="rail-title"><span><strong>Pages</strong><small id="baseline-state">No baseline</small></span><span id="page-total">0</span></div>
+        <div id="thumbnails" class="thumbnails"></div>
+      </aside>
+
+      <section id="canvas-region" class="canvas-region" aria-label="Document canvas">
+        <div class="canvas-toolbar">
+          <div class="zoom-control" role="group" aria-label="Canvas zoom">
+            <button id="zoom-out" aria-label="Zoom out">−</button>
+            <output id="zoom-value">100%</output>
+            <button id="zoom-in" aria-label="Zoom in">+</button>
+          </div>
+          <div id="page-label" class="page-label">No page</div>
+          <div class="preview-authority"><span class="status-dot"></span><span id="preview-status">Plan preview</span></div>
+        </div>
+        <div id="inspection-controls" class="inspection-controls" role="toolbar" aria-label="Exact plan overlays">
+          <span class="inspection-label">Inspect</span>
+          <button class="inspection-toggle" data-overlay="border" aria-pressed="false">Border</button>
+          <button class="inspection-toggle" data-overlay="content" aria-pressed="false">Content</button>
+          <button class="inspection-toggle" data-overlay="regions" aria-pressed="false">Regions</button>
+          <button class="inspection-toggle" data-overlay="breaks" aria-pressed="false">Breaks</button>
+          <button class="inspection-toggle" data-overlay="reading" aria-pressed="false">Reading</button>
+          <button class="inspection-toggle" data-overlay="roles" aria-pressed="false">Roles</button>
+        </div>
+        <div id="stale-banner" class="stale-banner" role="status">Preview revision changed. Rebuilding exact pages…</div>
+        <div id="canvas-scroll" class="canvas-scroll">
+          <div id="page-stage" class="page-stage" tabindex="0" aria-label="Rendered page">
+            <img id="page-image" alt="Exact display-list page preview">
+            <img id="geometry-image" class="geometry-image" alt="Layout geometry and break overlay">
+            <div id="inspection-layer" class="inspection-layer" aria-hidden="true"></div>
+            <div id="selection-layer" class="selection-layer" aria-hidden="true"></div>
+            <div id="selection-pulse" class="selection-pulse" aria-hidden="true"></div>
+            <div id="overlap-picker" class="overlap-picker" role="listbox" aria-label="Overlapping fragments in paint order" hidden></div>
+          </div>
+          <div id="empty-state" class="empty-state">
+            <strong>No authoritative plan yet</strong>
+            <span>Resolve the source issues to restore the page canvas.</span>
+          </div>
+        </div>
+      </section>
+
+      <aside id="inspector" class="inspector" aria-label="Selection inspector">
+        <div class="panel-heading">
+          <span>Inspector</span>
+          <span id="selection-kind" class="quiet">Nothing selected</span>
+        </div>
+        <div id="edit-controls" class="edit-controls" aria-live="polite"></div>
+        <div class="panel-heading authoring-heading"><span>Create &amp; connect</span><span class="quiet">journaled</span></div>
+        <div id="authoring-controls" class="authoring-controls" aria-live="polite"></div>
+        <div id="inspector-content" class="inspector-content">
+          <div class="inspector-empty">Select a node or click the page to trace its source, semantics, and layout decision.</div>
+        </div>
+        <div class="panel-heading issues-heading">
+          <span>Issues</span>
+          <span id="issue-count" class="issue-count">0</span>
+        </div>
+        <div id="issues" class="issues"></div>
+      </aside>
+
+      <section id="source-panel" class="source-panel" aria-label="Paper source">
+        <div class="source-gutter" id="source-gutter" aria-hidden="true"></div>
+        <pre id="source" tabindex="0"></pre>
+      </section>
+    </main>
+
+    <footer class="statusbar">
+      <span id="connection-state"><span class="status-dot"></span>Local workspace</span>
+      <span id="cursor-state">Page — · No selection</span>
+      <span class="shortcuts">←/→ page · +/− zoom · [/] panels</span>
+    </footer>
+  </div>
+  <script src="/rail-model.js" defer></script>
+  <script src="/edit-model.js" defer></script>
+  <script src="/resource-model.js" defer></script>
+  <script src="/authoring-model.js" defer></script>
+  <script src="/studio.js" defer></script>
+</body>
+</html>

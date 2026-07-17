@@ -1,0 +1,43 @@
+# Paper Studio read-first warm-path baseline
+# Date: 2026-07-17
+# Source revision: 50b25305eb49389d00f68656c61df92edc9f06e7 (dirty Paper Engine branch)
+# Environment: darwin/arm64, Apple M2, Go 1.26.5
+# Command:
+# GOCACHE=/tmp/gopdfkit-go-cache go test ./cmd/paper-studio -run '^$' \
+#   -bench BenchmarkPaperStudioWarmWorkspaceAndVisiblePage \
+#   -benchmem -benchtime=250ms -count=5
+
+BenchmarkPaperStudioWarmWorkspaceAndVisiblePage-8  2448  105399 ns/op  36928 B/op  71 allocs/op
+BenchmarkPaperStudioWarmWorkspaceAndVisiblePage-8  4444   67900 ns/op  36925 B/op  71 allocs/op
+BenchmarkPaperStudioWarmWorkspaceAndVisiblePage-8  4425   66886 ns/op  36942 B/op  71 allocs/op
+BenchmarkPaperStudioWarmWorkspaceAndVisiblePage-8  4585   67456 ns/op  36940 B/op  71 allocs/op
+BenchmarkPaperStudioWarmWorkspaceAndVisiblePage-8  4510   66441 ns/op  36935 B/op  71 allocs/op
+
+# This measures one cached workspace read plus one immutable cached visible-page
+# SVG response. It does not include browser SVG decode, paint, network transport,
+# cold planning, or filesystem notification latency, so it is a baseline rather
+# than the complete Stage 8 interaction gate.
+
+# Page-rail summary/baseline impact (2026-07-17)
+# Command:
+# GOCACHE=/tmp/gopdfkit-go-cache go test ./cmd/paper-studio -run '^$' \
+#   -bench 'BenchmarkPaperStudio(WarmWorkspaceAndVisiblePage|WarmWorkspaceWithPageRailBaseline)$' \
+#   -benchmem -benchtime=250ms -count=5
+
+BenchmarkPaperStudioWarmWorkspaceWithPageRailBaseline-8  2512  119032 ns/op  78255 B/op  85 allocs/op
+BenchmarkPaperStudioWarmWorkspaceWithPageRailBaseline-8  2386  117022 ns/op  78259 B/op  85 allocs/op
+BenchmarkPaperStudioWarmWorkspaceWithPageRailBaseline-8  2583  117160 ns/op  78268 B/op  85 allocs/op
+BenchmarkPaperStudioWarmWorkspaceWithPageRailBaseline-8  2595  115673 ns/op  78211 B/op  85 allocs/op
+BenchmarkPaperStudioWarmWorkspaceWithPageRailBaseline-8  2619  115556 ns/op  78108 B/op  85 allocs/op
+
+BenchmarkPaperStudioWarmWorkspaceAndVisiblePage-8  4107  71213 ns/op  39773 B/op  88 allocs/op
+BenchmarkPaperStudioWarmWorkspaceAndVisiblePage-8  4244  71044 ns/op  39808 B/op  88 allocs/op
+BenchmarkPaperStudioWarmWorkspaceAndVisiblePage-8  4278  70777 ns/op  39807 B/op  88 allocs/op
+BenchmarkPaperStudioWarmWorkspaceAndVisiblePage-8  4212  71418 ns/op  39787 B/op  88 allocs/op
+BenchmarkPaperStudioWarmWorkspaceAndVisiblePage-8  4161  70858 ns/op  39791 B/op  88 allocs/op
+
+# Page summaries are computed once per immutable plan and cached. The first
+# cohort measures JSON serialization of a warm two-page workspace while one
+# exact prior-plan baseline is active. The second includes that richer warm
+# workspace response plus one cached visible-page SVG. Both remain backend-only
+# measurements and do not close the browser interaction latency gate.

@@ -17,7 +17,11 @@ func htmlLinkTarget(href string) (string, error) {
 		return "", nil
 	}
 	if strings.HasPrefix(href, "#") {
-		return "", fmt.Errorf("HTML fragment links are not supported: %s", href)
+		name := strings.TrimPrefix(href, "#")
+		if err := validateTypedDestinationName(name); err != nil {
+			return "", fmt.Errorf("invalid HTML fragment link %q: %w", href, err)
+		}
+		return "#" + name, nil
 	}
 	u, err := url.Parse(href)
 	if err != nil {

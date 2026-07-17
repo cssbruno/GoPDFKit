@@ -172,12 +172,16 @@ func CompileHTMLTemplateContext(ctx context.Context, templateHTML string) (*Comp
 // unsupported. For image sources, place the slot inside a static img tag, for
 // example <img src="{{logo}}" alt="{{alt}}">.
 func (html *HTML) WriteTemplate(lineHt float64, template *CompiledHTMLTemplate, values HTMLTemplateValues) {
-	_ = html.WriteTemplateContext(context.Background(), lineHt, template, values)
+	_ = html.writeTemplateContextEntry(context.Background(), lineHt, template, values, "HTML.WriteTemplate")
 }
 
 // WriteTemplateContext fills a compiled HTML template with values, renders it,
 // and checks ctx before render. See WriteTemplate for value handling.
 func (html *HTML) WriteTemplateContext(ctx context.Context, lineHt float64, template *CompiledHTMLTemplate, values HTMLTemplateValues) error {
+	return html.writeTemplateContextEntry(ctx, lineHt, template, values, "HTML.WriteTemplateContext")
+}
+
+func (html *HTML) writeTemplateContextEntry(ctx context.Context, lineHt float64, template *CompiledHTMLTemplate, values HTMLTemplateValues, entryPoint string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -194,7 +198,7 @@ func (html *HTML) WriteTemplateContext(ctx context.Context, lineHt float64, temp
 		html.pdf.SetError(err)
 		return err
 	}
-	html.WriteCompiled(lineHt, compiled)
+	html.writeCompiledContext(ctx, lineHt, compiled, entryPoint)
 	return html.pdf.Error()
 }
 

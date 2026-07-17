@@ -1534,14 +1534,14 @@ func htmlHeadingFontSize(base float64, tag string) float64 {
 	case "h1":
 		return base * 2
 	case "h2":
-		return base * 1.6
+		return base * 1.5
 	case "h3":
-		return base * 1.35
+		return base * 1.17
 	case "h4":
-		return base * 1.15
-	case "h5":
 		return base
+	case "h5":
+		return base * 0.83
 	default:
-		return base * 0.9
+		return base * 0.67
 	}
 }

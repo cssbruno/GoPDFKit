@@ -6,6 +6,7 @@ package document
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -108,7 +109,7 @@ func (f *Document) HTMLNew() (html HTML) {
 //
 // lineHt indicates the line height in the unit of measure specified in New.
 func (html *HTML) Write(lineHt float64, htmlStr string) {
-	_ = html.WriteContext(context.Background(), lineHt, htmlStr)
+	_ = html.writeContextEntry(context.Background(), lineHt, htmlStr, "HTML.Write")
 }
 
 // WriteContext gets or compiles an HTML fragment render plan, renders it, and
@@ -116,6 +117,10 @@ func (html *HTML) Write(lineHt float64, htmlStr string) {
 // table/image rendering remains best effort until those internals accept
 // context directly.
 func (html *HTML) WriteContext(ctx context.Context, lineHt float64, htmlStr string) error {
+	return html.writeContextEntry(ctx, lineHt, htmlStr, "HTML.WriteContext")
+}
+
+func (html *HTML) writeContextEntry(ctx context.Context, lineHt float64, htmlStr, entryPoint string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -137,13 +142,24 @@ func (html *HTML) WriteContext(ctx context.Context, lineHt float64, htmlStr stri
 		html.pdf.SetError(err)
 		return err
 	}
-	html.WriteCompiled(lineHt, compiled)
+	html.writeCompiledContext(ctx, lineHt, compiled, entryPoint)
 	return html.pdf.Error()
 }
 
 // WriteCompiled renders a precompiled HTML fragment. Use CompileHTML when the
 // same HTML is rendered repeatedly across documents.
 func (html *HTML) WriteCompiled(lineHt float64, compiled *CompiledHTML) {
+	html.writeCompiledContext(context.Background(), lineHt, compiled, "HTML.WriteCompiled")
+}
+
+func (html *HTML) writeCompiledContext(ctx context.Context, lineHt float64, compiled *CompiledHTML, entryPoint string) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		html.pdf.SetError(err)
+		return
+	}
 	if compiled == nil {
 		html.pdf.SetError(errors.New("compiled HTML is nil"))
 		return
@@ -164,6 +180,79 @@ func (html *HTML) WriteCompiled(lineHt float64, compiled *CompiledHTML) {
 		html.pdf.SetError(err)
 		return
 	}
+	if err := html.validateCompiledTableRowLimit(compiled); err != nil {
+		html.pdf.SetError(err)
+		return
+	}
+	if err := html.validateCompiledFallbackSafety(compiled); err != nil {
+		html.pdf.SetError(err)
+		return
+	}
+	handled, routeErr := html.writeCompiledUnifiedFragmentContext(ctx, lineHt, compiled)
+	if handled {
+		if routeErr != nil {
+			html.pdf.SetError(routeErr)
+			return
+		}
+		html.pdf.observeLayoutEngineRoute(entryPoint, "unified", "")
+		return
+	} else if !errors.Is(routeErr, ErrHTMLPlanUnsupported) {
+		html.pdf.SetError(routeErr)
+		return
+	}
+	if err := outputCanceledError(ctx); err != nil {
+		html.pdf.SetError(err)
+		return
+	}
+	html.pdf.observeLayoutEngineRoute(entryPoint, "legacy", htmlUnifiedFallbackCategory(compiled, routeErr))
+	html.writeCompiledLegacy(lineHt, compiled)
+}
+
+func (html *HTML) validateCompiledFallbackSafety(compiled *CompiledHTML) error {
+	if compiled == nil {
+		return errors.New("compiled HTML is nil")
+	}
+	for _, token := range compiled.tokens {
+		if token.Cat != 'O' || token.Str != "a" {
+			continue
+		}
+		href := token.Attr["href"]
+		if href == "" {
+			href = token.Attr["xlink:href"]
+		}
+		if _, err := htmlLinkTarget(href); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (html *HTML) validateCompiledTableRowLimit(compiled *CompiledHTML) error {
+	if compiled == nil {
+		return errors.New("compiled HTML is nil")
+	}
+	limit := html.maxTableRows()
+	rows := make([]int, 0, 4)
+	for _, token := range compiled.tokens {
+		switch {
+		case token.Cat == 'O' && token.Str == "table":
+			rows = append(rows, 0)
+		case token.Cat == 'O' && token.Str == "tr" && len(rows) != 0:
+			rows[len(rows)-1]++
+			if rows[len(rows)-1] > limit {
+				return fmt.Errorf("%w: HTML table row count exceeds maximum size", ErrHTMLLimitExceeded)
+			}
+		case token.Cat == 'C' && token.Str == "table" && len(rows) != 0:
+			rows = rows[:len(rows)-1]
+		}
+	}
+	return nil
+}
+
+// writeCompiledLegacy is the private whole-fragment compatibility renderer.
+// Callers must capability-plan the complete fragment before entering it; it is
+// never invoked for a subtree or island inside a unified plan.
+func (html *HTML) writeCompiledLegacy(lineHt float64, compiled *CompiledHTML) {
 	previousStartPageCount := html.renderStartPageCount
 	previousRenderCacheActive := html.renderCacheActive
 	previousDataImageCache := html.dataImageCache

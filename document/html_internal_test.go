@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/cssbruno/gopdfkit/layout"
 )
 
 func TestHTMLParseLineHeight(t *testing.T) {
@@ -338,6 +340,91 @@ func TestHTMLTypographyStyleDeclarations(t *testing.T) {
 	}
 }
 
+func TestHTMLFontShorthandExpandsToUnifiedLonghands(t *testing.T) {
+	got := parseStyleDeclarations(`font: italic 700 14pt/18pt "Times New Roman"`)
+	want := map[string]string{
+		"font-style":  "italic",
+		"font-weight": "700",
+		"font-size":   "14pt",
+		"line-height": "18pt",
+		"font-family": `"Times New Roman"`,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("font shorthand declarations = %#v, want %#v", got, want)
+	}
+	for key, value := range want {
+		if got[key] != value {
+			t.Fatalf("font shorthand %q = %q, want %q in %#v", key, got[key], value, got)
+		}
+	}
+	if got := parseStyleDeclarations("font:14pt Arial"); got["font-size"] != "14pt" || got["font-family"] != "Arial" {
+		t.Fatalf("font shorthand with optional style/weight = %#v", got)
+	}
+
+	compiled, err := CompileHTML(`<p style="font:italic 700 14pt/18pt Arial">Shorthand</p>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planner := htmlUnifiedFlexTestPlanner()
+	resolved, err := planner.resolveCompiledHTMLUnifiedSnapshot(context.Background(), compiled, 12)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var style layout.TextStyle
+	for index, token := range resolved.tokens {
+		if token.Cat == 'O' && token.Str == "p" {
+			style = resolved.unifiedResolved[index].text
+			break
+		}
+	}
+	if style.FontFamily != "Helvetica" {
+		t.Fatalf("shorthand family = %q", style.FontFamily)
+	}
+	if !style.Italic || !style.Bold || style.FontSize != 14 || style.LineHeight != 18 {
+		t.Fatalf("shorthand style = %+v", style)
+	}
+}
+
+func TestHTMLInvalidFontShorthandStaysDiagnostic(t *testing.T) {
+	compiled, err := CompileHTML(`<p style="font:700 14pt">Invalid family</p>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = htmlUnifiedFlexTestPlanner().PlanCompiledHTML(12, compiled)
+	if !errors.Is(err, ErrHTMLPlanUnsupported) || !strings.Contains(err.Error(), "font shorthand") {
+		t.Fatalf("invalid shorthand error = %v", err)
+	}
+}
+
+func TestHTMLBackgroundColorShorthandExpandsOnlySimpleColors(t *testing.T) {
+	got := parseStyleDeclarations("background: #112233")
+	if got["background-color"] != "#112233" || got["background"] != "" {
+		t.Fatalf("background shorthand = %#v", got)
+	}
+	if got := parseStyleDeclarations("background: linear-gradient(red, blue)"); got["background"] == "" {
+		t.Fatalf("gradient background should remain unsupported: %#v", got)
+	}
+	compiled, err := CompileHTML(`<p style="background:#112233">Color</p>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planner := htmlUnifiedFlexTestPlanner()
+	resolved, err := planner.resolveCompiledHTMLUnifiedSnapshot(context.Background(), compiled, 12)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, token := range resolved.tokens {
+		if token.Cat == 'O' && token.Str == "p" {
+			box := resolved.unifiedResolved[index].box
+			if !box.BackgroundColor.Set || box.BackgroundColor.R != 0x11 || box.BackgroundColor.G != 0x22 || box.BackgroundColor.B != 0x33 {
+				t.Fatalf("resolved background box = %+v", box)
+			}
+			return
+		}
+	}
+	t.Fatal("resolved paragraph token not found")
+}
+
 func TestHTMLBoxEdgesFromDeclarations(t *testing.T) {
 	pdf := MustNew()
 	edges := htmlBoxEdgesFromDeclarations(map[string]string{
@@ -426,8 +513,11 @@ func TestCompiledHTMLTableCellCSSRuleBoxStyles(t *testing.T) {
 	if !strings.Contains(pdfText, "Boxed") {
 		t.Fatal("generated PDF does not contain cell text")
 	}
-	if !strings.Contains(pdfText, " re ") {
-		t.Fatal("generated PDF does not contain rectangle drawing for CSS cell box styles")
+	if !strings.Contains(pdfText, "0.9333333333 0.9333333333 0.9333333333 rg") ||
+		!strings.Contains(pdfText, " h f") ||
+		!strings.Contains(pdfText, "0.0705882353 0.2039215686 0.3372549020 RG") ||
+		strings.Count(pdfText, " l S") < 4 {
+		t.Fatal("generated PDF does not contain canonical fill and border paths for CSS cell box styles")
 	}
 }
 
@@ -999,6 +1089,59 @@ func TestHTMLParseNestedTableStaysInsideParentCell(t *testing.T) {
 	}
 }
 
+func TestHTMLStructuredTableCellMeasurementEqualsPaintCursor(t *testing.T) {
+	pdf := MustNew()
+	pdf.SetAutoPageBreak(true, 15)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	html := pdf.HTMLNew()
+	const lineHeight = 6.0
+	const contentWidth = 120.0
+	cell := htmlTableCell{tokens: HTMLTokenize(`<p>Generated</p><div>Mixed block content</div>` +
+		`<ul><li>Generated<ul><li>Nested table-cell list</li></ul></li></ul>` +
+		`<table border="1"><tr><td>Nested table cell</td></tr></table>`)}
+	appearance := htmlTableMeasuredCellAppearance{style: htmlTextStyle{
+		fontFamily: "Helvetica", fontSize: 12, lineHeight: lineHeight, align: "L",
+	}}
+	measured := html.measureTableCellStructuredHeight(cell, appearance, contentWidth, taggedRoleTD, lineHeight, CSSColorType{})
+	if err := pdf.Error(); err != nil {
+		t.Fatal(err)
+	}
+	if measured <= 5*lineHeight {
+		t.Fatalf("structured height = %.4f, want block/list/nested-table geometry", measured)
+	}
+	html.applyTextStyle(appearance.style, CSSColorType{})
+	pdf.SetXY(20, 30)
+	startY := pdf.GetY()
+	html.renderTableCellStructuredTokens(cell.tokens, htmlTableMeasuredCell{appearance: &appearance}, contentWidth, taggedRoleTD, lineHeight, CSSColorType{})
+	painted := pdf.GetY() - startY
+	if math.Abs(measured-painted) > 0.001 {
+		t.Fatalf("structured cell measured %.4f but painter consumed %.4f", measured, painted)
+	}
+}
+
+func TestHTMLStructuredTableCellTooTallRejectsBeforePainting(t *testing.T) {
+	pdf := MustNew()
+	pdf.SetCompression(false)
+	pdf.SetAutoPageBreak(true, 15)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.SetXY(24, 36)
+	beforeX, beforeY := pdf.GetXY()
+	beforeBytes := pdf.pages[1].Len()
+	beforePages := pdf.PageCount()
+	html := pdf.HTMLNew()
+	source := `<table border="1"><tr><td>` + strings.Repeat(`<p>bounded structured row</p>`, 160) + `</td></tr></table>`
+	if err := html.WriteContext(context.Background(), 6, source); !errors.Is(err, ErrHTMLLimitExceeded) {
+		t.Fatalf("structured overflow error = %v, want %v", err, ErrHTMLLimitExceeded)
+	}
+	afterX, afterY := pdf.GetXY()
+	if pdf.PageCount() != beforePages || pdf.pages[1].Len() != beforeBytes || afterX != beforeX || afterY != beforeY {
+		t.Fatalf("structured overflow mutated output: pages %d/%d bytes %d/%d cursor %.2f,%.2f/%.2f,%.2f",
+			pdf.PageCount(), beforePages, pdf.pages[1].Len(), beforeBytes, afterX, afterY, beforeX, beforeY)
+	}
+}
+
 func TestHTMLWriteTableCaptionAndFooter(t *testing.T) {
 	pdf := MustNew()
 	pdf.SetCompression(false)
@@ -1083,8 +1226,9 @@ func TestHTMLWritePerSideBorder(t *testing.T) {
 	if !strings.Contains(pdfText, "Side border") {
 		t.Fatal("generated PDF does not contain bordered text")
 	}
-	if !strings.Contains(pdfText, " l S") && !strings.Contains(pdfText, " l\nS") {
-		t.Fatal("generated PDF does not contain side border line operations")
+	if !strings.Contains(pdfText, " l S") && !strings.Contains(pdfText, " l\nS") &&
+		!strings.Contains(pdfText, " f") && !strings.Contains(pdfText, "f\n") {
+		t.Fatal("generated PDF does not contain side border line or exact fill operations")
 	}
 }
 

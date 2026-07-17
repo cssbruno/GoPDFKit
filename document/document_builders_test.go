@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cssbruno/gopdfkit/inspect"
 	"github.com/cssbruno/gopdfkit/layout"
 )
 
@@ -34,8 +35,12 @@ func TestNewDocumentModel(t *testing.T) {
 	if err := pdf.Output(&out); err != nil {
 		t.Fatalf("Output() error = %v", err)
 	}
+	text, err := inspect.PageText(out.Bytes(), 1)
+	if err != nil {
+		t.Fatalf("PageText() error = %v", err)
+	}
 	for _, want := range []string{"Custom Document", "Body text"} {
-		if !strings.Contains(out.String(), want) {
+		if !strings.Contains(text, want) {
 			t.Fatalf("PDF output missing %q", want)
 		}
 	}

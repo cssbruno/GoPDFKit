@@ -158,10 +158,104 @@ func parseStyleDeclarations(style string) map[string]string {
 		name = strings.TrimSpace(strings.ToLower(name))
 		value = strings.TrimSpace(value)
 		if name != "" && value != "" {
+			if name == "background" {
+				if color, ok := parseCSSColor(value); ok && color.Set && !color.None {
+					declarations["background-color"] = value
+					delete(declarations, name)
+					continue
+				}
+			}
+			if name == "font" {
+				if expanded, ok := htmlExpandFontShorthand(value); ok {
+					for expandedName, expandedValue := range expanded {
+						declarations[expandedName] = expandedValue
+					}
+					delete(declarations, name)
+					continue
+				}
+			}
 			declarations[name] = value
 		}
 	}
 	return declarations
+}
+
+// htmlExpandFontShorthand lowers the bounded, renderer-independent subset of
+// CSS font shorthand into the longhands consumed by the unified text style.
+// It intentionally rejects system fonts, variation settings, and keywords
+// whose metrics cannot be reproduced by the core PDF font set.
+func htmlExpandFontShorthand(value string) (map[string]string, bool) {
+	fields := htmlCSSValueFields(strings.TrimSpace(value))
+	if len(fields) < 2 {
+		return nil, false
+	}
+	sizeIndex := -1
+	for index, field := range fields {
+		size := field
+		if slash := strings.IndexByte(size, '/'); slash >= 0 {
+			size = size[:slash]
+		}
+		lowerSize := strings.ToLower(strings.TrimSpace(size))
+		isLength := strings.HasSuffix(lowerSize, "pt") || strings.HasSuffix(lowerSize, "px") || strings.HasSuffix(lowerSize, "em") || strings.HasSuffix(lowerSize, "%")
+		if isLength {
+			if _, ok := parseHTMLFontSize(size, 12); ok {
+				sizeIndex = index
+				break
+			}
+		}
+	}
+	if sizeIndex < 0 || sizeIndex >= len(fields)-1 {
+		return nil, false
+	}
+	fontStyle, fontWeight := "normal", "normal"
+	styleSeen, weightSeen := false, false
+	for _, field := range fields[:sizeIndex] {
+		switch strings.ToLower(field) {
+		case "normal":
+		case "italic", "oblique":
+			if styleSeen {
+				return nil, false
+			}
+			styleSeen = true
+			fontStyle = strings.ToLower(field)
+		case "bold", "bolder", "lighter", "100", "200", "300", "400", "500", "600", "700", "800", "900":
+			if weightSeen {
+				return nil, false
+			}
+			weightSeen = true
+			fontWeight = strings.ToLower(field)
+		default:
+			return nil, false
+		}
+	}
+	size := fields[sizeIndex]
+	lineHeight := "normal"
+	if slash := strings.IndexByte(size, '/'); slash >= 0 {
+		lineHeight = strings.TrimSpace(size[slash+1:])
+		size = strings.TrimSpace(size[:slash])
+	} else if sizeIndex+1 < len(fields) && fields[sizeIndex+1] == "/" {
+		if sizeIndex+2 >= len(fields) {
+			return nil, false
+		}
+		lineHeight = fields[sizeIndex+2]
+		sizeIndex += 2
+	}
+	if lineHeight != "normal" {
+		if _, ok := parseHTMLLineHeight(lineHeight, 12, nil); !ok {
+			return nil, false
+		}
+	}
+	family := strings.TrimSpace(strings.Join(fields[sizeIndex+1:], " "))
+	if htmlFontFamily(family) == "" {
+		return nil, false
+	}
+	return map[string]string{
+		"font-style":  fontStyle,
+		"font-weight": fontWeight,
+		"font-size":   size,
+		"line-height": lineHeight,
+		"font-family": family,
+	}, true
 }
 
 var cssNamedColors = map[string][3]int{

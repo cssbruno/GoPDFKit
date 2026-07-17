@@ -392,8 +392,13 @@ func TestHTMLWriteTableCellBorderAndBackground(t *testing.T) {
 	if !strings.Contains(pdfText, "Boxed") || !strings.Contains(pdfText, "Plain") {
 		t.Fatal("generated PDF does not contain cell text")
 	}
-	if !strings.Contains(pdfText, " re ") {
-		t.Fatal("generated PDF does not contain cell rectangle")
+	// Unified display-list painting emits the same closed fill and four border
+	// edges as canonical path commands rather than the legacy `re` shorthand.
+	if !strings.Contains(pdfText, "0.9333333333 0.9333333333 0.9333333333 rg") ||
+		!strings.Contains(pdfText, " h f") ||
+		!strings.Contains(pdfText, "0.0705882353 0.2039215686 0.3372549020 RG") ||
+		strings.Count(pdfText, " l S") < 4 {
+		t.Fatal("generated PDF does not contain the canonical cell fill and four border edges")
 	}
 }
 

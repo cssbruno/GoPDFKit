@@ -1,0 +1,12 @@
+GoPDFKit unified HTML default-route baseline
+platform: darwin/arm64, Apple M2
+command: go test ./document -run '^$' -bench '^BenchmarkHTMLUnifiedDefaultWriteCompiled$' -benchmem -count=3
+recorded: 2026-07-17
+
+BenchmarkHTMLUnifiedDefaultWriteCompiled-8    6882    172991 ns/op    301703 B/op    1071 allocs/op
+BenchmarkHTMLUnifiedDefaultWriteCompiled-8    6860    174798 ns/op    301732 B/op    1071 allocs/op
+BenchmarkHTMLUnifiedDefaultWriteCompiled-8    6992    177062 ns/op    301807 B/op    1071 allocs/op
+
+This is initial characterization evidence, not a portable acceptance threshold.
+Compare future samples on a calibrated platform as described in
+docs/migration/html-unified-default.md.

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -29,6 +30,143 @@ func (f *Document) WriteDocument(doc *layout.LayoutDocument) {
 		f.SetErrorf("document is nil")
 		return
 	}
+	if f.typedWriteDocumentFresh() {
+		plan, err := f.PlanLayoutDocument(doc)
+		switch {
+		case err == nil:
+			if _, err = f.WriteLayoutDocumentPlan(plan); err != nil {
+				f.SetError(err)
+				return
+			}
+			// Preserve the documented post-call margin state even though the
+			// immutable plan already consumed these values in points.
+			f.applyPageTemplateMargins(doc.PageTemplate)
+			f.installTypedWriteDocumentCompatibilityAliases(doc)
+			f.observeLayoutEngineRoute("WriteDocument", "unified", "")
+			return
+		case errors.Is(err, ErrLayoutDocumentPlanUnsupported):
+			f.observeLayoutEngineRoute("WriteDocument", "legacy", typedWriteDocumentFallbackCategory(err))
+			f.writeDocumentLegacy(doc)
+			return
+		default:
+			// Invalid input, cancellation, and resource-limit failures are not
+			// compatibility signals. Falling back for them would make safety and
+			// output depend on which renderer happened to receive the request.
+			f.SetError(err)
+			return
+		}
+	}
+	f.observeLayoutEngineRoute("WriteDocument", "legacy", "non-fresh-receiver")
+	f.writeDocumentLegacy(doc)
+}
+
+func (f *Document) typedWriteDocumentFresh() bool {
+	return f != nil && f.err == nil && f.page == 0 && f.state == documentStateUnopened &&
+		f.clipNest == 0 && f.transformNest == 0
+}
+
+func (f *Document) observeLayoutEngineRoute(entryPoint, engine, reason string) {
+	if f != nil && f.hooks.OnLayoutEngineRoute != nil {
+		f.hooks.OnLayoutEngineRoute(entryPoint, engine, reason)
+	}
+}
+
+func typedWriteDocumentFallbackCategory(err error) string {
+	var unsupported *layoutDocumentUnsupportedError
+	if !errors.As(err, &unsupported) || unsupported == nil {
+		return "unsupported-layout-contract"
+	}
+	switch unsupported.reason {
+	case typedShadowDocumentState:
+		return "document-state"
+	case typedShadowDocumentPolicy:
+		return "document-policy"
+	case typedShadowPageTemplate:
+		return "page-template"
+	case typedShadowFont:
+		return "resource-contract"
+	case typedShadowDocumentEnvelope:
+		return "document-envelope"
+	default:
+		return "unsupported-layout-contract"
+	}
+}
+
+func (f *Document) installTypedWriteDocumentCompatibilityAliases(doc *layout.LayoutDocument) {
+	if doc == nil {
+		return
+	}
+	install := func(qr layout.QRBlock) {
+		payload := strings.TrimSpace(qr.URL)
+		if payload == "" {
+			payload = strings.TrimSpace(qr.Value)
+		}
+		if payload == "" {
+			return
+		}
+		data, err := QRCodePNG(payload, defaultQRCodeSizePx)
+		if err != nil {
+			return
+		}
+		digest := sha256.Sum256(data)
+		f.ensureResourceStore().setImageAlias(QRCodeImageName(payload), "plan-image-"+hex.EncodeToString(digest[:]))
+	}
+	if doc.QR != nil {
+		install(*doc.QR)
+	}
+	var visit func([]layout.Block)
+	visit = func(blocks []layout.Block) {
+		for _, raw := range blocks {
+			block, ok := layout.NormalizeBlock(raw)
+			if !ok {
+				continue
+			}
+			switch value := block.(type) {
+			case layout.QRVerificationBlock:
+				install(value.QR)
+			case layout.SectionBlock:
+				visit(value.Blocks)
+			case layout.ClauseBlock:
+				visit(value.Blocks)
+			case layout.NoteBoxBlock:
+				visit(value.Body)
+			case layout.ListBlock:
+				for _, item := range value.Items {
+					visit(item.Blocks)
+				}
+			case layout.TableBlock:
+				rows := [][]layout.TableRow{value.Header, value.Body, value.Footer}
+				for _, group := range rows {
+					for _, row := range group {
+						for _, cell := range row.Cells {
+							visit(cell.Blocks)
+						}
+					}
+				}
+			case layout.RowColumnBlock:
+				for _, item := range value.Items {
+					visit([]layout.Block{item.Block})
+				}
+			}
+		}
+	}
+	visit(doc.Body)
+	for _, header := range []*layout.HeaderBlock{doc.PageTemplate.Header, doc.PageTemplate.FirstPageHeader} {
+		if header != nil {
+			visit(header.Blocks)
+		}
+	}
+	for _, footer := range []*layout.FooterBlock{doc.PageTemplate.Footer, doc.PageTemplate.FirstPageFooter, doc.PageTemplate.EvenPageFooter} {
+		if footer != nil {
+			visit(footer.Blocks)
+		}
+	}
+}
+
+// writeDocumentLegacy is the private whole-document rollback renderer. It is
+// deliberately unreachable as a per-block layout island: WriteDocument either
+// commits one immutable unified plan or delegates the complete model here.
+func (f *Document) writeDocumentLegacy(doc *layout.LayoutDocument) {
 	if doc.Title != "" {
 		f.SetTitle(doc.Title, true)
 	}
@@ -999,13 +1137,24 @@ func (r *documentRenderer) renderFittedImage(name string, options ImageOptions, 
 }
 
 func (r *documentRenderer) renderSignatureRow(block layout.SignatureRowBlock) {
+	if !finiteNumbers(block.Gap) || block.Gap < 0 {
+		r.pdf.SetErrorf("signature-row gap must be finite and non-negative")
+		return
+	}
 	r.renderBox(block.EffectiveBox(), func() {
 		columns := block.Columns
 		if len(columns) == 0 {
 			columns = []layout.SignatureColumn{{}}
 		}
-		gap := 8.0
+		gap := block.Gap
+		if gap == 0 {
+			gap = 8.0
+		}
 		available := r.contentWidth() - gap*float64(len(columns)-1)
+		if available <= 0 {
+			r.pdf.SetErrorf("signature-row gaps leave no column width")
+			return
+		}
 		constraints := make([]layoutgeom.TrackConstraint, len(columns))
 		for i, column := range columns {
 			constraints[i].Preferred = column.Width
@@ -1071,16 +1220,29 @@ func signatureColumnText(col layout.SignatureColumn) string {
 }
 
 func (r *documentRenderer) renderMetadataGrid(block layout.MetadataGridBlock) {
+	if !finiteNumbers(block.Gap) || block.Gap < 0 {
+		r.pdf.SetErrorf("metadata-grid gap must be finite and non-negative")
+		return
+	}
 	r.renderBox(block.EffectiveBox(), func() {
 		columns := block.Columns
 		if columns <= 0 {
 			columns = 2
 		}
-		wd := r.contentWidth() / float64(columns)
+		gap := block.Gap
+		available := r.contentWidth() - gap*float64(columns-1)
+		if available <= 0 {
+			r.pdf.SetErrorf("metadata-grid gaps leave no column width")
+			return
+		}
+		wd := available / float64(columns)
 		r.applyTextStyle(r.mergedStyle(block.EffectiveStyle()))
 		for i, field := range block.Fields {
 			if i > 0 && i%columns == 0 {
 				r.pdf.Ln(6)
+			}
+			if i%columns > 0 && gap > 0 {
+				r.pdf.SetX(r.pdf.GetX() + gap)
 			}
 			r.pdf.SetNextTextRole(taggedRoleLbl)
 			r.pdf.CellFormat(wd, 6, metadataFieldText(field), "", 0, "L", false, 0, "")
@@ -1248,6 +1410,10 @@ func textAlign(align string) string {
 }
 
 func listMarker(block layout.ListBlock, index int) string {
+	marker, err := paperListMarker(block, index)
+	if err == nil {
+		return marker
+	}
 	if block.Ordered {
 		return strconv.Itoa(index+1) + "."
 	}
@@ -1312,6 +1478,7 @@ func documentAttachments(blocks []layout.AttachmentBlock) []Attachment {
 			Content:     block.Data,
 			Filename:    block.Name,
 			Description: block.Description,
+			MIMEType:    block.MIMEType,
 		})
 	}
 	return attachments

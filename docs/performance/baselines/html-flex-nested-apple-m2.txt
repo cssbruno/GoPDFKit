@@ -1,0 +1,14 @@
+# gopdfkit-html-flex-nested-benchmark-v1
+# command: go test ./document -run ^$ -bench ^BenchmarkHTMLUnifiedNestedFlexPlanning$ -benchmem -count=3
+# go-version: go version go1.26.5 darwin/arm64
+# goos: darwin
+# goarch: arm64
+# cpu: Apple M2
+# worktree: dirty
+goos: darwin
+goarch: arm64
+pkg: github.com/cssbruno/gopdfkit/document
+cpu: Apple M2
+BenchmarkHTMLUnifiedNestedFlexPlanning-8   5678   200763 ns/op   223490 B/op   1204 allocs/op
+BenchmarkHTMLUnifiedNestedFlexPlanning-8   5498   182353 ns/op   223566 B/op   1204 allocs/op
+BenchmarkHTMLUnifiedNestedFlexPlanning-8   7212   175606 ns/op   223549 B/op   1204 allocs/op

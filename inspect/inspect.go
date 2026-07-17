@@ -334,14 +334,17 @@ func (r inspectContextReader) Read(p []byte) (int, error) {
 }
 
 type pdfTextToken struct {
-	text   string
-	isText bool
+	text       string
+	isText     bool
+	actualText bool
 }
 
 func textFromContentStreamContext(ctx context.Context, stream []byte) (string, error) {
 	var out strings.Builder
 	tokens := make([]pdfTextToken, 0, textTokenCapacity)
 	inText := false
+	actualTextDepth := 0
+	pendingActualText := false
 
 	for i := 0; i < len(stream); {
 		if i%1024 == 0 {
@@ -357,7 +360,8 @@ func textFromContentStreamContext(ctx context.Context, stream []byte) (string, e
 		switch stream[i] {
 		case '(':
 			raw, next := readPDFLiteralString(stream, i)
-			tokens = append(tokens, pdfTextToken{text: decodePDFTextBytes(raw), isText: true})
+			tokens = append(tokens, pdfTextToken{text: decodePDFTextBytes(raw), isText: true, actualText: pendingActualText})
+			pendingActualText = false
 			i = next
 		case '<':
 			if i+1 < len(stream) && stream[i+1] == '<' {
@@ -365,7 +369,8 @@ func textFromContentStreamContext(ctx context.Context, stream []byte) (string, e
 				continue
 			}
 			raw, next := readPDFHexString(stream, i)
-			tokens = append(tokens, pdfTextToken{text: decodePDFTextBytes(raw), isText: true})
+			tokens = append(tokens, pdfTextToken{text: decodePDFTextBytes(raw), isText: true, actualText: pendingActualText})
+			pendingActualText = false
 			i = next
 		case '[':
 			text, next := readPDFArrayText(stream, i)
@@ -379,6 +384,21 @@ func textFromContentStreamContext(ctx context.Context, stream []byte) (string, e
 			}
 
 			switch word {
+			case "ActualText":
+				pendingActualText = true
+			case "BDC":
+				if actual := lastActualTextToken(tokens); actual != "" {
+					out.WriteString(actual)
+					actualTextDepth++
+				}
+				tokens = tokens[:0]
+				pendingActualText = false
+			case "EMC":
+				if actualTextDepth > 0 {
+					actualTextDepth--
+				}
+				tokens = tokens[:0]
+				pendingActualText = false
 			case "BT":
 				inText = true
 				tokens = tokens[:0]
@@ -386,7 +406,7 @@ func textFromContentStreamContext(ctx context.Context, stream []byte) (string, e
 				inText = false
 				tokens = tokens[:0]
 			case "Tj", "'", "\"", "TJ":
-				if inText {
+				if inText && actualTextDepth == 0 {
 					out.WriteString(lastTextToken(tokens))
 				}
 				tokens = tokens[:0]
@@ -403,6 +423,15 @@ func textFromContentStreamContext(ctx context.Context, stream []byte) (string, e
 		return "", err
 	}
 	return out.String(), nil
+}
+
+func lastActualTextToken(tokens []pdfTextToken) string {
+	for i := len(tokens); i > 0; i-- {
+		if tokens[i-1].actualText {
+			return tokens[i-1].text
+		}
+	}
+	return ""
 }
 
 func isPDFTextStateOperator(word string) bool {

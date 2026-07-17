@@ -1,0 +1,14 @@
+# gopdfkit-html-svg-rich-benchmark-v2
+# command: go test ./document -run ^$ -bench ^BenchmarkAttachSVGDisplayPlanRich$ -benchmem -count=3
+# go-version: go version go1.26.5 darwin/arm64
+# goos: darwin
+# goarch: arm64
+# cpu: Apple M2
+# worktree: dirty
+goos: darwin
+goarch: arm64
+pkg: github.com/cssbruno/gopdfkit/document
+cpu: Apple M2
+BenchmarkAttachSVGDisplayPlanRich-8   61322   51544 ns/op   97581 B/op   131 allocs/op
+BenchmarkAttachSVGDisplayPlanRich-8   26196   58627 ns/op   97589 B/op   131 allocs/op
+BenchmarkAttachSVGDisplayPlanRich-8   61566   20248 ns/op   97572 B/op   131 allocs/op

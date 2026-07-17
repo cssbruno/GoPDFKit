@@ -77,6 +77,13 @@ type Hooks struct {
 	OnAttachmentLoaded  func(filename string, bytes int64)
 	OnOutputObject      func(objectNumber int, kind string)
 	OnWarning           func(message string)
+	// OnLayoutEngineRoute reports which private implementation served a public
+	// layout entry point. A non-empty reason is a bounded stable category meaning
+	// the preferred engine could not represent the request and a whole-document
+	// compatibility route was selected. It never contains authored content or
+	// source paths. Callers can aggregate these events into fallback rates
+	// without depending on private renderer types.
+	OnLayoutEngineRoute func(entryPoint, engine, reason string)
 }
 
 // ProductionPolicy groups operational controls for server and batch use.

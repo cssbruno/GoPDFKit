@@ -573,6 +573,12 @@ func MergedTextStyle(base, override TextStyle) TextStyle {
 	if override.Align != "" {
 		base.Align = override.Align
 	}
+	if override.WhiteSpace != "" {
+		base.WhiteSpace = override.WhiteSpace
+	}
+	if override.TabSize != 0 {
+		base.TabSize = override.TabSize
+	}
 	return base
 }
 

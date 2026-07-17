@@ -4,6 +4,7 @@
 package document
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -181,8 +182,21 @@ func (html *HTML) writeParsedTable(compiled *CompiledHTML, table htmlTableType, 
 		return end
 	}
 	pdf := html.pdf
-	pdf.BeginStructure(taggedRoleTable)
-	defer pdf.EndStructure()
+	measurePage, measureX, measureY := pdf.page, pdf.GetX(), pdf.GetY()
+	measureContentBytes := -1
+	if measurePage > 0 && measurePage < len(pdf.pages) && pdf.pages[measurePage] != nil {
+		measureContentBytes = pdf.pages[measurePage].Len()
+	}
+	rollbackMeasurement := false
+	defer func() {
+		if !rollbackMeasurement {
+			return
+		}
+		if pdf.page == measurePage && measureContentBytes >= 0 && measurePage < len(pdf.pages) && pdf.pages[measurePage] != nil {
+			pdf.pages[measurePage].Truncate(measureContentBytes)
+		}
+		pdf.SetXY(measureX, measureY)
+	}()
 	if len(table.rows) > html.maxTableRows() {
 		pdf.SetErrorf("HTML table row count exceeds maximum size")
 		return end
@@ -236,14 +250,27 @@ func (html *HTML) writeParsedTable(compiled *CompiledHTML, table htmlTableType, 
 	} else {
 		measuredRows, rowHeights = html.measureTableRows(compiled, layoutRows, colOffsets, padding, lineHt, inherited, fallback, cssRules, tableAncestors, tableBorder, table.attrs)
 	}
+	if pdf.Error() != nil {
+		rollbackMeasurement = true
+		return end
+	}
 	totalTableHt := captionHt + sumFloat64(rowHeights)
+	pageContentHt := pdf.pageBreakTrigger - pdf.tMargin
+	for _, rowHt := range rowHeights {
+		if rowHt > pageContentHt {
+			pdf.SetError(fmt.Errorf("%w: structured HTML table row exceeds one page body", ErrHTMLLimitExceeded))
+			rollbackMeasurement = true
+			return end
+		}
+	}
+	pdf.BeginStructure(taggedRoleTable)
+	defer pdf.EndStructure()
 	if tableBreakBefore {
 		if !html.addPageFormat() {
 			return end
 		}
 		startX = pdf.lMargin
 	}
-	pageContentHt := pdf.pageBreakTrigger - pdf.tMargin
 	if tableBreakInsideAvoid && totalTableHt <= pageContentHt && pdf.y+totalTableHt > pdf.pageBreakTrigger && !pdf.inHeader && !pdf.inFooter && pdf.acceptPageBreak() {
 		if !html.addPageFormat() {
 			return end
@@ -1238,6 +1265,13 @@ func (html *HTML) measureTableCellRequiredHeight(compiled *CompiledHTML, row htm
 	wd := layoutgeom.SpanSize(colOffsets, placement.col, placement.colspan)
 	cellStyle := html.cachedTableCellStyle(cell.attrs, row.row.attrs, cellDecl, rowDecl, cellDeclKey, rowDeclKey, style.align, padding, wd, tableBorder, rowFill, tableFill, cellStyleCache)
 	contentWd := htmlMaxFloat(wd-cellStyle.padding.left-cellStyle.padding.right, 0)
+	if htmlTableCellContainsStructuredContent(cell.tokens) {
+		appearance := htmlTableMeasuredCellAppearance{
+			style: style, align: cellStyle.align, fill: cellStyle.fill,
+			border: cellStyle.border, padding: cellStyle.padding,
+		}
+		return html.measureTableCellStructuredHeight(cell, appearance, contentWd, cellRoleForMeasurement(cell), lineHt, fallback) + cellStyle.padding.top + cellStyle.padding.bottom
+	}
 	text := htmlTableCellText(cell, style.preserveWhitespace)
 	return html.tableCellTextHeight(text, contentWd, style, lineHt) + cellStyle.padding.top + cellStyle.padding.bottom
 }
@@ -1259,6 +1293,20 @@ func (html *HTML) measureTableCell(compiled *CompiledHTML, row htmlTableLayoutRo
 	wd := layoutgeom.SpanSize(colOffsets, placement.col, placement.colspan)
 	cellStyle := html.cachedTableCellStyle(cell.attrs, row.row.attrs, cellDecl, rowDecl, cellDeclKey, rowDeclKey, style.align, padding, wd, tableBorder, rowFill, tableFill, cellStyleCache)
 	contentWd := htmlMaxFloat(wd-cellStyle.padding.left-cellStyle.padding.right, 0)
+	appearance := appearanceCache.intern(htmlTableMeasuredCellAppearance{
+		style:   style,
+		align:   cellStyle.align,
+		fill:    cellStyle.fill,
+		border:  cellStyle.border,
+		padding: cellStyle.padding,
+	})
+	if htmlTableCellContainsStructuredContent(cell.tokens) {
+		return htmlTableMeasuredCell{
+			placement:  placement,
+			appearance: appearance,
+			textHt:     html.measureTableCellStructuredHeight(cell, *appearance, contentWd, cellRoleForMeasurement(cell), lineHt, fallback),
+		}
+	}
 	text := htmlTableCellText(cell, style.preserveWhitespace)
 	lineCount := htmlSplitLineCount(html.pdf, text, contentWd)
 	var lines []string
@@ -1267,17 +1315,77 @@ func (html *HTML) measureTableCell(compiled *CompiledHTML, row htmlTableLayoutRo
 		lineCount = len(lines)
 	}
 	return htmlTableMeasuredCell{
-		placement: placement,
-		appearance: appearanceCache.intern(htmlTableMeasuredCellAppearance{
-			style:   style,
-			align:   cellStyle.align,
-			fill:    cellStyle.fill,
-			border:  cellStyle.border,
-			padding: cellStyle.padding,
-		}),
-		lines:  lines,
-		textHt: html.tableCellLineCountHeight(lineCount, style, lineHt),
+		placement:  placement,
+		appearance: appearance,
+		lines:      lines,
+		textHt:     html.tableCellLineCountHeight(lineCount, style, lineHt),
 	}
+}
+
+func cellRoleForMeasurement(cell htmlTableCell) string {
+	if cell.header {
+		return taggedRoleTH
+	}
+	return taggedRoleTD
+}
+
+// measureTableCellStructuredHeight replays the exact structured-cell painter
+// on an isolated document. This keeps block, list, and recursively measured
+// nested-table cursor geometry identical without mutating the live document.
+func (html *HTML) measureTableCellStructuredHeight(cell htmlTableCell, appearance htmlTableMeasuredCellAppearance, contentWd float64, cellRole string, lineHt float64, fallback CSSColorType) float64 {
+	if html == nil || html.pdf == nil || contentWd <= 0 {
+		return 0
+	}
+	live := html.pdf
+	scratch := documentNew(live.curOrientation, live.unitStr, "", live.fontDirStr, Size{Wd: live.w, Ht: live.h})
+	if scratch.Error() != nil {
+		live.SetError(scratch.Error())
+		return 0
+	}
+	scratch.lMargin, scratch.tMargin = live.lMargin, live.tMargin
+	scratch.rMargin, scratch.bMargin = live.rMargin, live.bMargin
+	scratch.cMargin, scratch.ws = live.cMargin, live.ws
+	scratch.coreFonts = live.coreFonts
+	for key, definition := range live.ensureResourceStore().fonts {
+		if definition.usedRunes != nil {
+			used := make(map[int]int, len(definition.usedRunes))
+			for runeValue, glyph := range definition.usedRunes {
+				used[runeValue] = glyph
+			}
+			definition.usedRunes = used
+		}
+		scratch.ensureResourceStore().setFont(key, definition)
+	}
+	scratch.SetAutoPageBreak(false, 0)
+	scratch.SetFont(live.fontFamily, live.fontStyle, live.fontSizePt)
+	scratch.AddPageFormat(live.curOrientation, Size{Wd: live.w, Ht: live.h})
+	if scratch.Error() != nil {
+		live.SetError(scratch.Error())
+		return 0
+	}
+	measureHTML := scratch.HTMLNew()
+	measureHTML.MaxTableRows = html.maxTableRows()
+	measureHTML.MaxGeneratedPages = 1
+	measureHTML.applyTextStyle(appearance.style, fallback)
+	const startX = 10.0
+	const startY = 10.0
+	scratch.SetXY(startX, startY)
+	measuredCell := htmlTableMeasuredCell{appearance: &appearance}
+	measureHTML.renderTableCellStructuredTokens(cell.tokens, measuredCell, contentWd, cellRole, lineHt, fallback)
+	if scratch.Error() != nil || scratch.PageCount() != 1 {
+		if scratch.Error() != nil {
+			live.SetError(scratch.Error())
+		} else {
+			live.SetError(fmt.Errorf("%w: structured HTML table cell requires pagination", ErrHTMLLimitExceeded))
+		}
+		return 0
+	}
+	height := scratch.GetY() - startY
+	if math.IsNaN(height) || math.IsInf(height, 0) || height < 0 || height > live.pageBreakTrigger-live.tMargin {
+		live.SetError(fmt.Errorf("%w: structured HTML table cell exceeds one page body", ErrHTMLLimitExceeded))
+		return 0
+	}
+	return height
 }
 
 func (html *HTML) tableCaptionHeight(compiled *CompiledHTML, table htmlTableType, tableWd, lineHt float64, inherited htmlTextStyle, fallback CSSColorType, cssRules []htmlCSSRule, tableAncestors []HTMLSegmentType) float64 {

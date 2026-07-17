@@ -1,0 +1,14 @@
+GoPDFKit unified HTML nested-list and whitespace characterization
+Date: 2026-07-17
+GOOS: darwin
+GOARCH: arm64
+CPU: Apple M2
+
+Command:
+  go test ./document -run '^$' -bench '^BenchmarkHTMLUnifiedNestedListWhitespacePlanning$' -benchmem -count=3
+
+BenchmarkHTMLUnifiedNestedListWhitespacePlanning-8  508528 ns/op  830716 B/op  3524 allocs/op
+BenchmarkHTMLUnifiedNestedListWhitespacePlanning-8  507994 ns/op  830710 B/op  3524 allocs/op
+BenchmarkHTMLUnifiedNestedListWhitespacePlanning-8  524236 ns/op  831684 B/op  3524 allocs/op
+
+This is a characterization baseline, not a Stage 0 release gate.

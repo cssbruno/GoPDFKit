@@ -66,7 +66,7 @@ type pageLink struct {
 
 type internalLink struct {
 	page int
-	y    float64
+	x, y float64
 }
 
 // outlineEntry is used for a sidebar outline of bookmarks.

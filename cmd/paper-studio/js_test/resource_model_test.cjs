@@ -1,0 +1,11 @@
+const assert = require('node:assert/strict');
+const model = require('../web/resource-model.js');
+const payload = {format_version:1, revision:'revision-r1', source_revision:'source-r1', plan_hash:'plan-p1', items:[{name:'hero',kind:'image',media_type:'image/png',digest:'a'.repeat(64),bytes:68,width_px:1,height_px:1,usages:[{node:'@hero',scenario:'stress',alt:'Evidence'}]},{name:'body-font',kind:'font',media_type:'font/ttf',digest:'b'.repeat(64),bytes:20,family:'Readable Sans',weight:400,style:'normal',license:'OFL-1.1',fallback:['system-sans']},{name:'new-hero',kind:'image',media_type:'image/png',digest:'c'.repeat(64),bytes:68,width_px:1,height_px:1,replaces:'hero'}]};
+const items = model.normalize(payload, 'revision-r1', 'source-r1', 'plan-p1');
+assert.equal(items[0].name, 'hero'); assert.equal(model.usageLabel(items[0]), '1×1 · 68 bytes · 1 use');
+assert.equal(model.usageLabel(items[1]), 'Readable Sans · 400 normal · 20 bytes');
+assert.throws(() => model.normalize(payload, 'stale', 'source-r1', 'plan-p1'), /stale/);
+assert.throws(() => model.normalize(payload, 'revision-r1', 'old-source', 'plan-p1'), /stale/);
+assert.throws(() => model.normalize(payload, 'revision-r1', 'source-r1', 'wrong-plan'), /stale/);
+assert.equal(model.replacementPayload({source_revision:'s',revision:'p',scenario:'stress'},items,'@hero','new-hero').text,'asset:new-hero');
+assert.throws(()=>model.replacementPayload({source_revision:'s',revision:'p'},items,'@missing','new-hero'),/not declared/);

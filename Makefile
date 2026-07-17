@@ -18,13 +18,19 @@ BENCH ?= BenchmarkGenerationHTMLLargeTableCompiled$
 BENCH_PACKAGE ?= ./document
 BENCH_COUNT ?= 3
 BENCH_OUT ?= artifacts/benchmarks.txt
+PAPER_ENGINE_BENCH_OUT ?= artifacts/paper-engine-benchmarks.txt
+PAPER_ENGINE_BENCH_COUNT ?= 10
+PAPER_ENGINE_BENCHTIME ?= 250ms
+PAPER_ENGINE_CALIBRATION_PROFILE ?= docs/performance/calibrations/apple-m2-go1.26.json
 GENERATION_CORE_BENCH_OUT ?= artifacts/generation-core-benchmarks.txt
 PROFILE_DIR ?= artifacts/profiles
 PROFILE_BENCHTIME ?= 10s
 ALLOC_PROFILE_BENCHTIME ?= 20x
 TRACE_BENCHTIME ?= 1s
+PAPER_ENGINE_PROFILE_CPU_SECONDS ?= 2
+PAPER_ENGINE_PROFILE_ALLOC_ITERATIONS ?= 20
 
-.PHONY: all documentation cov coverage-check test race vet fmt-check check modules tools tools-clean benchstat lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget profile profile-cpu profile-alloc profile-block profile-mutex profile-trace compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate pdf-reader-smoke clean
+.PHONY: all documentation cov coverage-check test race vet fmt-check check modules tools tools-clean benchstat lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget bench-paper-engine bench-paper-engine-ci bench-paper-engine-budget bench-paper-studio test-paper-studio-js characterize-paper-engine paper-studio profile-paper-engine profile-paper-engine-check profile profile-cpu profile-alloc profile-block profile-mutex profile-trace compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate pdf-reader-smoke clean
 
 cov : all
 	go test $(GO_PACKAGES) -coverprofile=coverage && go tool cover -html=coverage -o=coverage.html
@@ -131,6 +137,38 @@ bench-generation-core-ci :
 bench-generation-core-budget : bench-generation-core-ci
 	sh tools/benchmark-budget-check.sh "$(GENERATION_CORE_BENCH_OUT)"
 
+bench-paper-engine :
+	go test ./document ./internal/layoutengine -run '^$$' -bench '^BenchmarkPaperEngine(Planner|Painter|EndToEnd|WarmCompiled|Concurrent|Table)' -benchmem
+
+bench-paper-engine-ci :
+	PAPER_ENGINE_BENCH_COUNT="$(PAPER_ENGINE_BENCH_COUNT)" PAPER_ENGINE_BENCHTIME="$(PAPER_ENGINE_BENCHTIME)" sh tools/run-paper-engine-benchmarks.sh "$(PAPER_ENGINE_BENCH_OUT)"
+
+bench-paper-engine-budget : bench-paper-engine-ci
+	PAPER_ENGINE_CALIBRATION_PROFILE="$(PAPER_ENGINE_CALIBRATION_PROFILE)" sh tools/check-paper-engine-benchmark-report.sh "$(PAPER_ENGINE_BENCH_OUT)"
+
+bench-paper-studio :
+	go test ./cmd/paper-studio -run '^$$' -bench BenchmarkPaperStudio -benchmem -benchtime=250ms -count=5
+
+test-paper-studio-js :
+	node --test cmd/paper-studio/js_test/*.cjs
+
+characterize-paper-engine :
+	mkdir -p artifacts/characterization
+	go run ./cmd/paper-characterize -builtin typed > artifacts/characterization/typed.json
+	go run ./cmd/paper-characterize -builtin html > artifacts/characterization/html.json
+
+PAPER_STUDIO_FILE ?= testdata/paper/studio-demo.paper
+PAPER_STUDIO_ADDR ?= 127.0.0.1:7331
+
+paper-studio :
+	go run ./cmd/paper-studio -addr "$(PAPER_STUDIO_ADDR)" "$(PAPER_STUDIO_FILE)"
+
+profile-paper-engine :
+	PAPER_ENGINE_PROFILE_CPU_SECONDS="$(PAPER_ENGINE_PROFILE_CPU_SECONDS)" PAPER_ENGINE_PROFILE_ALLOC_ITERATIONS="$(PAPER_ENGINE_PROFILE_ALLOC_ITERATIONS)" sh tools/run-paper-engine-profiles.sh "$(PROFILE_DIR)/paper-engine"
+
+profile-paper-engine-check : profile-paper-engine
+	sh tools/check-paper-engine-profile-report.sh "$(PROFILE_DIR)/paper-engine"
+
 profile : profile-cpu profile-alloc profile-block profile-mutex profile-trace
 
 profile-cpu :
@@ -154,7 +192,7 @@ profile-trace :
 	go test "$(BENCH_PACKAGE)" -run '^$$' -bench '$(value BENCH)' -benchtime="$(TRACE_BENCHTIME)" -count=1 -o="$(abspath $(PROFILE_DIR))/" -outputdir="$(abspath $(PROFILE_DIR))" -trace=trace.out
 
 compliance-fixtures :
-	go run ./cmd/compliance-fixtures -out "$(COMPLIANCE_OUT)" $(if $(SRGB_ICC),-icc "$(SRGB_ICC)")
+	go run ./cmd/compliance-fixtures -out "$(COMPLIANCE_OUT)" $(if $(SRGB_ICC),-icc "$(SRGB_ICC)") -report "$(COMPLIANCE_OUT)/characterization.json"
 
 compliance-validate :
 	COMPLIANCE_OUT="$(COMPLIANCE_OUT)" SRGB_ICC="$(SRGB_ICC)" VERAPDF="$(VERAPDF)" PDFUA_CHECKER="$(PDFUA_CHECKER)" ARLINGTON_CHECKER="$(ARLINGTON_CHECKER)" ARLINGTON_URL="$(ARLINGTON_URL)" ARLINGTON_PROFILE="$(ARLINGTON_PROFILE)" ARLINGTON_REPORT_DIR="$(ARLINGTON_REPORT_DIR)" REQUIRE_COMPLIANCE_TOOLS="$(REQUIRE_COMPLIANCE_TOOLS)" sh tools/compliance-validate.sh

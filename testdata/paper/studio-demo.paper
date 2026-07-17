@@ -1,0 +1,44 @@
+document @studio-demo:
+  title: "Paper Studio"
+  language: "en"
+  scenario @review:
+  scenario @accessibility:
+  page @sheet:
+    width: 595pt
+    height: 842pt
+    margin: 54pt
+    body @content:
+      heading @title:
+        level: 1
+        font: "Helvetica"
+        size: 28pt
+        line-height: 34pt
+        text: "A document you can inspect"
+      paragraph @intro:
+        font: "Helvetica"
+        size: 12pt
+        line-height: 18pt
+        text: "Every visible mark comes from the immutable Paper display plan. Click the page to trace its source and layout decision."
+      heading @details:
+        level: 2
+        font: "Helvetica"
+        size: 16pt
+        line-height: 22pt
+        text: "Exact by construction"
+      paragraph @body-copy:
+        font: "Courier"
+        size: 10pt
+        line-height: 15pt
+        text: "Source -> semantic tree -> planner -> display list -> preview and PDF."
+      page-break:
+      heading @second-page:
+        level: 2
+        font: "Helvetica"
+        size: 18pt
+        line-height: 24pt
+        text: "Second page"
+      paragraph @review-copy:
+        font: "Helvetica"
+        size: 12pt
+        line-height: 18pt
+        text: "Review mode overlays fragments, diagnostics, and committed page-break evidence without using browser layout."

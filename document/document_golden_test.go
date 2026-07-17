@@ -21,13 +21,13 @@ func TestWriteDocumentGoldenPDFs(t *testing.T) {
 	}{
 		{name: "structured-report", doc: goldenStructuredReportDocument(), want: "9e08fd0a467a7fab1658e1df34833c220788df9811b5fa84d835151e9ac4c780"},
 		{name: "tabular-report", doc: goldenTabularReportDocument(), want: "af0d2bb5891e6521151bb45bed4cd92fab359bad7fa23a8090e41839d314c142"},
-		{name: "transactional", doc: goldenTransactionalDocument(), want: "555d9422fd17d913c981a020957349c141e06082daf245c3932d7385bc8131b2"},
-		{name: "attestation", doc: goldenAttestationDocument(), want: "5f9076f92a5d4dbd5361cefedb4f4d8d5426d9f33f407bc263c54d9e8eb17ea0"},
-		{name: "statement", doc: goldenStatementDocument(), want: "7356c9217ebb1734347cd6853c3dd6feb8c0cca76986b1bfbf7e784815e0b293"},
-		{name: "generic-free-text", doc: goldenGenericDocument(), want: "8ca4af399d06f0297dc54d9c5c47ef4d515fd49f651e7df354c916bf085e1977"},
-		{name: "long-form", doc: goldenLongFormDocument(), want: "9d456d67212fe02ef3a9965d31668603dec818180b3a64caf0a326a2f18330d7"},
+		{name: "transactional", doc: goldenTransactionalDocument(), want: "d9ca94a76c06a2bde1bf0475b7b3a856636d3e8f3a625b0dce707c8a064647be"},
+		{name: "attestation", doc: goldenAttestationDocument(), want: "6676f027e0652101d443c66ded3e395631b43e849cb5ac6bc0c23db7e120f86d"},
+		{name: "statement", doc: goldenStatementDocument(), want: "7643877fffe620edd7ecaf6c02d7d445990ddd8d5f754a5821494280cd310aec"},
+		{name: "generic-free-text", doc: goldenGenericDocument(), want: "f6095689238721c21ca0624833ac44e1fd37e0041a0dac4bbf48acbaf4cc4e8d"},
+		{name: "long-form", doc: goldenLongFormDocument(), want: "ce9872880bca539a3ac7ee2ddc96af58b79ad52bc6bff1a234490fb3a3827c05"},
 		{name: "form", doc: FormDocumentModel(testFormDocument()), want: "b124b2d03eb2968efcaa797de152f9a57d85dc8d53b000c14e7653c00c075875"},
-		{name: "qr-signature", doc: goldenQRSignatureDocument(), want: "f39ecb17bcd75388c9b85d507c2b14429183eb50f1ab5024fac1bfb410994aac"},
+		{name: "qr-signature", doc: goldenQRSignatureDocument(), want: "f1b172763a2dcabaafb89a6a430911e44dc5a02a77f95d5a59900e15f57b8d15"},
 	}
 
 	for _, tc := range cases {

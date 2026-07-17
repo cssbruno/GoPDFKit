@@ -1,0 +1,119 @@
+# gopdfkit-paper-engine-benchmark-v3
+# command: go test ./document ./internal/layoutengine -run ^$ -bench ^BenchmarkPaperEngine(Planner|Painter|EndToEnd|WarmCompiled|Concurrent|Table) -benchmem -benchtime=250ms -count=10
+# go-version: go version go1.26.5 darwin/arm64
+# goos: darwin
+# goarch: arm64
+# source-revision: 50b25305eb49389d00f68656c61df92edc9f06e7
+# worktree: dirty
+goos: darwin
+goarch: arm64
+pkg: github.com/cssbruno/gopdfkit/document
+cpu: Apple M2
+BenchmarkPaperEnginePlannerTyped-8            	     130	   2140240 ns/op	 3206936 B/op	   11861 allocs/op
+BenchmarkPaperEnginePlannerTyped-8            	     141	   2118154 ns/op	 3245941 B/op	   11865 allocs/op
+BenchmarkPaperEnginePlannerTyped-8            	     141	   2130351 ns/op	 3219700 B/op	   11863 allocs/op
+BenchmarkPaperEnginePlannerTyped-8            	     141	   2145801 ns/op	 3238101 B/op	   11863 allocs/op
+BenchmarkPaperEnginePlannerTyped-8            	     139	   2155838 ns/op	 3252249 B/op	   11865 allocs/op
+BenchmarkPaperEnginePlannerTyped-8            	     139	   2130117 ns/op	 3225985 B/op	   11864 allocs/op
+BenchmarkPaperEnginePlannerTyped-8            	     129	   2128238 ns/op	 3243590 B/op	   11865 allocs/op
+BenchmarkPaperEnginePlannerTyped-8            	     138	   2143767 ns/op	 3233215 B/op	   11865 allocs/op
+BenchmarkPaperEnginePlannerTyped-8            	     139	   2169486 ns/op	 3244720 B/op	   11864 allocs/op
+BenchmarkPaperEnginePlannerTyped-8            	     138	   2190091 ns/op	 3248900 B/op	   11867 allocs/op
+BenchmarkPaperEnginePainterTyped-8            	     374	    820305 ns/op	 1869904 B/op	    2959 allocs/op
+BenchmarkPaperEnginePainterTyped-8            	     374	    801456 ns/op	 1870134 B/op	    2960 allocs/op
+BenchmarkPaperEnginePainterTyped-8            	     372	    818232 ns/op	 1869999 B/op	    2959 allocs/op
+BenchmarkPaperEnginePainterTyped-8            	     367	    807181 ns/op	 1869926 B/op	    2959 allocs/op
+BenchmarkPaperEnginePainterTyped-8            	     362	    851845 ns/op	 1869847 B/op	    2959 allocs/op
+BenchmarkPaperEnginePainterTyped-8            	     363	    842245 ns/op	 1870143 B/op	    2960 allocs/op
+BenchmarkPaperEnginePainterTyped-8            	     376	    817573 ns/op	 1870141 B/op	    2960 allocs/op
+BenchmarkPaperEnginePainterTyped-8            	     375	    788072 ns/op	 1870349 B/op	    2961 allocs/op
+BenchmarkPaperEnginePainterTyped-8            	     376	    803377 ns/op	 1870383 B/op	    2961 allocs/op
+BenchmarkPaperEnginePainterTyped-8            	     370	    802840 ns/op	 1870203 B/op	    2960 allocs/op
+BenchmarkPaperEngineEndToEndTyped-8           	      97	   3139872 ns/op	 5633856 B/op	   14964 allocs/op
+BenchmarkPaperEngineEndToEndTyped-8           	      97	   3133978 ns/op	 5639660 B/op	   14966 allocs/op
+BenchmarkPaperEngineEndToEndTyped-8           	      93	   3145649 ns/op	 5645903 B/op	   14968 allocs/op
+BenchmarkPaperEngineEndToEndTyped-8           	      91	   3156034 ns/op	 5640421 B/op	   14969 allocs/op
+BenchmarkPaperEngineEndToEndTyped-8           	      94	   3163847 ns/op	 5627916 B/op	   14965 allocs/op
+BenchmarkPaperEngineEndToEndTyped-8           	      93	   3165261 ns/op	 5629008 B/op	   14967 allocs/op
+BenchmarkPaperEngineEndToEndTyped-8           	      92	   3147460 ns/op	 5623095 B/op	   14968 allocs/op
+BenchmarkPaperEngineEndToEndTyped-8           	      93	   3153407 ns/op	 5634580 B/op	   14968 allocs/op
+BenchmarkPaperEngineEndToEndTyped-8           	      93	   3141760 ns/op	 5638788 B/op	   14964 allocs/op
+BenchmarkPaperEngineEndToEndTyped-8           	      94	   3153745 ns/op	 5634128 B/op	   14966 allocs/op
+BenchmarkPaperEngineEndToEndCompiledHTML-8    	      88	   3507317 ns/op	 6135636 B/op	   17465 allocs/op
+BenchmarkPaperEngineEndToEndCompiledHTML-8    	      86	   3557270 ns/op	 6123582 B/op	   17464 allocs/op
+BenchmarkPaperEngineEndToEndCompiledHTML-8    	      87	   3556226 ns/op	 6123711 B/op	   17464 allocs/op
+BenchmarkPaperEngineEndToEndCompiledHTML-8    	      90	   3489500 ns/op	 6119170 B/op	   17466 allocs/op
+BenchmarkPaperEngineEndToEndCompiledHTML-8    	      85	   3527099 ns/op	 6110836 B/op	   17463 allocs/op
+BenchmarkPaperEngineEndToEndCompiledHTML-8    	      82	   3485614 ns/op	 6110409 B/op	   17464 allocs/op
+BenchmarkPaperEngineEndToEndCompiledHTML-8    	      92	   3460906 ns/op	 6119105 B/op	   17465 allocs/op
+BenchmarkPaperEngineEndToEndCompiledHTML-8    	      88	   3453604 ns/op	 6111445 B/op	   17462 allocs/op
+BenchmarkPaperEngineEndToEndCompiledHTML-8    	      87	   3462696 ns/op	 6123028 B/op	   17462 allocs/op
+BenchmarkPaperEngineEndToEndCompiledHTML-8    	      90	   3452450 ns/op	 6112891 B/op	   17465 allocs/op
+BenchmarkPaperEngineEndToEndPaper-8           	      78	   3841706 ns/op	 6975753 B/op	   19411 allocs/op
+BenchmarkPaperEngineEndToEndPaper-8           	      79	   3830533 ns/op	 6967497 B/op	   19407 allocs/op
+BenchmarkPaperEngineEndToEndPaper-8           	      78	   3867546 ns/op	 6960619 B/op	   19406 allocs/op
+BenchmarkPaperEngineEndToEndPaper-8           	      78	   3820948 ns/op	 6966582 B/op	   19407 allocs/op
+BenchmarkPaperEngineEndToEndPaper-8           	      76	   3825145 ns/op	 6973323 B/op	   19407 allocs/op
+BenchmarkPaperEngineEndToEndPaper-8           	      79	   3832108 ns/op	 6974638 B/op	   19407 allocs/op
+BenchmarkPaperEngineEndToEndPaper-8           	      78	   3832280 ns/op	 6968672 B/op	   19408 allocs/op
+BenchmarkPaperEngineEndToEndPaper-8           	      78	   3843483 ns/op	 6966524 B/op	   19408 allocs/op
+BenchmarkPaperEngineEndToEndPaper-8           	      79	   3865928 ns/op	 6966779 B/op	   19407 allocs/op
+BenchmarkPaperEngineEndToEndPaper-8           	      78	   3827189 ns/op	 6975049 B/op	   19408 allocs/op
+BenchmarkPaperEngineWarmCompiledPaper-8       	     259	   1095497 ns/op	 2848773 B/op	    4509 allocs/op
+BenchmarkPaperEngineWarmCompiledPaper-8       	     273	   1093954 ns/op	 2848846 B/op	    4509 allocs/op
+BenchmarkPaperEngineWarmCompiledPaper-8       	     272	   1130378 ns/op	 2848843 B/op	    4509 allocs/op
+BenchmarkPaperEngineWarmCompiledPaper-8       	     272	   1128347 ns/op	 2849080 B/op	    4510 allocs/op
+BenchmarkPaperEngineWarmCompiledPaper-8       	     250	   1169140 ns/op	 2849115 B/op	    4510 allocs/op
+BenchmarkPaperEngineWarmCompiledPaper-8       	     273	   1109948 ns/op	 2849124 B/op	    4510 allocs/op
+BenchmarkPaperEngineWarmCompiledPaper-8       	     272	   1134455 ns/op	 2848820 B/op	    4509 allocs/op
+BenchmarkPaperEngineWarmCompiledPaper-8       	     259	   1106578 ns/op	 2848744 B/op	    4508 allocs/op
+BenchmarkPaperEngineWarmCompiledPaper-8       	     268	   1184748 ns/op	 2848924 B/op	    4509 allocs/op
+BenchmarkPaperEngineWarmCompiledPaper-8       	     272	   1171357 ns/op	 2848908 B/op	    4509 allocs/op
+BenchmarkPaperEngineConcurrentPlanWrite16-8   	      44	   6353371 ns/op	29900698 B/op	   47345 allocs/op
+BenchmarkPaperEngineConcurrentPlanWrite16-8   	      40	   6388805 ns/op	29903567 B/op	   47347 allocs/op
+BenchmarkPaperEngineConcurrentPlanWrite16-8   	      45	   6348487 ns/op	29901600 B/op	   47345 allocs/op
+BenchmarkPaperEngineConcurrentPlanWrite16-8   	      43	   6360685 ns/op	29902105 B/op	   47343 allocs/op
+BenchmarkPaperEngineConcurrentPlanWrite16-8   	      45	   6307777 ns/op	29901156 B/op	   47339 allocs/op
+BenchmarkPaperEngineConcurrentPlanWrite16-8   	      44	   6308216 ns/op	29899641 B/op	   47335 allocs/op
+BenchmarkPaperEngineConcurrentPlanWrite16-8   	      44	   6247275 ns/op	29902107 B/op	   47344 allocs/op
+BenchmarkPaperEngineConcurrentPlanWrite16-8   	      44	   6381744 ns/op	29899684 B/op	   47340 allocs/op
+BenchmarkPaperEngineConcurrentPlanWrite16-8   	      45	   6333919 ns/op	29902426 B/op	   47345 allocs/op
+BenchmarkPaperEngineConcurrentPlanWrite16-8   	      46	   6315861 ns/op	29902325 B/op	   47345 allocs/op
+BenchmarkPaperEngineTableLarge128-8           	      18	  15339625 ns/op	26602939 B/op	  102433 allocs/op
+BenchmarkPaperEngineTableLarge128-8           	      19	  15281469 ns/op	26600907 B/op	  102427 allocs/op
+BenchmarkPaperEngineTableLarge128-8           	      19	  15221384 ns/op	26602132 B/op	  102430 allocs/op
+BenchmarkPaperEngineTableLarge128-8           	      19	  15573011 ns/op	26597760 B/op	  102427 allocs/op
+BenchmarkPaperEngineTableLarge128-8           	      18	  16331116 ns/op	26595579 B/op	  102421 allocs/op
+BenchmarkPaperEngineTableLarge128-8           	      18	  16212632 ns/op	26604626 B/op	  102429 allocs/op
+BenchmarkPaperEngineTableLarge128-8           	      18	  16147741 ns/op	26595802 B/op	  102419 allocs/op
+BenchmarkPaperEngineTableLarge128-8           	      16	  16243172 ns/op	26599116 B/op	  102431 allocs/op
+BenchmarkPaperEngineTableLarge128-8           	      18	  16304243 ns/op	26601113 B/op	  102429 allocs/op
+BenchmarkPaperEngineTableLarge128-8           	      18	  16168215 ns/op	26601164 B/op	  102428 allocs/op
+BenchmarkPaperEngineTableWide32-8             	      14	  20124104 ns/op	31821458 B/op	  129183 allocs/op
+BenchmarkPaperEngineTableWide32-8             	      14	  19999920 ns/op	31820904 B/op	  129182 allocs/op
+BenchmarkPaperEngineTableWide32-8             	      14	  20048851 ns/op	31821668 B/op	  129183 allocs/op
+BenchmarkPaperEngineTableWide32-8             	      14	  20099387 ns/op	31820714 B/op	  129182 allocs/op
+BenchmarkPaperEngineTableWide32-8             	      14	  19946875 ns/op	31820824 B/op	  129182 allocs/op
+BenchmarkPaperEngineTableWide32-8             	      14	  20173440 ns/op	31824602 B/op	  129193 allocs/op
+BenchmarkPaperEngineTableWide32-8             	      14	  20061884 ns/op	31820057 B/op	  129180 allocs/op
+BenchmarkPaperEngineTableWide32-8             	      14	  20199250 ns/op	31824377 B/op	  129192 allocs/op
+BenchmarkPaperEngineTableWide32-8             	      14	  20192524 ns/op	31823925 B/op	  129190 allocs/op
+BenchmarkPaperEngineTableWide32-8             	      14	  20092155 ns/op	31821756 B/op	  129184 allocs/op
+PASS
+ok  	github.com/cssbruno/gopdfkit/document	28.598s
+goos: darwin
+goarch: arm64
+pkg: github.com/cssbruno/gopdfkit/internal/layoutengine
+cpu: Apple M2
+BenchmarkPaperEngineTableRows10000-8   	       2	 208907125 ns/op	25468916 B/op	   40389 allocs/op
+BenchmarkPaperEngineTableRows10000-8   	       2	 205144188 ns/op	25468676 B/op	   40386 allocs/op
+BenchmarkPaperEngineTableRows10000-8   	       2	 205118166 ns/op	25468900 B/op	   40388 allocs/op
+BenchmarkPaperEngineTableRows10000-8   	       2	 205310084 ns/op	25468900 B/op	   40388 allocs/op
+BenchmarkPaperEngineTableRows10000-8   	       2	 207345208 ns/op	25468684 B/op	   40386 allocs/op
+BenchmarkPaperEngineTableRows10000-8   	       2	 205540500 ns/op	25469020 B/op	   40389 allocs/op
+BenchmarkPaperEngineTableRows10000-8   	       2	 205487188 ns/op	25468684 B/op	   40386 allocs/op
+BenchmarkPaperEngineTableRows10000-8   	       2	 205713958 ns/op	25468676 B/op	   40386 allocs/op
+BenchmarkPaperEngineTableRows10000-8   	       2	 209683188 ns/op	25468256 B/op	   40386 allocs/op
+BenchmarkPaperEngineTableRows10000-8   	       2	 205698146 ns/op	25468788 B/op	   40387 allocs/op
+PASS
+ok  	github.com/cssbruno/gopdfkit/internal/layoutengine	10.869s

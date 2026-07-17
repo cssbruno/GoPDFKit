@@ -6,9 +6,11 @@ package document
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
+	"github.com/cssbruno/gopdfkit/internal/layoutengine"
 	"github.com/cssbruno/gopdfkit/layout"
 	"github.com/cssbruno/gopdfkit/sign"
 )
@@ -185,9 +187,24 @@ func TestTypedBoxBackgroundUsesMeasuredContentHeight(t *testing.T) {
 			BackgroundColor: layout.DocumentColor{R: 240, G: 240, B: 240, Set: true},
 		},
 	}}
+	plan, err := pdf.PlanLayoutDocument(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projection := plan.plan.Projection()
+	if len(projection.Fills) != 1 {
+		t.Fatalf("planned fills = %#v, want one background", projection.Fills)
+	}
+	fill := projection.Fills[0]
+	if int(fill.Path) >= len(projection.Paths) {
+		t.Fatalf("background fill path = %d, paths = %d", fill.Path, len(projection.Paths))
+	}
+	want := pdf.UnitToPointConvert(12)
+	if got := projection.Paths[fill.Path].Bounds.Height.Points(); math.Abs(got-want) > 1.0/float64(layoutengine.FixedScale) {
+		t.Fatalf("planned background height = %.6f, want %.6f", got, want)
+	}
 	pdf.WriteDocument(doc)
-	content := pdf.pages[pdf.page].String()
-	if !strings.Contains(content, "-34.02 re f") {
-		t.Fatalf("background rectangle did not use measured block height:\n%s", content)
+	if pdf.Error() != nil || !strings.Contains(pdf.pages[pdf.page].String(), " h f") {
+		t.Fatalf("unified background was not painted: %v\n%s", pdf.Error(), pdf.pages[pdf.page].String())
 	}
 }

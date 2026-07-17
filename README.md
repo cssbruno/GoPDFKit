@@ -158,6 +158,40 @@ The `layout` package exists for the last case: an optional typed block model. It
 is not the default template system. Prefer compiled HTML templates when the
 document is naturally described as HTML/CSS with changing values.
 
+## Paper Engine preview
+
+The repository includes the emerging human-readable `.paper` compiler and a
+read-first Paper Studio workspace. Studio displays SVG pages captured directly
+from the immutable display plan; it does not use browser layout as a substitute
+for the PDF planner.
+
+```shell
+go run ./cmd/paper check testdata/paper/studio-demo.paper
+make paper-studio PAPER_STUDIO_FILE=testdata/paper/studio-demo.paper
+```
+
+Open `http://127.0.0.1:7331`. The workspace provides the exact page canvas,
+page rail, source and outline navigation, causal inspection, hit testing,
+geometry overlays, scenario switching, revision-bound requests, and stale-plan
+protection. The inspection strip projects exact border/content boxes, fragment
+regions, causal page breaks, semantic roles, and page-local reading indexes.
+The page rail projects each page's exact first/even/odd master-selector state,
+retained body/header/footer regions, repeated master content, positioned plan
+issues, and semantic/display-aware changes from one prior source revision.
+Scenario-mismatched or unavailable baselines are labeled and never compared.
+When geometry overlaps, the picker preserves the retained plan's topmost-first
+order instead of asking the browser to infer stacking. It is a
+development preview of the roadmap in [`PAPER_ENGINE_PLAN.md`](PAPER_ENGINE_PLAN.md),
+not yet the default document frontend. Project images can use readable
+content-addressed `asset:name` references; see
+[the `.paper` asset guide](docs/paper-assets.md).
+
+Studio intentionally accepts only an explicit loopback listen host. It serves
+local source and plan evidence without remote authentication and therefore
+refuses wildcard, LAN, and public bind addresses.
+
+Run `make test-paper-studio-js` for the dependency-free page-rail model tests.
+
 ## Large PDF Output
 
 Normal `Output` and `OutputFile` calls keep the final PDF bytes in the document
@@ -291,6 +325,11 @@ Unicode maps, and PDF/A-4f or PDF/A-4e when attachments are present.
 
 This is not a full validator replacement. Use `make compliance-fixtures` and
 `make compliance-validate` with external validators for standards checks.
+Fixture generation also writes `artifacts/compliance/characterization.json`, a
+canonical local baseline containing the reproduction command, runtime
+GOOS/GOARCH/Go version/CPU fingerprint, PDF hashes, page text, and structural
+PDF/A and PDF/UA markers. That report is characterization evidence only; it
+does not assert standards conformance.
 
 Strict validation can be run with Dockerized veraPDF plus the Arlington REST
 service:
@@ -621,6 +660,9 @@ make bench-ci
 make bench-generation-core
 make bench-generation-core-ci
 make bench-generation-core-budget
+make bench-paper-engine
+make bench-paper-engine-ci
+make bench-paper-engine-budget
 make profile-cpu BENCH='BenchmarkGenerationHTMLLargeTableCompiled$'
 make benchstat
 ```
@@ -631,6 +673,16 @@ attachments, and compiled HTML tables. The budget target always captures a new
 three-sample result before applying its broad regression ceilings. Use
 `tools/bin/benchstat baseline.txt current.txt` for local statistical A/B
 comparisons after `make benchstat`.
+
+The Paper Engine targets separately measure planner-only, retained-plan
+painter-only, typed/compiled-HTML/`.paper` end-to-end paths, and warm retained
+`.paper` plan rendering. The captured
+report includes the exact command, Go/OS/architecture fingerprint, source
+revision, worktree state, and standard `ns/op`, `B/op`, and `allocs/op` fields.
+The budget command requires at least ten samples and a matching named host/
+toolchain calibration; ordinary unit tests contain no wall-clock assertions.
+See [the Paper Engine performance workflow](docs/performance/paper-engine-benchmarks.md)
+for the fixture contract and statistically sound comparison procedure.
 
 Test examples generate PDFs in a unique temporary directory, so running the
 test suite never removes or overwrites repository assets.

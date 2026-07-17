@@ -112,6 +112,10 @@ const (
 	BlockKindClause BlockKind = "clause"
 	// BlockKindPageBreak identifies explicit page-break blocks.
 	BlockKindPageBreak BlockKind = "page-break"
+	// BlockKindRowColumn identifies a fixed-point row or column container.
+	BlockKindRowColumn BlockKind = "row-column"
+	// BlockKindCanvas identifies a local explicit anchor/constraint container.
+	BlockKindCanvas BlockKind = "canvas"
 )
 
 // Block identifies a supported shared document block. Rendering and
@@ -165,6 +169,10 @@ func NormalizeBlock(block Block) (_ Block, ok bool) {
 		return *block, true
 	case *PageBreakBlock:
 		return *block, true
+	case *RowColumnBlock:
+		return *block, true
+	case *CanvasBlock:
+		return *block, true
 	default:
 		return block, true
 	}
@@ -201,16 +209,40 @@ type TextStyle struct {
 	Color         DocumentColor // Optional text color.
 	Align         string        // Horizontal alignment, such as L, C, R, or J.
 	LineHeight    float64       // Line height in document units.
+	WhiteSpace    string        // Optional resolved whitespace mode: normal, nowrap, pre, pre-wrap, pre-line, or break-spaces.
+	TabSize       uint8         // Number of spaces per tab stop; zero uses 8.
 }
 
 // BoxStyle describes common block styling independent of a renderer.
 type BoxStyle struct {
-	Margin          Spacing       // Space outside the block.
-	Padding         Spacing       // Space inside the block.
-	Border          BorderStyle   // Per-side border settings.
-	BackgroundColor DocumentColor // Optional background color.
-	KeepTogether    bool          // Prefer not to split this block across pages.
-	KeepWithNext    bool          // Prefer to keep this block with the next one.
+	Margin          Spacing        // Space outside the block.
+	Padding         Spacing        // Space inside the block.
+	Border          BorderStyle    // Per-side border settings.
+	BackgroundColor DocumentColor  // Optional background color.
+	Width           float64        // Optional resolved border-box width; zero uses the containing width.
+	Height          float64        // Optional resolved border-box height; zero uses intrinsic content height.
+	MinWidth        float64        // Optional resolved minimum border-box width.
+	MinHeight       float64        // Optional resolved minimum border-box height.
+	MaxWidth        float64        // Optional resolved maximum border-box width.
+	MaxHeight       float64        // Optional resolved maximum border-box height.
+	Overflow        string         // Overflow policy: empty/visible or hidden.
+	BorderRadius    float64        // Optional uniform circular corner radius in document units.
+	Shadow          BoxShadowStyle // Optional bounded outer shadow; blur and inset shadows are not represented.
+	KeepTogether    bool           // Prefer not to split this block across pages.
+	KeepWithNext    bool           // Prefer to keep this block with the next one.
+	Orphans         uint32         // Minimum lines preferred at the bottom of a page; zero uses 1.
+	Widows          uint32         // Minimum lines preferred at the top of a continuation page; zero uses 1.
+}
+
+// BoxShadowStyle is the renderer-independent subset used by the unified
+// planner: one outer, solid-color shadow with fixed offsets and spread. Its
+// zero value paints no shadow. Keeping blur and inset out of this contract
+// prevents painters from inventing renderer-specific raster effects.
+type BoxShadowStyle struct {
+	OffsetX float64
+	OffsetY float64
+	Spread  float64
+	Color   DocumentColor
 }
 
 // Spacing stores top, right, bottom, and left measurements in document units.
@@ -238,11 +270,44 @@ type BorderSide struct {
 
 // TextSegment is a styled text run.
 type TextSegment struct {
-	Text     string     // Segment text.
-	Style    TextStyle  // Style applied to this segment.
-	StyleRef *TextStyle // Optional shared segment style.
-	Link     string     // Optional link target.
+	Text        string     // Segment text.
+	Style       TextStyle  // Style applied to this segment.
+	StyleRef    *TextStyle // Optional shared segment style.
+	Link        string     // Optional external URI or #name internal link target.
+	Destination string     // Optional named internal destination at this segment's first glyph.
 }
+
+// CanvasConstraint is one readable same-axis equality inside a local canvas.
+// Target is "canvas" or an authored sibling ID. Offset uses document units.
+type CanvasConstraint struct {
+	Anchor       string
+	Target       string
+	TargetAnchor string
+	Offset       float64
+}
+
+// CanvasItem is an explicitly measured visual node positioned by local
+// anchors. Box currently supplies its deterministic fill and border styling.
+type CanvasItem struct {
+	ID          string
+	Width       float64
+	Height      float64
+	Constraints []CanvasConstraint
+	Box         BoxStyle
+	Alt         string
+}
+
+// CanvasBlock is a bounded local anchor DAG. It is intentionally not a
+// document-wide constraint system.
+type CanvasBlock struct {
+	Width             float64
+	Height            float64
+	DefaultHorizontal string
+	DefaultVertical   string
+	Items             []CanvasItem
+}
+
+func (CanvasBlock) DocumentBlockKind() BlockKind { return BlockKindCanvas }
 
 // ParagraphBlock represents a paragraph of styled text.
 type ParagraphBlock struct {
@@ -269,10 +334,91 @@ type HeadingBlock struct {
 // DocumentBlockKind returns BlockKindHeading.
 func (HeadingBlock) DocumentBlockKind() BlockKind { return BlockKindHeading }
 
+// RowColumnDirection selects the main axis of a readable row/column block.
+type RowColumnDirection string
+
+const (
+	RowDirection    RowColumnDirection = "row"
+	ColumnDirection RowColumnDirection = "column"
+)
+
+// RowColumnTrackKind selects exact, intrinsic, or weighted main-axis sizing.
+type RowColumnTrackKind string
+
+const (
+	RowColumnTrackFixed    RowColumnTrackKind = "fixed"
+	RowColumnTrackAuto     RowColumnTrackKind = "auto"
+	RowColumnTrackFraction RowColumnTrackKind = "fraction"
+	RowColumnTrackFlex     RowColumnTrackKind = "flex"
+)
+
+type RowColumnFlexBasisKind string
+
+const (
+	RowColumnFlexBasisFixed   RowColumnFlexBasisKind = "fixed"
+	RowColumnFlexBasisPercent RowColumnFlexBasisKind = "percent"
+	RowColumnFlexBasisContent RowColumnFlexBasisKind = "content"
+)
+
+// RowColumnTrack is a renderer-independent point-based child constraint.
+// Flex tracks use Basis/BasisPercent with integral Grow/Shrink factors and
+// optional fixed Min/Max constraints; legacy fixed/auto/fraction fields retain
+// their existing contracts.
+type RowColumnTrack struct {
+	Kind         RowColumnTrackKind
+	Size         float64
+	Min          float64
+	Max          float64
+	Weight       uint32
+	BasisKind    RowColumnFlexBasisKind
+	Basis        float64
+	BasisPercent uint32
+	Grow         uint32
+	Shrink       uint32
+	// GrowFactor and ShrinkFactor are millionth-scale CSS factors. A zero
+	// value falls back to the corresponding integral Grow/Shrink field so the
+	// original typed API remains source compatible.
+	GrowFactor   uint64
+	ShrinkFactor uint64
+	MinPercent   uint32
+	MaxPercent   uint32
+}
+
+// RowColumnItem owns one supported text block and its placement constraints.
+type RowColumnItem struct {
+	Block           Block
+	Track           RowColumnTrack
+	CrossSize       float64
+	CrossAlign      string
+	CrossMin        float64
+	CrossMax        float64
+	CrossMinPercent uint32
+	CrossMaxPercent uint32
+}
+
+// RowColumnBlock is the readable source model for the fixed-point primitive.
+// Initial document planning accepts paragraph and heading item blocks.
+type RowColumnBlock struct {
+	Direction    RowColumnDirection
+	Gap          float64
+	CrossGap     float64
+	CrossSize    float64
+	Wrap         string
+	MainAlign    string
+	CrossAlign   string
+	AlignContent string
+	ReverseMain  bool
+	Items        []RowColumnItem
+}
+
+// DocumentBlockKind returns BlockKindRowColumn.
+func (RowColumnBlock) DocumentBlockKind() BlockKind { return BlockKindRowColumn }
+
 // ListBlock represents an ordered or unordered list.
 type ListBlock struct {
 	Ordered     bool       // Whether the list is ordered.
 	MarkerStyle string     // Marker style, such as decimal or bullet.
+	Start       int        // First ordered marker value; zero uses 1.
 	Items       []ListItem // List items.
 	Style       TextStyle  // List text style.
 	StyleRef    *TextStyle // Optional shared list text style.
@@ -285,19 +431,22 @@ func (ListBlock) DocumentBlockKind() BlockKind { return BlockKindList }
 
 // ListItem stores the blocks that belong to one list item.
 type ListItem struct {
-	Blocks []Block // Blocks that make up the list item.
+	Blocks   []Block // Blocks that make up the list item.
+	Value    int     // Explicit ordered marker value.
+	ValueSet bool    // Whether Value overrides the current ordered counter.
 }
 
 // TableBlock represents a table split into header, body, and footer rows.
 type TableBlock struct {
-	Caption string        // Optional table caption.
-	Columns []TableColumn // Column width constraints.
-	Header  []TableRow    // Header rows.
-	Body    []TableRow    // Body rows.
-	Footer  []TableRow    // Footer rows.
-	Style   TableStyle    // Table layout options.
-	Box     BoxStyle      // Table box style.
-	BoxRef  *BoxStyle     // Optional shared table box style.
+	Caption         string        // Optional plain table caption.
+	CaptionSegments []TextSegment // Optional structured caption; mutually exclusive with Caption.
+	Columns         []TableColumn // Column width constraints.
+	Header          []TableRow    // Header rows.
+	Body            []TableRow    // Body rows.
+	Footer          []TableRow    // Footer rows.
+	Style           TableStyle    // Table layout options.
+	Box             BoxStyle      // Table box style.
+	BoxRef          *BoxStyle     // Optional shared table box style.
 }
 
 // DocumentBlockKind returns BlockKindTable.
@@ -321,11 +470,15 @@ type TableStyle struct {
 type TableRow struct {
 	Cells        []TableCell // Cells in this row.
 	KeepTogether bool        // Whether the row should stay on one page.
+	KeepWithNext bool        // Whether this row should stay with the following row when possible.
+	Orphans      uint32      // Minimum authored rows retained at the start table-page boundary.
+	Widows       uint32      // Minimum authored rows retained at the final table-page boundary.
 }
 
 // TableCell stores table cell content and layout attributes.
 type TableCell struct {
 	Blocks        []Block    // Cell content blocks.
+	Header        bool       // Whether this cell carries header semantics.
 	ColSpan       int        // Number of columns spanned by the cell.
 	RowSpan       int        // Number of rows spanned by the cell.
 	Align         string     // Horizontal cell alignment.
@@ -350,21 +503,26 @@ const (
 
 // ImageBlock represents an image and optional caption.
 type ImageBlock struct {
-	Source    string        // Image file path or registered image name.
-	Data      []byte        // Inline image bytes.
-	DataRef   *[]byte       // Optional shared inline image bytes.
-	Format    string        // Image format, such as png or jpg.
-	Alt       string        // Alternative text used by fallback rendering.
-	Caption   []TextSegment // Optional caption text.
-	Width     float64       // Requested image width.
-	Height    float64       // Requested image height.
-	MaxWidth  float64       // Maximum rendered width.
-	MaxHeight float64       // Maximum rendered height.
-	Fit       ImageFitMode  // How the image fits inside its target box.
-	Align     string        // Horizontal alignment.
-	DPI       float64       // Optional image DPI override.
-	Box       BoxStyle      // Image box style.
-	BoxRef    *BoxStyle     // Optional shared image box style.
+	Source       string        // Image file path or registered image name.
+	Data         []byte        // Inline image bytes.
+	DataRef      *[]byte       // Optional shared inline image bytes.
+	Format       string        // Image format, such as png or jpg.
+	Alt          string        // Alternative text used by fallback rendering.
+	Caption      []TextSegment // Optional caption text.
+	CaptionStyle TextStyle     // Optional caption style; unset values use the canonical caption defaults.
+	Width        float64       // Requested image width.
+	Height       float64       // Requested image height.
+	MaxWidth     float64       // Maximum rendered width.
+	MaxHeight    float64       // Maximum rendered height.
+	Fit          ImageFitMode  // How the image fits inside its target box.
+	FocusX       float64       // Horizontal crop focus from 0 (left) through 1 (right).
+	FocusY       float64       // Vertical crop focus from 0 (top) through 1 (bottom).
+	FocusSet     bool          // Whether FocusX and FocusY are explicitly authored.
+	Align        string        // Horizontal alignment.
+	DPI          float64       // Optional image DPI override.
+	Decorative   bool          // Whether the image is an accessibility artifact rather than a figure.
+	Box          BoxStyle      // Image box style.
+	BoxRef       *BoxStyle     // Optional shared image box style.
 }
 
 // DocumentBlockKind returns BlockKindImage.
@@ -468,6 +626,7 @@ func needsTrimSpace(s string) bool {
 // SignatureRowBlock represents one row of signature columns.
 type SignatureRowBlock struct {
 	Columns      []SignatureColumn // Signature columns.
+	Gap          float64           // Optional gap between columns; zero uses the compatibility default.
 	KeepTogether bool              // Whether the row should stay on one page.
 	Box          BoxStyle          // Row box style.
 	BoxRef       *BoxStyle         // Optional shared row box style.
@@ -489,6 +648,7 @@ type SignatureColumn struct {
 type MetadataGridBlock struct {
 	Fields   []MetadataField // Metadata fields to render.
 	Columns  int             // Number of grid columns.
+	Gap      float64         // Optional gap between columns; zero uses the compatibility default.
 	Style    TextStyle       // Grid text style.
 	StyleRef *TextStyle      // Optional shared grid text style.
 	Box      BoxStyle        // Grid box style.

@@ -65,7 +65,15 @@ func (f *Document) SetLink(link int, y float64, page int) {
 		f.SetErrorf("invalid link destination position")
 		return
 	}
-	f.links[link] = internalLink{page, y}
+	f.links[link] = internalLink{page: page, y: y}
+}
+
+func (f *Document) setPlannedLink(link int, x, y float64, page int) {
+	if !f.validLinkID(link) || page <= 0 || page > f.page || !finiteNumbers(x, y) {
+		f.SetErrorf("invalid planned link destination")
+		return
+	}
+	f.links[link] = internalLink{page: page, x: x, y: y}
 }
 
 // newLink adds a new clickable link on the current page.
