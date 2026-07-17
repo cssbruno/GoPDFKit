@@ -1091,7 +1091,6 @@ async function showPage(page) {
     if (revision !== state.revision) return;
     state.page = page;
     paintWASMPage(display);
-    loadReviewOverlay(revision, page);
     geometryImage.src = geometry.url;
     $('#page-label').textContent = `Page ${page} of ${state.workspace.pages}`;
     document.querySelectorAll('.thumbnail-page').forEach((button) => {

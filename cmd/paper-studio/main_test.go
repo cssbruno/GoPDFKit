@@ -137,6 +137,7 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		bytes.Contains(javascript.Body, []byte("preview-status")) ||
 		bytes.Contains(javascript.Body, []byte("WASM plan preview")) ||
 		bytes.Contains(javascript.Body, []byte("loadSVG(page, 'display')")) ||
+		bytes.Contains(javascript.Body, []byte("loadReviewOverlay")) ||
 		!bytes.Contains(javascript.Body, []byte("await showPage(fragment.page)")) ||
 		!bytes.Contains(javascript.Body, []byte("markOutlineKey(fragment.Key)")) {
 		t.Fatalf("studio synchronization script = %d / %s", javascript.StatusCode, javascript.Body)
