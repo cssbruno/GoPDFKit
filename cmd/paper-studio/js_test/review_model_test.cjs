@@ -22,11 +22,10 @@ assert.deepEqual(model.blastRadius(root.members[1].node.members[0].node.members[
 assert.equal(model.pageBreakPolicies().length, 3);
 assert.equal(model.optimisticFeedback('box background').authoritative, false);
 const workspace = {revision:'plan-1', source_revision:'source-1', plan_hash:'plan-1', scenario:'@preview'};
-const normalized = model.normalizeReview({format_version:1, revision:'plan-1', source_revision:'source-1', plan_hash:'plan-1', scenario:'@preview', accessibility:{status:'verified', failures:[]}, annotations:[{transform:[1,0,0,1,0,0]}], comments:[], reference:{overlay_digest:'overlay', diff_digest:'abc', changed_pixels:4, transform:[1,0,0,1,0,0]}}, workspace);
+const normalized = model.normalizeReview({format_version:1, revision:'plan-1', source_revision:'source-1', plan_hash:'plan-1', scenario:'@preview', accessibility:{status:'verified', failures:[]}, annotations:[{transform:[1,0,0,1,0,0]}], comments:[], reference:{diff_digest:'abc', changed_pixels:4, transform:[1,0,0,1,0,0]}}, workspace);
 assert.equal(normalized.annotations[0].transform.length, 6);
 assert.equal(normalized.scenario, '@preview');
 assert.equal(normalized.accessibility.status, 'verified');
-assert.equal(normalized.reference.overlayDigest, 'overlay');
 assert.equal(normalized.reference.diffDigest, 'abc');
 assert.equal(normalized.reference.changedPixels, 4);
 assert.equal(model.commentPayload(workspace, '@copy', 1, 'keep semantic target', 'reviewer').kind, 'comment');

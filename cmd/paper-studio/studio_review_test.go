@@ -164,8 +164,8 @@ func TestPaperStudioReviewReferenceImageDiffAndArtifacts(t *testing.T) {
 		t.Fatalf("stored reference = %d %q %d bytes", stored.StatusCode, stored.Header, len(stored.Body))
 	}
 	overlay := studioRequest(t, handler, http.MethodGet, "/api/review/reference"+query+"&artifact=overlay", nil, "")
-	if overlay.StatusCode != http.StatusOK || !bytes.Equal(overlay.Body, referencePNG) || overlay.Header.Get("Content-Type") != "image/png" {
-		t.Fatalf("stored reference overlay = %d %q %d bytes", overlay.StatusCode, overlay.Header, len(overlay.Body))
+	if overlay.StatusCode != http.StatusBadRequest {
+		t.Fatalf("removed reference overlay artifact = %d %q", overlay.StatusCode, overlay.Header)
 	}
 	diff := studioRequest(t, handler, http.MethodGet, "/api/review/reference"+query+"&artifact=diff", nil, "")
 	if diff.StatusCode != http.StatusOK || len(diff.Body) == 0 || diff.Header.Get("Content-Type") != "image/png" {

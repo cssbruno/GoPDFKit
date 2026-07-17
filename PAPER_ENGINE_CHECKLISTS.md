@@ -3163,12 +3163,12 @@ as completed behavior.
   ([server](cmd/paper-studio/studio_review.go),
   [UI](cmd/paper-studio/web/studio.js),
   [persistence test](cmd/paper-studio/studio_review_test.go)).
-- [x] Reference PDFs/images support calibrated overlay and diff. Studio stores
-  bounded, digest-verified reference artifacts beside the review sidecar,
-  rasterizes PDF pages through the pinned Poppler verifier, emits deterministic
-  overlay/diff PNG artifacts, serves them only for the exact current source and
-  plan revisions, and renders the calibrated overlay in Reference mode
-  ([server](cmd/paper-studio/studio_review.go), [UI](cmd/paper-studio/web/studio.js),
+- [x] Reference PDFs/images support bounded, digest-verified artifacts and
+  deterministic raster diffs. Studio stores reference artifacts beside the
+  review sidecar, rasterizes PDF pages through the pinned Poppler verifier, and
+  serves the reference and diff only for the exact current source and plan
+  revisions ([server](cmd/paper-studio/studio_review.go),
+  [UI](cmd/paper-studio/web/studio.js),
   [image/PDF/artifact tests](cmd/paper-studio/studio_review_test.go)).
 - [x] Comments survive formatting and ordinary movement. Comments are anchored
   to authored IDs rather than source offsets, persisted atomically beside the
