@@ -1073,7 +1073,14 @@ Exit review:
   ([semantic adapter](document/paper.go),
   [characterization](document/typed_characterization_fixtures.go),
   [tests](document/typed_link_plan_test.go)). Full PDF tag-hierarchy parity and
-  unsupported typed cohorts remain pending.
+  unsupported typed cohorts remain pending. The typed display painter now
+  reuses one PDF structure element per retained semantic node across glyph
+  runs, fragments, and pages, preserves `/ActualText` and `/Lang`, and keeps
+  link annotation parent-tree references attached to the planned Link element
+  ([painter](document/layout_display_painter.go),
+  [tagged output](document/tagged_pdf.go),
+  [regression](document/typed_layout_plan_test.go)); complete PDF/UA role and
+  external-validator parity remains pending.
 - [x] Keep metadata, attachments, output policy, compliance, and the typed
   signing intent/field identity in a detached document envelope rather than
   layout nodes. Planning snapshots descriptive metadata, authored dates, XMP,

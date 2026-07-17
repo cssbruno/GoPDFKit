@@ -27,6 +27,7 @@ var (
 
 type taggedPDFState struct {
 	enabled           bool
+	documentLanguage  string
 	structTreeRootObj int
 	parentTreeObj     int
 	documentElemObj   int
@@ -45,16 +46,18 @@ type taggedPDFState struct {
 }
 
 type taggedElement struct {
-	ObjNum   int
-	Page     int
-	MCID     int
-	Role     string
-	Alt      string
-	ObjRef   int
-	Parent   *taggedElement
-	Table    taggedTableAttributes
-	Marked   []taggedMarkedContent
-	Children []*taggedElement
+	ObjNum     int
+	Page       int
+	MCID       int
+	Role       string
+	Alt        string
+	ActualText string
+	Lang       string
+	ObjRef     int
+	Parent     *taggedElement
+	Table      taggedTableAttributes
+	Marked     []taggedMarkedContent
+	Children   []*taggedElement
 }
 
 type taggedTableAttributes struct {
@@ -281,6 +284,43 @@ func (f *Document) beginTaggedContent(tag taggedContentOptions) []byte {
 	return out
 }
 
+// registerPreparedSemanticElement attaches a new marked-content reference to
+// an already materialized plan semantic element. Unlike registerTaggedElement,
+// this keeps one structure element for a semantic node even when its content
+// is split across glyph runs, fragments, or pages.
+func (f *Document) registerPreparedSemanticElement(elem *taggedElement) int {
+	if !f.tagged.enabled || elem == nil || f.page <= 0 {
+		return -1
+	}
+	f.tagged.pageStructParents = ensureIntSliceLen(f.tagged.pageStructParents, f.page+1)
+	f.tagged.pageElems = ensureTaggedPageElemsLen(f.tagged.pageElems, f.page+1)
+	if f.tagged.pageStructParents[f.page] < 0 && len(f.tagged.pageElems[f.page]) == 0 {
+		f.tagged.pageStructParents[f.page] = f.tagged.nextStructParent
+		f.tagged.nextStructParent++
+	}
+	mcid := len(f.tagged.pageElems[f.page])
+	elem.Marked = append(elem.Marked, taggedMarkedContent{Page: f.page, MCID: mcid})
+	f.tagged.pageElems[f.page] = append(f.tagged.pageElems[f.page], elem)
+	return mcid
+}
+
+func (f *Document) beginPreparedTaggedContent(role string, mcid int) []byte {
+	if !f.tagged.enabled || mcid < 0 {
+		return nil
+	}
+	role = normalizeTaggedRole(role)
+	if role == "" {
+		role = taggedRoleP
+	}
+	out := make([]byte, 0, len(role)+32)
+	out = append(out, '/')
+	out = append(out, role...)
+	out = append(out, " <</MCID "...)
+	out = appendPDFInt(out, mcid)
+	out = append(out, ">> BDC\n"...)
+	return out
+}
+
 func (f *Document) registerTaggedElement(role, alt string) (*taggedElement, int) {
 	page := f.page
 	if page <= 0 {
@@ -375,6 +415,14 @@ func (f *Document) putTaggedElement(elem *taggedElement) {
 	}
 	if elem.Alt != "" {
 		buf := f.appendUTF16TextString([]byte("/Alt "), elem.Alt)
+		f.outbytes(buf)
+	}
+	if elem.ActualText != "" {
+		buf := f.appendUTF16TextString([]byte("/ActualText "), elem.ActualText)
+		f.outbytes(buf)
+	}
+	if elem.Lang != "" {
+		buf := f.appendUTF16TextString([]byte("/Lang "), elem.Lang)
 		f.outbytes(buf)
 	}
 	if attr := f.taggedTableAttributeString(elem); attr != "" {
@@ -504,6 +552,10 @@ func (f *Document) putTaggedDocumentElement() {
 	f.out("/Type /StructElem")
 	f.out("/S /Document")
 	f.outf("/P %d 0 R", f.tagged.structTreeRootObj)
+	if language := firstNonEmpty(f.tagged.documentLanguage, f.compliance.Lang); language != "" {
+		buf := f.appendUTF16TextString([]byte("/Lang "), language)
+		f.outbytes(buf)
+	}
 	if f.tagged.namespaceObj > 0 {
 		f.outf("/NS %d 0 R", f.tagged.namespaceObj)
 	}

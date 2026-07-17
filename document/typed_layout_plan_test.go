@@ -80,6 +80,45 @@ func TestLayoutDocumentPlanLowersNestedSectionClauseAndNoteToExactPDF(t *testing
 	}
 }
 
+func TestTypedPlanPDFReusesSemanticStructureAcrossGlyphRuns(t *testing.T) {
+	source := MustNew(WithUnit(UnitPoint), WithCustomPageSize(Size{Wd: 150, Ht: 220}), WithNoCompression())
+	source.SetMargins(12, 12, 12)
+	source.SetComplianceMetadata(ComplianceMetadata{PDFUA2: true, Title: "Semantic reuse", Lang: "en-US"})
+	text := strings.Repeat("semantic text stays in one tagged paragraph ", 8)
+	plan, err := source.PlanLayoutDocument(&layout.LayoutDocument{
+		Language: "en-US",
+		Body:     []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: text}}}},
+	})
+	if err != nil || plan.Hash() == "" {
+		t.Fatalf("PlanLayoutDocument() = hash %q, %v", plan.Hash(), err)
+	}
+	projection := plan.plan.Projection()
+	paragraphs := 0
+	for _, node := range projection.SemanticNodes {
+		if node.Role == layoutengine.SemanticRoleParagraph {
+			paragraphs++
+		}
+	}
+	if paragraphs != 1 || len(projection.GlyphRuns) < 2 {
+		t.Fatalf("semantic paragraph/runs = %d/%d, want one paragraph across multiple runs", paragraphs, len(projection.GlyphRuns))
+	}
+
+	target := MustNew(WithUnit(UnitPoint), WithNoCompression(), WithDeterministicOutput())
+	if _, err := target.WriteLayoutDocumentPlan(plan); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if err := target.OutputWithOptions(&output, OutputOptions{Deterministic: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := bytes.Count(output.Bytes(), []byte("/S /P")); got != 1 {
+		t.Fatalf("tagged paragraph structures = %d, want one reusable structure element", got)
+	}
+	if !bytes.Contains(output.Bytes(), []byte("/ActualText ")) || !bytes.Contains(output.Bytes(), []byte("/Lang ")) {
+		t.Fatalf("tagged semantic attributes are missing from PDF")
+	}
+}
+
 func TestLayoutDocumentPlanUnsupportedContainerDiagnosticIsStableAndAtomic(t *testing.T) {
 	source := MustNew(WithUnit(UnitPoint), WithCustomPageSize(Size{Wd: 180, Ht: 120}))
 	doc := &layout.LayoutDocument{Body: []layout.Block{
