@@ -122,6 +122,8 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		!bytes.Contains(javascript.Body, []byte("PaperStudioIssueModel.sourceAnnotations")) ||
 		!bytes.Contains(javascript.Body, []byte("source-diagnostic")) ||
 		!bytes.Contains(javascript.Body, []byte("commitPageSetup")) ||
+		!bytes.Contains(javascript.Body, []byte("refreshPromise")) ||
+		bytes.Contains(javascript.Body, []byte("draft.orientation = 'portrait'")) ||
 		bytes.Contains(javascript.Body, []byte("Apply page size")) ||
 		!bytes.Contains(javascript.Body, []byte(".render?revision=")) ||
 		bytes.Contains(javascript.Body, []byte("preview-status")) ||

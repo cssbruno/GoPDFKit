@@ -1,8 +1,8 @@
 document @report:
   title: "Studio repeated fragments"
   page @sheet:
-    width: 841.88976378pt
-    height: 1190.551181102pt
+    width: 595.275590551pt
+    height: 841.88976378pt
     margin: 6pt
     body @body:
       table @ledger:
@@ -67,3 +67,7 @@ document @report:
             text: "Row 9"
           cell @value-9:
             text: "Value 9"
+      paragraph @new-content:
+        text: "New content"
+      paragraph @new-contentd:
+        text: "New content"

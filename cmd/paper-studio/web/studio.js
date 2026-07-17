@@ -24,6 +24,7 @@ const state = {
   pageSetupDraft: null,
   pageSetupFeedback: null,
   loading: false,
+  refreshPromise: null,
   pdfTags: null,
   pdfTagsRevision: '',
   tagsLoading: false,
@@ -76,7 +77,21 @@ async function api(path, options = {}) {
 }
 
 async function refresh({quiet = false} = {}) {
-  if (state.loading) return;
+  if (state.refreshPromise) {
+    await state.refreshPromise;
+    if (quiet) return;
+  }
+  if (state.refreshPromise) return state.refreshPromise;
+  const pending = performRefresh({quiet});
+  state.refreshPromise = pending;
+  try {
+    return await pending;
+  } finally {
+    if (state.refreshPromise === pending) state.refreshPromise = null;
+  }
+}
+
+async function performRefresh({quiet = false} = {}) {
   state.loading = true;
   if (!quiet) setPreviewStale(true);
   try {
@@ -197,20 +212,19 @@ function renderPageSetup() {
     target.innerHTML = '<span class="quiet">Add one addressed page master to enable page setup.</span>';
     return;
   }
-  $('#page-size-summary').textContent = `${current.preset} · ${current.orientation}`;
-  if (!state.pageSetupDraft || state.pageSetupDraft.target !== current.target) {
+  if (!state.pageSetupDraft || state.pageSetupDraft.target !== current.target || state.pageSetupDraft.revision !== state.revision) {
     state.pageSetupDraft = {
-      target: current.target, preset: current.preset, orientation: current.orientation, unit: 'mm',
+      target: current.target, revision: state.revision, preset: current.preset, orientation: current.orientation, unit: 'mm',
       width: Number((current.width * 25.4 / 72).toFixed(2)), height: Number((current.height * 25.4 / 72).toFixed(2)),
     };
   }
   const draft = state.pageSetupDraft;
+  $('#page-size-summary').textContent = `${draft.preset} · ${draft.orientation}`;
   const form = document.createElement('form');
   form.className = 'page-setup-form';
   form.addEventListener('submit', event => event.preventDefault());
   const preset = authoringSelect('Preset', [...Object.keys(PaperStudioPageSetupModel.presets), 'Custom'], draft.preset, value => {
     draft.preset = value;
-    if (value !== 'Custom') draft.orientation = 'portrait';
     renderPageSetup();
     if (value !== 'Custom') commitPageSetup({...draft});
   });
