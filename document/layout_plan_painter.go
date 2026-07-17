@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -12,6 +12,21 @@ import (
 
 	"github.com/cssbruno/gopdfkit/internal/layoutengine"
 )
+
+// layoutPlanHasMultipleGlyphRunsPerLine identifies plans whose finalized
+// display list switches core fonts or visual styles within a line. The compact
+// core painter intentionally has a one-run-per-line contract; these plans are
+// still fully positioned and simply use the general display-list painter.
+func layoutPlanHasMultipleGlyphRunsPerLine(projection layoutengine.LayoutPlanProjection) bool {
+	counts := make(map[uint32]uint32)
+	for _, run := range projection.GlyphRuns {
+		counts[run.Line]++
+		if counts[run.Line] > 1 {
+			return true
+		}
+	}
+	return false
+}
 
 var errCoreLayoutPlanPaintUnsupported = errors.New("document: core layout plan paint unsupported")
 

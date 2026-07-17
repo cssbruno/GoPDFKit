@@ -30,7 +30,7 @@ TRACE_BENCHTIME ?= 1s
 PAPER_ENGINE_PROFILE_CPU_SECONDS ?= 2
 PAPER_ENGINE_PROFILE_ALLOC_ITERATIONS ?= 20
 
-.PHONY: all documentation cov coverage-check test race vet fmt-check check modules tools tools-clean benchstat lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget bench-paper-engine bench-paper-engine-ci bench-paper-engine-budget bench-paper-studio test-paper-studio-js characterize-paper-engine paper-studio profile-paper-engine profile-paper-engine-check profile profile-cpu profile-alloc profile-block profile-mutex profile-trace compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate pdf-reader-smoke clean
+.PHONY: all documentation cov coverage-check test race vet fmt-check check modules tools tools-clean benchstat lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget bench-paper-engine bench-paper-engine-ci bench-paper-engine-budget bench-paper-studio test-paper-studio-js test-paper-studio-wasm characterize-paper-engine paper-studio-wasm paper-studio profile-paper-engine profile-paper-engine-check profile profile-cpu profile-alloc profile-block profile-mutex profile-trace compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate pdf-reader-smoke clean
 
 cov : all
 	go test $(GO_PACKAGES) -coverprofile=coverage && go tool cover -html=coverage -o=coverage.html
@@ -119,7 +119,7 @@ release-push :
 
 release : release-tag
 
-build :
+build : paper-studio-wasm
 	go build -v $(GO_PACKAGES)
 
 bench :
@@ -138,7 +138,7 @@ bench-generation-core-budget : bench-generation-core-ci
 	sh tools/benchmark-budget-check.sh "$(GENERATION_CORE_BENCH_OUT)"
 
 bench-paper-engine :
-	go test ./document ./internal/layoutengine -run '^$$' -bench '^BenchmarkPaperEngine(Planner|Painter|EndToEnd|WarmCompiled|Concurrent|Table)' -benchmem
+	go test ./document ./internal/layoutengine -run '^$$' -bench '^BenchmarkPaperEngine(Planner|Painter|ProductionDefault|EndToEnd|WarmCompiled|Concurrent|Table)' -benchmem
 
 bench-paper-engine-ci :
 	PAPER_ENGINE_BENCH_COUNT="$(PAPER_ENGINE_BENCH_COUNT)" PAPER_ENGINE_BENCHTIME="$(PAPER_ENGINE_BENCHTIME)" sh tools/run-paper-engine-benchmarks.sh "$(PAPER_ENGINE_BENCH_OUT)"
@@ -152,6 +152,18 @@ bench-paper-studio :
 test-paper-studio-js :
 	node --test cmd/paper-studio/js_test/*.cjs
 
+PAPER_STUDIO_WASM := cmd/paper-studio/web/paper-studio.wasm
+PAPER_STUDIO_WASM_EXEC := cmd/paper-studio/web/wasm_exec.js
+
+paper-studio-wasm :
+	GOOS=js GOARCH=wasm go build -trimpath -ldflags='-s -w' -o "$(PAPER_STUDIO_WASM)" ./cmd/paper-studio-wasm
+	chmod u+w "$(PAPER_STUDIO_WASM_EXEC)" 2>/dev/null || true
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" "$(PAPER_STUDIO_WASM_EXEC)"
+	chmod 0644 "$(PAPER_STUDIO_WASM_EXEC)"
+
+test-paper-studio-wasm : paper-studio-wasm
+	sh tools/test-paper-studio-wasm.sh
+
 characterize-paper-engine :
 	mkdir -p artifacts/characterization
 	go run ./cmd/paper-characterize -builtin typed > artifacts/characterization/typed.json
@@ -160,7 +172,7 @@ characterize-paper-engine :
 PAPER_STUDIO_FILE ?= testdata/paper/studio-demo.paper
 PAPER_STUDIO_ADDR ?= 127.0.0.1:7331
 
-paper-studio :
+paper-studio : paper-studio-wasm
 	go run ./cmd/paper-studio -addr "$(PAPER_STUDIO_ADDR)" "$(PAPER_STUDIO_FILE)"
 
 profile-paper-engine :

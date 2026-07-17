@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperlang
@@ -167,7 +167,7 @@ func (f *astFormatter) writeNode(node *Node, path string, depth int) error {
 		if node.Value != nil {
 			return f.invalid(path+".value", fmt.Sprintf("%s cannot have an inline scalar value", node.Kind))
 		}
-		if len(node.Members) == 0 && node.Kind != NodeScenario && node.Kind != NodeObject && node.Kind != NodeKeyedList && node.Kind != NodeTheme && node.Kind != NodeScope {
+		if len(node.Members) == 0 && node.Kind != NodeScenario && node.Kind != NodeObject && node.Kind != NodeKeyedList && node.Kind != NodeTheme && node.Kind != NodeStyle && node.Kind != NodeScope {
 			return f.invalid(path+".members", fmt.Sprintf("%s requires indented content", node.Kind))
 		}
 	}
@@ -176,6 +176,9 @@ func (f *astFormatter) writeNode(node *Node, path string, depth int) error {
 	}
 	if (node.Kind == NodeTheme || node.Kind == NodeToken || node.Kind == NodeScope) && node.ID == "" {
 		return f.invalid(path+".id", fmt.Sprintf("%s requires a readable @name", node.Kind))
+	}
+	if node.Kind == NodeStyle && node.ID == "" {
+		return f.invalid(path+".id", "style requires a readable @name")
 	}
 	if node.Kind == NodeRepeat && node.ID == "" {
 		return f.invalid(path+".id", "repeat requires a readable @name")

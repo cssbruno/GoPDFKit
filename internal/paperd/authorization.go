@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -29,10 +29,12 @@ const (
 	MutationFillSlot         MutationOperation = "fill_slot"
 	MutationApplyFix         MutationOperation = "apply_fix"
 	MutationSetBoxProperty   MutationOperation = "set_box_property"
+	MutationSetTextProperty  MutationOperation = "set_text_property"
 	MutationSetGridTrack     MutationOperation = "set_grid_track"
 	MutationSetImageProperty MutationOperation = "set_image_property"
 	MutationSetTableProperty MutationOperation = "set_table_property"
 	MutationSetPageMargin    MutationOperation = "set_page_margin"
+	MutationSetPageSize      MutationOperation = "set_page_size"
 	MutationSetCanvasAnchor  MutationOperation = "set_canvas_anchor"
 	MutationSetPageRegion    MutationOperation = "set_page_region"
 	MutationMoveNode         MutationOperation = "move_node"
@@ -43,7 +45,7 @@ const (
 func (operation MutationOperation) valid() bool {
 	switch operation {
 	case MutationSetLiteral, MutationSetRichText, MutationSetBinding, MutationFillSlot, MutationApplyFix,
-		MutationSetBoxProperty, MutationSetGridTrack, MutationSetImageProperty, MutationSetTableProperty, MutationSetPageMargin, MutationSetCanvasAnchor, MutationSetPageRegion:
+		MutationSetBoxProperty, MutationSetTextProperty, MutationSetGridTrack, MutationSetImageProperty, MutationSetTableProperty, MutationSetPageMargin, MutationSetPageSize, MutationSetCanvasAnchor, MutationSetPageRegion:
 		return true
 	case MutationMoveNode, MutationInsertTemplate, MutationCreateScenario:
 		return true

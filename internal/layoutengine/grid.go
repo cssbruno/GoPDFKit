@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -188,7 +188,31 @@ func PlanGridContext(ctx context.Context, input GridPlanInput) (GridPlanResult, 
 
 	planInput := LayoutPlanInput{Pages: []PlannedPage{{
 		Number: 1, Size: input.PageSize, Fragments: IndexRange{Count: uint32(len(items))},
-	}}}
+	}}, PageRegions: []PlannedPageRegion{{Page: 1, Region: RegionBody, Bounds: input.Region}}}
+	for index, width := range columns {
+		bounds, boundsErr := NewRect(columnOffsets[index], input.Region.Y, width, usedHeight)
+		if boundsErr != nil {
+			return GridPlanResult{}, boundsErr
+		}
+		gapAfter := Fixed(0)
+		if index+1 < len(columns) {
+			gapAfter = input.ColumnGap
+		}
+		planInput.GridTracks = append(planInput.GridTracks, PlannedGridTrack{Group: 1, Page: 1, Region: RegionBody,
+			Axis: GridTrackColumn, Index: uint32(index), Bounds: bounds, GapAfter: gapAfter})
+	}
+	for index, height := range rows {
+		bounds, boundsErr := NewRect(input.Region.X, rowOffsets[index], usedWidth, height)
+		if boundsErr != nil {
+			return GridPlanResult{}, boundsErr
+		}
+		gapAfter := Fixed(0)
+		if index+1 < len(rows) {
+			gapAfter = input.RowGap
+		}
+		planInput.GridTracks = append(planInput.GridTracks, PlannedGridTrack{Group: 1, Page: 1, Region: RegionBody,
+			Axis: GridTrackRow, Index: uint32(index), Bounds: bounds, GapAfter: gapAfter})
+	}
 	for index, item := range items {
 		if err := budget.charge(1); err != nil {
 			return GridPlanResult{}, err

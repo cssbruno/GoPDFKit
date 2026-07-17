@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperlang
@@ -69,6 +69,7 @@ const (
 	NodeObject      NodeKind = "object"
 	NodeKeyedList   NodeKind = "keyed-list"
 	NodeTheme       NodeKind = "theme"
+	NodeStyle       NodeKind = "style"
 	NodeToken       NodeKind = "token"
 	NodeScope       NodeKind = "scope"
 )
@@ -76,7 +77,7 @@ const (
 func parseNodeKind(value string) (NodeKind, bool) {
 	kind := NodeKind(value)
 	switch kind {
-	case NodeDocument, NodePage, NodeBody, NodeHeader, NodeFooter, NodeCanvas, NodeAnchor, NodeHeading, NodeText, NodeParagraph, NodeList, NodeItem, NodePageBreak, NodeRow, NodeColumn, NodeImage, NodeTable, NodeTableRow, NodeTableCell, NodeTableHeader, NodeTableTrack, NodeComponent, NodeProp, NodeSlot, NodeUse, NodeArg, NodeFill, NodeRepeat, NodeLoop, NodeSchema, NodeField, NodeScenario, NodeValue, NodeObject, NodeKeyedList, NodeTheme, NodeToken, NodeScope:
+	case NodeDocument, NodePage, NodeBody, NodeHeader, NodeFooter, NodeCanvas, NodeAnchor, NodeHeading, NodeText, NodeParagraph, NodeList, NodeItem, NodePageBreak, NodeRow, NodeColumn, NodeImage, NodeTable, NodeTableRow, NodeTableCell, NodeTableHeader, NodeTableTrack, NodeComponent, NodeProp, NodeSlot, NodeUse, NodeArg, NodeFill, NodeRepeat, NodeLoop, NodeSchema, NodeField, NodeScenario, NodeValue, NodeObject, NodeKeyedList, NodeTheme, NodeStyle, NodeToken, NodeScope:
 		return kind, true
 	default:
 		return "", false

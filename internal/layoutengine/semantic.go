@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -102,6 +102,7 @@ func AttachSemantics(plan LayoutPlan, nodes []SemanticNode, associations []Seman
 	}
 	return NewLayoutPlan(LayoutPlanInput{DeterministicInputs: projection.DeterministicInputs,
 		Pages: projection.Pages, Fragments: projection.Fragments, Lines: projection.Lines,
+		PageRegions: projection.PageRegions, GridTracks: projection.GridTracks,
 		Fonts: projection.Fonts, GlyphRuns: projection.GlyphRuns, ImageResources: projection.ImageResources,
 		Images: projection.Images, Destinations: projection.Destinations, Links: projection.Links,
 		Paths: projection.Paths, Transforms: projection.Transforms, Clips: projection.Clips, Fills: projection.Fills, Strokes: projection.Strokes,
@@ -120,6 +121,7 @@ func ReplaceSemantics(plan LayoutPlan, nodes []SemanticNode, associations []Sema
 	projection := plan.Projection()
 	return NewLayoutPlan(LayoutPlanInput{DeterministicInputs: projection.DeterministicInputs,
 		Pages: projection.Pages, Fragments: projection.Fragments, Lines: projection.Lines,
+		PageRegions: projection.PageRegions, GridTracks: projection.GridTracks,
 		Fonts: projection.Fonts, GlyphRuns: projection.GlyphRuns, ImageResources: projection.ImageResources,
 		Images: projection.Images, Destinations: projection.Destinations, Links: projection.Links,
 		Paths: projection.Paths, Transforms: projection.Transforms, Clips: projection.Clips, Fills: projection.Fills, Strokes: projection.Strokes,

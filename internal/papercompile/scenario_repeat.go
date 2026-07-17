@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -39,18 +39,30 @@ type scenarioCompileRequest struct {
 // CompileScenario compiles one explicitly selected source fixture. It is the
 // only compile entry point that expands repeat and loop nodes.
 func CompileScenario(ast paperlang.AST, scenario string) Result {
-	return compilePipeline(ast, ExpansionLimits{}, SchemaLimits{}, &scenarioCompileRequest{name: scenario}, AssetCatalog{})
+	return compilePipeline(ast, ExpansionLimits{}, SchemaLimits{}, &scenarioCompileRequest{name: scenario}, AssetCatalog{}, nil)
 }
 
 // CompileScenarioWithAssets is CompileScenario with the same explicit,
 // immutable asset boundary used by CompileWithAssets.
 func CompileScenarioWithAssets(ast paperlang.AST, scenario string, assets AssetCatalog) Result {
-	return compilePipeline(ast, ExpansionLimits{}, SchemaLimits{}, &scenarioCompileRequest{name: scenario}, assets)
+	return compilePipeline(ast, ExpansionLimits{}, SchemaLimits{}, &scenarioCompileRequest{name: scenario}, assets, nil)
+}
+
+// CompileScenarioWithResolver is CompileScenario with an explicit source
+// boundary for reusable design imports.
+func CompileScenarioWithResolver(ast paperlang.AST, scenario string, resolver ImportResolver) Result {
+	return compilePipeline(ast, ExpansionLimits{}, SchemaLimits{}, &scenarioCompileRequest{name: scenario}, AssetCatalog{}, resolver)
+}
+
+// CompileScenarioWithAssetsAndResolver combines the explicit asset and source
+// boundaries used by the scenario compiler.
+func CompileScenarioWithAssetsAndResolver(ast paperlang.AST, scenario string, assets AssetCatalog, resolver ImportResolver) Result {
+	return compilePipeline(ast, ExpansionLimits{}, SchemaLimits{}, &scenarioCompileRequest{name: scenario}, assets, resolver)
 }
 
 // CompileScenarioWithLimits is CompileScenario with explicit bounded policies.
 func CompileScenarioWithLimits(ast paperlang.AST, scenario string, limits ScenarioCompileLimits) Result {
-	return compilePipeline(ast, limits.Components, limits.Schemas, &scenarioCompileRequest{name: scenario, limits: limits}, AssetCatalog{})
+	return compilePipeline(ast, limits.Components, limits.Schemas, &scenarioCompileRequest{name: scenario, limits: limits}, AssetCatalog{}, nil)
 }
 
 type repeatExpansionContext struct {

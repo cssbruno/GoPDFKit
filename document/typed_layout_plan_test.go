@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -77,6 +77,65 @@ func TestLayoutDocumentPlanLowersNestedSectionClauseAndNoteToExactPDF(t *testing
 		target.compliance.Lang != "en-US" {
 		t.Fatalf("painted plan metadata/output = %d bytes, title %q subject %q author %q lang %q",
 			output.Len(), target.title, target.subject, target.author, target.compliance.Lang)
+	}
+}
+
+func TestLayoutDocumentPlanBindsDeterministicInputManifest(t *testing.T) {
+	source := MustNew(WithUnit(UnitPoint), WithCustomPageSize(Size{Wd: 220, Ht: 160}), WithNoCompression())
+	doc := &layout.LayoutDocument{Language: "en-US", Body: []layout.Block{
+		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "stable typed identity"}}},
+	}}
+	plan, err := source.PlanLayoutDocument(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, ok := plan.plan.DeterministicInputs()
+	if !ok || manifest.Locale != "en-US" || manifest.Timezone != "UTC" ||
+		manifest.PlannerVersion != layoutengine.PlannerVersion || manifest.PlanID == "" ||
+		manifest.ResourceCatalog.ID == "" || manifest.PageProfile.ID == "" {
+		t.Fatalf("typed deterministic manifest = %#v, bound=%t", manifest, ok)
+	}
+	if len(manifest.TextData.Unicode) == 0 || len(manifest.CompatibilityFlags) == 0 {
+		t.Fatalf("typed deterministic text/flags = %#v", manifest)
+	}
+	changed := *doc
+	changed.Language = "pt-BR"
+	changedPlan, err := source.PlanLayoutDocument(&changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changedManifest, ok := changedPlan.plan.DeterministicInputs()
+	if !ok || changedManifest.Locale != "pt-BR" || changedPlan.Hash() == plan.Hash() {
+		t.Fatalf("typed locale identity did not change: %#v / %q vs %q", changedManifest, plan.Hash(), changedPlan.Hash())
+	}
+}
+
+func TestUnifiedHTMLSVGPlansBindDeterministicInputManifest(t *testing.T) {
+	compiled, err := CompileHTML(`<p>before</p><svg width="18" height="12" aria-label="Vector mark"><rect width="18" height="12" fill="#408020" stroke="none"/></svg><p>after</p>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planner := MustNew(WithUnit(UnitPoint), WithCustomPageSize(Size{Wd: 220, Ht: 180}), WithNoCompression(), WithDeterministicOutput())
+	plan, err := planner.PlanCompiledHTML(12, compiled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, ok := plan.plan.DeterministicInputs()
+	if !ok || manifest.PlanID == "" || manifest.PageProfile.ID == "" || manifest.ResourceCatalog.ID == "" || manifest.Timezone != "UTC" {
+		t.Fatalf("mixed HTML/SVG deterministic manifest = %#v, bound=%t", manifest, ok)
+	}
+
+	sole, err := CompileHTML(`<svg width="18" height="12" aria-label="Sole vector"><rect width="18" height="12" fill="#408020" stroke="none"/></svg>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	solePlan, err := planner.PlanCompiledHTML(12, sole)
+	if err != nil {
+		t.Fatal(err)
+	}
+	soleManifest, ok := solePlan.plan.DeterministicInputs()
+	if !ok || soleManifest.PlanID == "" || soleManifest.PageProfile.ID == "" {
+		t.Fatalf("sole HTML/SVG deterministic manifest = %#v, bound=%t", soleManifest, ok)
 	}
 }
 

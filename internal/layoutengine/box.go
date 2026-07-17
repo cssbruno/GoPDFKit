@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -124,7 +124,13 @@ func PlanBoxFlowContext(ctx context.Context, input BoxFlowInput, limits Vertical
 		if err != nil {
 			return LayoutPlan{}, fmt.Errorf("layoutengine: box flow block %d content box: %w", index, err)
 		}
+		paddingBox, err := borderBox.Inset(item.block.Style.Border)
+		if err != nil {
+			return LayoutPlan{}, fmt.Errorf("layoutengine: box flow block %d padding box: %w", index, err)
+		}
+		projection.Fragments[index].MarginBox = outer
 		projection.Fragments[index].BorderBox = borderBox
+		projection.Fragments[index].PaddingBox = paddingBox
 		projection.Fragments[index].ContentBox = contentBox
 	}
 	fragments := make(map[FragmentID]Fragment, len(projection.Fragments))
@@ -140,6 +146,7 @@ func PlanBoxFlowContext(ctx context.Context, input BoxFlowInput, limits Vertical
 	return NewLayoutPlan(LayoutPlanInput{
 		DeterministicInputs: projection.DeterministicInputs,
 		Pages:               projection.Pages, Fragments: projection.Fragments, Lines: projection.Lines,
+		PageRegions: projection.PageRegions, GridTracks: projection.GridTracks,
 		Fonts: projection.Fonts, GlyphRuns: projection.GlyphRuns,
 		ImageResources: projection.ImageResources, Images: projection.Images,
 		Commands: projection.Commands, Breaks: projection.Breaks, Diagnostics: projection.Diagnostics,

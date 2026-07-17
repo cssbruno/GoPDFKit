@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -91,6 +91,99 @@ func TestExplainLayoutReturnsExactContinuationAndCausalEvidence(t *testing.T) {
 	}
 }
 
+func TestExplainLayoutPreservesRepeatedFragmentEvidence(t *testing.T) {
+	plan, err := NewLayoutPlan(LayoutPlanInput{
+		Pages: []PlannedPage{
+			{Number: 1, Size: Size{Width: 100, Height: 100}, Fragments: IndexRange{Count: 1}},
+			{Number: 2, Size: Size{Width: 100, Height: 100}, Fragments: IndexRange{Start: 1, Count: 1}},
+		},
+		Fragments: []Fragment{
+			{ID: 1, Node: 1, Key: "@header", Instance: "@header", Page: 1, Region: RegionHeader, BorderBox: Rect{Width: 80, Height: 10}, ContentBox: Rect{Width: 80, Height: 10}, Continuation: ContinuationWhole},
+			{ID: 2, Node: 1, Key: "@header", Instance: "@header", Page: 2, Region: RegionHeader, BorderBox: Rect{Width: 80, Height: 10}, ContentBox: Rect{Width: 80, Height: 10}, Continuation: ContinuationWhole, Repeated: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewLayoutPlan() = %v", err)
+	}
+	explanation, err := plan.ExplainLayout([]StructuralQuery{{Page: 2, MaxResults: 10}}, DefaultExplainLayoutLimits())
+	if err != nil {
+		t.Fatalf("ExplainLayout() = %v", err)
+	}
+	fragment := explanation.Targets[0].Fragments[0]
+	if !fragment.Repeated || fragment.Region != RegionHeader || fragment.Source.Instance != "@header" {
+		t.Fatalf("repeated fragment evidence = %+v", fragment)
+	}
+	canonical, err := explanation.CanonicalJSON()
+	if err != nil || !bytes.Contains(canonical, []byte(`"repeated":true`)) ||
+		!bytes.Contains(canonical, []byte(`"margin_box"`)) || !bytes.Contains(canonical, []byte(`"padding_box"`)) {
+		t.Fatalf("canonical repeated evidence = %s, %v", canonical, err)
+	}
+}
+
+func TestExplainLayoutReturnsBoundedPageGridTracks(t *testing.T) {
+	plan, err := NewLayoutPlan(LayoutPlanInput{
+		Pages:       []PlannedPage{{Number: 1, Size: Size{Width: 100, Height: 100}}},
+		PageRegions: []PlannedPageRegion{{Page: 1, Region: RegionBody, Bounds: Rect{Width: 100, Height: 100}, Master: "default"}},
+		GridTracks: []PlannedGridTrack{
+			{Group: 1, Page: 1, Region: RegionBody, Axis: GridTrackColumn, Index: 0, Bounds: Rect{Width: 40, Height: 20}, GapAfter: 5},
+			{Group: 1, Page: 1, Region: RegionBody, Axis: GridTrackColumn, Index: 1, Bounds: Rect{X: 45, Width: 55, Height: 20}},
+			{Group: 1, Page: 1, Region: RegionBody, Axis: GridTrackRow, Index: 0, Bounds: Rect{Width: 100, Height: 20}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	explanation, err := plan.ExplainLayout([]StructuralQuery{{Page: 1, MaxResults: 2}}, DefaultExplainLayoutLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := explanation.Targets[0]
+	if target.Selection.GridTracks != (ExplainLayoutCount{Matches: 3, Returned: 2, Truncated: true}) || len(target.GridTracks) != 2 {
+		t.Fatalf("bounded grid tracks = %+v / %+v", target.Selection.GridTracks, target.GridTracks)
+	}
+	if target.Selection.PageRegions != (ExplainLayoutCount{Matches: 1, Returned: 1}) || len(target.PageRegions) != 1 || target.PageRegions[0].Region.Master != "default" {
+		t.Fatalf("page-region evidence = %+v / %+v", target.Selection.PageRegions, target.PageRegions)
+	}
+	if target.GridTracks[0].Index != 0 || target.GridTracks[0].Track.GapAfter != 5 || target.GridTracks[1].Track.Index != 1 {
+		t.Fatalf("grid-track evidence = %+v", target.GridTracks)
+	}
+	nonPage, err := plan.ExplainLayout([]StructuralQuery{{Key: "@none", MaxResults: 2}}, DefaultExplainLayoutLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nonPage.Targets[0].Selection.GridTracks != (ExplainLayoutCount{}) || len(nonPage.Targets[0].GridTracks) != 0 {
+		t.Fatalf("non-page selector inferred grid ownership = %+v", nonPage.Targets[0])
+	}
+}
+
+func TestExplainLayoutPreservesFragmentSemanticOwnershipPath(t *testing.T) {
+	plan, err := NewLayoutPlan(LayoutPlanInput{
+		Pages: []PlannedPage{{Number: 1, Size: Size{Width: 100, Height: 100}, Fragments: IndexRange{Count: 1}}},
+		Fragments: []Fragment{{ID: 1, Node: 1, Key: "@cell", Instance: "@cell", Page: 1, Region: RegionBody,
+			BorderBox: Rect{Width: 80, Height: 20}, ContentBox: Rect{Width: 80, Height: 20}, Continuation: ContinuationWhole}},
+		SemanticNodes: []SemanticNode{
+			{ID: 1, Role: SemanticRoleDocument, Key: "@document", Instance: "@document"},
+			{ID: 2, Parent: 1, Role: SemanticRoleTable, Key: "@table", Instance: "@table"},
+			{ID: 3, Parent: 2, Role: SemanticRoleRow, Key: "@row", Instance: "@row"},
+			{ID: 4, Parent: 3, Role: SemanticRoleCell, Key: "@cell/semantic", Instance: "@cell/semantic", Attributes: SemanticAttributes{TableHeader: true}},
+			{ID: 5, Parent: 4, Role: SemanticRoleArtifact, Key: "@cell", Instance: "@cell"},
+		},
+		SemanticFragments: []SemanticFragmentAssociation{{Semantic: 5, Page: 1, Fragment: 1}},
+	})
+	if err != nil {
+		t.Fatalf("NewLayoutPlan() = %v", err)
+	}
+	explanation, err := plan.ExplainLayout([]StructuralQuery{{Page: 1, MaxResults: 10}}, DefaultExplainLayoutLimits())
+	if err != nil {
+		t.Fatalf("ExplainLayout() = %v", err)
+	}
+	semantic := explanation.Targets[0].Fragments[0].Semantic
+	if semantic == nil || semantic.Owner != 5 || semantic.Cell != 4 || !semantic.TableHeader ||
+		!reflect.DeepEqual(semantic.Roles, []SemanticRole{SemanticRoleArtifact, SemanticRoleCell, SemanticRoleRow, SemanticRoleTable, SemanticRoleDocument}) {
+		t.Fatalf("semantic ownership = %+v", semantic)
+	}
+}
+
 func TestExplainLayoutProjectsGlyphAndImageResources(t *testing.T) {
 	glyphPlan, err := NewLayoutPlan(coreGlyphPlanInput())
 	if err != nil {
@@ -156,7 +249,7 @@ func TestExplainLayoutBoundsExpandedEvidenceAndCanonicalJSON(t *testing.T) {
 	if err != nil || !bytes.Equal(firstJSON, secondJSON) {
 		t.Fatalf("canonical JSON mismatch: %v\n%s\n%s", err, firstJSON, secondJSON)
 	}
-	for _, field := range []string{`"schema_version":1`, `"source_identity"`, `"continuation_fragments"`, `"plan_hash"`} {
+	for _, field := range []string{`"schema_version":2`, `"source_identity"`, `"continuation_fragments"`, `"plan_hash"`} {
 		if !bytes.Contains(firstJSON, []byte(field)) {
 			t.Fatalf("canonical JSON missing %s: %s", field, firstJSON)
 		}

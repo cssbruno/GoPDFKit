@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -34,6 +34,30 @@ func TestTypedMetadataAndSignatureMultiColumnGeometryMixedPlanCaptureAndPDF(t *t
 		t.Fatalf("plan = pages %d source pages %d, %v", plan.PageCount(), planner.PageCount(), err)
 	}
 	projection := plan.plan.Projection()
+	if got := len(projection.GridTracks); got != 12 {
+		t.Fatalf("retained grid tracks = %d, want 12", got)
+	}
+	for group := uint32(1); group <= 3; group++ {
+		base := int((group - 1) * 4)
+		for column := uint32(0); column < 3; column++ {
+			track := projection.GridTracks[base+int(column)]
+			if track.Group != group || track.Page != 1 || track.Region != layoutengine.RegionBody || track.Axis != layoutengine.GridTrackColumn || track.Index != column {
+				t.Fatalf("grid track group %d column %d = %+v", group, column, track)
+			}
+			if column < 2 && track.GapAfter != layoutengine.Fixed(8*1024) {
+				t.Fatalf("grid track group %d column %d gap = %d", group, column, track.GapAfter)
+			}
+		}
+		rowTrack := projection.GridTracks[base+3]
+		if rowTrack.Group != group || rowTrack.Axis != layoutengine.GridTrackRow || rowTrack.Index != 0 || rowTrack.GapAfter != 0 {
+			t.Fatalf("grid track group %d row = %+v", group, rowTrack)
+		}
+	}
+	// The incomplete second metadata row still retains all three authored
+	// columns, including the empty trailing track needed by inspection tools.
+	if projection.GridTracks[6].Bounds.X != projection.GridTracks[2].Bounds.X || projection.GridTracks[6].Bounds.Width != projection.GridTracks[2].Bounds.Width {
+		t.Fatalf("incomplete metadata row lost trailing column: first=%+v second=%+v", projection.GridTracks[2], projection.GridTracks[6])
+	}
 	fragmentsByText := make(map[string]layoutengine.Fragment)
 	for _, association := range projection.SemanticFragments {
 		node := projection.SemanticNodes[association.Semantic-1]

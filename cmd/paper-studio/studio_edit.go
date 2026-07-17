@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -37,6 +37,8 @@ type studioEditRequest struct {
 	Property       string   `json:"property"`
 	Points         *float64 `json:"points,omitempty"`
 	Number         *float64 `json:"number,omitempty"`
+	Width          *float64 `json:"width_points,omitempty"`
+	Height         *float64 `json:"height_points,omitempty"`
 	Color          string   `json:"color,omitempty"`
 	Kind           string   `json:"kind,omitempty"`
 	Weight         *uint32  `json:"weight,omitempty"`
@@ -118,7 +120,8 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 	if err != nil {
 		return studioEditResponse{}, err
 	}
-	if request.SourceRevision != studioSourceRevision(snapshot.source) || request.PlanRevision != snapshot.revision || (snapshot.pages == 0 && request.Operation != "template") {
+	fontRepair := request.Operation == "text" && request.Property == "font"
+	if request.SourceRevision != studioSourceRevision(snapshot.source) || request.PlanRevision != snapshot.revision || (snapshot.pages == 0 && request.Operation != "template" && !fontRepair) {
 		return studioEditResponse{}, fmt.Errorf("%w: source or plan changed after selection", errStudioStaleEdit)
 	}
 
@@ -130,6 +133,8 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 	directTargets := []string{request.Target}
 	operation := paperd.MutationSetBoxProperty
 	switch request.Operation {
+	case "text":
+		operation = paperd.MutationSetTextProperty
 	case "grid":
 		operation = paperd.MutationSetGridTrack
 		if parent == nil || parent.ID == "" {
@@ -149,6 +154,8 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 		}
 	case "page":
 		operation = paperd.MutationSetPageMargin
+	case "page-size":
+		operation = paperd.MutationSetPageSize
 	case "canvas":
 		operation = paperd.MutationSetCanvasAnchor
 		if parent == nil || parent.Kind != paperlang.NodeCanvas || parent.ID == "" {
@@ -186,6 +193,7 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 		DisclosureDomain:         paperd.DisclosureRestricted,
 		RequireMutationAuthority: true,
 		AssetResources:           assetResources,
+		ImportResolver:           papercompile.ImportResolver(studioFileImportResolver()),
 	})
 	if err != nil {
 		return studioEditResponse{}, err
@@ -281,7 +289,10 @@ func validateStudioEditRequest(request studioEditRequest) error {
 	if request.Number != nil && (math.IsNaN(*request.Number) || math.IsInf(*request.Number, 0)) {
 		return fmt.Errorf("%w: number must be finite", errStudioInvalidEdit)
 	}
-	if request.Operation != "box" && request.Operation != "grid" && request.Operation != "image" && request.Operation != "table" && request.Operation != "page" && request.Operation != "canvas" && request.Operation != "region" && request.Operation != "binding" && request.Operation != "template" && request.Operation != "scenario-create" && request.Operation != "flow" {
+	if request.Width != nil && (math.IsNaN(*request.Width) || math.IsInf(*request.Width, 0)) || request.Height != nil && (math.IsNaN(*request.Height) || math.IsInf(*request.Height, 0)) {
+		return fmt.Errorf("%w: page dimensions must be finite", errStudioInvalidEdit)
+	}
+	if request.Operation != "box" && request.Operation != "text" && request.Operation != "grid" && request.Operation != "image" && request.Operation != "table" && request.Operation != "page" && request.Operation != "page-size" && request.Operation != "canvas" && request.Operation != "region" && request.Operation != "binding" && request.Operation != "template" && request.Operation != "scenario-create" && request.Operation != "flow" {
 		return fmt.Errorf("%w: operation is outside the closed Studio authoring vocabulary", errStudioInvalidEdit)
 	}
 	if request.Operation == "flow" && (request.NewParent == "" || request.NewParent[0] != '@') {
@@ -310,6 +321,11 @@ func applyStudioSemanticMutation(workspace *paperd.Workspace, guard paperd.Paper
 		}
 		return workspace.PaperSetBoxProperty(paperd.PaperSetBoxPropertyRequest{
 			Guard: guard, Property: paperd.PaperBoxProperty(request.Property), Points: points, Color: request.Color,
+		})
+	}
+	if request.Operation == "text" {
+		return workspace.PaperSetTextProperty(paperd.PaperSetTextPropertyRequest{
+			Guard: guard, Property: paperd.PaperTextProperty(request.Property), Text: request.Text,
 		})
 	}
 	if request.Operation == "image" {
@@ -348,6 +364,12 @@ func applyStudioSemanticMutation(workspace *paperd.Workspace, guard paperd.Paper
 		return workspace.PaperSetPageMargin(paperd.PaperSetPageMarginRequest{
 			Guard: guard, Property: paperd.PaperPageMarginProperty(request.Property), Points: points,
 		})
+	}
+	if request.Operation == "page-size" {
+		if request.Width == nil || request.Height == nil {
+			return paperd.PaperMutationResult{}, fmt.Errorf("%w: page size requires width and height", errStudioInvalidEdit)
+		}
+		return workspace.PaperSetPageSize(paperd.PaperSetPageSizeRequest{Guard: guard, WidthPoints: *request.Width, HeightPoints: *request.Height})
 	}
 	if request.Operation == "canvas" {
 		offset := 0.0

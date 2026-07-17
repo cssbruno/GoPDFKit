@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -141,7 +141,7 @@ func expandComponents(ast paperlang.AST, limits ExpansionLimits, scenario string
 				root.Members = append(root.Members, cloneExpansionProperty(member.Property))
 				continue
 			}
-			if member.Node == nil || member.Node.Kind == paperlang.NodeComponent || member.Node.Kind == paperlang.NodeSchema || member.Node.Kind == paperlang.NodeScenario || member.Node.Kind == paperlang.NodeTheme {
+			if member.Node == nil || member.Node.Kind == paperlang.NodeComponent || member.Node.Kind == paperlang.NodeSchema || member.Node.Kind == paperlang.NodeScenario || member.Node.Kind == paperlang.NodeTheme || member.Node.Kind == paperlang.NodeStyle {
 				continue
 			}
 			for _, node := range expander.expandNode(member.Node, expansionOrigin{}, 0) {
@@ -254,7 +254,7 @@ func (e *componentExpander) expandNode(source *paperlang.Node, origin expansionO
 	if source.Kind == paperlang.NodeUse {
 		return e.expandUse(source, origin, depth)
 	}
-	if source.Kind == paperlang.NodeComponent || source.Kind == paperlang.NodeProp || source.Kind == paperlang.NodeArg || source.Kind == paperlang.NodeSlot || source.Kind == paperlang.NodeFill || source.Kind == paperlang.NodeSchema || source.Kind == paperlang.NodeField || source.Kind == paperlang.NodeTheme || source.Kind == paperlang.NodeToken || source.Kind == paperlang.NodeScope {
+	if source.Kind == paperlang.NodeComponent || source.Kind == paperlang.NodeProp || source.Kind == paperlang.NodeArg || source.Kind == paperlang.NodeSlot || source.Kind == paperlang.NodeFill || source.Kind == paperlang.NodeSchema || source.Kind == paperlang.NodeField || source.Kind == paperlang.NodeTheme || source.Kind == paperlang.NodeStyle || source.Kind == paperlang.NodeToken || source.Kind == paperlang.NodeScope {
 		e.add("PAPER_COMPONENT_HIERARCHY", fmt.Sprintf("%s cannot appear in expanded output", source.Kind), "keep definitions at document scope and slots/fills in their owning component/use", source.HeaderSpan)
 		return nil
 	}

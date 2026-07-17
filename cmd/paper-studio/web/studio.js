@@ -6,6 +6,8 @@ const state = {
   loadedScenario: '',
   page: 1,
   zoom: 1,
+  zoomRender: 0,
+  activePageMeta: null,
   pageMeta: new Map(),
   inspections: new Map(),
   objectURLs: new Set(),
@@ -19,7 +21,14 @@ const state = {
   authoring: null,
   authoringDraft: {operation: 'template'},
   authoringFeedback: null,
+  pageSetupDraft: null,
+  pageSetupFeedback: null,
   loading: false,
+  pdfTags: null,
+  pdfTagsRevision: '',
+  tagsLoading: false,
+  tagError: '',
+  verificationStale: false,
   poll: null,
 };
 
@@ -31,6 +40,28 @@ const inspectionLayer = $('#inspection-layer');
 const overlapPicker = $('#overlap-picker');
 const selectionLayer = $('#selection-layer');
 const canvasScroll = $('#canvas-scroll');
+
+function previewRevisionLocked() {
+  return PaperStudioMutationGate.revisionsLocked(
+    state.workspace, state.revision, state.sourceRevision, app.classList.contains('is-stale'),
+  );
+}
+
+function visualMutationsLocked() {
+  return PaperStudioMutationGate.visualMutationsLocked(
+    state.workspace, state.revision, state.sourceRevision, app.classList.contains('is-stale'), state.committing,
+  );
+}
+
+function setPreviewStale(stale) {
+  app.classList.toggle('is-stale', stale);
+  renderVerificationState();
+  renderEditControls();
+  renderAuthoringControls();
+  renderPageSetup();
+  renderResources();
+  document.querySelectorAll('.font-replacement-apply').forEach((button) => { button.disabled = visualMutationsLocked(); });
+}
 
 async function api(path, options = {}) {
   const response = await fetch(path, {cache: 'no-store', ...options});
@@ -47,7 +78,7 @@ async function api(path, options = {}) {
 async function refresh({quiet = false} = {}) {
   if (state.loading) return;
   state.loading = true;
-  if (!quiet) app.classList.add('is-stale');
+  if (!quiet) setPreviewStale(true);
   try {
     const query = state.scenario ? `?scenario=${encodeURIComponent(state.scenario)}` : '';
     const workspace = await api(`/api/workspace${query}`);
@@ -59,16 +90,22 @@ async function refresh({quiet = false} = {}) {
     state.scenario = workspaceScenario;
     state.loadedScenario = state.scenario;
     if (changed) {
+      if (state.pdfTagsRevision && state.pdfTagsRevision !== workspace.revision) state.verificationStale = true;
       clearObjectURLs();
       state.pageMeta.clear();
       state.inspections.clear();
       state.selectionFragments = [];
+      state.activePageMeta = null;
+      state.pdfTags = null;
+      state.pdfTagsRevision = '';
+      state.tagError = '';
       closeOverlapPicker();
       state.page = Math.min(Math.max(1, state.page), Math.max(1, workspace.pages));
       renderWorkspace();
       await loadResources(workspace.revision);
       await loadAuthoring(workspace.revision);
       if (workspace.pages) await showPage(state.page);
+      if (workspace.pages && app.dataset.mode === 'accessibility') await loadPDFTags();
     } else if (!quiet) {
       renderStatus();
     }
@@ -79,7 +116,7 @@ async function refresh({quiet = false} = {}) {
     showFailure(error);
   } finally {
     state.loading = false;
-    app.classList.remove('is-stale');
+    setPreviewStale(false);
   }
 }
 
@@ -119,13 +156,13 @@ function renderResources() {
     row.append(heading,meta,digest);
     const lifecycle=[];if(item.kind==='font'){lifecycle.push(`license ${item.license}`);if(item.fallback.length)lifecycle.push(`fallback ${item.fallback.join(' → ')}`);}else{if(item.defaultFocusX!==null||item.defaultFocusY!==null)lifecycle.push(`default focus ${item.defaultFocusX??'auto'},${item.defaultFocusY??'auto'}`);if(item.replaces)lifecycle.push(`replaces ${item.replaces}`);}if(lifecycle.length){const line=document.createElement('div');line.className='resource-meta resource-lifecycle';line.textContent=lifecycle.join(' · ');row.append(line);}
     for (const usage of item.usages) { const button=document.createElement('button');button.className='resource-use';button.type='button';button.textContent=`${usage.node||'anonymous'} · ${usage.decorative?'decorative':usage.alt||'missing alt'} · focus ${usage.focus_x??'auto'},${usage.focus_y??'auto'}${usage.scenario?` · ${usage.scenario}`:''}`;button.addEventListener('click',()=>{const found=walkNodes(state.workspace?.ast?.root).find(({node})=>node.id===usage.node);if(found)selectSourceNode(found.node,document.querySelector(`.outline-row[data-key="${CSS.escape(usage.node)}"]`));});row.append(button); }
-    if(item.kind==='image'&&item.replaces){const previous=state.resources.find(candidate=>candidate.name===item.replaces);for(const usage of previous?.usages||[]){const replace=document.createElement('button');replace.className='resource-use resource-replace';replace.type='button';replace.disabled=state.committing;replace.textContent=`Replace ${usage.node} with ${item.name}`;replace.addEventListener('click',()=>commitResourceReplacement(usage.node,item.name));row.append(replace);}}
+    if(item.kind==='image'&&item.replaces){const previous=state.resources.find(candidate=>candidate.name===item.replaces);for(const usage of previous?.usages||[]){const replace=document.createElement('button');replace.className='resource-use resource-replace';replace.type='button';replace.disabled=visualMutationsLocked();replace.textContent=`Replace ${usage.node} with ${item.name}`;replace.addEventListener('click',()=>commitResourceReplacement(usage.node,item.name));row.append(replace);}}
     target.append(row);
   }
 }
 
 async function commitResourceReplacement(target, resource) {
-  if(state.committing||!state.workspace)return;state.committing=true;renderResources();
+  if(visualMutationsLocked()||!state.workspace)return;state.committing=true;renderResources();
   let payload;try{payload=PaperStudioResourceModel.replacementPayload(state.workspace,state.resources,target,resource);}catch(error){state.committing=false;showFailure(error);renderResources();return;}
   try{await api('/api/edit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});await refresh();}catch(error){if(error.status===409)await refresh();else showFailure(error);}finally{state.committing=false;renderResources();}
 }
@@ -135,15 +172,118 @@ function renderWorkspace() {
   $('#file-name').textContent = workspace.file.split(/[\\/]/).pop();
   $('#revision').textContent = workspace.revision;
   $('#page-total').textContent = workspace.pages;
-  renderSource(workspace.source || '');
+  renderSource(workspace.source || '', workspace.diagnostics || []);
   renderOutline(workspace.ast?.root);
   renderScenarios(workspace.ast?.root);
   renderIssues(workspace.diagnostics || []);
+  renderPDFTags();
   renderThumbnails(workspace.pages, workspace.page_rail || []);
   renderBaseline(workspace.baseline || {status: 'none'});
   reconcileEditSelection();
   renderAuthoringControls();
+  renderPageSetup();
   renderStatus();
+}
+
+function renderPageSetup() {
+  const target = $('#page-setup-controls');
+  if (!target) return;
+  target.replaceChildren();
+  let current;
+  try {
+    current = PaperStudioPageSetupModel.dimensions(state.workspace);
+  } catch (error) {
+    $('#page-size-summary').textContent = 'Unavailable';
+    target.innerHTML = '<span class="quiet">Add one addressed page master to enable page setup.</span>';
+    return;
+  }
+  $('#page-size-summary').textContent = `${current.preset} · ${current.orientation}`;
+  if (!state.pageSetupDraft || state.pageSetupDraft.target !== current.target) {
+    state.pageSetupDraft = {
+      target: current.target, preset: current.preset, orientation: current.orientation, unit: 'mm',
+      width: Number((current.width * 25.4 / 72).toFixed(2)), height: Number((current.height * 25.4 / 72).toFixed(2)),
+    };
+  }
+  const draft = state.pageSetupDraft;
+  const form = document.createElement('form');
+  form.className = 'page-setup-form';
+  form.addEventListener('submit', event => event.preventDefault());
+  const preset = authoringSelect('Preset', [...Object.keys(PaperStudioPageSetupModel.presets), 'Custom'], draft.preset, value => {
+    draft.preset = value;
+    if (value !== 'Custom') draft.orientation = 'portrait';
+    renderPageSetup();
+    if (value !== 'Custom') commitPageSetup({...draft});
+  });
+  preset.classList.add('page-size-preset');
+  form.append(preset, authoringSelect('Orientation', ['portrait', 'landscape'], draft.orientation, value => {
+    draft.orientation = value;
+    commitPageSetup({...draft});
+  }));
+  if (draft.preset === 'Custom') {
+    form.append(
+      pageSetupInput('Width', draft.width, value => { draft.width = value; commitPageSetup({...draft}); }),
+      pageSetupInput('Height', draft.height, value => { draft.height = value; commitPageSetup({...draft}); }),
+      authoringSelect('Unit', ['mm', 'in', 'pt'], draft.unit, value => {
+        const points = {mm: 72 / 25.4, in: 72, pt: 1};
+        draft.width = Number((Number(draft.width) * points[draft.unit] / points[value]).toFixed(3));
+        draft.height = Number((Number(draft.height) * points[draft.unit] / points[value]).toFixed(3));
+        draft.unit = value;
+        renderPageSetup();
+      }),
+    );
+  }
+  target.append(form);
+  if (state.pageSetupFeedback) {
+    const feedback = document.createElement('div');
+    feedback.className = `edit-feedback is-${state.pageSetupFeedback.tone}`;
+    feedback.textContent = state.pageSetupFeedback.text;
+    target.append(feedback);
+  }
+}
+
+function pageSetupInput(labelText, value, change) {
+  const field = document.createElement('label');
+  field.className = 'edit-field';
+  const caption = document.createElement('span');
+  caption.textContent = labelText;
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '0.001';
+  input.max = '14400';
+  input.step = '0.01';
+  input.value = value;
+  input.disabled = visualMutationsLocked();
+  input.addEventListener('change', () => change(input.value));
+  field.append(caption, input);
+  return field;
+}
+
+async function commitPageSetup(draft) {
+  if (visualMutationsLocked()) return;
+  let payload;
+  try {
+    payload = PaperStudioPageSetupModel.buildPayload(state.workspace, draft);
+  } catch (error) {
+    state.pageSetupFeedback = {tone: 'error', text: error.message};
+    renderPageSetup();
+    return;
+  }
+  state.committing = true;
+  state.pageSetupFeedback = {tone: 'working', text: 'Saving page size…'};
+  renderPageSetup();
+  try {
+    await api('/api/edit', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(payload)});
+    state.pageSetupDraft = null;
+    state.pageSetupFeedback = null;
+    await refresh();
+  } catch (error) {
+    state.pageSetupFeedback = {tone: 'error', text: error.status === 409 ? 'Page changed · refresh and try again' : error.message};
+    if (error.status === 409) await refresh();
+  } finally {
+    state.committing = false;
+    renderPageSetup();
+    renderEditControls();
+  }
 }
 
 function renderAuthoringControls() {
@@ -174,25 +314,50 @@ function renderAuthoringControls() {
     const schemas=metadata.schemas.map(item=>item.name); draft.target=metadata.documentTarget; draft.schema=schemas.includes(draft.schema)?draft.schema:schemas[0]; draft.preset=metadata.presets.includes(draft.preset)?draft.preset:'typical'; draft.id=draft.id||'@stress-case';
     form.append(authoringSelect('Schema',schemas,draft.schema,value=>draft.schema=value),authoringSelect('Matrix case',metadata.presets,draft.preset,value=>draft.preset=value),authoringInput('Scenario ID',draft.id,value=>draft.id=value));
   }
-  const submit=document.createElement('button'); submit.type='submit'; submit.className='edit-commit'; submit.disabled=state.committing; submit.textContent=state.committing?'Committing…':'Create exact patch'; form.append(submit);
-  form.addEventListener('submit',async event=>{event.preventDefault();let payload;try{payload=PaperStudioAuthoringModel.buildPayload(state.workspace,metadata,draft);}catch(error){state.authoringFeedback={tone:'error',text:error.message};renderAuthoringControls();return;}state.committing=true;state.authoringFeedback={tone:'working',text:'Committing against exact revisions…'};renderAuthoringControls();try{const result=await api('/api/edit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});state.authoringFeedback={tone:'success',text:`Committed · ${result.patch_count} minimal patch${result.patch_count===1?'':'es'}`};await refresh();}catch(error){state.authoringFeedback={tone:error.status===409?'stale':'error',text:error.status===409?'Stale authoring state · refreshed without applying':error.message};if(error.status===409)await refresh();}finally{state.committing=false;renderAuthoringControls();renderEditControls();}});
+  const submit=document.createElement('button'); submit.type='submit'; submit.className='edit-commit'; submit.disabled=visualMutationsLocked(); submit.textContent=state.committing?'Committing…':'Create exact patch'; form.append(submit);
+  form.addEventListener('submit',async event=>{event.preventDefault();if(visualMutationsLocked())return;let payload;try{payload=PaperStudioAuthoringModel.buildPayload(state.workspace,metadata,draft);}catch(error){state.authoringFeedback={tone:'error',text:error.message};renderAuthoringControls();return;}state.committing=true;state.authoringFeedback={tone:'working',text:'Committing against exact revisions…'};renderAuthoringControls();try{const result=await api('/api/edit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});state.authoringFeedback={tone:'success',text:`Committed · ${result.patch_count} minimal patch${result.patch_count===1?'':'es'}`};await refresh();}catch(error){state.authoringFeedback={tone:error.status===409?'stale':'error',text:error.status===409?'Stale authoring state · refreshed without applying':error.message};if(error.status===409)await refresh();}finally{state.committing=false;renderAuthoringControls();renderEditControls();}});
   target.append(form);
   if(state.authoringFeedback){const feedback=document.createElement('div');feedback.className=`edit-feedback is-${state.authoringFeedback.tone}`;feedback.textContent=state.authoringFeedback.text;target.append(feedback);}
 }
 
 function authoringSelect(labelText, values, selected, change) {
-  const field=document.createElement('label');field.className='edit-field';const caption=document.createElement('span');caption.textContent=labelText;const select=document.createElement('select');select.disabled=state.committing;
+  const field=document.createElement('label');field.className='edit-field';const caption=document.createElement('span');caption.textContent=labelText;const select=document.createElement('select');select.disabled=visualMutationsLocked();
   for(const value of values){const option=document.createElement('option');option.value=value;option.textContent=value.replaceAll('-',' ');option.selected=value===selected;select.append(option);}select.addEventListener('change',()=>change(select.value));field.append(caption,select);return field;
 }
 
 function authoringInput(labelText, value, change) {
-  const field=document.createElement('label');field.className='edit-field';const caption=document.createElement('span');caption.textContent=labelText;const input=document.createElement('input');input.type='text';input.value=value;input.maxLength=128;input.disabled=state.committing;input.addEventListener('input',()=>change(input.value));field.append(caption,input);return field;
+  const field=document.createElement('label');field.className='edit-field';const caption=document.createElement('span');caption.textContent=labelText;const input=document.createElement('input');input.type='text';input.value=value;input.maxLength=128;input.disabled=visualMutationsLocked();input.addEventListener('input',()=>change(input.value));field.append(caption,input);return field;
 }
 
-function renderSource(source) {
-  $('#source').textContent = source;
-  const lines = source.split('\n').length;
-  $('#source-gutter').textContent = Array.from({length: lines}, (_, index) => index + 1).join('\n');
+function renderSource(source, issues = []) {
+  const target = $('#source');
+  const lines = source.split('\n');
+  const annotations = new Map(PaperStudioIssueModel.sourceAnnotations(issues, lines.length).map(annotation => [annotation.line, annotation]));
+  target.replaceChildren();
+  lines.forEach((line, index) => {
+    const lineNumber = index + 1;
+    const row = document.createElement('span');
+    row.className = 'source-line';
+    row.dataset.line = String(lineNumber);
+    const code = document.createElement('span');
+    code.className = 'source-line-code';
+    code.innerHTML = PaperStudioSyntaxModel.highlight(line) || '&#8203;';
+    row.append(code);
+    const annotation = annotations.get(lineNumber);
+    if (annotation) {
+      row.classList.add('has-issue', `is-${annotation.severity}`);
+      const marker = document.createElement('button');
+      marker.type = 'button';
+      marker.className = 'source-diagnostic';
+      marker.textContent = annotation.label;
+      marker.title = annotation.title;
+      marker.setAttribute('aria-label', `Line ${lineNumber}: ${annotation.label}`);
+      marker.addEventListener('click', () => focusSourceLine(lineNumber));
+      row.append(marker);
+    }
+    target.append(row);
+  });
+  $('#source-gutter').textContent = Array.from({length: lines.length}, (_, index) => index + 1).join('\n');
 }
 
 function nodeLabel(node) {
@@ -264,15 +429,156 @@ function renderIssues(issues) {
     return;
   }
   for (const issue of issues) {
-    const button = document.createElement('button');
-    button.className = 'issue';
-    button.innerHTML = '<span class="issue-code"></span><span class="issue-message"></span><span class="issue-location"></span>';
-    button.querySelector('.issue-code').textContent = issue.code || issue.stage;
-    button.querySelector('.issue-message').textContent = issue.message;
-    button.querySelector('.issue-location').textContent = issue.start_line ? `Line ${issue.start_line}:${issue.start_column || 1}` : issue.stage;
-    button.addEventListener('click', () => focusSourceLine(issue.start_line || 1));
-    target.append(button);
+    const item = document.createElement('div');
+    item.className = 'issue';
+    if (issue.start_line) item.dataset.line = String(issue.start_line);
+    const focus = document.createElement('button');
+    focus.type = 'button';
+    focus.className = 'issue-focus';
+    focus.innerHTML = '<span class="issue-code"></span><span class="issue-message"></span><span class="issue-location"></span>';
+    focus.querySelector('.issue-code').textContent = issue.code || issue.stage;
+    focus.querySelector('.issue-message').textContent = issue.message;
+    focus.querySelector('.issue-location').textContent = issue.start_line ? `Line ${issue.start_line}:${issue.start_column || 1}` : issue.stage;
+    focus.addEventListener('click', () => focusSourceLine(issue.start_line || 1));
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'issue-copy';
+    copy.textContent = 'Copy';
+    copy.setAttribute('aria-label', `Copy ${issue.code || issue.stage || 'issue'} error`);
+    copy.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(PaperStudioIssueModel.format(issue));
+        copy.textContent = 'Copied';
+        copy.dataset.status = 'copied';
+        setTimeout(() => { copy.textContent = 'Copy'; delete copy.dataset.status; }, 1600);
+      } catch (_) {
+        copy.textContent = 'Copy failed';
+        copy.dataset.status = 'failed';
+      }
+    });
+    item.append(focus, copy);
+    if (issue.code === 'PAPER_COMPILE_FONT') {
+      const selection = PaperStudioEditModel.findTextSelectionAtLine(state.workspace?.ast?.root, issue.start_line);
+      if (selection) item.append(fontReplacementOffer(selection));
+    }
+    target.append(item);
   }
+}
+
+async function loadPDFTags() {
+  const workspace = state.workspace;
+  if (!workspace?.pages || state.tagsLoading || state.pdfTagsRevision === workspace.revision) return;
+  const revision = workspace.revision;
+  state.tagsLoading = true;
+  state.tagError = '';
+  renderPDFTags();
+  try {
+    const scenario = state.scenario ? `&scenario=${encodeURIComponent(state.scenario)}` : '';
+    const payload = await api(`/api/pdf-tags?revision=${encodeURIComponent(revision)}${scenario}`);
+    if (revision !== state.revision) return;
+    state.pdfTags = PaperStudioTagModel.normalize(payload, state.workspace);
+    state.pdfTagsRevision = revision;
+    state.verificationStale = false;
+  } catch (error) {
+    if (revision === state.revision) state.tagError = error.status === 409 ? 'Plan changed before tag inspection completed.' : error.message;
+  } finally {
+    state.tagsLoading = false;
+    renderPDFTags();
+  }
+}
+
+function renderPDFTags() {
+  const status = $('#tag-status');
+  const summary = $('#tag-summary');
+  const tree = $('#tag-tree');
+  if (!status || !summary || !tree) return;
+  tree.replaceChildren();
+  if (state.tagsLoading) {
+    status.textContent = 'Inspecting…';
+    status.dataset.status = 'loading';
+    summary.textContent = 'Serializing and independently inspecting exact final PDF bytes.';
+    renderVerificationState();
+    return;
+  }
+  if (state.tagError) {
+    status.textContent = 'Inspection failed';
+    status.dataset.status = 'failed';
+    summary.textContent = state.tagError;
+    renderVerificationState();
+    return;
+  }
+  const tags = state.pdfTags;
+  if (!tags || state.pdfTagsRevision !== state.revision) {
+    status.textContent = state.workspace?.pages ? 'Not inspected' : 'Unavailable';
+    status.dataset.status = 'none';
+    summary.textContent = state.workspace?.pages ? 'Open Accessibility to inspect the serialized PDF.' : 'A current plan is required.';
+    renderVerificationState();
+    return;
+  }
+  status.textContent = tags.passed ? 'Tags verified' : 'Invalid tags';
+  status.dataset.status = tags.passed ? 'passed' : 'failed';
+  summary.textContent = tags.passed
+    ? `${tags.structureElements} structure elements · ${tags.contentMarked} marked streams · PDF ${tags.hash.slice(0, 12)}`
+    : tags.failures.join(' · ') || 'Final PDF tag verification failed.';
+  for (const node of tags.rows) {
+    const row = document.createElement('div');
+    row.className = 'tag-node';
+    row.setAttribute('role', 'treeitem');
+    row.setAttribute('aria-level', String(node.depth + 1));
+    row.style.paddingLeft = `${10 + Math.min(node.depth, 12) * 12}px`;
+    const role = document.createElement('span');
+    role.className = 'tag-role';
+    role.textContent = node.role;
+    const evidence = document.createElement('span');
+    evidence.className = 'tag-evidence';
+    const flags = [node.markedContent ? `${node.markedContent} MCID` : '', node.hasAlt ? 'Alt' : '', node.hasActualText ? 'ActualText' : '', node.hasLanguage ? 'Lang' : ''].filter(Boolean);
+    evidence.textContent = flags.join(' · ') || `${node.children} children`;
+    row.append(role, evidence);
+    tree.append(row);
+  }
+  renderVerificationState();
+}
+
+function fontReplacementOffer(selection) {
+  const controls = document.createElement('div');
+  controls.className = 'font-replacement';
+  const select = document.createElement('select');
+  select.setAttribute('aria-label', `Replacement font for ${selection.target}`);
+  for (const font of PaperStudioEditModel.coreFonts) select.append(new Option(font, font));
+  const apply = document.createElement('button');
+  apply.type = 'button';
+  apply.className = 'font-replacement-apply';
+  apply.textContent = 'Replace font';
+  apply.disabled = visualMutationsLocked();
+  const status = document.createElement('span');
+  status.className = 'font-replacement-status';
+  apply.addEventListener('click', async () => {
+    if (visualMutationsLocked()) return;
+    let payload;
+    try {
+      payload = PaperStudioEditModel.buildPayload(state.workspace, selection, 'text', 'font', select.value);
+    } catch (error) {
+      status.textContent = error.message;
+      return;
+    }
+    state.committing = true;
+    apply.disabled = true;
+    status.textContent = 'Applying exact patch…';
+    try {
+      await api('/api/edit', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(payload)});
+      await refresh();
+    } catch (error) {
+      status.textContent = error.status === 409 ? 'Source changed; refresh and choose again.' : error.message;
+    } finally {
+      state.committing = false;
+      apply.disabled = visualMutationsLocked();
+      renderEditControls();
+      renderAuthoringControls();
+      renderResources();
+    }
+  });
+  controls.append(select, apply, status);
+  return controls;
 }
 
 function renderBaseline(baseline) {
@@ -297,7 +603,7 @@ function renderThumbnails(count, summaries) {
     button.dataset.page = page;
     if (page === state.page) button.setAttribute('aria-current', 'page');
     button.setAttribute('aria-label', `Page ${page}, ${summary.selector} selector, ${(summary.regions || []).join(', ') || 'no retained regions'}`);
-    button.innerHTML = `<span class="thumbnail-sheet"><img alt="Page ${page} thumbnail"></span><span class="thumbnail-label">${page}</span>`;
+    button.innerHTML = `<span class="thumbnail-sheet"><canvas role="img" aria-label="Page ${page} WASM thumbnail"></canvas></span><span class="thumbnail-label">${page}</span>`;
     button.addEventListener('click', () => showPage(page));
     item.append(button);
 
@@ -342,7 +648,7 @@ function renderThumbnails(count, summaries) {
     }
     item.append(badges);
     target.append(item);
-    loadSVG(page, 'display').then(({url}) => { button.querySelector('img').src = url; }).catch(() => {});
+    loadWASMPage(page, 72).then((rendered) => paintWASMCanvas(button.querySelector('canvas'), rendered)).catch(() => {});
   }
 }
 
@@ -389,6 +695,38 @@ async function loadSVG(page, kind) {
   return result;
 }
 
+async function loadWASMPage(page, dpi = renderDPIForZoom()) {
+  const key = `${state.revision}:wasm:${page}:${dpi}`;
+  if (state.pageMeta.has(key)) return state.pageMeta.get(key);
+  const revision = state.revision;
+  const scenario = state.scenario ? `&scenario=${encodeURIComponent(state.scenario)}` : '';
+  const response = await api(`/api/page/${page}.render?revision=${encodeURIComponent(revision)}&dpi=${dpi}${scenario}`);
+  const result = await PaperStudioWASMRenderer.renderResponse(response, {revision, page, dpi});
+  if (revision !== state.revision) {
+    result.bitmap.close();
+    const error = new Error('WASM page belongs to a stale plan revision');
+    error.status = 409;
+    throw error;
+  }
+  state.pageMeta.set(key, result);
+  return result;
+}
+
+function paintWASMCanvas(canvas, rendered) {
+  canvas.width = rendered.pixelWidth;
+  canvas.height = rendered.pixelHeight;
+  const context = canvas.getContext('2d', {alpha: false});
+  context.imageSmoothingEnabled = false;
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(rendered.bitmap, 0, 0);
+}
+
+function paintWASMPage(rendered) {
+  paintWASMCanvas(pageImage, rendered);
+  state.activePageMeta = rendered;
+  applyPageStageWidth(rendered);
+}
+
 async function loadInspection(page) {
   const key = `${state.revision}:${page}`;
   if (state.inspections.has(key)) return state.inspections.get(key);
@@ -414,12 +752,12 @@ async function showPage(page) {
     canvasScroll.scrollTop = 0;
     canvasScroll.scrollLeft = 0;
   }
-  app.classList.add('is-stale');
+  setPreviewStale(true);
   try {
-    const [display, geometry] = await Promise.all([loadSVG(page, 'display'), loadSVG(page, 'geometry'), loadInspection(page)]);
+    const [display, geometry] = await Promise.all([loadWASMPage(page, renderDPIForZoom()), loadSVG(page, 'geometry'), loadInspection(page)]);
     if (revision !== state.revision) return;
     state.page = page;
-    pageImage.src = display.url;
+    paintWASMPage(display);
     geometryImage.src = geometry.url;
     $('#page-label').textContent = `Page ${page} of ${state.workspace.pages}`;
     document.querySelectorAll('.thumbnail-page').forEach((button) => {
@@ -434,7 +772,7 @@ async function showPage(page) {
   } catch (error) {
     if (error.status === 409) await refresh(); else showFailure(error);
   } finally {
-    app.classList.remove('is-stale');
+    setPreviewStale(state.loading);
   }
 }
 
@@ -443,7 +781,7 @@ function inspectionTarget() {
 }
 
 function addInspectionRect(rect, className, label = '') {
-  const meta = state.pageMeta.get(`${state.revision}:display:${state.page}`);
+  const meta = state.activePageMeta;
   if (!meta || !rect || !(rect.width >= 0 && rect.height >= 0)) return null;
   const [viewX, viewY, viewWidth, viewHeight] = meta.viewBox;
   if (!(viewWidth > 0 && viewHeight > 0)) return null;
@@ -469,6 +807,8 @@ function renderInspectionOverlays() {
   const fragments = [...(target.fragments || []), ...(target.continuation_fragments || [])]
     .filter((fragment, index, all) => fragment.page === state.page && all.findIndex((entry) => entry.id === fragment.id) === index);
   const fragmentByID = new Map(fragments.map((fragment) => [fragment.id, fragment]));
+  const classifiedInstances = globalThis.PaperStudioInstanceModel?.classifyFragments(fragments) || [];
+  const instanceByFragment = new Map(classifiedInstances.map((entry) => [entry.fragment.id, entry]));
   const semantics = target.semantics || [];
   const semanticByID = new Map(semantics.map((entry) => [entry.Node?.id ?? entry.node?.id, entry.Node ?? entry.node]));
   const semanticByIdentity = new Map(semantics.map((entry) => {
@@ -478,10 +818,19 @@ function renderInspectionOverlays() {
   const reading = (target.reading_order || []).map((entry) => entry.Occurrence ?? entry.occurrence).filter(Boolean);
   const readingByFragment = new Map(reading.map((entry) => [entry.fragment, entry]));
 
+  const boxModels = globalThis.PaperStudioInspectionModel?.boxModelMarks(fragments, state.page) || [];
+  for (const box of boxModels) {
+    if (state.overlays.has('margin')) addInspectionRect(box.margin, 'is-margin');
+    if (state.overlays.has('border')) addInspectionRect(box.border, 'is-border');
+    if (state.overlays.has('padding')) addInspectionRect(box.padding, 'is-padding');
+    if (state.overlays.has('content')) addInspectionRect(box.content, 'is-content');
+  }
+
   for (const fragment of fragments) {
-    if (state.overlays.has('border')) addInspectionRect(fragment.border_box, 'is-border');
-    if (state.overlays.has('content')) addInspectionRect(fragment.content_box, 'is-content');
-    if (state.overlays.has('regions')) addInspectionRect(fragment.border_box, `is-region is-region-${fragment.region || 'unknown'}`, fragment.region || 'region');
+    if (state.overlays.has('instances')) {
+      const instance = instanceByFragment.get(fragment.id);
+      if (instance) addInspectionRect(fragment.border_box, instance.className, instance.label);
+    }
     if (state.overlays.has('reading')) {
       const occurrence = readingByFragment.get(fragment.id);
       if (occurrence) addInspectionRect(fragment.border_box, 'is-reading', String(occurrence.reading_index + 1));
@@ -493,6 +842,26 @@ function renderInspectionOverlays() {
       if (semantic?.role) addInspectionRect(fragment.border_box, `is-role is-role-${semantic.role}`, semantic.role);
     }
   }
+  if (state.overlays.has('regions')) {
+    const regions = globalThis.PaperStudioInspectionModel?.pageRegionMarks(target.page_regions || [], state.page) || [];
+    for (const region of regions) addInspectionRect(region.rect, `is-region is-region-${region.region}`, region.label);
+  }
+  if (state.overlays.has('baselines')) {
+    const baselines = globalThis.PaperStudioInspectionModel?.baselineMarks(target.lines || [], state.page) || [];
+    for (const baseline of baselines) addInspectionRect(baseline.rect, 'is-baseline', baseline.label);
+  }
+  if (state.overlays.has('tracks')) {
+    const tracks = globalThis.PaperStudioInspectionModel?.gridTrackMarks(target.grid_tracks || [], state.page) || [];
+    for (const track of tracks) addInspectionRect(track.rect, `is-grid-track is-grid-track-${track.axis}`, track.label);
+  }
+  if (state.overlays.has('cells')) {
+    const cells = globalThis.PaperStudioInspectionModel?.tableCellMarks(fragments, state.page) || [];
+    for (const cell of cells) addInspectionRect(cell.rect, `is-table-cell${cell.tableHeader ? ' is-table-header-cell' : ''}`, cell.label);
+  }
+  const issues = globalThis.PaperStudioInspectionModel?.issueMarks(target, state.page) || {};
+  if (state.overlays.has('overflow')) for (const mark of issues.overflow || []) addInspectionRect(mark.rect, 'is-overflow', mark.label);
+  if (state.overlays.has('clips')) for (const mark of issues.clips || []) addInspectionRect(mark.rect, 'is-clip', mark.label);
+  if (state.overlays.has('collisions')) for (const mark of issues.collisions || []) addInspectionRect(mark.rect, 'is-collision', mark.label);
   if (state.overlays.has('breaks')) {
     for (const entry of target.breaks || []) {
       const decision = entry.decision || {};
@@ -505,21 +874,50 @@ function renderInspectionOverlays() {
 function renderPageInspectionEvidence() {
   const target = inspectionTarget();
   if (!target) return;
-  const regions = [...new Set((target.fragments || []).map((fragment) => fragment.region).filter(Boolean))];
-  renderInspector({
-    plan_revision: state.revision,
-    page: state.page,
-    active_overlays: [...state.overlays],
-    exact_plan_evidence: target.selection,
-    regions,
-    breaks: target.breaks || [],
-    reading_order: target.reading_order || [],
-    semantic_roles: target.semantics || [],
-  }, 'Page inspection');
+  const pageRegions = (globalThis.PaperStudioInspectionModel?.pageRegionMarks(target.page_regions || [], state.page) || []).map((entry) => ({
+    region: entry.region, master: entry.master, bounds: entry.rect,
+  }));
+  const regions = pageRegions.map((entry) => entry.region);
+  const fragments = [...(target.fragments || []), ...(target.continuation_fragments || [])]
+    .filter((fragment, index, all) => all.findIndex((entry) => entry.id === fragment.id) === index);
+  const fragmentInstances = (globalThis.PaperStudioInstanceModel?.classifyFragments(fragments) || []).map((entry) => ({
+    id: entry.fragment.id,
+    key: entry.key,
+    instance: entry.instance,
+    region: entry.region,
+    kind: entry.kind,
+    repeated: entry.repeated,
+  }));
+  const tableCells = (globalThis.PaperStudioInspectionModel?.tableCellMarks(fragments, state.page) || []).map((entry) => ({
+    semantic: entry.cell,
+    fragment: entry.fragment,
+    table_header: entry.tableHeader,
+  }));
+  const gridTracks = (globalThis.PaperStudioInspectionModel?.gridTrackMarks(target.grid_tracks || [], state.page) || []).map((entry) => ({
+    group: entry.group,
+    axis: entry.axis,
+    index: entry.trackIndex,
+    gap_after: entry.gapAfter,
+    bounds: entry.rect,
+  }));
+  const repeated = fragmentInstances.filter(entry => entry.repeated).length;
+  const tableSummary = tableCells.length || gridTracks.length ? `${tableCells.length} cells · ${gridTracks.length} tracks` : 'None';
+  const provenance = globalThis.PaperStudioProvenanceModel?.forFragments(target.provenance, fragments) || {bindings: [], styleTokens: []};
+  renderInspectorRows([
+    ['Page', `${state.page} of ${state.workspace?.pages || state.page}`],
+    ['Regions', regions.join(', ') || 'Body'],
+    ['Repeated', repeated ? `${repeated} instances` : 'None'],
+    ['Tables', tableSummary],
+    ['Bindings', provenance.bindings.length ? `${provenance.bindings.length} paths` : 'None'],
+    ['Style tokens', provenance.styleTokens.length ? `${provenance.styleTokens.length} properties` : 'None'],
+    ['Reading', `${(target.reading_order || []).length} entries`],
+    ['Overlays', state.overlays.size ? [...state.overlays].join(', ') : 'None'],
+  ], 'Page');
+  renderProvenance({provenance: target.provenance, fragments});
 }
 
 function renderSelectionRects({reveal = false} = {}) {
-  const meta = state.pageMeta.get(`${state.revision}:display:${state.page}`);
+  const meta = state.activePageMeta;
   selectionLayer.replaceChildren();
   const selectedPages = new Set(state.selectionFragments.map((fragment) => fragment.page));
   document.querySelectorAll('.thumbnail-page').forEach((button) => button.closest('.thumbnail')?.classList.toggle('has-selection', selectedPages.has(Number(button.dataset.page))));
@@ -543,8 +941,9 @@ function renderSelectionRects({reveal = false} = {}) {
 }
 
 async function hitPage(event) {
-  if (app.classList.contains('is-stale')) return;
-  const meta = state.pageMeta.get(`${state.revision}:display:${state.page}`);
+  if (previewRevisionLocked()) return;
+  const revision = state.revision;
+  const meta = state.activePageMeta;
   if (!meta) return;
   const bounds = pageImage.getBoundingClientRect();
   const [x, y, width, height] = meta.viewBox;
@@ -560,6 +959,7 @@ async function hitPage(event) {
       method: 'POST', headers: {'content-type': 'application/json'},
       body: JSON.stringify({revision: state.revision, scenario: state.scenario, page: state.page, x_fixed: xFixed, y_fixed: yFixed}),
     });
+    if (revision !== state.revision || previewRevisionLocked()) return;
     const fragments = result.Fragments || [];
     const fragment = fragments[0];
     if (fragments.length > 1) openOverlapPicker(result, event.clientX - bounds.left, event.clientY - bounds.top);
@@ -571,6 +971,7 @@ async function hitPage(event) {
 }
 
 async function selectHitFragment(result, fragment) {
+  const revision = state.revision;
   try {
     if (!fragment?.Key) {
       state.selectionFragments = fragment ? [{page: state.page, border_box: fragment.BorderBox, content_box: fragment.ContentBox}] : [];
@@ -585,6 +986,7 @@ async function selectHitFragment(result, fragment) {
       method: 'POST', headers: {'content-type': 'application/json'},
       body: JSON.stringify({revision: state.revision, scenario: state.scenario, selector: {key: fragment.Key}}),
     });
+    if (revision !== state.revision || previewRevisionLocked()) return;
     state.selectionFragments = explanation.targets?.[0]?.fragments || [];
     renderSelectionRects({reveal: true});
     renderInspector({causal: explanation, hit: result}, 'Pixel trace');
@@ -666,15 +1068,55 @@ async function selectSourceNode(node, row) {
 }
 
 function renderInspector(value, kind) {
+  const useful = /(key|kind|role|page|region|reason|message|source|instance|operation|property|value)$/i;
+  const blocked = /(revision|hash|bounds|box|fixed|geometry|selection|content_hash)/i;
+  const seen = new Set();
+  const rows = flatten(value)
+    .filter(([key, entry]) => !blocked.test(key) && useful.test(key) && entry !== '' && entry !== null && entry !== undefined)
+    .map(([key, entry]) => [key.split('.').at(-1).replaceAll('_', ' '), entry])
+    .filter(([key]) => !seen.has(key) && seen.add(key))
+    .slice(0, 10);
+  renderInspectorRows(rows, kind);
+  const target = value?.causal?.targets?.[0] || value?.targets?.[0] || value;
+  renderProvenance({provenance: target?.provenance || value?.provenance, fragments: target?.fragments || []});
+}
+
+function renderProvenance(value) {
+  const target = $('#inspector-content');
+  const model = globalThis.PaperStudioProvenanceModel;
+  if (!model) return;
+  const selected = model.forFragments(value?.provenance, value?.fragments || []);
+  if (!selected.bindings.length && !selected.styleTokens.length) return;
+  const section = document.createElement('section');
+  section.className = 'provenance-evidence';
+  const heading = document.createElement('div');
+  heading.className = 'provenance-heading';
+  heading.textContent = 'Source provenance';
+  section.append(heading);
+  for (const binding of selected.bindings) {
+    const item = document.createElement('div');
+    item.className = 'provenance-item';
+    item.textContent = `Data · ${model.bindingLabel(binding)}`;
+    section.append(item);
+  }
+  for (const token of selected.styleTokens) {
+    const item = document.createElement('div');
+    item.className = 'provenance-item';
+    item.textContent = `Token · ${model.tokenLabel(token)}`;
+    section.append(item);
+  }
+  target.append(section);
+}
+
+function renderInspectorRows(rows, kind) {
   $('#selection-kind').textContent = kind;
   const target = $('#inspector-content');
   target.replaceChildren();
-  const flattened = flatten(value).slice(0, 120);
-  if (!flattened.length) {
-    target.innerHTML = '<div class="inspector-empty">No matching fragment at this coordinate.</div>';
+  if (!rows.length) {
+    target.innerHTML = '<div class="inspector-empty">Select the page or an outline item to inspect it.</div>';
     return;
   }
-  for (const [key, entry] of flattened) {
+  for (const [key, entry] of rows) {
     const row = document.createElement('div');
     row.className = 'property';
     row.innerHTML = '<span class="property-key"></span><span class="property-value"></span>';
@@ -746,10 +1188,11 @@ function renderEditControls() {
   submit.type = 'submit';
   submit.className = 'edit-commit';
   submit.textContent = state.committing ? 'Committing…' : 'Apply exact patch';
-  submit.disabled = state.committing;
+  submit.disabled = visualMutationsLocked();
   form.append(operationField.label, propertyField.label, valueField.label, submit);
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (visualMutationsLocked()) return;
     let payload;
     try {
       payload = PaperStudioEditModel.buildPayload(state.workspace, state.editSelection, operation, property, valueField.input.value);
@@ -796,7 +1239,7 @@ function studioSelect(labelText, options, selected) {
   const caption = document.createElement('span');
   caption.textContent = labelText;
   const select = document.createElement('select');
-  select.disabled = state.committing;
+  select.disabled = visualMutationsLocked();
   for (const value of options) {
     const option = document.createElement('option');
     option.value = value;
@@ -829,7 +1272,7 @@ function studioValueField(spec) {
     if (spec.max !== undefined) input.max = String(spec.max);
     if (spec.step !== undefined) input.step = String(spec.step);
   }
-  input.disabled = state.committing;
+  input.disabled = visualMutationsLocked();
   label.append(caption, input);
   return {label, input};
 }
@@ -850,8 +1293,21 @@ function flatten(value, prefix = '', result = []) {
 function focusSourceLine(line) {
   const source = $('#source');
   const lineHeight = parseFloat(getComputedStyle(source).lineHeight) || 19.8;
-  source.scrollTop = Math.max(0, (line - 4) * lineHeight);
   if (!['source', 'split'].includes(app.dataset.mode)) setMode('split');
+  const row = source.querySelector(`.source-line[data-line="${Number(line)}"]`);
+  source.querySelectorAll('.source-line.is-focused').forEach(item => item.classList.remove('is-focused'));
+  document.querySelectorAll('.issue.is-selected').forEach(item => item.classList.remove('is-selected'));
+  if (row) {
+    row.classList.add('is-focused');
+    source.scrollTop = Math.max(0, row.offsetTop - lineHeight * 3);
+  } else {
+    source.scrollTop = Math.max(0, (line - 4) * lineHeight);
+  }
+  const issue = document.querySelector(`.issue[data-line="${Number(line)}"]`);
+  if (issue) {
+    issue.classList.add('is-selected');
+    issue.scrollIntoView({block: 'nearest'});
+  }
 }
 
 function setMode(mode) {
@@ -862,30 +1318,86 @@ function setMode(mode) {
     button.setAttribute('aria-pressed', String(active));
   });
   if (mode === 'review') app.classList.add('show-geometry');
+  if (mode === 'accessibility') {
+    document.querySelector('.overlay-disclosure').open = true;
+    for (const overlay of ['reading', 'roles']) state.overlays.add(overlay);
+    document.querySelectorAll('.inspection-toggle').forEach((button) => button.setAttribute('aria-pressed', String(state.overlays.has(button.dataset.overlay))));
+    renderInspectionOverlays();
+    renderPageInspectionEvidence();
+    loadPDFTags();
+  }
+}
+
+function renderDPIForZoom() {
+  return Math.max(72, Math.min(600, Math.round(144 * Math.max(1, state.zoom))));
+}
+
+function applyPageStageWidth(rendered = state.activePageMeta) {
+  if (!rendered) return;
+  const naturalWidth = rendered.pixelWidth * 72 / rendered.manifest.profile.dpi;
+  $('#page-stage').style.width = `${Math.max(1, naturalWidth * state.zoom)}px`;
 }
 
 function setZoom(next) {
-  state.zoom = Math.max(.45, Math.min(2, next));
-  const width = Math.round(state.zoom * 720);
-  $('#page-stage').style.width = state.zoom <= 1 ? `min(${width}px, calc(100vw - 560px))` : `${width}px`;
-  $('#zoom-value').textContent = `${Math.round(state.zoom * 100)}%`;
+  if (!Number.isFinite(next)) {
+    $('#zoom-value').value = String(Math.round(state.zoom * 100));
+    return;
+  }
+  state.zoom = Math.max(.25, Math.min(4, Math.round(next * 100) / 100));
+  $('#zoom-value').value = String(Math.round(state.zoom * 100));
+  applyPageStageWidth();
+  const serial = ++state.zoomRender;
+  const page = state.page;
+  const revision = state.revision;
+  const dpi = renderDPIForZoom();
+  loadWASMPage(page, dpi).then(rendered => {
+    if (serial !== state.zoomRender || page !== state.page || revision !== state.revision) return;
+    paintWASMPage(rendered);
+    renderInspectionOverlays();
+    renderSelectionRects();
+  }).catch(error => { if (error.status === 409) refresh(); else showFailure(error); });
 }
 
 function renderStatus() {
   const workspace = state.workspace;
-  $('#preview-status').textContent = workspace?.preview_status === 'plan_preview' ? 'Plan preview' : 'Preview unavailable';
+  $('#page-label').textContent = workspace?.pages ? `Page ${state.page} of ${workspace.pages}` : 'No page';
   $('#cursor-state').textContent = workspace?.pages ? `Page ${state.page} · No selection` : 'No planned page';
+  renderVerificationState();
+}
+
+function renderVerificationState() {
+  const badge = $('#verification-state');
+  if (!badge) return;
+  let label = 'Plan preview';
+  let className = 'is-preview';
+  if (!state.workspace?.pages) {
+    label = 'Unavailable';
+    className = 'is-stale';
+  } else if (app.classList.contains('is-stale') || state.verificationStale) {
+    label = 'Verification stale';
+    className = 'is-stale';
+  } else if (state.pdfTagsRevision === state.revision && state.pdfTags?.passed) {
+    label = 'PDF verified';
+    className = 'is-verified';
+  }
+  badge.textContent = label;
+  badge.className = `verification-state ${className}`;
+  badge.title = label === 'PDF verified'
+    ? 'The exact current plan was serialized and independently verified as a final PDF.'
+    : label === 'Plan preview'
+      ? 'The canvas is an exact plan preview; the final PDF has not been independently verified.'
+      : 'The final-PDF verification no longer matches the current plan revision.';
 }
 
 function showFailure(error) {
-  $('#preview-status').textContent = error.message;
-  $('#connection-state').innerHTML = '<span class="status-dot" style="background:var(--danger)"></span>Workspace error';
+  $('#connection-state').textContent = `Workspace error · ${error.message}`;
   app.classList.add('has-no-plan');
 }
 
 function clearObjectURLs() {
   for (const url of state.objectURLs) URL.revokeObjectURL(url);
   state.objectURLs.clear();
+  for (const value of state.pageMeta.values()) value.bitmap?.close?.();
 }
 
 document.querySelectorAll('.mode').forEach((button) => button.addEventListener('click', () => setMode(button.dataset.mode)));
@@ -912,6 +1424,13 @@ overlapPicker.addEventListener('keydown', (event) => {
 $('#refresh').addEventListener('click', () => refresh());
 $('#zoom-in').addEventListener('click', () => setZoom(state.zoom + .1));
 $('#zoom-out').addEventListener('click', () => setZoom(state.zoom - .1));
+$('#zoom-value').addEventListener('change', event => setZoom(Number(event.currentTarget.value) / 100));
+$('#zoom-value').addEventListener('keydown', event => {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  setZoom(Number(event.currentTarget.value) / 100);
+  event.currentTarget.blur();
+});
 pageImage.addEventListener('click', hitPage);
 window.addEventListener('keydown', (event) => {
   if (event.target.matches('pre')) return;

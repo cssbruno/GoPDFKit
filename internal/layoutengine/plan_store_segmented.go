@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -105,6 +105,8 @@ type segmentedPlanCounts struct {
 	Pages             uint32 `json:"pages"`
 	Fragments         uint32 `json:"fragments"`
 	Lines             uint32 `json:"lines"`
+	PageRegions       uint32 `json:"page_regions"`
+	GridTracks        uint32 `json:"grid_tracks"`
 	GlyphRuns         uint32 `json:"glyph_runs"`
 	Images            uint32 `json:"images"`
 	Links             uint32 `json:"links"`
@@ -153,6 +155,14 @@ type indexedLine struct {
 	Index uint32      `json:"index"`
 	Value PlannedLine `json:"value"`
 }
+type indexedGridTrack struct {
+	Index uint32           `json:"index"`
+	Value PlannedGridTrack `json:"value"`
+}
+type indexedPageRegion struct {
+	Index uint32            `json:"index"`
+	Value PlannedPageRegion `json:"value"`
+}
 type indexedGlyphRun struct {
 	Index uint32       `json:"index"`
 	Value CoreGlyphRun `json:"value"`
@@ -194,6 +204,8 @@ type segmentedPlanPayload struct {
 	Pages             []PlannedPage              `json:"pages"`
 	Fragments         []indexedFragment          `json:"fragments,omitempty"`
 	Lines             []indexedLine              `json:"lines,omitempty"`
+	PageRegions       []indexedPageRegion        `json:"page_regions,omitempty"`
+	GridTracks        []indexedGridTrack         `json:"grid_tracks,omitempty"`
 	GlyphRuns         []indexedGlyphRun          `json:"glyph_runs,omitempty"`
 	Images            []indexedImage             `json:"images,omitempty"`
 	Links             []indexedLink              `json:"links,omitempty"`
@@ -576,7 +588,7 @@ func encodeSegmentedPlan(ctx context.Context, plan LayoutPlan, limits SegmentedP
 		return int((page - 1) / limits.MaxPagesPerSegment)
 	}
 	fragmentPages := make(map[FragmentID]uint32, len(projection.Fragments))
-	work := uint64(len(projection.Pages)) + uint64(len(projection.Fragments)) + uint64(len(projection.Lines)) +
+	work := uint64(len(projection.Pages)) + uint64(len(projection.Fragments)) + uint64(len(projection.Lines)) + uint64(len(projection.PageRegions)) + uint64(len(projection.GridTracks)) +
 		uint64(len(projection.GlyphRuns)) + uint64(len(projection.Images)) + uint64(len(projection.Links)) +
 		displayGraphicsProjectionWork(projection) +
 		uint64(len(projection.Commands)) + uint64(len(projection.Breaks)) + uint64(len(projection.Diagnostics)) +
@@ -593,6 +605,14 @@ func encodeSegmentedPlan(ctx context.Context, plan LayoutPlan, limits SegmentedP
 		page := fragmentPages[value.Fragment]
 		s := segmentForPage(page)
 		segments[s].Lines = append(segments[s].Lines, indexedLine{uint32(index), value})
+	}
+	for index, value := range projection.GridTracks {
+		s := segmentForPage(value.Page)
+		segments[s].GridTracks = append(segments[s].GridTracks, indexedGridTrack{uint32(index), value})
+	}
+	for index, value := range projection.PageRegions {
+		s := segmentForPage(value.Page)
+		segments[s].PageRegions = append(segments[s].PageRegions, indexedPageRegion{uint32(index), value})
 	}
 	for index, value := range projection.GlyphRuns {
 		page := fragmentPages[projection.Lines[value.Line].Fragment]
@@ -639,6 +659,7 @@ func encodeSegmentedPlan(ctx context.Context, plan LayoutPlan, limits SegmentedP
 		PlannerVersion: PlannerVersion, PainterContractVersion: PainterContractVersion, PlanHash: hash,
 		DeterministicInputs: projection.DeterministicInputs,
 		Counts: segmentedPlanCounts{Pages: uint32(len(projection.Pages)), Fragments: uint32(len(projection.Fragments)), Lines: uint32(len(projection.Lines)),
+			PageRegions: uint32(len(projection.PageRegions)), GridTracks: uint32(len(projection.GridTracks)),
 			GlyphRuns: uint32(len(projection.GlyphRuns)), Images: uint32(len(projection.Images)), Links: uint32(len(projection.Links)),
 			Commands: uint32(len(projection.Commands)), Breaks: uint32(len(projection.Breaks)), Diagnostics: uint32(len(projection.Diagnostics)),
 			SemanticNodes: uint32(len(projection.SemanticNodes)), SemanticFragments: uint32(len(projection.SemanticFragments)), ReadingOrder: uint32(len(projection.ReadingOrder))},
@@ -683,7 +704,7 @@ func reconstructSegmentedPlan(ctx context.Context, hash PlanHash, encoded []byte
 		return LayoutPlan{}, err
 	}
 	budget := segmentedBudget{ctx: ctx, limit: limits.MaxWork}
-	work := uint64(manifest.Counts.Pages) + uint64(manifest.Counts.Fragments) + uint64(manifest.Counts.Lines) +
+	work := uint64(manifest.Counts.Pages) + uint64(manifest.Counts.Fragments) + uint64(manifest.Counts.Lines) + uint64(manifest.Counts.PageRegions) + uint64(manifest.Counts.GridTracks) +
 		uint64(manifest.Counts.GlyphRuns) + uint64(manifest.Counts.Images) + uint64(manifest.Counts.Links) +
 		displayGraphicsManifestWork(manifest) +
 		uint64(manifest.Counts.Commands) + uint64(manifest.Counts.Breaks) + uint64(manifest.Counts.Diagnostics) +
@@ -691,10 +712,12 @@ func reconstructSegmentedPlan(ctx context.Context, hash PlanHash, encoded []byte
 	if err := budget.charge(work); err != nil {
 		return LayoutPlan{}, err
 	}
-	input := LayoutPlanInput{DeterministicInputs: manifest.DeterministicInputs, Pages: make([]PlannedPage, manifest.Counts.Pages), Fragments: make([]Fragment, manifest.Counts.Fragments), Lines: make([]PlannedLine, manifest.Counts.Lines), Fonts: cloneSlice(manifest.Fonts), GlyphRuns: make([]CoreGlyphRun, manifest.Counts.GlyphRuns), ImageResources: cloneSlice(manifest.ImageResources), Images: make([]PlannedImage, manifest.Counts.Images), Destinations: cloneSlice(manifest.Destinations), Links: make([]PlannedLink, manifest.Counts.Links), Paths: clonePlannedPaths(manifest.Paths), Transforms: cloneSlice(manifest.Transforms), Clips: cloneSlice(manifest.Clips), Fills: cloneSlice(manifest.Fills), Strokes: clonePlannedStrokes(manifest.Strokes), Commands: make([]DisplayCommand, manifest.Counts.Commands), Breaks: make([]BreakDecision, manifest.Counts.Breaks), Diagnostics: make([]Diagnostic, manifest.Counts.Diagnostics), SemanticNodes: cloneSlice(manifest.SemanticNodes), SemanticFragments: make([]SemanticFragmentAssociation, manifest.Counts.SemanticFragments), ReadingOrder: make([]ReadingOccurrence, manifest.Counts.ReadingOrder)}
+	input := LayoutPlanInput{DeterministicInputs: manifest.DeterministicInputs, Pages: make([]PlannedPage, manifest.Counts.Pages), Fragments: make([]Fragment, manifest.Counts.Fragments), Lines: make([]PlannedLine, manifest.Counts.Lines), PageRegions: make([]PlannedPageRegion, manifest.Counts.PageRegions), GridTracks: make([]PlannedGridTrack, manifest.Counts.GridTracks), Fonts: cloneSlice(manifest.Fonts), GlyphRuns: make([]CoreGlyphRun, manifest.Counts.GlyphRuns), ImageResources: cloneSlice(manifest.ImageResources), Images: make([]PlannedImage, manifest.Counts.Images), Destinations: cloneSlice(manifest.Destinations), Links: make([]PlannedLink, manifest.Counts.Links), Paths: clonePlannedPaths(manifest.Paths), Transforms: cloneSlice(manifest.Transforms), Clips: cloneSlice(manifest.Clips), Fills: cloneSlice(manifest.Fills), Strokes: clonePlannedStrokes(manifest.Strokes), Commands: make([]DisplayCommand, manifest.Counts.Commands), Breaks: make([]BreakDecision, manifest.Counts.Breaks), Diagnostics: make([]Diagnostic, manifest.Counts.Diagnostics), SemanticNodes: cloneSlice(manifest.SemanticNodes), SemanticFragments: make([]SemanticFragmentAssociation, manifest.Counts.SemanticFragments), ReadingOrder: make([]ReadingOccurrence, manifest.Counts.ReadingOrder)}
 	pageSeen := make([]bool, len(input.Pages))
 	fragSeen := make([]bool, len(input.Fragments))
 	lineSeen := make([]bool, len(input.Lines))
+	pageRegionSeen := make([]bool, len(input.PageRegions))
+	gridTrackSeen := make([]bool, len(input.GridTracks))
 	glyphSeen := make([]bool, len(input.GlyphRuns))
 	imageSeen := make([]bool, len(input.Images))
 	linkSeen := make([]bool, len(input.Links))
@@ -725,6 +748,16 @@ func reconstructSegmentedPlan(ctx context.Context, hash PlanHash, encoded []byte
 		}
 		for _, v := range segment.Lines {
 			if err := putSegmented(int(v.Index), v.Value, input.Lines, lineSeen); err != nil {
+				return LayoutPlan{}, err
+			}
+		}
+		for _, v := range segment.GridTracks {
+			if err := putSegmented(int(v.Index), v.Value, input.GridTracks, gridTrackSeen); err != nil {
+				return LayoutPlan{}, err
+			}
+		}
+		for _, v := range segment.PageRegions {
+			if err := putSegmented(int(v.Index), v.Value, input.PageRegions, pageRegionSeen); err != nil {
 				return LayoutPlan{}, err
 			}
 		}
@@ -769,7 +802,7 @@ func reconstructSegmentedPlan(ctx context.Context, hash PlanHash, encoded []byte
 			}
 		}
 	}
-	for _, seen := range [][]bool{pageSeen, fragSeen, lineSeen, glyphSeen, imageSeen, linkSeen, commandSeen, breakSeen, diagnosticSeen, semanticFragmentSeen, readingSeen} {
+	for _, seen := range [][]bool{pageSeen, fragSeen, lineSeen, pageRegionSeen, gridTrackSeen, glyphSeen, imageSeen, linkSeen, commandSeen, breakSeen, diagnosticSeen, semanticFragmentSeen, readingSeen} {
 		for _, value := range seen {
 			if !value {
 				return LayoutPlan{}, corruptionError(nil, "segmented projection has a missing indexed value")
@@ -858,7 +891,7 @@ func validateSegmentedManifestLimits(manifest segmentedPlanManifest, limits Segm
 		}
 		bytes += reference.ByteLength
 	}
-	work := uint64(manifest.Counts.Pages) + uint64(manifest.Counts.Fragments) + uint64(manifest.Counts.Lines) +
+	work := uint64(manifest.Counts.Pages) + uint64(manifest.Counts.Fragments) + uint64(manifest.Counts.Lines) + uint64(manifest.Counts.PageRegions) + uint64(manifest.Counts.GridTracks) +
 		uint64(manifest.Counts.GlyphRuns) + uint64(manifest.Counts.Images) + uint64(manifest.Counts.Links) +
 		uint64(manifest.Counts.Commands) + uint64(manifest.Counts.Breaks) + uint64(manifest.Counts.Diagnostics) +
 		uint64(manifest.Counts.SemanticNodes) + uint64(manifest.Counts.SemanticFragments) + uint64(manifest.Counts.ReadingOrder) + uint64(len(manifest.Segments))

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -147,6 +147,7 @@ func (f *Document) planTypedTableBodies(ctx context.Context, doc *layout.LayoutD
 			columns[index].Width = width
 		}
 	}
+	tableWidth := typedTablePlanWidth(body.Width, columns)
 
 	rows := make([]layout.TableRow, 0, len(table.Header)+len(table.Body)+len(table.Footer))
 	rows = append(rows, table.Header...)
@@ -171,7 +172,7 @@ func (f *Document) planTypedTableBodies(ctx context.Context, doc *layout.LayoutD
 			path: path + ".caption", row: 0, column: 0, rowSpan: 1,
 			columnSpan: uint32(len(columns)), node: 1,
 		}
-		measurement, measureErr := f.measureTypedTableCell(ctx, doc, placement, body.Width, layout.DocumentColor{})
+		measurement, measureErr := f.measureTypedTableCell(ctx, doc, placement, tableWidth, layout.DocumentColor{})
 		if measureErr != nil {
 			return layoutengine.LayoutPlan{}, measureErr
 		}
@@ -207,7 +208,7 @@ func (f *Document) planTypedTableBodies(ctx context.Context, doc *layout.LayoutD
 	if f.limits.MaxPages > 0 && uint32(f.limits.MaxPages) < limits.MaxPages {
 		limits.MaxPages = uint32(f.limits.MaxPages)
 	}
-	resolvedColumns, err := layoutengine.ResolveTableColumnWidths(ctx, body.Width, columns, engineCells, limits)
+	resolvedColumns, err := layoutengine.ResolveTableColumnWidths(ctx, tableWidth, columns, engineCells, limits)
 	if err != nil {
 		return layoutengine.LayoutPlan{}, fmt.Errorf("document: resolve typed table columns: %w", err)
 	}
@@ -250,7 +251,7 @@ func (f *Document) planTypedTableBodies(ctx context.Context, doc *layout.LayoutD
 		}
 	}
 	geometry, err := layoutengine.PlanTable(ctx, layoutengine.TablePlanInput{
-		PageSize: pageSize, Body: body, Width: body.Width, Rows: uint32(len(rows)),
+		PageSize: pageSize, Body: body, Width: tableWidth, Rows: uint32(len(rows)),
 		Columns: columns, HeaderRows: headerRows, Cells: engineCells,
 		Caption: caption, BodyForPage: tableBodyForPage,
 		KeepTogether: table.Box.KeepTogether, KeepWithNext: table.Box.KeepWithNext,
@@ -260,6 +261,28 @@ func (f *Document) planTypedTableBodies(ctx context.Context, doc *layout.LayoutD
 		return layoutengine.LayoutPlan{}, fmt.Errorf("document: plan typed table: %w", err)
 	}
 	return composeTypedTablePlan(ctx, geometry, measurements, strings.TrimSpace(doc.Language), table.Style.BorderCollapse)
+}
+
+// typedTablePlanWidth lets an entirely fixed grid retain its authored width
+// when the page body is wider. The layout engine still receives the body width
+// for intrinsic or mixed grids, and for fixed grids that overflow the body, so
+// its explicit-width validation remains authoritative.
+func typedTablePlanWidth(bodyWidth layoutengine.Fixed, columns []layoutengine.TableColumn) layoutengine.Fixed {
+	total := layoutengine.Fixed(0)
+	for _, column := range columns {
+		if column.Kind != layoutengine.TableTrackFixed {
+			return bodyWidth
+		}
+		var err error
+		total, err = total.Add(column.Width)
+		if err != nil {
+			return bodyWidth
+		}
+	}
+	if total > 0 && total <= bodyWidth {
+		return total
+	}
+	return bodyWidth
 }
 
 type typedTablePlacement struct {
@@ -647,18 +670,23 @@ func (f *Document) measureTypedTableCell(ctx context.Context, doc *layout.Layout
 			paragraph.Style.Align = textAlign(align)
 		}
 		authoredSegments := append([]layout.TextSegment(nil), paragraph.Segments...)
-		paragraph.Segments = make([]layout.TextSegment, len(authoredSegments))
-		for index, segment := range authoredSegments {
-			paragraph.Segments[index] = layout.TextSegment{Text: segment.Text, Link: segment.Link, Destination: segment.Destination}
+		mixedCoreShadow := typedParagraphNeedsMixedCoreShadow(paragraph, f)
+		if !mixedCoreShadow {
+			paragraph.Segments = make([]layout.TextSegment, len(authoredSegments))
+			for index, segment := range authoredSegments {
+				paragraph.Segments[index] = layout.TextSegment{Text: segment.Text, Link: segment.Link, Destination: segment.Destination}
+			}
 		}
 		margins := typedShadowMarginsForCell(f, doc)
 		measurement, err := f.measurePaperRowColumnChild(ctx, doc, paragraph, margins.left, margins.top, margins.right, margins.bottom, innerWidth)
 		if err != nil {
 			return typedTableCellMeasurement{}, fmt.Errorf("%s.blocks[%d]: %w", placement.path, blockIndex, err)
 		}
-		measurement, err = f.restylePaperMeasurement(measurement, paragraph.Style, authoredSegments)
-		if err != nil {
-			return typedTableCellMeasurement{}, fmt.Errorf("%s.blocks[%d]: %w", placement.path, blockIndex, err)
+		if !mixedCoreShadow {
+			measurement, err = f.restylePaperMeasurement(measurement, paragraph.Style, authoredSegments)
+			if err != nil {
+				return typedTableCellMeasurement{}, fmt.Errorf("%s.blocks[%d]: %w", placement.path, blockIndex, err)
+			}
 		}
 		result.blocks = append(result.blocks, measurement)
 		role, heading := layoutengine.SemanticRoleParagraph, uint8(0)
@@ -815,7 +843,7 @@ func (f *Document) restylePaperMeasurement(measurement paperRowColumnMeasurement
 	for index := range geometryPages {
 		geometryPages[index].Commands = layoutengine.IndexRange{}
 	}
-	geometry, err := layoutengine.NewLayoutPlan(layoutengine.LayoutPlanInput{Pages: geometryPages, Fragments: projection.Fragments, Lines: projection.Lines, Breaks: projection.Breaks, Diagnostics: projection.Diagnostics})
+	geometry, err := layoutengine.NewLayoutPlan(layoutengine.LayoutPlanInput{Pages: geometryPages, Fragments: projection.Fragments, Lines: projection.Lines, PageRegions: projection.PageRegions, GridTracks: projection.GridTracks, Breaks: projection.Breaks, Diagnostics: projection.Diagnostics})
 	if err != nil {
 		return paperRowColumnMeasurement{}, err
 	}
@@ -1407,7 +1435,13 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 						childFragment.Key = layoutengine.NodeKey(prefix + string(childFragment.Key))
 						childFragment.Instance = layoutengine.InstanceID(prefix + string(childFragment.Instance))
 						childFragment.Page, childFragment.Region = fragment.Page, fragment.Region
-						childFragment.BorderBox, nestedErr = translateTypedRect(childFragment.BorderBox, dx, dy)
+						childFragment.MarginBox, nestedErr = translateTypedRect(childFragment.MarginBox, dx, dy)
+						if nestedErr == nil {
+							childFragment.BorderBox, nestedErr = translateTypedRect(childFragment.BorderBox, dx, dy)
+						}
+						if nestedErr == nil {
+							childFragment.PaddingBox, nestedErr = translateTypedRect(childFragment.PaddingBox, dx, dy)
+						}
 						if nestedErr == nil {
 							childFragment.ContentBox, nestedErr = translateTypedRect(childFragment.ContentBox, dx, dy)
 						}
@@ -1711,6 +1745,27 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 					runs = append(runs, run)
 					items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(len(runs) - 1)})
 				}
+				if len(block.plan.Strokes) != 0 {
+					dx, dxErr := contentX.Sub(block.body.X)
+					dy, dyErr := contentY.Sub(block.body.Y)
+					if dxErr != nil || dyErr != nil {
+						return layoutengine.LayoutPlan{}, typedTableUnsupported("table.decoration", fmt.Sprintf("text decoration translation offset: %v %v", dxErr, dyErr))
+					}
+					for _, stroke := range block.plan.Strokes {
+						if uint64(stroke.Path) >= uint64(len(block.plan.Paths)) {
+							return layoutengine.LayoutPlan{}, typedTableUnsupported("table.decoration", "text decoration references a missing path")
+						}
+						path, pathErr := translatePaperNestedPath(block.plan.Paths[stroke.Path], dx, dy)
+						if pathErr != nil {
+							return layoutengine.LayoutPlan{}, pathErr
+						}
+						paths = append(paths, path)
+						stroke.Path = uint32(len(paths) - 1)
+						stroke.Fragment = contentFragment.ID
+						strokes = append(strokes, stroke)
+						items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)})
+					}
+				}
 				for _, link := range block.plan.Links {
 					if link.URI == "" || link.Destination.Valid() {
 						return layoutengine.LayoutPlan{}, typedTableUnsupported("table.link", "only external cell links are supported")
@@ -1766,6 +1821,7 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 	}
 	geometry, err := layoutengine.NewLayoutPlan(layoutengine.LayoutPlanInput{
 		Pages: projection.Pages, Fragments: fragments, Lines: lines,
+		PageRegions: projection.PageRegions, GridTracks: projection.GridTracks,
 		Breaks: projection.Breaks, Diagnostics: projection.Diagnostics,
 	})
 	if err != nil {

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -105,6 +105,10 @@ func (f *Document) PlanCompiledHTMLContext(ctx context.Context, lineHeight float
 		composed, composeErr := composeHTMLMixedSVGPlan(ctx, plan.plan, svgMetas, svgPlaceholder)
 		if composeErr != nil {
 			return LayoutDocumentPlan{}, composeErr
+		}
+		composed, bindErr := bindTypedDeterministicInputs(composed, plan.tree, model)
+		if bindErr != nil {
+			return LayoutDocumentPlan{}, fmt.Errorf("document: bind mixed HTML/SVG deterministic inputs: %w", bindErr)
 		}
 		plan.plan = composed
 		plan.imageSources = withoutHTMLSVGPlaceholder(plan.imageSources, svgPlaceholder)

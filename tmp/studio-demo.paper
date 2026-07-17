@@ -1,0 +1,80 @@
+document @studio-demo:
+  title: "Paper Studio"
+  language: "en"
+  theme: "@studio"
+  theme @studio:
+    token @body-font:
+      type: "string"
+      value: "Helvetica"
+    token @body-size:
+      type: "length"
+      value: 12pt
+    token @body-leading:
+      type: "length"
+      value: 18pt
+    token @title-size:
+      type: "length"
+      value: 28pt
+    token @title-leading:
+      type: "length"
+      value: 34pt
+    token @section-size:
+      type: "length"
+      value: 16pt
+    token @section-leading:
+      type: "length"
+      value: 22pt
+    token @code-font:
+      type: "string"
+      value: "Courier"
+    token @code-size:
+      type: "length"
+      value: 10pt
+    token @code-leading:
+      type: "length"
+      value: 15pt
+    token @second-page-size:
+      type: "length"
+      value: 18pt
+    token @second-page-leading:
+      type: "length"
+      value: 24pt
+  page @sheet:
+    width: 595pt
+    height: 842pt
+    margin: 54pt
+    body @content:
+      heading @title:
+        level: 1
+        font-token: "body-font"
+        size-token: "title-size"
+        line-height-token: "title-leading"
+        text: "A document you can inspect"
+      paragraph @intro:
+        font-token: "body-font"
+        size-token: "body-size"
+        line-height-token: "body-leading"
+        text: "Every visible mark comes from the immutable Paper display plan. Click the page to trace its source and layout decision."
+      heading @details:
+        level: 2
+        font-token: "body-font"
+        size-token: "section-size"
+        line-height-token: "section-leading"
+        text: "Exact by construction"
+      paragraph @body-copy:
+        font-token: "code-font"
+        size-token: "code-size"
+        line-height-token: "code-leading"
+        text: "Source -> semantic tree -> planner -> display list -> preview and PDF."
+      page-break:
+      heading @second-page:
+        level: 2
+        font-token: "body-font"
+        size-token: "second-page-size"
+        line-height-token: "second-page-leading"
+        text: "Second page"
+      paragraph @review-copy:
+        font-token: "body-font"
+        size-token: "body-size"
+        line-height-token: "body-leading"
+        text: "Review mode overlays fragments, diagnostics, and committed page-break evidence without using browser layout."

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package perfgate
@@ -96,7 +96,7 @@ func TestCheckedAppleM2CalibrationReportPassesDeterministically(t *testing.T) {
 		t.Fatal(err)
 	}
 	summary, err := Validate(profile, report)
-	if err != nil || summary.Profile != "apple-m2-go1.26-paper-engine-v1" || len(summary.Results) != 10 {
+	if err != nil || summary.Profile != "apple-m2-go1.26-paper-engine-v1" || len(summary.Results) != 11 {
 		t.Fatalf("checked calibration = %#v, %v", summary, err)
 	}
 }

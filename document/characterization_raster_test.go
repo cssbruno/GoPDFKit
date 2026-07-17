@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -42,12 +42,12 @@ func TestCharacterizationRasterPagesArePinnedBoundedAndFailureAtomic(t *testing.
 			}
 		}
 	}
-	if typedRasterPages != 21 || typedRasterPages > characterizationRasterMaxPages || typedRasterBytes == 0 || typedRasterBytes > characterizationRasterMaxPNGBytes {
+	if typedRasterPages != 22 || typedRasterPages > characterizationRasterMaxPages || typedRasterBytes == 0 || typedRasterBytes > characterizationRasterMaxPNGBytes {
 		t.Fatalf("typed raster totals pages=%d bytes=%d", typedRasterPages, typedRasterBytes)
 	}
 	// Includes the documented local-canvas characterization fixture so the
 	// public typed inventory and its visual evidence stay in lockstep.
-	if got := characterizationRasterPinsHash(t, typedPins); got != "091c88be4d3cd878f0698d21d6e3db1244b185564fa6554bd4dfd0802f3e3c44" {
+	if got := characterizationRasterPinsHash(t, typedPins); got != "675e1542d979284cb4449e0158aac65e2f3e0a8ff39e838ce8ac168da546d2e4" {
 		t.Fatalf("typed raster baseline drift: got %s", got)
 	}
 
@@ -75,7 +75,7 @@ func TestCharacterizationRasterPagesArePinnedBoundedAndFailureAtomic(t *testing.
 	if htmlRasterPages != 1 || htmlRasterBytes == 0 || htmlRasterBytes > characterizationRasterMaxPNGBytes {
 		t.Fatalf("HTML raster totals pages=%d bytes=%d", htmlRasterPages, htmlRasterBytes)
 	}
-	if got := characterizationRasterPinsHash(t, htmlPins); got != "5a40e23c196ed8b7fd1e892fc286611a8fec511ee0230b1440762882c82d18b0" {
+	if got := characterizationRasterPinsHash(t, htmlPins); got != "9e6707c1c60c07836b37bfd98abfe6e2af238685498f30d484f4ac9ef13327a1" {
 		t.Fatalf("HTML raster baseline drift: got %s", got)
 	}
 

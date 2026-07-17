@@ -1,0 +1,23 @@
+# gopdfkit-paper-engine-benchmark-v3
+# command: go test ./document ./internal/layoutengine -run ^$ -bench ^BenchmarkPaperEngine(Planner|Painter|ProductionDefault|EndToEnd|WarmCompiled|Concurrent|Table) -benchmem -benchtime=250ms -count=10
+# go-version: go version go1.26.5 darwin/arm64
+# goos: darwin
+# goarch: arm64
+# source-revision: 8d2f5b81fae867e1147796df57095a568bbde17a
+# worktree: dirty
+goos: darwin
+goarch: arm64
+pkg: github.com/cssbruno/gopdfkit/document
+cpu: Apple M2
+BenchmarkPaperEngineProductionDefault-8       	      80	   3613133 ns/op	 5348140 B/op	   16802 allocs/op
+BenchmarkPaperEngineProductionDefault-8       	      79	   3541848 ns/op	 5355411 B/op	   16802 allocs/op
+BenchmarkPaperEngineProductionDefault-8       	      82	   3559097 ns/op	 5326202 B/op	   16798 allocs/op
+BenchmarkPaperEngineProductionDefault-8       	      82	   3560297 ns/op	 5348177 B/op	   16802 allocs/op
+BenchmarkPaperEngineProductionDefault-8       	      80	   3570692 ns/op	 5340946 B/op	   16800 allocs/op
+BenchmarkPaperEngineProductionDefault-8       	      80	   3571592 ns/op	 5335644 B/op	   16801 allocs/op
+BenchmarkPaperEngineProductionDefault-8       	      82	   3561686 ns/op	 5353730 B/op	   16799 allocs/op
+BenchmarkPaperEngineProductionDefault-8       	      82	   3622309 ns/op	 5352523 B/op	   16803 allocs/op
+BenchmarkPaperEngineProductionDefault-8       	      86	   3537522 ns/op	 5322210 B/op	   16800 allocs/op
+BenchmarkPaperEngineProductionDefault-8       	      78	   3593330 ns/op	 5338303 B/op	   16800 allocs/op
+PASS
+ok  	github.com/cssbruno/gopdfkit/document	33.799s

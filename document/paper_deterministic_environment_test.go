@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -66,7 +66,7 @@ func TestPlanPaperIdentityExcludesAmbientProcessEnvironment(t *testing.T) {
 		}
 	}
 	sum := sha256.Sum256(first)
-	const fixtureSHA256 = "b49a9636501dc8d43302be7d95089ae7193bb2bf7360330ca501d296c2e46e32"
+	const fixtureSHA256 = "d40fdb40f29612f11b876eaca6221c039e51bef4544305a26f9b9cf1f8eca4b9"
 	if got := hex.EncodeToString(sum[:]); got != fixtureSHA256 {
 		t.Fatalf("deterministic paper identity fixture hash = %s", got)
 	}

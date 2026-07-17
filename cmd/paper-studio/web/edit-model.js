@@ -12,6 +12,7 @@
   ]);
   const gridProperties = Object.freeze(['track', 'track-size', 'track-min', 'track-weight']);
   const boxKinds = new Set(['paragraph', 'heading', 'list']);
+  const coreFonts = Object.freeze(['Courier', 'Helvetica', 'Times', 'Symbol', 'ZapfDingbats']);
   const gridKinds = new Set(['paragraph', 'heading']);
   const gridParents = new Set(['row', 'column']);
   const imageProperties = Object.freeze(['fit', 'focus-x', 'focus-y', 'width', 'height', 'max-width', 'max-height', 'alt', 'decorative']);
@@ -34,9 +35,26 @@
     return matches === 1 ? result : null;
   }
 
+  function findTextSelectionAtLine(root, line) {
+    let result = null;
+    const wanted = Number(line);
+    function walk(node) {
+      if (!node) return;
+      const start = Number(node.span?.start?.line || 0);
+      const end = Number(node.span?.end?.line || start);
+      if (boxKinds.has(node.kind) && node.id && start > 0 && wanted >= start && wanted <= end) {
+        result = findSelection(root, node.id);
+      }
+      for (const member of node.members || []) walk(member.node);
+    }
+    walk(root);
+    return result;
+  }
+
   function operations(selection) {
     if (!selection) return [];
     const result = [];
+    if (boxKinds.has(selection.node.kind)) result.push('text');
     if (boxKinds.has(selection.node.kind)) result.push('box');
     if (gridKinds.has(selection.node.kind) && gridParents.has(selection.parent?.kind) && selection.parent?.id) result.push('grid');
     if (selection.node.kind === 'image') result.push('image');
@@ -49,6 +67,7 @@
   }
 
   function properties(operation) {
+    if (operation === 'text') return ['font'];
     if (operation === 'box') return boxProperties;
     if (operation === 'grid') return gridProperties;
     if (operation === 'image') return imageProperties;
@@ -63,6 +82,7 @@
   }
 
   function valueSpec(operation, property) {
+    if (operation === 'text' && property === 'font') return {kind: 'choice', label: 'Replacement font', choices: coreFonts, field: 'text'};
     if ((operation === 'box' || operation === 'region') && ['border-color', 'background'].includes(property)) return {kind: 'color', label: 'Color'};
     if (operation === 'grid' && property === 'track') return {kind: 'choice', label: 'Track', choices: ['fixed', 'auto', 'fraction']};
     if (operation === 'grid' && property === 'track-weight') return {kind: 'integer', label: 'Weight', min: 1, max: 4294967295};
@@ -107,9 +127,9 @@
       if (!/^#[0-9a-f]{6}$/.test(color)) throw new Error('Use a six-digit color such as #315ee8');
       payload.color = color;
     } else if (spec.kind === 'choice') {
-      const kind = String(rawValue || '').toLowerCase();
-      if (!spec.choices.includes(kind)) throw new Error('Choose fixed, auto, or fraction');
-      payload.kind = kind;
+      const choice = String(rawValue || '').trim();
+      if (!spec.choices.includes(choice)) throw new Error(`Choose one of: ${spec.choices.join(', ')}`);
+      payload[spec.field || 'kind'] = choice;
     } else if (spec.kind === 'text') {
       payload.text = String(rawValue || '');
     } else if (spec.kind === 'boolean') {
@@ -122,10 +142,6 @@
       if (spec.kind === 'integer') payload.weight = value;
       else if (spec.field === 'number') payload.number = value;
       else payload.points = value;
-    }
-    if (spec.field === 'split') {
-      payload.split = payload.kind;
-      delete payload.kind;
     }
     return payload;
   }
@@ -159,5 +175,5 @@
     return result;
   }
 
-  return Object.freeze({findSelection, operations, properties: propertiesForSelection, valueSpec, buildPayload, flowDestinations});
+  return Object.freeze({coreFonts, findSelection, findTextSelectionAtLine, operations, properties: propertiesForSelection, valueSpec, buildPayload, flowDestinations});
 });

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -683,7 +683,9 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 					}
 					outer := fragment
 					outer.ID = layoutengine.FragmentID(len(projection.Fragments) + 1)
-					outer.Page, outer.BorderBox, outer.ContentBox, outer.Continuation = currentPage, outerBox, outerBox, continuation
+					outer.Page = currentPage
+					outer.MarginBox, outer.BorderBox, outer.PaddingBox, outer.ContentBox = outerBox, outerBox, outerBox, outerBox
+					outer.Continuation = continuation
 					projection.Fragments = append(projection.Fragments, outer)
 					outerFragments = append(outerFragments, outer.ID)
 				}
@@ -707,7 +709,13 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 				childFragment.Key = layoutengine.NodeKey(string(measurement.identity.key) + "/" + string(childFragment.Key))
 				childFragment.Instance = layoutengine.InstanceID(string(measurement.identity.instance) + "/" + string(childFragment.Instance))
 				childFragment.Region = layoutengine.RegionBody
-				childFragment.BorderBox, err = translateTypedRect(childFragment.BorderBox, dx, dy)
+				childFragment.MarginBox, err = translateTypedRect(childFragment.MarginBox, dx, dy)
+				if err == nil {
+					childFragment.BorderBox, err = translateTypedRect(childFragment.BorderBox, dx, dy)
+				}
+				if err == nil {
+					childFragment.PaddingBox, err = translateTypedRect(childFragment.PaddingBox, dx, dy)
+				}
 				if err == nil {
 					childFragment.ContentBox, err = translateTypedRect(childFragment.ContentBox, dx, dy)
 				}
@@ -875,7 +883,9 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 			if err != nil {
 				return layoutengine.LayoutPlan{}, err
 			}
+			projection.Fragments[childIndex].MarginBox = outer
 			projection.Fragments[childIndex].BorderBox = outer
+			projection.Fragments[childIndex].PaddingBox = content
 			projection.Fragments[childIndex].ContentBox = content
 			fragment = projection.Fragments[childIndex]
 			if image.background.Set {
@@ -1005,6 +1015,7 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 	}
 	geometry, err := layoutengine.NewLayoutPlan(layoutengine.LayoutPlanInput{
 		Pages: projection.Pages, Fragments: projection.Fragments, Lines: projection.Lines,
+		PageRegions: projection.PageRegions, GridTracks: projection.GridTracks,
 		Breaks: projection.Breaks, Diagnostics: projection.Diagnostics,
 	})
 	if err != nil {

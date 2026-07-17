@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -180,7 +180,9 @@ func reviewRequest() ReviewBundleRequest {
 func reviewChangedFixture(t *testing.T, before LayoutPlan) LayoutPlan {
 	t.Helper()
 	p := before.Projection()
+	p.Fragments[0].MarginBox.Width += Fixed(FixedScale)
 	p.Fragments[0].BorderBox.Width += Fixed(FixedScale)
+	p.Fragments[0].PaddingBox.Width += Fixed(FixedScale)
 	p.Fragments[0].ContentBox.Width += Fixed(FixedScale)
 	p.Fills[0].Color = CoreRGBColor{G: 255, Set: true}
 	return mustPlanFromProjection(t, p)
@@ -189,7 +191,7 @@ func reviewChangedFixture(t *testing.T, before LayoutPlan) LayoutPlan {
 func mustPlanFromProjection(t *testing.T, p LayoutPlanProjection) LayoutPlan {
 	t.Helper()
 	plan, err := NewLayoutPlan(LayoutPlanInput{DeterministicInputs: p.DeterministicInputs, Pages: p.Pages, Fragments: p.Fragments,
-		Lines: p.Lines, Fonts: p.Fonts, GlyphRuns: p.GlyphRuns, ImageResources: p.ImageResources, Images: p.Images,
+		Lines: p.Lines, PageRegions: p.PageRegions, GridTracks: p.GridTracks, Fonts: p.Fonts, GlyphRuns: p.GlyphRuns, ImageResources: p.ImageResources, Images: p.Images,
 		Destinations: p.Destinations, Links: p.Links, Paths: p.Paths, Transforms: p.Transforms, Clips: p.Clips,
 		Fills: p.Fills, Strokes: p.Strokes, Commands: p.Commands, Breaks: p.Breaks, Diagnostics: p.Diagnostics,
 		SemanticNodes: p.SemanticNodes, SemanticFragments: p.SemanticFragments, ReadingOrder: p.ReadingOrder})

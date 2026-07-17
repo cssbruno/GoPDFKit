@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -18,6 +18,13 @@ const boxMutationFixture = "document @report:\n" +
 	"      paragraph @box:\n" +
 	"        padding: 4pt\n" +
 	"        text @copy: \"Box\"\n"
+
+const invalidFontMutationFixture = "document @report:\n" +
+	"  page @sheet:\n" +
+	"    body @body:\n" +
+	"      paragraph @copy:\n" +
+	"        font: \"Unavailable Sans\"\n" +
+	"        text: \"Strict font\"\n"
 
 const gridMutationFixture = "document @report:\n" +
 	"  page @sheet:\n" +
@@ -68,6 +75,17 @@ func TestPaperSetPageMarginIsReadableMinimalAndAuthorized(t *testing.T) {
 	}
 }
 
+func TestPaperSetPageSizeWritesTwoExactDimensions(t *testing.T) {
+	workspace := authorizationWorkspace(t, WorkspaceOptions{RequireMutationAuthority: true})
+	guard, _, opened := mutationGuard(t, workspace, pageMarginMutationFixture, "@sheet", "page-size", CapabilityEdit)
+	guard.Authority = grantMutationAuthority(t, workspace, opened, "studio:page-size", []MutationOperation{MutationSetPageSize}, []string{"@sheet"}, nil)
+	result, err := workspace.PaperSetPageSize(PaperSetPageSizeRequest{Guard: guard, WidthPoints: 595.275590551, HeightPoints: 841.88976378})
+	if err != nil || !result.Authorization.Allowed || result.Authorization.Operation != MutationSetPageSize ||
+		result.Edit.Diff == nil || len(result.Edit.Diff.Patches) != 2 || !strings.Contains(result.Revision.Source, "width: 595.275590551pt") || !strings.Contains(result.Revision.Source, "height: 841.88976378pt") {
+		t.Fatalf("page size = %#v, %v", result, err)
+	}
+}
+
 func TestPaperSetPageRegionGuardsGoverningPage(t *testing.T) {
 	source := "document @report:\n  page @sheet:\n    header @head:\n      paragraph @copy:\n        text: \"Header\"\n    body @body:\n      paragraph @main:\n        text: \"Body\"\n"
 	workspace := authorizationWorkspace(t, WorkspaceOptions{RequireMutationAuthority: true})
@@ -111,6 +129,29 @@ func TestPaperSetBoxPropertyIsTypedMinimalAndAuthorized(t *testing.T) {
 				t.Fatalf("authorization = %#v", result.Authorization)
 			}
 		})
+	}
+}
+
+func TestPaperSetTextPropertyExplicitlyRepairsUnavailableFont(t *testing.T) {
+	workspace := authorizationWorkspace(t, WorkspaceOptions{RequireMutationAuthority: true})
+	guard, created, opened := mutationGuard(t, workspace, invalidFontMutationFixture, "@copy", "font-replacement", CapabilityEdit)
+	if created.Revision.CompileOK {
+		t.Fatal("unavailable font unexpectedly compiled")
+	}
+	guard.Authority = grantMutationAuthority(t, workspace, opened, "studio:font-replacement", []MutationOperation{MutationSetTextProperty}, []string{"@copy"}, nil)
+	result, err := workspace.PaperSetTextProperty(PaperSetTextPropertyRequest{Guard: guard, Property: PaperTextFont, Text: "Helvetica"})
+	if err != nil || !result.Revision.CompileOK || result.Edit.Diff == nil || len(result.Edit.Diff.Patches) != 1 ||
+		!strings.Contains(result.Revision.Source, `font: "Helvetica"`) || result.Authorization.Operation != MutationSetTextProperty {
+		t.Fatalf("font replacement = %#v, %v", result, err)
+	}
+
+	workspace = mustWorkspace(t, Limits{})
+	invalidGuard, invalidCreated, _ := mutationGuard(t, workspace, invalidFontMutationFixture, "@copy", "font-invalid", CapabilityEdit)
+	if _, err := workspace.PaperSetTextProperty(PaperSetTextPropertyRequest{Guard: invalidGuard, Property: PaperTextFont, Text: "Another Missing Font"}); err == nil {
+		t.Fatal("unsupported replacement unexpectedly succeeded")
+	}
+	if candidate, _ := workspace.Candidate(invalidCreated.Candidate.Handle); candidate.Head != invalidCreated.Revision.Handle {
+		t.Fatal("invalid replacement advanced candidate")
 	}
 }
 

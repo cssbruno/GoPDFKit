@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -29,6 +29,61 @@ const studioGridFixture = "document @report:\n" +
 	"          text @right-copy: \"Right\"\n"
 
 const studioBoxFixture = "document @report:\n  page @sheet:\n    width: 160pt\n    height: 100pt\n    margin: 10pt\n    body @content:\n      paragraph @message:\n        text: \"Box\"\n"
+
+const studioInvalidFontFixture = "document @report:\n  page @sheet:\n    width: 160pt\n    height: 100pt\n    margin: 10pt\n    body @content:\n      paragraph @message:\n        font: \"Unavailable Sans\"\n        text: \"Strict font\"\n"
+
+func TestPaperStudioAppliesExactPageSize(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "page-size.paper")
+	if err := os.WriteFile(file, []byte(studioBoxFixture), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	studio, err := newStudioServer(file, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := studio.routes()
+	before := fetchStudioWorkspace(t, handler)
+	response := postStudioJSON(t, handler, "/api/edit", map[string]any{
+		"source_revision": before.SourceRevision, "plan_revision": before.Revision,
+		"operation": "page-size", "target": "@sheet", "property": "size",
+		"width_points": 612, "height_points": 792,
+	})
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("page size edit = %d %s", response.StatusCode, response.Body)
+	}
+	after := fetchStudioWorkspace(t, handler)
+	if !strings.Contains(after.Source, "width: 612pt") || !strings.Contains(after.Source, "height: 792pt") || after.Revision == before.Revision {
+		t.Fatalf("page size source = %s", after.Source)
+	}
+}
+
+func TestPaperStudioOffersExplicitFontRepairAgainstUnavailablePlan(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "invalid-font.paper")
+	if err := os.WriteFile(file, []byte(studioInvalidFontFixture), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	studio, err := newStudioServer(file, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := studio.routes()
+	before := fetchStudioWorkspace(t, handler)
+	if before.Pages != 0 || len(before.Diagnostics) != 1 || before.Diagnostics[0].Code != "PAPER_COMPILE_FONT" {
+		t.Fatalf("strict unavailable-font workspace = %+v", before)
+	}
+	response := postStudioJSON(t, handler, "/api/edit", map[string]any{
+		"source_revision": before.SourceRevision, "plan_revision": before.Revision,
+		"operation": "text", "target": "@message", "property": "font", "text": "Helvetica",
+	})
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("font replacement = %d %s", response.StatusCode, response.Body)
+	}
+	after := fetchStudioWorkspace(t, handler)
+	written, _ := os.ReadFile(file)
+	if after.Pages != 1 || len(after.Diagnostics) != 0 || !strings.Contains(string(written), `font: "Helvetica"`) {
+		t.Fatalf("repaired workspace = %+v / %s", after, written)
+	}
+}
 
 const studioImageFixture = "document @report:\n  page @sheet:\n    body @body:\n      image @hero:\n" +
 	"        source: \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"\n" +

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -31,6 +31,25 @@ func TestPlanTableResolvesTracksDeterministically(t *testing.T) {
 	projection := plan.Projection()
 	if len(projection.Pages) != 1 || len(projection.Fragments) != len(input.Cells) {
 		t.Fatalf("unexpected projection sizes: pages=%d fragments=%d", len(projection.Pages), len(projection.Fragments))
+	}
+	if len(projection.GridTracks) != 8 {
+		t.Fatalf("retained table tracks = %d, want two 3-column/1-row groups", len(projection.GridTracks))
+	}
+	for group := uint32(1); group <= 2; group++ {
+		base := int((group - 1) * 4)
+		wantHeight := Fixed(8)
+		if group == 2 {
+			wantHeight = 21
+		}
+		for index, track := range projection.GridTracks[base : base+3] {
+			if track.Group != group || track.Axis != GridTrackColumn || track.Index != uint32(index) || track.Bounds.Width != 20 || track.Bounds.Height != wantHeight {
+				t.Fatalf("group %d column track[%d] = %+v", group, index, track)
+			}
+		}
+		row := projection.GridTracks[base+3]
+		if row.Group != group || row.Axis != GridTrackRow || row.Index != 0 || row.Bounds.Height != wantHeight {
+			t.Fatalf("group %d row track = %+v", group, row)
+		}
 	}
 
 	// Canonical row/column order is independent of the shuffled input. The
@@ -97,6 +116,15 @@ func TestPlanTablePaginatesGroupsAndRepeatsHeaders(t *testing.T) {
 	}
 	if len(p.Diagnostics) != 0 {
 		t.Fatalf("unexpected diagnostics: %+v", p.Diagnostics)
+	}
+	var pageTwoTracks int
+	for _, track := range p.GridTracks {
+		if track.Page == 2 {
+			pageTwoTracks++
+		}
+	}
+	if pageTwoTracks != 6 {
+		t.Fatalf("page-two repeated-header/body tracks = %d, want 6", pageTwoTracks)
 	}
 }
 

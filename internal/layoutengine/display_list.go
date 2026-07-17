@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -145,6 +145,7 @@ func AttachDisplayList(plan LayoutPlan, input DisplayListInput) (LayoutPlan, err
 	}
 	result, err := NewLayoutPlan(LayoutPlanInput{
 		Pages: projection.Pages, Fragments: projection.Fragments, Lines: projection.Lines,
+		PageRegions: projection.PageRegions, GridTracks: projection.GridTracks,
 		Fonts: input.Fonts, GlyphRuns: input.GlyphRuns,
 		ImageResources: input.ImageResources, Images: input.Images, Commands: commands,
 		Destinations: input.Destinations, Links: input.Links,

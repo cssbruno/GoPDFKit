@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -250,8 +250,52 @@ func validateSHA256(name, value string) error {
 // painter will consume. Core-font entries cover exact canonical metrics;
 // image entries cover exact encoded bytes through their existing digest.
 func ResourceCatalogFromPlan(plan LayoutPlan) (ResourceCatalogManifest, error) {
-	projection := plan.Projection()
-	return resourceCatalogFromProjection(projection.Fonts, projection.ImageResources)
+	return resourceCatalogFromProjection(plan.fonts, plan.imageResources)
+}
+
+// HasEmbeddedUTF8Font reports whether the exact plan carries an embedded font
+// resource rather than relying only on canonical core-font metrics.
+func (plan LayoutPlan) HasEmbeddedUTF8Font() bool {
+	for _, font := range plan.fonts {
+		if font.EmbeddedUTF8 != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// BindDeterministicInputs derives and binds the complete deterministic input
+// manifest from the exact plan storage. It deliberately avoids projecting the
+// plan, so callers can attach identity evidence without cloning large display
+// lists before the canonical plan hash is computed.
+func (plan LayoutPlan) BindDeterministicInputs(template SemanticTemplateID, scenario ScenarioRevisionID,
+	locale, timezone string, textData TextDataVersions, compatibilityProfile string,
+	compatibilityFlags []string, pageProfileName string) (LayoutPlan, error) {
+	resources, err := resourceCatalogFromProjection(plan.fonts, plan.imageResources)
+	if err != nil {
+		return LayoutPlan{}, err
+	}
+	if len(plan.pages) == 0 {
+		return LayoutPlan{}, errors.New("layoutengine: deterministic inputs require at least one page")
+	}
+	page := plan.pages[0]
+	pageProfile, err := NewPageProfileManifest(pageProfileName, page.Size.Width, page.Size.Height)
+	if err != nil {
+		return LayoutPlan{}, err
+	}
+	for index, plannedPage := range plan.pages[1:] {
+		if plannedPage.Size != page.Size {
+			return LayoutPlan{}, fmt.Errorf("layoutengine: page %d does not match the bound page profile", index+2)
+		}
+	}
+	manifest, err := NewDeterministicInputManifest(
+		template, scenario, resources, locale, timezone, textData,
+		compatibilityProfile, compatibilityFlags, pageProfile, PlannerVersion,
+	)
+	if err != nil {
+		return LayoutPlan{}, err
+	}
+	return plan.WithDeterministicInputs(manifest)
 }
 
 func resourceCatalogFromProjection(fonts []CoreFontResource, images []ImageResource) (ResourceCatalogManifest, error) {
@@ -272,9 +316,6 @@ func resourceCatalogFromProjection(fonts []CoreFontResource, images []ImageResou
 // WithDeterministicInputs returns a detached plan whose canonical projection
 // and hash include the complete validated input manifest.
 func (plan LayoutPlan) WithDeterministicInputs(manifest DeterministicInputManifest) (LayoutPlan, error) {
-	if err := plan.Validate(); err != nil {
-		return LayoutPlan{}, err
-	}
 	if err := manifest.validate(); err != nil {
 		return LayoutPlan{}, err
 	}

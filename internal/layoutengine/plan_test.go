@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -76,7 +76,7 @@ func TestLayoutPlanProjectionAndHashAreDeterministic(t *testing.T) {
 	if firstHash != secondHash {
 		t.Fatalf("hashes differ: %s != %s", firstHash, secondHash)
 	}
-	if got, want := firstHash.String(), "d7a7125efd5ef97fc51e2b7b916e6426450ce55ab793bf8687ab3068205f73db"; got != want {
+	if got, want := firstHash.String(), "b76f4922fd0609b7d8e3d285f4f3abf3b76a98f050d26e8302154caaa793055a"; got != want {
 		t.Fatalf("Hash() = %s, want %s", got, want)
 	}
 }
@@ -111,6 +111,83 @@ func TestLayoutPlanValidationRejectsIdentityCollisionAndBadPageRange(t *testing.
 	input.Fragments[0].Repeated = true
 	if _, err := NewLayoutPlan(input); err == nil {
 		t.Fatal("repeated fragment without an earlier original unexpectedly validated")
+	}
+}
+
+func TestLayoutPlanDefaultsCoincidentBoxLayersAndRejectsInvalidNesting(t *testing.T) {
+	input := testPlanInput()
+	plan, err := NewLayoutPlan(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fragment := plan.Projection().Fragments[0]
+	if fragment.MarginBox != fragment.BorderBox || fragment.PaddingBox != fragment.ContentBox {
+		t.Fatalf("default box layers = %+v", fragment)
+	}
+
+	input = testPlanInput()
+	input.Fragments[0].MarginBox = Rect{X: 20, Y: 20, Width: 10, Height: 10}
+	input.Fragments[0].PaddingBox = input.Fragments[0].ContentBox
+	if _, err := NewLayoutPlan(input); err == nil || !strings.Contains(err.Error(), "box-model rectangles are not nested") {
+		t.Fatalf("invalid nesting = %v", err)
+	}
+}
+
+func TestLayoutPlanValidatesAndCopiesRetainedGridTracks(t *testing.T) {
+	input := testPlanInput()
+	input.GridTracks = []PlannedGridTrack{
+		{Group: 1, Page: 1, Region: RegionBody, Axis: GridTrackColumn, Bounds: Rect{X: 0, Y: 0, Width: 10, Height: 20}, GapAfter: 2},
+		{Group: 1, Page: 1, Region: RegionBody, Axis: GridTrackRow, Bounds: Rect{X: 0, Y: 0, Width: 10, Height: 20}},
+	}
+	plan, err := NewLayoutPlan(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.GridTracks[0].Bounds.Width = 99
+	projection := plan.Projection()
+	projection.GridTracks[0].Bounds.Width = 88
+	if got := plan.Projection().GridTracks[0].Bounds.Width; got != 10 {
+		t.Fatalf("retained grid track width = %d, want 10", got)
+	}
+
+	invalid := testPlanInput()
+	invalid.GridTracks = []PlannedGridTrack{{Group: 1, Page: 1, Region: RegionBody, Axis: GridTrackRow, Bounds: Rect{Width: 10, Height: 10}}}
+	if _, err := NewLayoutPlan(invalid); err == nil || !strings.Contains(err.Error(), "begin with column zero") {
+		t.Fatalf("row-first grid tracks = %v", err)
+	}
+	invalid.GridTracks = []PlannedGridTrack{
+		{Group: 1, Page: 1, Region: RegionBody, Axis: GridTrackColumn, Bounds: Rect{Width: 10, Height: 10}},
+		{Group: 1, Page: 1, Region: RegionBody, Axis: GridTrackColumn, Index: 2, Bounds: Rect{Width: 10, Height: 10}},
+	}
+	if _, err := NewLayoutPlan(invalid); err == nil || !strings.Contains(err.Error(), "indexes are not consecutive") {
+		t.Fatalf("nonconsecutive grid tracks = %v", err)
+	}
+}
+
+func TestLayoutPlanValidatesAndCopiesRetainedPageRegions(t *testing.T) {
+	input := testPlanInput()
+	input.PageRegions = []PlannedPageRegion{{Page: 1, Region: RegionBody, Bounds: Rect{X: 5, Y: 5, Width: 90, Height: 90}, Master: "default"}}
+	plan, err := NewLayoutPlan(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.PageRegions[0].Bounds.Width = 1
+	projection := plan.Projection()
+	projection.PageRegions[0].Bounds.Width = 2
+	if got := plan.Projection().PageRegions[0].Bounds.Width; got != 90 {
+		t.Fatalf("retained page-region width = %d, want 90", got)
+	}
+	invalid := testPlanInput()
+	invalid.PageRegions = []PlannedPageRegion{{Page: 1, Region: RegionBody, Bounds: Rect{X: invalid.Pages[0].Size.Width - 5, Width: 10, Height: 10}}}
+	if _, err := NewLayoutPlan(invalid); err == nil || !strings.Contains(err.Error(), "outside its page") {
+		t.Fatalf("outside page region = %v", err)
+	}
+	invalid.PageRegions = []PlannedPageRegion{
+		{Page: 1, Region: RegionBody, Bounds: Rect{Width: 10, Height: 10}},
+		{Page: 1, Region: RegionHeader, Bounds: Rect{Width: 10, Height: 10}},
+	}
+	if _, err := NewLayoutPlan(invalid); err == nil || !strings.Contains(err.Error(), "unique and ordered") {
+		t.Fatalf("unordered page regions = %v", err)
 	}
 }
 

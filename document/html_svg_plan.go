@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -220,6 +220,10 @@ func (f *Document) planCompiledHTMLInlineSVGContext(ctx context.Context, compile
 	tree, err := papercompile.LowerLayoutDocumentTreeContext(ctx, model, layoutengine.CanonicalTreeLimits{})
 	if err != nil {
 		return LayoutDocumentPlan{}, fmt.Errorf("document: lower HTML SVG canonical tree: %w", err)
+	}
+	planned, err = bindTypedDeterministicInputs(planned, tree, model)
+	if err != nil {
+		return LayoutDocumentPlan{}, fmt.Errorf("document: bind HTML SVG deterministic inputs: %w", err)
 	}
 	envelope, err := f.snapshotLayoutDocumentEnvelope(model)
 	if err != nil {

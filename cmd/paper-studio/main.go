@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 // Command paper-studio serves the read-first Paper Studio workspace. Browser
@@ -192,6 +192,7 @@ func (s *studioServer) routes() http.Handler {
 	mux.HandleFunc("/api/hit", s.handleHit)
 	mux.HandleFunc("/api/explain", s.handleExplain)
 	mux.HandleFunc("/api/inspect", s.handleInspect)
+	mux.HandleFunc("/api/pdf-tags", s.handlePDFTags)
 	mux.HandleFunc("/api/edit", s.handleEdit)
 	mux.HandleFunc("/api/resources", s.handleResources)
 	mux.HandleFunc("/api/authoring", s.handleAuthoring)
@@ -201,7 +202,7 @@ func (s *studioServer) routes() http.Handler {
 
 func (s *studioServer) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -232,20 +233,22 @@ func (s *studioServer) current(ctx context.Context, requestedScenario string) (*
 		clear(s.snapshots)
 		s.sourceHash, s.hasSourceHash = hash, true
 	}
-	if snapshot := s.snapshots[scenario]; snapshot != nil && snapshot.sourceHash == hash {
+	parsed := paperlang.Parse(s.file, source)
+	imports := hasPaperImports(parsed.AST)
+	if snapshot := s.snapshots[scenario]; snapshot != nil && snapshot.sourceHash == hash && !imports {
 		return snapshot, nil
 	}
-	parsed := paperlang.Parse(s.file, source)
 	ast, astErr := parsed.AST.CanonicalJSON()
 	if astErr != nil {
 		return nil, astErr
 	}
 	var plan document.PaperPlan
 	var planned document.PaperPlanResult
+	resolver := studioFileImportResolver()
 	if scenario == "" {
-		plan, planned, err = document.PlanPaperWithAssetsContext(ctx, s.file, source, s.assetCatalog)
+		plan, planned, err = document.PlanPaperWithAssetsAndImportsContext(ctx, s.file, source, s.assetCatalog, resolver)
 	} else {
-		plan, planned, err = document.PlanPaperScenarioWithAssetsContext(ctx, s.file, source, scenario, s.assetCatalog)
+		plan, planned, err = document.PlanPaperScenarioWithAssetsAndImportsContext(ctx, s.file, source, scenario, s.assetCatalog, resolver)
 	}
 	revision := "source-" + hex.EncodeToString(hash[:8])
 	pages := 0
@@ -265,10 +268,42 @@ func (s *studioServer) current(ctx context.Context, requestedScenario string) (*
 		diagnostics: append([]document.PaperDiagnostic(nil), planned.Diagnostics...), plan: plan, pages: pages,
 		pageSummary: pageSummary, baseline: s.previous, captures: make(map[string]document.PaperPlanPageSVG)}
 	_, alreadyCached := s.snapshots[scenario]
-	if (alreadyCached || len(s.snapshots) < studioScenarioCacheLimit) && (scenario == "" || (err == nil && planned.OK())) {
+	if !imports && (alreadyCached || len(s.snapshots) < studioScenarioCacheLimit) && (scenario == "" || (err == nil && planned.OK())) {
 		s.snapshots[scenario] = snapshot
 	}
 	return snapshot, nil
+}
+
+func hasPaperImports(ast paperlang.AST) bool {
+	if ast.Root == nil {
+		return false
+	}
+	for _, member := range ast.Root.Members {
+		if member.Property != nil && member.Property.Name == "import" {
+			return true
+		}
+	}
+	return false
+}
+
+func studioFileImportResolver() document.PaperImportResolver {
+	return func(importerFile, importPath string) (string, string, error) {
+		base := filepath.Dir(importerFile)
+		file := filepath.Clean(filepath.Join(base, filepath.FromSlash(importPath)))
+		input, err := os.Open(file)
+		if err != nil {
+			return "", "", err
+		}
+		defer input.Close()
+		encoded, err := io.ReadAll(io.LimitReader(input, studioSourceLimit+1))
+		if err != nil {
+			return "", "", err
+		}
+		if len(encoded) > studioSourceLimit {
+			return "", "", fmt.Errorf("imported source exceeds %d bytes", studioSourceLimit)
+		}
+		return file, string(encoded), nil
+	}
 }
 
 func readStudioSource(file string) (string, [32]byte, error) {
@@ -363,6 +398,8 @@ func (s *studioServer) handlePage(w http.ResponseWriter, r *http.Request) {
 	kind := "display"
 	if strings.HasSuffix(name, ".geometry.svg") {
 		kind, name = "geometry", strings.TrimSuffix(name, ".geometry.svg")
+	} else if strings.HasSuffix(name, ".render") {
+		kind, name = "wasm", strings.TrimSuffix(name, ".render")
 	} else if strings.HasSuffix(name, ".svg") {
 		name = strings.TrimSuffix(name, ".svg")
 	} else {
@@ -387,6 +424,28 @@ func (s *studioServer) handlePage(w http.ResponseWriter, r *http.Request) {
 	}
 	if int(page64) > snapshot.pages {
 		http.NotFound(w, r)
+		return
+	}
+	if kind == "wasm" {
+		renderRequest := document.DefaultPaperPlanWebRenderRequest(uint32(page64))
+		if rawDPI := r.URL.Query().Get("dpi"); rawDPI != "" {
+			dpi, dpiErr := strconv.ParseUint(rawDPI, 10, 32)
+			if dpiErr != nil || dpi < 36 || dpi > 600 {
+				writeStudioError(w, http.StatusBadRequest, errors.New("paper-studio: render DPI must be between 36 and 600"))
+				return
+			}
+			renderRequest.DPI = uint32(dpi)
+		}
+		payload, payloadErr := snapshot.plan.WebDisplayRenderPayload(ctx, renderRequest)
+		if payloadErr != nil {
+			writeStudioError(w, http.StatusUnprocessableEntity, payloadErr)
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.gopdfkit.display-render")
+		w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+		w.Header().Set("ETag", `"`+snapshot.revision+`-wasm-`+name+`-`+strconv.FormatUint(uint64(renderRequest.DPI), 10)+`"`)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(payload)
 		return
 	}
 	cacheKey := kind + ":" + name

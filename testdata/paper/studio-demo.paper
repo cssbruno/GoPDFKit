@@ -1,6 +1,7 @@
 document @studio-demo:
   title: "Paper Studio"
   language: "en"
+  import: "studio-design.paper"
   scenario @review:
   scenario @accessibility:
   page @sheet:
@@ -10,35 +11,23 @@ document @studio-demo:
     body @content:
       heading @title:
         level: 1
-        font: "Helvetica"
-        size: 28pt
-        line-height: 34pt
+        style: "@title"
         text: "A document you can inspect"
       paragraph @intro:
-        font: "Helvetica"
-        size: 12pt
-        line-height: 18pt
+        style: "@body"
         text: "Every visible mark comes from the immutable Paper display plan. Click the page to trace its source and layout decision."
       heading @details:
         level: 2
-        font: "Helvetica"
-        size: 16pt
-        line-height: 22pt
+        style: "@section"
         text: "Exact by construction"
       paragraph @body-copy:
-        font: "Courier"
-        size: 10pt
-        line-height: 15pt
+        style: "@code"
         text: "Source -> semantic tree -> planner -> display list -> preview and PDF."
       page-break:
       heading @second-page:
         level: 2
-        font: "Helvetica"
-        size: 18pt
-        line-height: 24pt
+        style: "@second-page"
         text: "Second page"
       paragraph @review-copy:
-        font: "Helvetica"
-        size: 12pt
-        line-height: 18pt
+        style: "@body"
         text: "Review mode overlays fragments, diagnostics, and committed page-break evidence without using browser layout."

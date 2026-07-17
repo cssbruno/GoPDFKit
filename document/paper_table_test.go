@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -161,5 +161,29 @@ func TestPaperTableMultiPageRepeatHeaderSplitSpansAndNestedContent(t *testing.T)
 	rendered, err := target.WritePaperPlan(plan)
 	if err != nil || !rendered.OK() || rendered.Pages != result.Pages {
 		t.Fatalf("paint=%#v %v", rendered, err)
+	}
+}
+
+func TestPaperFixedTableTracksRemainValidWhenPageChangesToA4(t *testing.T) {
+	source := "document @report:\n" +
+		"  page @sheet:\n" +
+		"    width: 595.275590551pt\n" +
+		"    height: 841.88976378pt\n" +
+		"    margin: 6pt\n" +
+		"    body @body:\n" +
+		"      table @ledger:\n" +
+		"        table-track @left:\n" +
+		"          width: 84pt\n" +
+		"        table-track @right:\n" +
+		"          width: 84pt\n" +
+		"        table-row @row:\n" +
+		"          cell @label:\n" +
+		"            text: \"Label\"\n" +
+		"          cell @value:\n" +
+		"            text: \"Value\"\n"
+
+	plan, result, err := PlanPaper("a4-fixed-table.paper", source)
+	if err != nil || !result.OK() || result.Pages != 1 || plan.Hash() == "" {
+		t.Fatalf("PlanPaper(A4 fixed table) = %#v, %v", result, err)
 	}
 }

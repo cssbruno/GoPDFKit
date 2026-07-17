@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 )
@@ -61,6 +62,35 @@ func TestMemoryPlanStoreRoundTripIsCanonicalDetachedAndIdempotent(t *testing.T) 
 	}
 	if string(store.items[hash]) != string(encoded) {
 		t.Fatal("store did not retain the exact canonical serialization")
+	}
+}
+
+func TestMemoryPlanStoreRoundTripsRetainedGridTracks(t *testing.T) {
+	result, err := PlanGrid(GridPlanInput{
+		PageSize: Size{Width: 100, Height: 100}, Region: Rect{Width: 100, Height: 20},
+		Columns: []GridTrack{{Kind: GridTrackFixed, Size: 40}, {Kind: GridTrackFixed, Size: 55}},
+		Rows:    []GridTrack{{Kind: GridTrackFixed, Size: 20}}, ColumnGap: 5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewMemoryPlanStore(DefaultPlanStoreLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash, err := store.Put(result.Plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.Get(hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := loaded.Projection().GridTracks, result.Plan.Projection().GridTracks; !reflect.DeepEqual(got, want) {
+		t.Fatalf("round-tripped grid tracks = %+v, want %+v", got, want)
+	}
+	if got, want := loaded.Projection().PageRegions, result.Plan.Projection().PageRegions; !reflect.DeepEqual(got, want) {
+		t.Fatalf("round-tripped page regions = %+v, want %+v", got, want)
 	}
 }
 

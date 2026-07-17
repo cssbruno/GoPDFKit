@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -49,6 +49,12 @@ type PaperSetPageMarginRequest struct {
 	Guard    PaperMutationGuard      `json:"guard"`
 	Property PaperPageMarginProperty `json:"property"`
 	Points   float64                 `json:"points"`
+}
+
+type PaperSetPageSizeRequest struct {
+	Guard        PaperMutationGuard `json:"guard"`
+	WidthPoints  float64            `json:"width_points"`
+	HeightPoints float64            `json:"height_points"`
 }
 
 type PaperCanvasAnchorProperty string
@@ -144,6 +150,29 @@ func (w *Workspace) PaperSetPageMargin(request PaperSetPageMarginRequest) (Paper
 	return w.applyPaperMutation("set_page_margin", request.Guard, opened, revision, []string{request.Guard.Target}, []paperedit.Operation{operation}, "INVALID_PAGE_MASTER")
 }
 
+// PaperSetPageSize writes explicit physical page dimensions. Presets are
+// resolved by the caller before this boundary so the retained source remains
+// unambiguous and custom sizes use the identical mutation path.
+func (w *Workspace) PaperSetPageSize(request PaperSetPageSizeRequest) (PaperMutationResult, error) {
+	opened, revision, err := w.mutationRevision(request.Guard)
+	if err != nil {
+		return PaperMutationResult{}, err
+	}
+	node := findNodeByID(revision.parsed.AST.Root, request.Guard.Target)
+	if node == nil || node.Kind != paperlang.NodePage {
+		return PaperMutationResult{}, workspaceError("INVALID_PAGE_SIZE_TARGET", "page-size handles require an exact page source node", paperedit.ErrInvalidOperation)
+	}
+	if !finiteLayoutHandle(request.WidthPoints) || !finiteLayoutHandle(request.HeightPoints) ||
+		request.WidthPoints <= 0 || request.HeightPoints <= 0 || request.WidthPoints > 1_000_000 || request.HeightPoints > 1_000_000 {
+		return PaperMutationResult{}, workspaceError("INVALID_PAGE_SIZE_VALUE", "page dimensions must be finite positive point values", paperedit.ErrInvalidOperation)
+	}
+	operations := []paperedit.Operation{
+		paperedit.SetProperty{Target: request.Guard.Target, Name: "width", Value: paperedit.UnitValue(request.WidthPoints, "pt")},
+		paperedit.SetProperty{Target: request.Guard.Target, Name: "height", Value: paperedit.UnitValue(request.HeightPoints, "pt")},
+	}
+	return w.applyPaperMutation("set_page_size", request.Guard, opened, revision, []string{request.Guard.Target}, operations, "INVALID_PAGE_SIZE")
+}
+
 type PaperSetPageRegionRequest struct {
 	Guard    PaperMutationGuard `json:"guard"`
 	Property string             `json:"property"`
@@ -208,6 +237,50 @@ type PaperSetBoxPropertyRequest struct {
 	Property PaperBoxProperty   `json:"property"`
 	Points   float64            `json:"points,omitempty"`
 	Color    string             `json:"color,omitempty"`
+}
+
+// PaperTextProperty is the closed authored typography vocabulary exposed by
+// text-style handles. Font replacement is explicit and never automatic.
+type PaperTextProperty string
+
+const PaperTextFont PaperTextProperty = "font"
+
+type PaperSetTextPropertyRequest struct {
+	Guard    PaperMutationGuard `json:"guard"`
+	Property PaperTextProperty  `json:"property"`
+	Text     string             `json:"text"`
+}
+
+func canonicalPaperCoreFont(value string) (string, bool) {
+	switch value {
+	case "Courier", "Helvetica", "Times", "Symbol", "ZapfDingbats":
+		return value, true
+	default:
+		return "", false
+	}
+}
+
+// PaperSetTextProperty replaces one authored text-style property. The source
+// may fail compilation because of the old font; the replacement is published
+// only when the complete candidate compiles.
+func (w *Workspace) PaperSetTextProperty(request PaperSetTextPropertyRequest) (PaperMutationResult, error) {
+	opened, revision, err := w.mutationRevision(request.Guard)
+	if err != nil {
+		return PaperMutationResult{}, err
+	}
+	node := findNodeByID(revision.parsed.AST.Root, request.Guard.Target)
+	if node == nil || node.Kind != paperlang.NodeParagraph && node.Kind != paperlang.NodeHeading && node.Kind != paperlang.NodeList {
+		return PaperMutationResult{}, workspaceError("INVALID_TEXT_STYLE_TARGET", "text-style handles require a paragraph, heading, or list source node", paperedit.ErrInvalidOperation)
+	}
+	if request.Property != PaperTextFont {
+		return PaperMutationResult{}, workspaceError("INVALID_TEXT_STYLE_PROPERTY", "text-style property is outside the closed handle vocabulary", paperedit.ErrInvalidOperation)
+	}
+	font, ok := canonicalPaperCoreFont(request.Text)
+	if !ok {
+		return PaperMutationResult{}, workspaceError("INVALID_TEXT_STYLE_VALUE", "font must name an existing supported core font", paperedit.ErrInvalidOperation)
+	}
+	operation := paperedit.SetProperty{Target: request.Guard.Target, Name: string(request.Property), Value: paperedit.StringValue(font)}
+	return w.applyPaperMutation("set_text_property", request.Guard, opened, revision, []string{request.Guard.Target}, []paperedit.Operation{operation}, "INVALID_TEXT_STYLE")
 }
 
 // PaperSetBoxProperty updates one box handle on a paragraph, heading, or list.

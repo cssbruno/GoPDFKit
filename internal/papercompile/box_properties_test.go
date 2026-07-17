@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -15,6 +15,8 @@ func TestCompileLowersReadableBoxProperties(t *testing.T) {
 		"  page @sheet:\n" +
 		"    body @body:\n" +
 		"      paragraph @box:\n" +
+		"        margin: 3pt\n" +
+		"        margin-right: 5pt\n" +
 		"        padding: 8pt\n" +
 		"        padding-left: 12pt\n" +
 		"        border-width: 1pt\n" +
@@ -32,6 +34,9 @@ func TestCompileLowersReadableBoxProperties(t *testing.T) {
 		t.Fatalf("Compile() diagnostics = %#v", result.Diagnostics)
 	}
 	box := result.Document.Body[0].(layout.ParagraphBlock).Box
+	if box.Margin != (layout.Spacing{Top: 3, Right: 5, Bottom: 3, Left: 3}) {
+		t.Fatalf("margin = %#v", box.Margin)
+	}
 	if box.Padding != (layout.Spacing{Top: 8, Right: 8, Bottom: 8, Left: 12}) {
 		t.Fatalf("padding = %#v", box.Padding)
 	}
@@ -47,6 +52,7 @@ func TestCompileLowersReadableBoxProperties(t *testing.T) {
 
 func TestCompileRejectsInvalidReadableBoxProperties(t *testing.T) {
 	for _, source := range []string{
+		"document:\n  page:\n    body:\n      paragraph:\n        margin: -1pt\n        text: \"x\"\n",
 		"document:\n  page:\n    body:\n      paragraph:\n        padding: -1pt\n        text: \"x\"\n",
 		"document:\n  page:\n    body:\n      paragraph:\n        background: \"red\"\n        text: \"x\"\n",
 	} {

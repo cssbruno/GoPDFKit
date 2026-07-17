@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -104,11 +104,11 @@ func TestHTMLUnifiedTextCohortResolvedInlineStylesWhitespaceDisplayRasterAndPDF(
 	}
 }
 
-func TestHTMLUnifiedTextCohortRejectsMetricChangingInlineStyleAsWholeFragment(t *testing.T) {
+func TestHTMLUnifiedTextCohortPlansMetricChangingInlineStyleAndDecoration(t *testing.T) {
 	for _, source := range []string{
 		`<p>before <span style="font-size:18pt">larger</span> after</p>`,
+		`<p>before <span style="font-size:16pt;line-height:20pt">taller</span> after</p>`,
 		`<p style="font-family:Helvetica">before <strong>wide MMMM</strong> after</p>`,
-		`<p><span style="text-decoration:underline">underlined</span></p>`,
 	} {
 		compiled, err := CompileHTML(source)
 		if err != nil {
@@ -116,9 +116,108 @@ func TestHTMLUnifiedTextCohortRejectsMetricChangingInlineStyleAsWholeFragment(t 
 		}
 		planner := paginationTestDocument(t, 100)
 		plan, err := planner.PlanCompiledHTML(12, compiled)
-		if !errors.Is(err, ErrHTMLPlanUnsupported) || plan.Hash() != "" || planner.PageCount() != 0 {
+		if err != nil || plan.Hash() == "" || plan.PageCount() == 0 || planner.PageCount() != 0 {
 			t.Fatalf("metric-changing source %q = plan %q pages %d, %v", source, plan.Hash(), planner.PageCount(), err)
 		}
+		var plannedText strings.Builder
+		var previousLine uint32
+		for index, run := range plan.plan.Projection().GlyphRuns {
+			if index != 0 && run.Line != previousLine {
+				plannedText.WriteByte(' ')
+			}
+			plannedText.WriteString(run.Codes)
+			previousLine = run.Line
+		}
+		wantText := "before larger after"
+		if strings.Contains(source, "taller") {
+			wantText = "before taller after"
+		} else if strings.Contains(source, "wide") {
+			wantText = "before wide MMMM after"
+		}
+		if got := strings.Join(strings.Fields(plannedText.String()), " "); got != wantText {
+			t.Fatalf("metric-changing source %q lost wrapped text: got %q want %q", source, got, wantText)
+		}
+		if strings.Contains(source, "font-size") {
+			var hasBaseSize, hasLargerSize bool
+			largerSize := layoutengine.Fixed(18 * layoutengine.FixedScale)
+			if strings.Contains(source, "16pt") {
+				largerSize = layoutengine.Fixed(16 * layoutengine.FixedScale)
+			}
+			for _, run := range plan.plan.Projection().GlyphRuns {
+				hasBaseSize = hasBaseSize || run.FontSize == layoutengine.Fixed(12*layoutengine.FixedScale)
+				hasLargerSize = hasLargerSize || run.FontSize == largerSize
+			}
+			if !hasBaseSize || !hasLargerSize {
+				t.Fatalf("metric-changing source %q did not retain mixed glyph sizes: %#v", source, plan.plan.Projection().GlyphRuns)
+			}
+		} else if len(plan.plan.Projection().Fonts) < 2 {
+			t.Fatalf("metric-changing source %q did not retain distinct core font resources", source)
+		}
+		if _, err := plan.CaptureDisplayPage(1); err != nil {
+			t.Fatalf("metric-changing source %q display capture: %v", source, err)
+		}
+	}
+	compiled, err := CompileHTML(`<p><span style="text-decoration:underline">underlined</span> <span style="text-decoration:line-through">struck</span></p>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planner := paginationTestDocument(t, 100)
+	plan, err := planner.PlanCompiledHTML(12, compiled)
+	if err != nil || plan.Hash() == "" || plan.PageCount() == 0 || planner.PageCount() != 0 {
+		t.Fatalf("decoration source = plan %q pages %d, %v", plan.Hash(), planner.PageCount(), err)
+	}
+	projection := plan.plan.Projection()
+	var strokes int
+	for _, command := range projection.Commands {
+		if command.Kind == layoutengine.CommandStrokePath {
+			strokes++
+		}
+	}
+	if strokes != 2 {
+		t.Fatalf("decoration source stroke commands = %d, want 2", strokes)
+	}
+	if _, err := plan.CaptureDisplayPage(1); err != nil {
+		t.Fatalf("decoration display capture: %v", err)
+	}
+	target := MustNew(WithUnit(UnitPoint), WithNoCompression(), WithDeterministicOutput())
+	if _, err := target.WriteLayoutDocumentPlan(plan); err != nil {
+		t.Fatalf("decoration PDF replay: %v", err)
+	}
+}
+
+func TestHTMLUnifiedTableCellPlansMetricChangingInlineStyle(t *testing.T) {
+	compiled, err := CompileHTML(`<table><tbody><tr><td>before <span style="font-size:18pt">larger</span> after</td></tr></tbody></table>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planner := paginationTestDocument(t, 160)
+	plan, err := planner.PlanCompiledHTML(12, compiled)
+	if err != nil || plan.Hash() == "" || plan.PageCount() == 0 || planner.PageCount() != 0 {
+		t.Fatalf("metric-changing table cell = plan %q pages %d, %v", plan.Hash(), planner.PageCount(), err)
+	}
+	var hasLargerSize bool
+	for _, run := range plan.plan.Projection().GlyphRuns {
+		hasLargerSize = hasLargerSize || run.FontSize == layoutengine.Fixed(18*layoutengine.FixedScale)
+	}
+	if !hasLargerSize {
+		t.Fatalf("metric-changing table cell did not retain the inline font size: %#v", plan.plan.Projection().GlyphRuns)
+	}
+	decorated, err := CompileHTML(`<table><tbody><tr><td><span style="text-decoration:underline">underlined</span></td></tr></tbody></table>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoratedPlan, err := paginationTestDocument(t, 160).PlanCompiledHTML(12, decorated)
+	if err != nil || decoratedPlan.Hash() == "" {
+		t.Fatalf("decorated metric-changing table cell = plan %q, %v", decoratedPlan.Hash(), err)
+	}
+	var strokes int
+	for _, command := range decoratedPlan.plan.Projection().Commands {
+		if command.Kind == layoutengine.CommandStrokePath {
+			strokes++
+		}
+	}
+	if strokes != 1 {
+		t.Fatalf("decorated table cell stroke commands = %d, want 1", strokes)
 	}
 }
 

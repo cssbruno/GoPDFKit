@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperlang
@@ -274,7 +274,7 @@ func (p *paperParser) validateNode(node *Node, depth int) {
 	} else if node.Value != nil {
 		p.add("PAPER_NODE_VALUE", fmt.Sprintf("%s does not accept an inline scalar", node.Kind), "move the value into a text child or named property", node.Value.Span)
 	}
-	if node.Kind != NodeText && node.Kind != NodeValue && node.Kind != NodeArg && node.Kind != NodePageBreak && node.Kind != NodeScenario && node.Kind != NodeObject && node.Kind != NodeKeyedList && node.Kind != NodeTheme && node.Kind != NodeScope && len(node.Members) == 0 {
+	if node.Kind != NodeText && node.Kind != NodeValue && node.Kind != NodeArg && node.Kind != NodePageBreak && node.Kind != NodeScenario && node.Kind != NodeObject && node.Kind != NodeKeyedList && node.Kind != NodeTheme && node.Kind != NodeStyle && node.Kind != NodeScope && len(node.Members) == 0 {
 		p.add("PAPER_EMPTY_BLOCK", fmt.Sprintf("%s has no indented content", node.Kind), "add an indented child or property", node.HeaderSpan)
 	}
 	if (node.Kind == NodeScenario || isFixtureNodeKind(node.Kind)) && node.ID == "" {
@@ -282,6 +282,9 @@ func (p *paperParser) validateNode(node *Node, depth int) {
 	}
 	if (node.Kind == NodeTheme || node.Kind == NodeToken || node.Kind == NodeScope) && node.ID == "" {
 		p.add("PAPER_THEME_NAME", fmt.Sprintf("%s requires a readable @name", node.Kind), "add an @name after the declaration kind", node.HeaderSpan)
+	}
+	if node.Kind == NodeStyle && node.ID == "" {
+		p.add("PAPER_STYLE_NAME", "style requires a readable @name", "write style @body:", node.HeaderSpan)
 	}
 	if node.Kind == NodeRepeat && node.ID == "" {
 		p.add("PAPER_REPEAT_NAME", "repeat requires a readable @name", "write repeat @name:", node.HeaderSpan)
@@ -306,7 +309,7 @@ func (p *paperParser) validateNode(node *Node, depth int) {
 func allowedChild(parent, child NodeKind) bool {
 	switch parent {
 	case NodeDocument:
-		return child == NodePage || child == NodeComponent || child == NodeSchema || child == NodeScenario || child == NodeTheme
+		return child == NodePage || child == NodeComponent || child == NodeSchema || child == NodeScenario || child == NodeTheme || child == NodeStyle
 	case NodePage:
 		return child == NodeBody || child == NodeHeader || child == NodeFooter
 	case NodeHeader, NodeFooter:
@@ -349,6 +352,8 @@ func allowedChild(parent, child NodeKind) bool {
 		return isFixtureNodeKind(child)
 	case NodeTheme, NodeScope:
 		return child == NodeToken || child == NodeScope
+	case NodeStyle:
+		return false
 	case NodeText, NodeArg, NodeImage, NodeTableTrack, NodeAnchor:
 		return false
 	default:
@@ -400,6 +405,8 @@ func hierarchyHint(parent NodeKind) string {
 		return "scenario data accepts value, object, and keyed-list declarations"
 	case NodeTheme, NodeScope:
 		return "themes and lexical scopes accept token and nested scope declarations"
+	case NodeStyle:
+		return "styles accept named design properties"
 	case NodeHeading, NodeParagraph:
 		return "heading and paragraph accept text children"
 	default:
@@ -451,7 +458,7 @@ func isFixtureNodeKind(kind NodeKind) bool {
 }
 
 func isContextualNodeKind(kind NodeKind) bool {
-	return isFixtureNodeKind(kind) || kind == NodeTheme || kind == NodeToken || kind == NodeScope
+	return isFixtureNodeKind(kind) || kind == NodeTheme || kind == NodeStyle || kind == NodeToken || kind == NodeScope
 }
 
 func scopedReadableID(kind NodeKind) bool {

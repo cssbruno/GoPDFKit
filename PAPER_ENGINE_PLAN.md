@@ -1004,8 +1004,9 @@ The component palette is typed and slot-aware. It searches by capability and
 shows previews using the active theme and scenario. A binding picker exposes
 schema paths, types, optionality, formatting, and current fixture values.
 
-The resource manager covers font fallback, embedding and license status, asset
-hashes, replacement, image crop focus, missing-resource recovery, and which
+The resource manager covers explicit missing-font replacement, embedding and
+license status, asset hashes, replacement, image crop focus,
+missing-resource recovery, and which
 nodes/scenarios use each resource. Basic component insertion, schema binding,
 and resource management ship with semantic direct manipulation; they are not
 deferred to the later team ecosystem.
@@ -1044,8 +1045,11 @@ agent adapter    the same RPC exposed as tools
 ```
 
 The frontend never performs substitute CSS layout. A future web shell uses the
-same remote engine. WASM may assist parsing or editing but must not become a
-second layout implementation.
+same remote planning engine. The shared direct display-list rasterizer may be
+compiled to WASM for visible-page rendering: it consumes the immutable,
+revision-bound plan and content-addressed resources and performs no measuring,
+wrapping, positioning, fragmentation, or pagination. WASM must remain a build
+of the shared renderer, never a second layout implementation.
 
 ## 13. Agent tool protocol
 

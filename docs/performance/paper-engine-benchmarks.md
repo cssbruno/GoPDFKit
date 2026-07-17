@@ -19,6 +19,11 @@ comparable stages over a deterministic 48-paragraph fixture:
 - `BenchmarkPaperEnginePainterTyped` reuses one immutable plan and measures
   production preflight plus positioned-command replay. It does not serialize
   the final PDF.
+- `BenchmarkPaperEngineProductionDefault` measures the public typed
+  `WriteDocument` route after the unified default cutover, including planning,
+  painting, and deterministic PDF serialization. It is calibrated separately
+  so the public entry point cannot regress while the lower-level cohorts stay
+  within their own budgets.
 - The three `BenchmarkPaperEngineEndToEnd*` cases measure planning, painting,
   and deterministic PDF serialization from typed, reusable compiled HTML, and
   `.paper` inputs. The `.paper` case includes parsing and semantic compilation;

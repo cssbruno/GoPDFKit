@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -28,7 +28,7 @@ func TestCoreGlyphPlanOwnsNestedAdvances(t *testing.T) {
 		t.Fatalf("projection advance mutation reached plan: got %d", got)
 	}
 	encoded, err := plan.CanonicalJSON()
-	if err != nil || !strings.Contains(string(encoded), `"schema_version":15`) ||
+	if err != nil || !strings.Contains(string(encoded), `"schema_version":16`) ||
 		!strings.Contains(string(encoded), `"planner_version":"layoutengine/0.1"`) ||
 		!strings.Contains(string(encoded), `"glyph_runs"`) || !strings.Contains(string(encoded), `"payload":0`) {
 		t.Fatalf("CanonicalJSON() = %s, %v", encoded, err)

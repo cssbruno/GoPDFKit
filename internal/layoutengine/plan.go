@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -14,7 +14,7 @@ import (
 
 const (
 	// LayoutPlanSchemaVersion pins the canonical JSON shape.
-	LayoutPlanSchemaVersion uint16 = 15
+	LayoutPlanSchemaVersion uint16 = 16
 	// PlannerVersion pins automatic measurement, fragmentation, and pagination
 	// semantics independently from the storage shape.
 	PlannerVersion = "layoutengine/0.1"
@@ -71,7 +71,9 @@ type Fragment struct {
 	Instance     InstanceID           `json:"instance"`
 	Page         uint32               `json:"page"`
 	Region       RegionID             `json:"region"`
+	MarginBox    Rect                 `json:"margin_box"`
 	BorderBox    Rect                 `json:"border_box"`
+	PaddingBox   Rect                 `json:"padding_box"`
 	ContentBox   Rect                 `json:"content_box"`
 	Source       SourceSpan           `json:"source"`
 	Continuation FragmentContinuation `json:"continuation"`
@@ -89,6 +91,38 @@ type PlannedLine struct {
 	Bounds   Rect       `json:"bounds"`
 	Baseline Fixed      `json:"baseline"`
 	Source   SourceSpan `json:"source"`
+}
+
+// PlannedPageRegion is one exact enabled page-master band. Master is optional
+// for planners that receive only a concrete body rectangle.
+type PlannedPageRegion struct {
+	Page   uint32       `json:"page"`
+	Region RegionID     `json:"region"`
+	Bounds Rect         `json:"bounds"`
+	Master PageMasterID `json:"master,omitempty"`
+}
+
+// GridTrackAxis identifies one resolved column or row track.
+type GridTrackAxis string
+
+const (
+	GridTrackColumn GridTrackAxis = "column"
+	GridTrackRow    GridTrackAxis = "row"
+)
+
+func (axis GridTrackAxis) valid() bool { return axis == GridTrackColumn || axis == GridTrackRow }
+
+// PlannedGridTrack is exact, page-positioned track geometry retained after
+// sizing. Group is a one-based plan-local grid occurrence; Index is zero-based
+// within one group and axis. GapAfter is the resolved gap to the next track.
+type PlannedGridTrack struct {
+	Group    uint32        `json:"group"`
+	Page     uint32        `json:"page"`
+	Region   RegionID      `json:"region"`
+	Axis     GridTrackAxis `json:"axis"`
+	Index    uint32        `json:"index"`
+	Bounds   Rect          `json:"bounds"`
+	GapAfter Fixed         `json:"gap_after,omitempty"`
 }
 
 // DisplayCommandKind identifies a no-layout painter operation. Payload is an
@@ -168,6 +202,8 @@ type LayoutPlanInput struct {
 	Pages               []PlannedPage
 	Fragments           []Fragment
 	Lines               []PlannedLine
+	PageRegions         []PlannedPageRegion
+	GridTracks          []PlannedGridTrack
 	Fonts               []CoreFontResource
 	GlyphRuns           []CoreGlyphRun
 	ImageResources      []ImageResource
@@ -195,6 +231,8 @@ type LayoutPlan struct {
 	pages                  []PlannedPage
 	fragments              []Fragment
 	lines                  []PlannedLine
+	pageRegions            []PlannedPageRegion
+	gridTracks             []PlannedGridTrack
 	fonts                  []CoreFontResource
 	glyphRuns              []CoreGlyphRun
 	imageResources         []ImageResource
@@ -227,6 +265,8 @@ type LayoutPlanProjection struct {
 	Pages                  []PlannedPage                 `json:"pages,omitempty"`
 	Fragments              []Fragment                    `json:"fragments,omitempty"`
 	Lines                  []PlannedLine                 `json:"lines,omitempty"`
+	PageRegions            []PlannedPageRegion           `json:"page_regions,omitempty"`
+	GridTracks             []PlannedGridTrack            `json:"grid_tracks,omitempty"`
 	Fonts                  []CoreFontResource            `json:"fonts,omitempty"`
 	GlyphRuns              []CoreGlyphRun                `json:"glyph_runs,omitempty"`
 	ImageResources         []ImageResource               `json:"image_resources,omitempty"`
@@ -261,6 +301,8 @@ func NewLayoutPlan(input LayoutPlanInput) (LayoutPlan, error) {
 		pages:             cloneSlice(input.Pages),
 		fragments:         cloneSlice(input.Fragments),
 		lines:             cloneSlice(input.Lines),
+		pageRegions:       cloneSlice(input.PageRegions),
+		gridTracks:        cloneSlice(input.GridTracks),
 		fonts:             cloneFontResources(input.Fonts),
 		glyphRuns:         cloneCoreGlyphRuns(input.GlyphRuns),
 		imageResources:    cloneSlice(input.ImageResources),
@@ -277,6 +319,14 @@ func NewLayoutPlan(input LayoutPlanInput) (LayoutPlan, error) {
 		semanticNodes:     cloneSlice(input.SemanticNodes),
 		semanticFragments: cloneSlice(input.SemanticFragments),
 		readingOrder:      cloneSlice(input.ReadingOrder),
+	}
+	for index := range plan.fragments {
+		if plan.fragments[index].MarginBox == (Rect{}) {
+			plan.fragments[index].MarginBox = plan.fragments[index].BorderBox
+		}
+		if plan.fragments[index].PaddingBox == (Rect{}) {
+			plan.fragments[index].PaddingBox = plan.fragments[index].ContentBox
+		}
 	}
 	if input.DeterministicInputs != nil {
 		plan.deterministicInputs = cloneDeterministicInputs(*input.DeterministicInputs)
@@ -331,6 +381,9 @@ func (p LayoutPlan) Validate() error {
 	if err := validateDisplayGraphics(p.paths, p.transforms, p.clips, p.fills, p.strokes); err != nil {
 		return err
 	}
+	if err := validatePlannedGridTracks(p.gridTracks, len(p.pages)); err != nil {
+		return err
+	}
 	fragmentIDs := make(map[FragmentID]Fragment, len(p.fragments))
 	fragmentLineCounts := make(map[FragmentID]uint32, len(p.fragments))
 	nodeKeys := make(map[NodeID]NodeKey)
@@ -368,8 +421,17 @@ func (p LayoutPlan) Validate() error {
 		if err := fragment.BorderBox.Validate(); err != nil {
 			return planError(path+".border_box", err.Error())
 		}
+		if err := fragment.MarginBox.Validate(); err != nil {
+			return planError(path+".margin_box", err.Error())
+		}
+		if err := fragment.PaddingBox.Validate(); err != nil {
+			return planError(path+".padding_box", err.Error())
+		}
 		if err := fragment.ContentBox.Validate(); err != nil {
 			return planError(path+".content_box", err.Error())
+		}
+		if !fragmentBoxContains(fragment.MarginBox, fragment.BorderBox) || !fragmentBoxContains(fragment.BorderBox, fragment.PaddingBox) || !fragmentBoxContains(fragment.PaddingBox, fragment.ContentBox) {
+			return planError(path, "box-model rectangles are not nested margin/border/padding/content")
 		}
 		if err := fragment.Source.Validate(); err != nil {
 			return planError(path+".source", err.Error())
@@ -501,6 +563,9 @@ func (p LayoutPlan) Validate() error {
 	}
 	if fragmentCursor != len(p.fragments) || lineCursor != len(p.lines) || commandCursor != len(p.commands) {
 		return planError("pages", "page ranges do not cover the plan")
+	}
+	if err := validatePlannedPageRegions(p.pageRegions, p.pages); err != nil {
+		return err
 	}
 	if err := validatePlannedLinks(p.pages, fragmentIDs, p.destinations, p.links); err != nil {
 		return err
@@ -932,6 +997,92 @@ func planError(path, problem string) error {
 	return fmt.Errorf("layoutengine: invalid layout plan at %s: %s", path, problem)
 }
 
+func fragmentBoxContains(outer, inner Rect) bool {
+	outerRight, outerRightErr := outer.Right()
+	outerBottom, outerBottomErr := outer.Bottom()
+	innerRight, innerRightErr := inner.Right()
+	innerBottom, innerBottomErr := inner.Bottom()
+	return outerRightErr == nil && outerBottomErr == nil && innerRightErr == nil && innerBottomErr == nil &&
+		inner.X >= outer.X && inner.Y >= outer.Y && innerRight <= outerRight && innerBottom <= outerBottom
+}
+
+func validatePlannedGridTracks(tracks []PlannedGridTrack, pages int) error {
+	var previousGroup uint32
+	var groupPage uint32
+	var previousAxis GridTrackAxis
+	var nextIndex uint32
+	for index, track := range tracks {
+		path := fmt.Sprintf("grid_tracks[%d]", index)
+		if track.Group == 0 || track.Page == 0 || uint64(track.Page) > uint64(pages) {
+			return planError(path, "has an absent group or invalid page")
+		}
+		if !track.Region.Valid() || !track.Axis.valid() {
+			return planError(path, "has an invalid region or axis")
+		}
+		if err := track.Bounds.Validate(); err != nil || track.Bounds.IsEmpty() {
+			return planError(path+".bounds", "track bounds must have positive extents")
+		}
+		if track.GapAfter < 0 {
+			return planError(path+".gap_after", "gap must be non-negative")
+		}
+		if track.Group != previousGroup {
+			if track.Group != previousGroup+1 || track.Axis != GridTrackColumn || track.Index != 0 {
+				return planError(path, "groups must be consecutive and begin with column zero")
+			}
+			previousGroup, groupPage, previousAxis, nextIndex = track.Group, track.Page, track.Axis, 1
+			continue
+		}
+		if track.Page != groupPage {
+			return planError(path, "one grid group spans multiple pages")
+		}
+		if track.Axis != previousAxis {
+			if previousAxis != GridTrackColumn || track.Axis != GridTrackRow || track.Index != 0 {
+				return planError(path, "row tracks must follow all column tracks")
+			}
+			previousAxis, nextIndex = track.Axis, 1
+			continue
+		}
+		if track.Index != nextIndex {
+			return planError(path, "track indexes are not consecutive")
+		}
+		nextIndex++
+	}
+	return nil
+}
+
+func validatePlannedPageRegions(regions []PlannedPageRegion, pages []PlannedPage) error {
+	var previousPage uint32
+	previousOrder := -1
+	for index, region := range regions {
+		path := fmt.Sprintf("page_regions[%d]", index)
+		if region.Page == 0 || uint64(region.Page) > uint64(len(pages)) || !region.Region.Valid() {
+			return planError(path, "has an invalid page or region")
+		}
+		if err := region.Bounds.Validate(); err != nil || region.Bounds.IsEmpty() {
+			return planError(path+".bounds", "region bounds must have positive extents")
+		}
+		if region.Master != "" && !region.Master.valid() {
+			return planError(path+".master", "master ID is invalid")
+		}
+		right, rightErr := region.Bounds.Right()
+		bottom, bottomErr := region.Bounds.Bottom()
+		page := pages[region.Page-1]
+		if rightErr != nil || bottomErr != nil || region.Bounds.X < 0 || region.Bounds.Y < 0 || right > page.Size.Width || bottom > page.Size.Height {
+			return planError(path+".bounds", "region lies outside its page")
+		}
+		order := regionOrder(region.Region)
+		if region.Page < previousPage || region.Page == previousPage && order <= previousOrder {
+			return planError(path, "regions must be unique and ordered by page, header, body, footer")
+		}
+		if region.Page != previousPage {
+			previousPage, previousOrder = region.Page, order
+		} else {
+			previousOrder = order
+		}
+	}
+	return nil
+}
+
 // Projection returns a detached canonical projection.
 func (p LayoutPlan) Projection() LayoutPlanProjection {
 	projection := LayoutPlanProjection{
@@ -941,6 +1092,8 @@ func (p LayoutPlan) Projection() LayoutPlanProjection {
 		Pages:                  cloneSlice(p.pages),
 		Fragments:              cloneSlice(p.fragments),
 		Lines:                  cloneSlice(p.lines),
+		PageRegions:            cloneSlice(p.pageRegions),
+		GridTracks:             cloneSlice(p.gridTracks),
 		Fonts:                  cloneFontResources(p.fonts),
 		GlyphRuns:              cloneCoreGlyphRuns(p.glyphRuns),
 		ImageResources:         cloneSlice(p.imageResources),

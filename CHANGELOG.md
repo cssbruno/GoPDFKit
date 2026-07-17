@@ -177,7 +177,7 @@ and lower allocation pressure in document generation.
 ## v0.12.0 - 2026-07-09
 
 Intentionally breaking pre-v1 release that makes ownership and package
-boundaries explicit. See `MIGRATION_v0.12.md` for exact replacements.
+boundaries explicit. The exact API replacements are summarized below.
 
 ### Changed
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -263,6 +263,7 @@ func AttachCoreGlyphRuns(plan LayoutPlan, fonts []CoreFontResource, runs []CoreG
 	}
 	result, err := NewLayoutPlan(LayoutPlanInput{
 		Pages: projection.Pages, Fragments: projection.Fragments, Lines: projection.Lines,
+		PageRegions: projection.PageRegions, GridTracks: projection.GridTracks,
 		Fonts: fonts, GlyphRuns: runs, Commands: commands, Breaks: projection.Breaks,
 		Diagnostics:   projection.Diagnostics,
 		SemanticNodes: projection.SemanticNodes, SemanticFragments: projection.SemanticFragments, ReadingOrder: projection.ReadingOrder,

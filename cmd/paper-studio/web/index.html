@@ -44,6 +44,11 @@
         <div id="scenarios" class="scenarios"><span class="quiet">No scenario selected</span></div>
         <div class="panel-heading resources-heading"><span>Resources</span><span id="resource-count" class="quiet">0</span></div>
         <div id="resources" class="resources" aria-live="polite"><span class="quiet">No catalog assets</span></div>
+        <section id="tag-panel" class="tag-panel" aria-label="Final PDF tag tree">
+          <div class="panel-heading"><span>Final PDF tags</span><span id="tag-status" class="quiet">Not inspected</span></div>
+          <div id="tag-summary" class="tag-summary">Open Accessibility to inspect the serialized PDF.</div>
+          <div id="tag-tree" class="tag-tree" role="tree" aria-label="Verified final PDF structure tree"></div>
+        </section>
       </aside>
 
       <aside id="page-rail" class="page-rail" aria-label="Pages">
@@ -52,28 +57,10 @@
       </aside>
 
       <section id="canvas-region" class="canvas-region" aria-label="Document canvas">
-        <div class="canvas-toolbar">
-          <div class="zoom-control" role="group" aria-label="Canvas zoom">
-            <button id="zoom-out" aria-label="Zoom out">−</button>
-            <output id="zoom-value">100%</output>
-            <button id="zoom-in" aria-label="Zoom in">+</button>
-          </div>
-          <div id="page-label" class="page-label">No page</div>
-          <div class="preview-authority"><span class="status-dot"></span><span id="preview-status">Plan preview</span></div>
-        </div>
-        <div id="inspection-controls" class="inspection-controls" role="toolbar" aria-label="Exact plan overlays">
-          <span class="inspection-label">Inspect</span>
-          <button class="inspection-toggle" data-overlay="border" aria-pressed="false">Border</button>
-          <button class="inspection-toggle" data-overlay="content" aria-pressed="false">Content</button>
-          <button class="inspection-toggle" data-overlay="regions" aria-pressed="false">Regions</button>
-          <button class="inspection-toggle" data-overlay="breaks" aria-pressed="false">Breaks</button>
-          <button class="inspection-toggle" data-overlay="reading" aria-pressed="false">Reading</button>
-          <button class="inspection-toggle" data-overlay="roles" aria-pressed="false">Roles</button>
-        </div>
         <div id="stale-banner" class="stale-banner" role="status">Preview revision changed. Rebuilding exact pages…</div>
         <div id="canvas-scroll" class="canvas-scroll">
           <div id="page-stage" class="page-stage" tabindex="0" aria-label="Rendered page">
-            <img id="page-image" alt="Exact display-list page preview">
+            <canvas id="page-image" role="img" aria-label="Exact display-list page preview rendered by WebAssembly"></canvas>
             <img id="geometry-image" class="geometry-image" alt="Layout geometry and break overlay">
             <div id="inspection-layer" class="inspection-layer" aria-hidden="true"></div>
             <div id="selection-layer" class="selection-layer" aria-hidden="true"></div>
@@ -92,9 +79,35 @@
           <span>Inspector</span>
           <span id="selection-kind" class="quiet">Nothing selected</span>
         </div>
+        <details class="inspector-disclosure overlay-disclosure">
+          <summary><span>Overlays</span><span class="quiet">Exact plan</span></summary>
+          <div id="inspection-controls" class="inspection-controls" role="toolbar" aria-label="Exact plan overlays">
+            <button class="inspection-toggle" data-overlay="margin" aria-pressed="false">Margin</button>
+            <button class="inspection-toggle" data-overlay="border" aria-pressed="false">Border</button>
+            <button class="inspection-toggle" data-overlay="padding" aria-pressed="false">Padding</button>
+            <button class="inspection-toggle" data-overlay="content" aria-pressed="false">Content</button>
+            <button class="inspection-toggle" data-overlay="regions" aria-pressed="false">Regions</button>
+            <button class="inspection-toggle" data-overlay="instances" aria-pressed="false">Instances</button>
+            <button class="inspection-toggle" data-overlay="baselines" aria-pressed="false">Baselines</button>
+            <button class="inspection-toggle" data-overlay="tracks" aria-pressed="false">Tracks</button>
+            <button class="inspection-toggle" data-overlay="cells" aria-pressed="false">Cells</button>
+            <button class="inspection-toggle" data-overlay="overflow" aria-pressed="false">Overflow</button>
+            <button class="inspection-toggle" data-overlay="clips" aria-pressed="false">Clips</button>
+            <button class="inspection-toggle" data-overlay="collisions" aria-pressed="false">Collisions</button>
+            <button class="inspection-toggle" data-overlay="breaks" aria-pressed="false">Breaks</button>
+            <button class="inspection-toggle" data-overlay="reading" aria-pressed="false">Reading</button>
+            <button class="inspection-toggle" data-overlay="roles" aria-pressed="false">Roles</button>
+          </div>
+        </details>
+        <details class="inspector-disclosure page-setup-disclosure">
+          <summary><span>Page size</span><span id="page-size-summary" class="quiet">—</span></summary>
+          <div id="page-setup-controls" class="page-setup-controls" aria-live="polite"></div>
+        </details>
         <div id="edit-controls" class="edit-controls" aria-live="polite"></div>
-        <div class="panel-heading authoring-heading"><span>Create &amp; connect</span><span class="quiet">journaled</span></div>
-        <div id="authoring-controls" class="authoring-controls" aria-live="polite"></div>
+        <details class="inspector-disclosure authoring-disclosure">
+          <summary><span>Create content</span><span class="quiet">Optional</span></summary>
+          <div id="authoring-controls" class="authoring-controls" aria-live="polite"></div>
+        </details>
         <div id="inspector-content" class="inspector-content">
           <div class="inspector-empty">Select a node or click the page to trace its source, semantics, and layout decision.</div>
         </div>
@@ -112,15 +125,36 @@
     </main>
 
     <footer class="statusbar">
-      <span id="connection-state"><span class="status-dot"></span>Local workspace</span>
-      <span id="cursor-state">Page — · No selection</span>
-      <span class="shortcuts">←/→ page · +/− zoom · [/] panels</span>
+      <span id="connection-state">Local workspace</span>
+      <span id="verification-state" class="verification-state is-preview">Plan preview</span>
+      <div class="footer-page-controls">
+        <span id="page-label" class="page-label">No page</span>
+        <div class="zoom-control" role="group" aria-label="Canvas zoom">
+          <button id="zoom-out" aria-label="Zoom out">−</button>
+          <input id="zoom-value" type="number" min="25" max="400" step="5" value="100" aria-label="Zoom percent">
+          <button id="zoom-in" aria-label="Zoom in">+</button>
+        </div>
+      </div>
+      <div class="footer-context">
+        <span id="cursor-state">Page — · No selection</span>
+        <span class="shortcuts">←/→ page · +/− zoom · [/] panels</span>
+      </div>
     </footer>
   </div>
   <script src="/rail-model.js" defer></script>
+  <script src="/mutation-gate.js" defer></script>
   <script src="/edit-model.js" defer></script>
   <script src="/resource-model.js" defer></script>
   <script src="/authoring-model.js" defer></script>
+  <script src="/instance-model.js" defer></script>
+  <script src="/inspection-model.js" defer></script>
+  <script src="/provenance-model.js" defer></script>
+  <script src="/tag-model.js" defer></script>
+  <script src="/syntax-model.js" defer></script>
+  <script src="/page-setup-model.js" defer></script>
+  <script src="/issue-model.js" defer></script>
+  <script src="/wasm_exec.js" defer></script>
+  <script src="/wasm-renderer.js" defer></script>
   <script src="/studio.js" defer></script>
 </body>
 </html>

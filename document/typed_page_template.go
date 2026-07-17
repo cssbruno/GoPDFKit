@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -493,6 +493,7 @@ type typedComposedProjection struct {
 	region     layoutengine.RegionID
 	dx         layoutengine.Fixed
 	dy         layoutengine.Fixed
+	height     layoutengine.Fixed
 	artifact   bool
 }
 
@@ -526,7 +527,7 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 		if shell.headerHeight > 0 {
 			projection := shell.header.Projection()
 			regions = append(regions, typedComposedProjection{projection: projection, page: page,
-				region: layoutengine.RegionHeader, artifact: true})
+				region: layoutengine.RegionHeader, height: shell.headerHeight, artifact: true})
 		}
 		regions = append(regions, typedComposedProjection{projection: body, page: page, region: layoutengine.RegionBody})
 		if shell.footerHeight > 0 {
@@ -544,7 +545,7 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 				return layoutengine.LayoutPlan{}, err
 			}
 			regions = append(regions, typedComposedProjection{projection: projection, page: page,
-				region: layoutengine.RegionFooter, dy: dy, artifact: true})
+				region: layoutengine.RegionFooter, dy: dy, height: shell.footerHeight, artifact: true})
 		}
 	}
 
@@ -552,6 +553,7 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 	lineMaps := make([]map[uint32]uint32, len(regions))
 	bodyFragmentMap := make(map[layoutengine.FragmentID]layoutengine.FragmentID)
 	var nextNode layoutengine.NodeID
+	var gridGroup uint32
 	for _, fragment := range body.Fragments {
 		if fragment.Node > nextNode {
 			nextNode = fragment.Node
@@ -564,6 +566,37 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 		for regionIndex, region := range regions {
 			if region.page != page {
 				continue
+			}
+			for _, retained := range region.projection.PageRegions {
+				if region.region == layoutengine.RegionBody && retained.Page != page || region.region != layoutengine.RegionBody && retained.Page != 1 {
+					continue
+				}
+				bounds := retained.Bounds
+				if region.region != layoutengine.RegionBody {
+					bounds.Height = region.height
+				}
+				bounds, err := translateTypedRect(bounds, region.dx, region.dy)
+				if err != nil {
+					return layoutengine.LayoutPlan{}, err
+				}
+				input.PageRegions = append(input.PageRegions, layoutengine.PlannedPageRegion{Page: page, Region: region.region, Bounds: bounds, Master: retained.Master})
+				break
+			}
+			var localGridGroup uint32
+			for _, track := range region.projection.GridTracks {
+				if region.region == layoutengine.RegionBody && track.Page != page || region.region != layoutengine.RegionBody && track.Page != 1 {
+					continue
+				}
+				if track.Group != localGridGroup {
+					gridGroup++
+					localGridGroup = track.Group
+				}
+				bounds, err := translateTypedRect(track.Bounds, region.dx, region.dy)
+				if err != nil {
+					return layoutengine.LayoutPlan{}, err
+				}
+				track.Group, track.Page, track.Region, track.Bounds = gridGroup, page, region.region, bounds
+				input.GridTracks = append(input.GridTracks, track)
 			}
 			fragmentMap := make(map[layoutengine.FragmentID]layoutengine.FragmentID)
 			lineMap := make(map[uint32]uint32)
@@ -597,7 +630,13 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 				fragment.ID = layoutengine.FragmentID(len(input.Fragments) + 1)
 				fragment.Page, fragment.Region = page, region.region
 				var err error
-				fragment.BorderBox, err = translateTypedRect(fragment.BorderBox, region.dx, region.dy)
+				fragment.MarginBox, err = translateTypedRect(fragment.MarginBox, region.dx, region.dy)
+				if err == nil {
+					fragment.BorderBox, err = translateTypedRect(fragment.BorderBox, region.dx, region.dy)
+				}
+				if err == nil {
+					fragment.PaddingBox, err = translateTypedRect(fragment.PaddingBox, region.dx, region.dy)
+				}
 				if err == nil {
 					fragment.ContentBox, err = translateTypedRect(fragment.ContentBox, region.dx, region.dy)
 				}

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -229,6 +229,10 @@ func (f *Document) PlanLayoutDocumentContext(ctx context.Context, doc *layout.La
 	if err != nil {
 		return LayoutDocumentPlan{}, layoutDocumentPlanError(err)
 	}
+	planned, err = bindTypedDeterministicInputs(planned, tree, doc)
+	if err != nil {
+		return LayoutDocumentPlan{}, fmt.Errorf("document: bind typed deterministic inputs: %w", err)
+	}
 	layoutHash, err := planned.Hash()
 	if err != nil {
 		return LayoutDocumentPlan{}, fmt.Errorf("document: hash typed layout plan: %w", err)
@@ -253,6 +257,36 @@ func (f *Document) PlanLayoutDocumentContext(ctx context.Context, doc *layout.La
 		plan: planned, tree: tree, hash: hash, pages: pages,
 		imageSources: imageSources, fontSources: fontSources, envelope: envelope,
 	}, nil
+}
+
+func bindTypedDeterministicInputs(plan layoutengine.LayoutPlan, tree layoutengine.CanonicalTree, doc *layout.LayoutDocument) (layoutengine.LayoutPlan, error) {
+	// The typed lowering contract guarantees empty SourceSpan values (the
+	// model has no source-file locations), so the exact canonical tree hash is
+	// already the semantic template identity. This avoids materializing a
+	// second source-stripped tree projection for large tables.
+	templateHash, err := tree.Hash()
+	if err != nil {
+		return layoutengine.LayoutPlan{}, fmt.Errorf("derive typed template identity: %w", err)
+	}
+	template, err := layoutengine.ParseSemanticTemplateID(templateHash)
+	if err != nil {
+		return layoutengine.LayoutPlan{}, err
+	}
+	scenarioDigest := sha256.Sum256([]byte("gopdfkit.typed-layout-scenario.v1\x00" + templateHash))
+	scenario, err := layoutengine.ParseScenarioRevisionID(hex.EncodeToString(scenarioDigest[:]))
+	if err != nil {
+		return layoutengine.LayoutPlan{}, err
+	}
+	locale := strings.TrimSpace(doc.Language)
+	if locale == "" {
+		locale = "und"
+	}
+	flags := []string{"no-cldr", "no-hyphenation", "typed-layout/0.1"}
+	if plan.HasEmbeddedUTF8Font() {
+		flags = append(flags, "embedded-utf8-font")
+	}
+	return plan.BindDeterministicInputs(template, scenario, locale, "UTC", layoutengine.BuiltinTextDataVersions(),
+		"typed-layout/0.1", flags, "typed-point-size")
 }
 
 func layoutDocumentPlanError(err error) error {
@@ -312,6 +346,7 @@ func (f *Document) WriteLayoutDocumentPlanContext(ctx context.Context, plan Layo
 	}
 	projection := plan.plan.Projection()
 	withDisplay := len(projection.ImageResources) != 0 || len(projection.Links) != 0 || len(projection.Destinations) != 0 || len(projection.Paths) != 0 || len(projection.Fills) != 0 || len(projection.Strokes) != 0 || len(projection.Clips) != 0 || len(projection.Transforms) != 0 || len(projection.SemanticNodes) != 0
+	withDisplay = withDisplay || layoutPlanHasMultipleGlyphRunsPerLine(projection)
 	for _, font := range projection.Fonts {
 		withDisplay = withDisplay || font.EmbeddedUTF8 != nil
 	}

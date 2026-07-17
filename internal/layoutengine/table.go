@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -826,6 +826,7 @@ type tablePaginator struct {
 	headerHeight       Fixed
 	headerTooTallAdded bool
 	body               Rect
+	gridGroup          uint32
 }
 
 func (p *tablePaginator) plan() (LayoutPlan, error) {
@@ -912,6 +913,7 @@ func (p *tablePaginator) startPage() error {
 		}
 		p.body = selected
 	}
+	p.output.PageRegions = append(p.output.PageRegions, PlannedPageRegion{Page: p.page, Region: RegionBody, Bounds: p.body})
 	p.pageFragmentStart = len(p.output.Fragments)
 	p.cursor = p.body.Y
 	p.lastBodyFragment = 0
@@ -993,6 +995,32 @@ func (p *tablePaginator) placeRows(start, end uint32, header bool) (FragmentID, 
 		}
 		columnOffsets[column+1] = next
 	}
+	unitHeight := rowOffsets[len(rowOffsets)-1]
+	p.gridGroup++
+	for column, width := range p.columns {
+		x, err := p.body.X.Add(columnOffsets[column])
+		if err != nil {
+			return 0, 0, err
+		}
+		bounds, err := NewRect(x, p.cursor, width, unitHeight)
+		if err != nil {
+			return 0, 0, err
+		}
+		p.output.GridTracks = append(p.output.GridTracks, PlannedGridTrack{Group: p.gridGroup, Page: p.page, Region: RegionBody,
+			Axis: GridTrackColumn, Index: uint32(column), Bounds: bounds})
+	}
+	for row := start; row < end; row++ {
+		y, err := p.cursor.Add(rowOffsets[row-start])
+		if err != nil {
+			return 0, 0, err
+		}
+		bounds, err := NewRect(p.body.X, y, p.input.Width, p.rows[row])
+		if err != nil {
+			return 0, 0, err
+		}
+		p.output.GridTracks = append(p.output.GridTracks, PlannedGridTrack{Group: p.gridGroup, Page: p.page, Region: RegionBody,
+			Axis: GridTrackRow, Index: row - start, Bounds: bounds})
+	}
 	var first, last FragmentID
 	for _, cell := range p.cells {
 		if cell.Row < start || cell.Row >= end {
@@ -1032,7 +1060,6 @@ func (p *tablePaginator) placeRows(start, end uint32, header bool) (FragmentID, 
 		}
 		last = id
 	}
-	unitHeight := rowOffsets[len(rowOffsets)-1]
 	nextCursor, err := p.cursor.Add(unitHeight)
 	if err != nil {
 		return 0, 0, err

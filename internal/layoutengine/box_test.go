@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -62,6 +62,16 @@ func TestPlanBoxFlowResolvesExactBoxesAndMarginPagination(t *testing.T) {
 		X: fixedPoints(15), Y: fixedPoints(22), Width: fixedPoints(92), Height: fixedPoints(30),
 	}); got != want {
 		t.Fatalf("border box = %+v, want %+v", got, want)
+	}
+	if got, want := projection.Fragments[0].MarginBox, (Rect{
+		X: fixedPoints(10), Y: fixedPoints(20), Width: fixedPoints(100), Height: fixedPoints(37),
+	}); got != want {
+		t.Fatalf("margin box = %+v, want %+v", got, want)
+	}
+	if got, want := projection.Fragments[0].PaddingBox, (Rect{
+		X: fixedPoints(16), Y: fixedPoints(23), Width: fixedPoints(89), Height: fixedPoints(27),
+	}); got != want {
+		t.Fatalf("padding box = %+v, want %+v", got, want)
 	}
 	if got, want := projection.Fragments[0].ContentBox, (Rect{
 		X: fixedPoints(20), Y: fixedPoints(26), Width: fixedPoints(79), Height: fixedPoints(20),

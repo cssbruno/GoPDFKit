@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -28,6 +28,13 @@ func characterizationDocument(blocks ...layout.Block) *layout.LayoutDocument {
 func typedCharacterizationFixtures() []typedCharacterizationFixture {
 	pixel, _ := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
 	p := characterizationParagraph("body")
+	envelope := characterizationDocument(p)
+	envelope.Signature = &layout.SignatureBlock{
+		PlaceholderReference: "CharacterizationSignature",
+		Rows:                 []layout.SignatureRowBlock{{Columns: []layout.SignatureColumn{{Label: "Approved", Name: "Ada Example"}}}},
+	}
+	envelope.QR = &layout.QRBlock{Value: "characterization-envelope", Label: "Verify", Size: 24}
+	envelope.Attachments = []layout.AttachmentBlock{{Name: "evidence.txt", MIMEType: "text/plain", Description: "characterization evidence", Data: []byte("typed envelope")}}
 	fixtures := []typedCharacterizationFixture{
 		{TypedFixtureInventory{Name: "block-paragraph", Coverage: []string{"every-block"}, Blocks: []layout.BlockKind{layout.BlockKindParagraph}}, characterizationDocument(p), 200, ""},
 		{TypedFixtureInventory{Name: "block-heading", Coverage: []string{"every-block"}, Blocks: []layout.BlockKind{layout.BlockKindHeading}}, characterizationDocument(layout.HeadingBlock{Level: 1, Segments: []layout.TextSegment{{Text: "Heading"}}, Style: p.Style}), 200, ""},
@@ -43,6 +50,7 @@ func typedCharacterizationFixtures() []typedCharacterizationFixture {
 		{TypedFixtureInventory{Name: "block-page-break", Coverage: []string{"every-block", "mixed"}, Blocks: []layout.BlockKind{layout.BlockKindParagraph, layout.BlockKindPageBreak}}, characterizationDocument(p, layout.PageBreakBlock{After: true}, p), 200, ""},
 		{TypedFixtureInventory{Name: "block-row-column", Coverage: []string{"every-block", "nested"}, Blocks: []layout.BlockKind{layout.BlockKindRowColumn, layout.BlockKindParagraph}}, characterizationDocument(layout.RowColumnBlock{Direction: layout.RowDirection, Items: []layout.RowColumnItem{{Block: p, Track: layout.RowColumnTrack{Kind: layout.RowColumnTrackFraction, Weight: 1}}, {Block: p, Track: layout.RowColumnTrack{Kind: layout.RowColumnTrackFraction, Weight: 1}}}}), 200, ""},
 		{TypedFixtureInventory{Name: "block-canvas", Coverage: []string{"every-block", "local-constraints"}, Blocks: []layout.BlockKind{layout.BlockKindCanvas}}, characterizationDocument(layout.CanvasBlock{Width: 120, Height: 60, DefaultHorizontal: "left", DefaultVertical: "top", Items: []layout.CanvasItem{{ID: "@box", Width: 30, Height: 20, Alt: "positioned box", Box: layout.BoxStyle{BackgroundColor: layout.DocumentColor{R: 51, G: 102, B: 153, Set: true}}, Constraints: []layout.CanvasConstraint{{Anchor: "left", Target: "canvas", TargetAnchor: "left", Offset: 8}, {Anchor: "top", Target: "canvas", TargetAnchor: "top", Offset: 8}}}}}), 200, ""},
+		{TypedFixtureInventory{Name: "document-envelope-fields", Coverage: []string{"envelope", "attachments", "signature", "qr", "mixed"}, Blocks: []layout.BlockKind{layout.BlockKindParagraph, layout.BlockKindSignatureRow, layout.BlockKindQRVerification}}, envelope, 240, ""},
 		{TypedFixtureInventory{Name: "mixed-nested", Coverage: []string{"nested", "mixed"}, Blocks: []layout.BlockKind{layout.BlockKindHeading, layout.BlockKindSection, layout.BlockKindList, layout.BlockKindParagraph}}, characterizationDocument(layout.HeadingBlock{Level: 1, Segments: []layout.TextSegment{{Text: "H"}}, Style: p.Style}, layout.SectionBlock{Blocks: []layout.Block{layout.ListBlock{Items: []layout.ListItem{{Blocks: []layout.Block{p}}}}}}), 200, ""},
 		{TypedFixtureInventory{Name: "internal-links-hierarchy", Coverage: []string{"internal-links", "semantic-hierarchy", "nested"}, Blocks: []layout.BlockKind{layout.BlockKindSection, layout.BlockKindHeading, layout.BlockKindList, layout.BlockKindParagraph}}, characterizationDocument(
 			layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Jump", Link: "#details"}}, Style: p.Style},

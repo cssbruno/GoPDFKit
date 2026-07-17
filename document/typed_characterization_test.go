@@ -1,10 +1,12 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"go/ast"
 	"go/format"
 	"go/parser"
@@ -250,6 +252,10 @@ func TestTypedCharacterizationCorpusIsCompleteBoundedAndDeterministic(t *testing
 	if !bytes.Equal(a, b) {
 		t.Fatalf("runner is nondeterministic:\n%s\n%s", a, b)
 	}
+	digest := sha256.Sum256(a)
+	if got := hex.EncodeToString(digest[:]); got != "c7e60d7e21913c72cb509f2781768e5abdd13167d1e468b8b705a3ec8f283bf9" {
+		t.Fatalf("typed characterization golden drift: got %s", got)
+	}
 	if len(first.Fixtures) != len(inventory.Fixtures) {
 		t.Fatalf("fixture results = %d, want %d", len(first.Fixtures), len(inventory.Fixtures))
 	}
@@ -257,6 +263,22 @@ func TestTypedCharacterizationCorpusIsCompleteBoundedAndDeterministic(t *testing
 	for _, fixture := range first.Fixtures {
 		outcomes[fixture.Outcome] = true
 		success := fixture.Outcome == "planned" || fixture.Outcome == "accepted-malformed"
+		if success {
+			if fixture.PlanHash == "" || fixture.Pages == 0 || len(fixture.ReadingRoles) == 0 {
+				t.Fatalf("successful fixture lacks plan/semantic evidence: %+v", fixture)
+			}
+			if len(fixture.BreakLedger) >= fixture.Pages {
+				t.Fatalf("fixture %q has too many break records for %d pages: %+v", fixture.Name, fixture.Pages, fixture.BreakLedger)
+			}
+			for index, decision := range fixture.BreakLedger {
+				if decision.Reason == "" || decision.FromPage == 0 || decision.ToPage != decision.FromPage+1 ||
+					!decision.Preceding.Valid() || !decision.Triggering.Valid() || decision.Preceding == decision.Triggering {
+					t.Fatalf("fixture %q break ledger[%d] lacks causal evidence: %+v", fixture.Name, index, decision)
+				}
+			}
+		} else if len(fixture.BreakLedger) != 0 {
+			t.Fatalf("unsuccessful fixture published break evidence: %+v", fixture)
+		}
 		if success && (fixture.Pages == 0 || fixture.PDF == nil || fixture.PDF.SHA256 == "" ||
 			fixture.PDF.Bytes == 0 || len(fixture.PDF.PageText) != fixture.Pages) {
 			t.Fatalf("successful fixture lacks complete PDF evidence: %+v", fixture)

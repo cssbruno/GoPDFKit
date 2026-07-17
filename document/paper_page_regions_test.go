@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -37,6 +37,15 @@ func TestPaperPageRegionsPlanCaptureRasterPDFAndSemantics(t *testing.T) {
 		t.Fatalf("PlanPaper = %#v, %v", result, err)
 	}
 	projection := plan.plan.Projection()
+	if len(projection.PageRegions) != 3 || projection.PageRegions[0].Region != layoutengine.RegionHeader ||
+		projection.PageRegions[1].Region != layoutengine.RegionBody || projection.PageRegions[2].Region != layoutengine.RegionFooter {
+		t.Fatalf("retained page regions = %+v", projection.PageRegions)
+	}
+	headerBottom, _ := projection.PageRegions[0].Bounds.Bottom()
+	bodyBottom, _ := projection.PageRegions[1].Bounds.Bottom()
+	if headerBottom > projection.PageRegions[1].Bounds.Y || bodyBottom > projection.PageRegions[2].Bounds.Y {
+		t.Fatalf("retained page regions overlap = %+v", projection.PageRegions)
+	}
 	regions := map[layoutengine.RegionID]bool{}
 	fragmentRegions := map[layoutengine.FragmentID]layoutengine.RegionID{}
 	for _, fragment := range projection.Fragments {

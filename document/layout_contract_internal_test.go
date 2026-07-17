@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -100,6 +100,46 @@ func TestTypedTableRepeatsHeaderAcrossPages(t *testing.T) {
 	}
 	if count := strings.Count(output.String(), "repeated-header"); count != pdf.PageCount() {
 		t.Fatalf("header occurrences = %d, want one on each of %d pages", count, pdf.PageCount())
+	}
+}
+
+func TestTypedTableFixedColumnsRetainAuthoredWidthOnWiderPage(t *testing.T) {
+	pdf := MustNew(WithCustomPageSize(Size{Wd: 595.275590551, Ht: 841.88976378}))
+	doc := layout.NewLayoutDocument()
+	doc.PageTemplate.Margins = layout.Spacing{Top: 12, Right: 12, Bottom: 12, Left: 12}
+	doc.Body = []layout.Block{layout.TableBlock{
+		Columns: []layout.TableColumn{{Width: 84}, {Width: 84}},
+		Body: []layout.TableRow{{Cells: []layout.TableCell{
+			{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "left"}}}}},
+			{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "right"}}}}},
+		}}},
+	}}
+
+	plan, err := pdf.PlanLayoutDocument(doc)
+	if err != nil {
+		t.Fatalf("PlanLayoutDocument() error = %v", err)
+	}
+	if plan.PageCount() == 0 {
+		t.Fatal("PlanLayoutDocument() returned no pages")
+	}
+	want, err := layoutengine.FixedFromPoints(168)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bodyWidth, err := layoutengine.FixedFromPoints(571.275590551)
+	if err != nil {
+		t.Fatal(err)
+	}
+	columnWidth, err := layoutengine.FixedFromPoints(84)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tableWidth := typedTablePlanWidth(bodyWidth, []layoutengine.TableColumn{
+		{Kind: layoutengine.TableTrackFixed, Width: columnWidth},
+		{Kind: layoutengine.TableTrackFixed, Width: columnWidth},
+	})
+	if tableWidth != want {
+		t.Fatalf("typedTablePlanWidth() = %v, want authored fixed width %v", tableWidth, want)
 	}
 }
 

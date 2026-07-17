@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -46,7 +46,7 @@ func (f *Document) measurePaperGridRow(ctx context.Context, doc *layout.LayoutDo
 	if err != nil || available <= 0 {
 		return paperMeasuredGridRow{}, fmt.Errorf("%s: grid gaps leave no column width", block.path)
 	}
-	widths := make([]layoutengine.Fixed, count)
+	widths := make([]layoutengine.Fixed, trackCount)
 	var explicit layoutengine.Fixed
 	auto := trackCount - count
 	for index, cell := range block.gridRow.cells {
@@ -86,7 +86,7 @@ func (f *Document) measurePaperGridRow(ctx context.Context, doc *layout.LayoutDo
 		}
 	}
 
-	row := paperMeasuredGridRow{cells: make([]paperMeasuredGridCell, count)}
+	row := paperMeasuredGridRow{cells: make([]paperMeasuredGridCell, count), trackWidths: append([]layoutengine.Fixed(nil), widths...), gap: gap}
 	if block.gridRow.minimumHeightPoints > 0 {
 		row.height, err = layoutengine.FixedFromPoints(block.gridRow.minimumHeightPoints)
 		if block.gridRow.minimumHeightInDocumentUnits {

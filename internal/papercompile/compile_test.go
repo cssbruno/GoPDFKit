@@ -1,10 +1,11 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
 
 import (
 	"bytes"
+	"math"
 	"reflect"
 	"testing"
 
@@ -89,6 +90,20 @@ func TestCompileLowersPaperASTToLayoutDocumentAndMapping(t *testing.T) {
 		got := result.Mapping.Nodes[index]
 		if got.ID != want.id || got.BodyIndex != want.body || got.SegmentIndex != want.segment {
 			t.Fatalf("mapping[%d] = %#v, want %#v", index, got, want)
+		}
+	}
+}
+
+func TestCompileSupportsNamedA3AndLegalPageSizes(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		width  float64
+		height float64
+	}{{"A3", 841.88976378, 1190.551181102}, {"Legal", 612, 1008}} {
+		parsed := paperlang.Parse("size.paper", "document @d:\n  page @p:\n    size: \""+test.name+"\"\n    body @b:\n")
+		result := Compile(parsed.AST)
+		if !result.OK() || math.Abs(result.Page.Width-test.width) > 1e-9 || math.Abs(result.Page.Height-test.height) > 1e-9 {
+			t.Fatalf("%s page = %#v, diagnostics=%#v", test.name, result.Page, result.Diagnostics)
 		}
 	}
 }

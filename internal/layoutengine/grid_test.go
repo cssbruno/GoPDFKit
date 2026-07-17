@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -84,6 +84,14 @@ func TestPlanGridResolvesTracksSpansAndCanonicalPlacement(t *testing.T) {
 		t.Fatalf("rows = %+v, want %+v", got, want)
 	}
 	projection := result.Plan.Projection()
+	if got, want := projection.GridTracks, []PlannedGridTrack{
+		{Group: 1, Page: 1, Region: RegionBody, Axis: GridTrackColumn, Index: 0, Bounds: Rect{X: fixedPoints(10), Y: fixedPoints(20), Width: fixedPoints(35), Height: fixedPoints(50)}},
+		{Group: 1, Page: 1, Region: RegionBody, Axis: GridTrackColumn, Index: 1, Bounds: Rect{X: fixedPoints(45), Y: fixedPoints(20), Width: fixedPoints(35), Height: fixedPoints(50)}},
+		{Group: 1, Page: 1, Region: RegionBody, Axis: GridTrackColumn, Index: 2, Bounds: Rect{X: fixedPoints(80), Y: fixedPoints(20), Width: fixedPoints(20), Height: fixedPoints(50)}},
+		{Group: 1, Page: 1, Region: RegionBody, Axis: GridTrackRow, Index: 0, Bounds: Rect{X: fixedPoints(10), Y: fixedPoints(20), Width: fixedPoints(90), Height: fixedPoints(50)}},
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("retained grid tracks = %+v, want %+v", got, want)
+	}
 	if len(projection.Fragments) != 2 || projection.Fragments[0].Key != "@span" || projection.Fragments[1].Key != "@last" {
 		t.Fatalf("canonical fragments = %+v", projection.Fragments)
 	}

@@ -1,0 +1,17 @@
+document @report:
+  language: "en"
+  page @master:
+    width: 200pt
+    height: 140pt
+    margin: 12pt
+    header @running-head:
+      paragraph @header-copy:
+        size: 8pt
+        text: "RUNNING HEADER"
+    footer @running-foot:
+      paragraph @footer-copy:
+        size: 8pt
+        text: "RUNNING FOOTER"
+    body @body:
+      paragraph @copy:
+        text: "Body content"

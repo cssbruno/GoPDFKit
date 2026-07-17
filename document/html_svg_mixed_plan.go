@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -102,8 +102,8 @@ func htmlPlanGeometryOnly(projection layoutengine.LayoutPlanProjection) (layoute
 		pages[index].Commands = layoutengine.IndexRange{}
 	}
 	return layoutengine.NewLayoutPlan(layoutengine.LayoutPlanInput{
-		DeterministicInputs: projection.DeterministicInputs,
-		Pages:               pages, Fragments: projection.Fragments, Lines: projection.Lines,
+		Pages: pages, Fragments: projection.Fragments, Lines: projection.Lines,
+		PageRegions: projection.PageRegions, GridTracks: projection.GridTracks,
 		Breaks: projection.Breaks, Diagnostics: projection.Diagnostics,
 		SemanticNodes: projection.SemanticNodes, SemanticFragments: projection.SemanticFragments, ReadingOrder: projection.ReadingOrder,
 	})

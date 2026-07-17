@@ -4,7 +4,7 @@ set -eu
 output=${1:-artifacts/paper-engine-benchmarks.txt}
 count=${PAPER_ENGINE_BENCH_COUNT:-10}
 benchtime=${PAPER_ENGINE_BENCHTIME:-250ms}
-benchmark='^BenchmarkPaperEngine(Planner|Painter|EndToEnd|WarmCompiled|Concurrent|Table)'
+benchmark='^BenchmarkPaperEngine(Planner|Painter|ProductionDefault|EndToEnd|WarmCompiled|Concurrent|Table)'
 
 case "$count" in
 	''|*[!0-9]*|0)

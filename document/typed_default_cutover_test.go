@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -175,7 +175,7 @@ func deterministicDocumentBytes(t *testing.T, pdf *Document) []byte {
 
 func planDigest(value []byte) [sha256.Size]byte { return sha256.Sum256(value) }
 
-func BenchmarkWriteDocumentUnifiedDefault(b *testing.B) {
+func BenchmarkPaperEngineProductionDefault(b *testing.B) {
 	model := paperEngineBenchmarkTypedFixture()
 	b.ReportAllocs()
 	for b.Loop() {

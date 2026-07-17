@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -89,7 +89,7 @@ func (w *Workspace) CreatePlan(revision RevisionHandle) (PlanSnapshot, document.
 	if !record.parsed.OK() || !record.compiled.OK() {
 		return PlanSnapshot{}, document.PaperPlanResult{}, workspaceError("INVALID_SOURCE", "source is not plannable", ErrInvalidSource)
 	}
-	plan, result, err := document.PlanPaper(record.file, record.source)
+	plan, result, err := document.PlanPaperWithImports(record.file, record.source, document.PaperImportResolver(w.importResolver))
 	if err != nil {
 		return PlanSnapshot{}, result, err
 	}

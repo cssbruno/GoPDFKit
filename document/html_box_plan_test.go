@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -35,7 +35,9 @@ func TestHTMLUnifiedBoxModelExactPlanRasterPDFAndCursor(t *testing.T) {
 		t.Fatalf("fragments=%+v", projection.Fragments)
 	}
 	fragment := projection.Fragments[0]
-	if fragment.BorderBox != (layoutengine.Rect{X: 25 * 1024, Y: 22 * 1024, Width: 192 * 1024, Height: 30 * 1024}) ||
+	if fragment.MarginBox != (layoutengine.Rect{X: 20 * 1024, Y: 20 * 1024, Width: 200 * 1024, Height: 36 * 1024}) ||
+		fragment.BorderBox != (layoutengine.Rect{X: 25 * 1024, Y: 22 * 1024, Width: 192 * 1024, Height: 30 * 1024}) ||
+		fragment.PaddingBox != (layoutengine.Rect{X: 29 * 1024, Y: 23 * 1024, Width: 186 * 1024, Height: 26 * 1024}) ||
 		fragment.ContentBox != (layoutengine.Rect{X: 38 * 1024, Y: 29 * 1024, Width: 170 * 1024, Height: 12 * 1024}) {
 		t.Fatalf("box geometry=%+v", fragment)
 	}

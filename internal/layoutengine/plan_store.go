@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -391,6 +391,8 @@ func layoutPlanInputFromStoredProjection(projection LayoutPlanProjection) Layout
 		Pages:               projection.Pages,
 		Fragments:           projection.Fragments,
 		Lines:               projection.Lines,
+		PageRegions:         projection.PageRegions,
+		GridTracks:          projection.GridTracks,
 		Fonts:               projection.Fonts,
 		GlyphRuns:           projection.GlyphRuns,
 		ImageResources:      projection.ImageResources,

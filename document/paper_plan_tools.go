@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -376,7 +376,7 @@ func (p PaperPlan) Explain(selectors []PaperPlanSelector, maxSelectors, maxBytes
 	if err != nil {
 		return PaperPlanJSON{}, err
 	}
-	encoded, err := explanation.CanonicalJSON()
+	encoded, err := p.explainJSON(explanation.CanonicalJSON, maxBytes)
 	if err != nil {
 		return PaperPlanJSON{}, err
 	}
@@ -396,11 +396,52 @@ func (p PaperPlan) ExplainContext(ctx context.Context, selectors []PaperPlanSele
 	if err != nil {
 		return PaperPlanJSON{}, err
 	}
-	encoded, err := explanation.CanonicalJSON()
+	encoded, err := p.explainJSON(explanation.CanonicalJSON, maxBytes)
 	if err != nil {
 		return PaperPlanJSON{}, err
 	}
 	return PaperPlanJSON{PlanHash: p.hash, payload: encoded}, nil
+}
+
+// explainJSON adds source-level binding and style-token provenance to the
+// exact layout explanation without making the layout engine depend on the
+// .paper compiler. The layout explanation remains the authoritative geometry
+// projection; provenance is a detached document-adapter field beside it.
+func (p PaperPlan) explainJSON(encode func() ([]byte, error), maxBytes uint32) ([]byte, error) {
+	encoded, err := encode()
+	if err != nil {
+		return nil, err
+	}
+	provenance, err := p.Provenance()
+	if err != nil {
+		return nil, err
+	}
+	var base struct {
+		SchemaVersion uint16          `json:"schema_version"`
+		PlanHash      string          `json:"plan_hash"`
+		Limits        json.RawMessage `json:"limits"`
+		Targets       json.RawMessage `json:"targets"`
+	}
+	if err := json.Unmarshal(encoded, &base); err != nil {
+		return nil, fmt.Errorf("document: decode paper explanation: %w", err)
+	}
+	final, err := json.Marshal(struct {
+		SchemaVersion uint16              `json:"schema_version"`
+		PlanHash      string              `json:"plan_hash"`
+		Limits        json.RawMessage     `json:"limits"`
+		Targets       json.RawMessage     `json:"targets"`
+		Provenance    PaperPlanProvenance `json:"provenance"`
+	}{
+		SchemaVersion: base.SchemaVersion, PlanHash: base.PlanHash,
+		Limits: base.Limits, Targets: base.Targets, Provenance: provenance,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("document: encode paper explanation: %w", err)
+	}
+	if uint64(len(final)) > uint64(maxBytes) {
+		return nil, fmt.Errorf("document: paper explanation exceeds byte limit: encoded=%d limit=%d", len(final), maxBytes)
+	}
+	return final, nil
 }
 
 // HitTest queries one exact fixed-point page coordinate. xFixed and yFixed

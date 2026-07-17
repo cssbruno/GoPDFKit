@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -64,6 +64,11 @@ type PaperAssetCatalog struct {
 	compile papercompile.AssetCatalog
 }
 
+// PaperImportResolver is the explicit source boundary for reusable design
+// imports. It receives the importing file and the authored relative path, and
+// returns the imported file's stable name plus source bytes.
+type PaperImportResolver func(importerFile, importPath string) (file, source string, err error)
+
 func NewPaperAssetCatalog(resources []PaperAssetResource) (PaperAssetCatalog, error) {
 	compiled := make([]papercompile.AssetResource, len(resources))
 	for index, resource := range resources {
@@ -91,6 +96,7 @@ type PaperRenderResult struct {
 // evolving plan schema.
 type PaperPlan struct {
 	plan         layoutengine.LayoutPlan
+	mapping      papercompile.CompileMapping
 	file         string
 	title        string
 	language     string
@@ -99,6 +105,7 @@ type PaperPlan struct {
 	pages        int
 	revisions    layoutengine.ViewerRevisionIdentityInput
 	imageSources plannedImageSources
+	fontSources  plannedFontSources
 }
 
 // PaperPlanResult describes a plan transaction without exposing internal
@@ -175,6 +182,30 @@ func (f *Document) WritePaperWithAssets(file, source string, assets PaperAssetCa
 	return rendered, err
 }
 
+// WritePaperWithImports is WritePaper with an explicit resolver for reusable
+// themes and styles declared in source-relative files.
+func (f *Document) WritePaperWithImports(file, source string, resolver PaperImportResolver) (PaperRenderResult, error) {
+	plan, planned, err := PlanPaperWithImports(file, source, resolver)
+	if err != nil {
+		return PaperRenderResult{Diagnostics: planned.Diagnostics}, err
+	}
+	rendered, err := f.WritePaperPlan(plan)
+	rendered.Diagnostics = append(append([]PaperDiagnostic(nil), planned.Diagnostics...), rendered.Diagnostics...)
+	return rendered, err
+}
+
+// WritePaperWithAssetsAndImports combines explicit asset and source-import
+// boundaries for direct rendering.
+func (f *Document) WritePaperWithAssetsAndImports(file, source string, assets PaperAssetCatalog, resolver PaperImportResolver) (PaperRenderResult, error) {
+	plan, planned, err := PlanPaperWithAssetsAndImports(file, source, assets, resolver)
+	if err != nil {
+		return PaperRenderResult{Diagnostics: planned.Diagnostics}, err
+	}
+	rendered, err := f.WritePaperPlan(plan)
+	rendered.Diagnostics = append(append([]PaperDiagnostic(nil), planned.Diagnostics...), rendered.Diagnostics...)
+	return rendered, err
+}
+
 // WritePaperScenario is WritePaper with one explicitly selected source
 // scenario. Bounded repeat nodes are expanded before planning.
 func (f *Document) WritePaperScenario(file, source, scenario string) (PaperRenderResult, error) {
@@ -197,6 +228,30 @@ func (f *Document) WritePaperScenarioWithAssets(file, source, scenario string, a
 	return rendered, err
 }
 
+// WritePaperScenarioWithImports renders one selected scenario with reusable
+// themes and styles supplied by an explicit resolver.
+func (f *Document) WritePaperScenarioWithImports(file, source, scenario string, resolver PaperImportResolver) (PaperRenderResult, error) {
+	plan, planned, err := PlanPaperScenarioWithImports(file, source, scenario, resolver)
+	if err != nil {
+		return PaperRenderResult{Diagnostics: planned.Diagnostics}, err
+	}
+	rendered, err := f.WritePaperPlan(plan)
+	rendered.Diagnostics = append(append([]PaperDiagnostic(nil), planned.Diagnostics...), rendered.Diagnostics...)
+	return rendered, err
+}
+
+// WritePaperScenarioWithAssetsAndImports combines explicit assets and imports
+// for one selected scenario.
+func (f *Document) WritePaperScenarioWithAssetsAndImports(file, source, scenario string, assets PaperAssetCatalog, resolver PaperImportResolver) (PaperRenderResult, error) {
+	plan, planned, err := PlanPaperScenarioWithAssetsAndImports(file, source, scenario, assets, resolver)
+	if err != nil {
+		return PaperRenderResult{Diagnostics: planned.Diagnostics}, err
+	}
+	rendered, err := f.WritePaperPlan(plan)
+	rendered.Diagnostics = append(append([]PaperDiagnostic(nil), planned.Diagnostics...), rendered.Diagnostics...)
+	return rendered, err
+}
+
 // PlanPaper performs the complete read-only .paper pipeline. It never paints
 // and cannot mutate a caller-owned Document.
 func PlanPaper(file, source string) (PaperPlan, PaperPlanResult, error) {
@@ -206,7 +261,7 @@ func PlanPaper(file, source string) (PaperPlan, PaperPlanResult, error) {
 // PlanPaperContext propagates cancellation and one cumulative work budget
 // through parsing-adjacent planning and every nested layout child.
 func PlanPaperContext(ctx context.Context, file, source string) (PaperPlan, PaperPlanResult, error) {
-	return planPaperSource(ctx, file, source, "", false, papercompile.AssetCatalog{})
+	return planPaperSource(ctx, file, source, "", false, papercompile.AssetCatalog{}, nil)
 }
 
 func PlanPaperWithAssets(file, source string, assets PaperAssetCatalog) (PaperPlan, PaperPlanResult, error) {
@@ -214,7 +269,27 @@ func PlanPaperWithAssets(file, source string, assets PaperAssetCatalog) (PaperPl
 }
 
 func PlanPaperWithAssetsContext(ctx context.Context, file, source string, assets PaperAssetCatalog) (PaperPlan, PaperPlanResult, error) {
-	return planPaperSource(ctx, file, source, "", false, assets.compile)
+	return planPaperSource(ctx, file, source, "", false, assets.compile, nil)
+}
+
+// PlanPaperWithImports is PlanPaper with an explicit resolver for source-
+// relative reusable themes and styles.
+func PlanPaperWithImports(file, source string, resolver PaperImportResolver) (PaperPlan, PaperPlanResult, error) {
+	return PlanPaperWithImportsContext(context.Background(), file, source, resolver)
+}
+
+func PlanPaperWithImportsContext(ctx context.Context, file, source string, resolver PaperImportResolver) (PaperPlan, PaperPlanResult, error) {
+	return planPaperSource(ctx, file, source, "", false, papercompile.AssetCatalog{}, papercompile.ImportResolver(resolver))
+}
+
+// PlanPaperWithAssetsAndImports combines explicit asset and source-import
+// boundaries.
+func PlanPaperWithAssetsAndImports(file, source string, assets PaperAssetCatalog, resolver PaperImportResolver) (PaperPlan, PaperPlanResult, error) {
+	return PlanPaperWithAssetsAndImportsContext(context.Background(), file, source, assets, resolver)
+}
+
+func PlanPaperWithAssetsAndImportsContext(ctx context.Context, file, source string, assets PaperAssetCatalog, resolver PaperImportResolver) (PaperPlan, PaperPlanResult, error) {
+	return planPaperSource(ctx, file, source, "", false, assets.compile, papercompile.ImportResolver(resolver))
 }
 
 // PlanPaperScenario plans one explicitly selected source scenario and expands
@@ -224,7 +299,7 @@ func PlanPaperScenario(file, source, scenario string) (PaperPlan, PaperPlanResul
 }
 
 func PlanPaperScenarioContext(ctx context.Context, file, source, scenario string) (PaperPlan, PaperPlanResult, error) {
-	return planPaperSource(ctx, file, source, scenario, true, papercompile.AssetCatalog{})
+	return planPaperSource(ctx, file, source, scenario, true, papercompile.AssetCatalog{}, nil)
 }
 
 func PlanPaperScenarioWithAssets(file, source, scenario string, assets PaperAssetCatalog) (PaperPlan, PaperPlanResult, error) {
@@ -232,10 +307,30 @@ func PlanPaperScenarioWithAssets(file, source, scenario string, assets PaperAsse
 }
 
 func PlanPaperScenarioWithAssetsContext(ctx context.Context, file, source, scenario string, assets PaperAssetCatalog) (PaperPlan, PaperPlanResult, error) {
-	return planPaperSource(ctx, file, source, scenario, true, assets.compile)
+	return planPaperSource(ctx, file, source, scenario, true, assets.compile, nil)
 }
 
-func planPaperSource(ctx context.Context, file, source, scenario string, selectScenario bool, assets papercompile.AssetCatalog) (PaperPlan, PaperPlanResult, error) {
+// PlanPaperScenarioWithImports plans one explicitly selected scenario with an
+// explicit resolver for reusable themes and styles.
+func PlanPaperScenarioWithImports(file, source, scenario string, resolver PaperImportResolver) (PaperPlan, PaperPlanResult, error) {
+	return PlanPaperScenarioWithImportsContext(context.Background(), file, source, scenario, resolver)
+}
+
+func PlanPaperScenarioWithImportsContext(ctx context.Context, file, source, scenario string, resolver PaperImportResolver) (PaperPlan, PaperPlanResult, error) {
+	return planPaperSource(ctx, file, source, scenario, true, papercompile.AssetCatalog{}, papercompile.ImportResolver(resolver))
+}
+
+// PlanPaperScenarioWithAssetsAndImports combines explicit asset and source-
+// import boundaries for one selected scenario.
+func PlanPaperScenarioWithAssetsAndImports(file, source, scenario string, assets PaperAssetCatalog, resolver PaperImportResolver) (PaperPlan, PaperPlanResult, error) {
+	return PlanPaperScenarioWithAssetsAndImportsContext(context.Background(), file, source, scenario, assets, resolver)
+}
+
+func PlanPaperScenarioWithAssetsAndImportsContext(ctx context.Context, file, source, scenario string, assets PaperAssetCatalog, resolver PaperImportResolver) (PaperPlan, PaperPlanResult, error) {
+	return planPaperSource(ctx, file, source, scenario, true, assets.compile, papercompile.ImportResolver(resolver))
+}
+
+func planPaperSource(ctx context.Context, file, source, scenario string, selectScenario bool, assets papercompile.AssetCatalog, resolver papercompile.ImportResolver) (PaperPlan, PaperPlanResult, error) {
 	var budgetErr error
 	ctx, budgetErr = ensureDocumentPlanningBudget(ctx)
 	if budgetErr != nil {
@@ -250,9 +345,9 @@ func planPaperSource(ctx context.Context, file, source, scenario string, selectS
 		return paperPlanFailure(result, PaperStageParse, errors.New("source is invalid"))
 	}
 
-	compiled := papercompile.CompileWithAssets(parsed.AST, assets)
+	compiled := papercompile.CompileWithAssetsAndResolver(parsed.AST, assets, resolver)
 	if selectScenario {
-		compiled = papercompile.CompileScenarioWithAssets(parsed.AST, scenario, assets)
+		compiled = papercompile.CompileScenarioWithAssetsAndResolver(parsed.AST, scenario, assets, resolver)
 	}
 	result.Diagnostics = append(result.Diagnostics, paperDiagnostics(PaperStageCompile, compiled.Diagnostics)...)
 	if !compiled.OK() {
@@ -296,6 +391,10 @@ func planPaperSource(ctx context.Context, file, source, scenario string, selectS
 	if err != nil {
 		return paperPlanStageFailure(result, PaperStagePlan, "PAPER_PLAN_IMAGE_RESOURCES", err, file, parsed.AST.Root)
 	}
+	fontSources, err := planner.typedLayoutFontSourcesContext(ctx, planned)
+	if err != nil {
+		return paperPlanStageFailure(result, PaperStagePlan, "PAPER_PLAN_FONT_RESOURCES", err, file, parsed.AST.Root)
+	}
 	hash, err := planned.Hash()
 	if err != nil {
 		return paperPlanStageFailure(result, PaperStagePlan, "PAPER_PLAN_HASH", err, file, parsed.AST.Root)
@@ -306,7 +405,9 @@ func planPaperSource(ctx context.Context, file, source, scenario string, selectS
 	}
 	plan := PaperPlan{plan: planned, file: file, title: compiled.Document.Title,
 		language: strings.TrimSpace(compiled.Document.Language), root: root, hash: hash.String(),
-		pages: len(planned.Projection().Pages), revisions: paperViewerRevisions(source, scenario, selectScenario), imageSources: imageSources}
+		pages: len(planned.Projection().Pages), revisions: paperViewerRevisions(source, scenario, selectScenario),
+		mapping:      clonePaperCompileMapping(compiled.Mapping),
+		imageSources: imageSources, fontSources: fontSources}
 	result.Pages, result.Hash = plan.PageCount(), plan.Hash()
 	return plan, result, nil
 }
@@ -382,7 +483,7 @@ func (f *Document) WritePaperPlan(plan PaperPlan) (PaperRenderResult, error) {
 			errors.New("paper plan is empty"), "create the plan with document.PlanPaper", plan.root)
 	}
 	projection := plan.plan.Projection()
-	needsDisplayPainter := len(projection.ImageResources) != 0
+	needsDisplayPainter := f.tagged.enabled || len(projection.ImageResources) != 0 || layoutPlanHasMultipleGlyphRunsPerLine(projection)
 	for _, command := range projection.Commands {
 		if command.Kind != layoutengine.CommandGlyphRun {
 			needsDisplayPainter = true
@@ -435,6 +536,7 @@ type paperMeasuredBlock struct {
 	explicitBreak     bool
 	lines             []layoutengine.ParagraphLineInput
 	runs              map[uint32][]layoutengine.CoreGlyphRun
+	decorations       map[uint32][]paperMeasuredDecoration
 	fontIDs           map[layoutengine.FontResourceID]layoutengine.FontResourceID
 	node              layoutengine.NodeID
 	key               layoutengine.NodeKey
@@ -442,6 +544,7 @@ type paperMeasuredBlock struct {
 	source            layoutengine.SourceSpan
 	semanticRole      layoutengine.SemanticRole
 	semanticText      string
+	headingLevel      uint8
 	segments          []layout.TextSegment
 	keepTogether      bool
 	keepWithNext      bool
@@ -455,6 +558,12 @@ type paperMeasuredBlock struct {
 	box               paperMeasuredBox
 }
 
+type paperMeasuredDecoration struct {
+	path       layoutengine.PlannedPath
+	stroke     layoutengine.PlannedStroke
+	sourceLine layoutengine.PlannedLine
+}
+
 type paperPlanningBlock struct {
 	bodyIndex         int
 	segmentIndex      int
@@ -464,6 +573,7 @@ type paperPlanningBlock struct {
 	paragraph         layout.ParagraphBlock
 	semanticRole      layoutengine.SemanticRole
 	semanticText      string
+	headingLevel      uint8
 	keepTogether      bool
 	keepWithNext      bool
 	orphans           uint32
@@ -522,9 +632,11 @@ type paperMeasuredGridCell struct {
 }
 
 type paperMeasuredGridRow struct {
-	cells      []paperMeasuredGridCell
-	height     layoutengine.Fixed
-	lineOffset layoutengine.Fixed
+	cells       []paperMeasuredGridCell
+	trackWidths []layoutengine.Fixed
+	gap         layoutengine.Fixed
+	height      layoutengine.Fixed
+	lineOffset  layoutengine.Fixed
 }
 
 type paperBodySelector func(page uint32, base layoutengine.Rect) (layoutengine.Rect, error)
@@ -747,9 +859,12 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 		single := *doc
 		paragraph := block.paragraph
 		authoredSegments := append([]layout.TextSegment(nil), paragraph.Segments...)
-		paragraph.Segments = make([]layout.TextSegment, len(authoredSegments))
-		for index, segment := range authoredSegments {
-			paragraph.Segments[index] = layout.TextSegment{Text: segment.Text, Link: segment.Link, Destination: segment.Destination}
+		mixedCoreShadow := typedParagraphNeedsMixedCoreShadow(paragraph, f)
+		if !mixedCoreShadow {
+			paragraph.Segments = make([]layout.TextSegment, len(authoredSegments))
+			for index, segment := range authoredSegments {
+				paragraph.Segments[index] = layout.TextSegment{Text: segment.Text, Link: segment.Link, Destination: segment.Destination}
+			}
 		}
 		paragraph.Box, paragraph.BoxRef = layout.BoxStyle{}, nil
 		single.Body = []layout.Block{paragraph}
@@ -779,9 +894,13 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			}
 			return layoutengine.LayoutPlan{}, fmt.Errorf("%s: %w", path, err)
 		}
-		measurement, restyleErr := f.restylePaperMeasurement(paperRowColumnMeasurement{plan: shadow.Plan.Projection()}, paragraph.Style, authoredSegments)
-		if restyleErr != nil {
-			return layoutengine.LayoutPlan{}, fmt.Errorf("%s: %w", block.path, restyleErr)
+		measurement := paperRowColumnMeasurement{plan: shadow.Plan.Projection()}
+		if !mixedCoreShadow {
+			var restyleErr error
+			measurement, restyleErr = f.restylePaperMeasurement(measurement, paragraph.Style, authoredSegments)
+			if restyleErr != nil {
+				return layoutengine.LayoutPlan{}, fmt.Errorf("%s: %w", block.path, restyleErr)
+			}
 		}
 		projection := measurement.plan
 		nextNode++
@@ -794,6 +913,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			instance:     identity.instance,
 			source:       identity.source,
 			semanticRole: block.semanticRole, semanticText: block.semanticText,
+			headingLevel: block.headingLevel,
 			segments:     append([]layout.TextSegment(nil), block.paragraph.Segments...),
 			keepTogether: block.keepTogether, keepWithNext: block.keepWithNext,
 			orphans: block.orphans, widows: block.widows,
@@ -839,10 +959,47 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			run.Origin.Y = 0
 			blockPlan.runs[run.Line] = append(blockPlan.runs[run.Line], run)
 		}
+		if len(projection.Strokes) != 0 {
+			blockPlan.decorations = make(map[uint32][]paperMeasuredDecoration)
+			for _, stroke := range projection.Strokes {
+				if uint64(stroke.Path) >= uint64(len(projection.Paths)) {
+					return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] decoration references a missing path", block.bodyIndex)
+				}
+				path := projection.Paths[stroke.Path]
+				lineIndex := 0
+				found := false
+				bestDistance := int64(^uint64(0) >> 1)
+				for candidate, line := range projection.Lines {
+					bottom, bottomErr := line.Bounds.Bottom()
+					if bottomErr != nil {
+						return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] decoration line bounds: %w", block.bodyIndex, bottomErr)
+					}
+					delta := int64(path.Bounds.Y - line.Baseline)
+					if delta < 0 {
+						delta = -delta
+					}
+					if delta < bestDistance {
+						bestDistance = delta
+						lineIndex = candidate
+					}
+					if path.Bounds.Y >= line.Bounds.Y && path.Bounds.Y <= bottom {
+						lineIndex, found = candidate, true
+						break
+					}
+				}
+				if !found && len(projection.Lines) == 0 {
+					return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] decoration has no owning line", block.bodyIndex)
+				}
+				blockPlan.decorations[uint32(lineIndex)] = append(blockPlan.decorations[uint32(lineIndex)], paperMeasuredDecoration{
+					path: path, stroke: stroke, sourceLine: projection.Lines[lineIndex],
+				})
+			}
+		}
 		measured = append(measured, blockPlan)
 	}
 
 	geometry := layoutengine.LayoutPlanInput{}
+	var gridGroup uint32
 	runs := make([]layoutengine.CoreGlyphRun, 0)
 	imageResources := make([]layoutengine.ImageResource, 0)
 	images := make([]layoutengine.PlannedImage, 0)
@@ -851,6 +1008,26 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 	fills := make([]layoutengine.PlannedFill, 0)
 	strokes := make([]layoutengine.PlannedStroke, 0)
 	displayItems := make([]layoutengine.DisplayItem, 0)
+	appendMeasuredDecorations := func(block paperMeasuredBlock, sourceLine uint32, line layoutengine.PlannedLine, fragmentID layoutengine.FragmentID) error {
+		for _, decoration := range block.decorations[sourceLine] {
+			dx, dxErr := line.Bounds.X.Sub(decoration.sourceLine.Bounds.X)
+			dy, dyErr := line.Bounds.Y.Sub(decoration.sourceLine.Bounds.Y)
+			if dxErr != nil || dyErr != nil {
+				return fmt.Errorf("decoration translation offset: %v %v", dxErr, dyErr)
+			}
+			path, pathErr := translatePaperNestedPath(decoration.path, dx, dy)
+			if pathErr != nil {
+				return pathErr
+			}
+			paths = append(paths, path)
+			stroke := decoration.stroke
+			stroke.Path = uint32(len(paths) - 1)
+			stroke.Fragment = fragmentID
+			strokes = append(strokes, stroke)
+			displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)})
+		}
+		return nil
+	}
 	explicitDecorationBoxes := make(map[layoutengine.NodeID]layoutengine.Rect)
 	pageNumber := uint32(1)
 	cursorY := body.Y
@@ -913,6 +1090,11 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 		cursorY, available, regionEmpty = body.Y, body.Height, true
 		return nil
 	}
+	startBodyPage := func() {
+		geometry.Pages = append(geometry.Pages, layoutengine.PlannedPage{Number: pageNumber, Size: pageSize,
+			Fragments: layoutengine.IndexRange{Start: uint32(len(geometry.Fragments))}, Lines: layoutengine.IndexRange{Start: uint32(len(geometry.Lines))}})
+		geometry.PageRegions = append(geometry.PageRegions, layoutengine.PlannedPageRegion{Page: pageNumber, Region: layoutengine.RegionBody, Bounds: body})
+	}
 	for blockIndex, block := range measured {
 		if err := layoutengine.ChargePlanningWork(ctx, "typed document pagination", 1); err != nil {
 			return layoutengine.LayoutPlan{}, err
@@ -947,8 +1129,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 				}
 			}
 			if regionEmpty {
-				geometry.Pages = append(geometry.Pages, layoutengine.PlannedPage{Number: pageNumber, Size: pageSize,
-					Fragments: layoutengine.IndexRange{Start: uint32(len(geometry.Fragments))}, Lines: layoutengine.IndexRange{Start: uint32(len(geometry.Lines))}})
+				startBodyPage()
 			}
 			page := &geometry.Pages[len(geometry.Pages)-1]
 			dy, moveErr := cursorY.Sub(body.Y)
@@ -960,7 +1141,13 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 				oldID := local.ID
 				local.ID = layoutengine.FragmentID(len(geometry.Fragments) + 1)
 				local.Page, local.Region = pageNumber, layoutengine.RegionBody
-				local.BorderBox, moveErr = translateTypedRect(local.BorderBox, 0, dy)
+				local.MarginBox, moveErr = translateTypedRect(local.MarginBox, 0, dy)
+				if moveErr == nil {
+					local.BorderBox, moveErr = translateTypedRect(local.BorderBox, 0, dy)
+				}
+				if moveErr == nil {
+					local.PaddingBox, moveErr = translateTypedRect(local.PaddingBox, 0, dy)
+				}
 				if moveErr == nil {
 					local.ContentBox, moveErr = translateTypedRect(local.ContentBox, 0, dy)
 				}
@@ -1107,8 +1294,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 				}
 			}
 			if regionEmpty {
-				geometry.Pages = append(geometry.Pages, layoutengine.PlannedPage{Number: pageNumber, Size: pageSize,
-					Fragments: layoutengine.IndexRange{Start: uint32(len(geometry.Fragments))}, Lines: layoutengine.IndexRange{Start: uint32(len(geometry.Lines))}})
+				startBodyPage()
 			}
 			page := &geometry.Pages[len(geometry.Pages)-1]
 			contentX, contentY := body.X, cursorY
@@ -1143,6 +1329,34 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 					return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] grid row content origin is invalid", blockIndex)
 				}
 			}
+			gridGroup++
+			trackX := contentX
+			for trackIndex, trackWidth := range row.trackWidths {
+				trackBox, trackErr := layoutengine.NewRect(trackX, contentY, trackWidth, row.height)
+				if trackErr != nil {
+					return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] grid column track %d: %w", blockIndex, trackIndex, trackErr)
+				}
+				gapAfter := layoutengine.Fixed(0)
+				if trackIndex+1 < len(row.trackWidths) {
+					gapAfter = row.gap
+				}
+				geometry.GridTracks = append(geometry.GridTracks, layoutengine.PlannedGridTrack{Group: gridGroup, Page: pageNumber,
+					Region: layoutengine.RegionBody, Axis: layoutengine.GridTrackColumn, Index: uint32(trackIndex), Bounds: trackBox, GapAfter: gapAfter})
+				trackX, err = trackX.Add(trackWidth)
+				if err == nil && gapAfter > 0 {
+					trackX, err = trackX.Add(gapAfter)
+				}
+				if err != nil {
+					return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] grid column track %d overflows", blockIndex, trackIndex)
+				}
+			}
+			rowWidth, rowWidthErr := trackX.Sub(contentX)
+			rowTrackBox, rowTrackErr := layoutengine.NewRect(contentX, contentY, rowWidth, row.height)
+			if rowWidthErr != nil || rowTrackErr != nil {
+				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] grid row track is invalid", blockIndex)
+			}
+			geometry.GridTracks = append(geometry.GridTracks, layoutengine.PlannedGridTrack{Group: gridGroup, Page: pageNumber,
+				Region: layoutengine.RegionBody, Axis: layoutengine.GridTrackRow, Bounds: rowTrackBox})
 			for cellIndex, cell := range row.cells {
 				x, err := contentX.Add(cell.offsetX)
 				if err != nil {
@@ -1265,11 +1479,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 				}
 			}
 			if regionEmpty {
-				geometry.Pages = append(geometry.Pages, layoutengine.PlannedPage{
-					Number: pageNumber, Size: pageSize,
-					Fragments: layoutengine.IndexRange{Start: uint32(len(geometry.Fragments))},
-					Lines:     layoutengine.IndexRange{Start: uint32(len(geometry.Lines))},
-				})
+				startBodyPage()
 			}
 			page := &geometry.Pages[len(geometry.Pages)-1]
 			x, err := block.image.targetX(body)
@@ -1365,11 +1575,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 				}
 			}
 			if regionEmpty {
-				geometry.Pages = append(geometry.Pages, layoutengine.PlannedPage{
-					Number: pageNumber, Size: pageSize,
-					Fragments: layoutengine.IndexRange{Start: uint32(len(geometry.Fragments))},
-					Lines:     layoutengine.IndexRange{Start: uint32(len(geometry.Lines))},
-				})
+				startBodyPage()
 			}
 			page := &geometry.Pages[len(geometry.Pages)-1]
 			borderX, boxErr := body.X.Add(block.box.style.Margin.Left)
@@ -1391,6 +1597,14 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			borderBox, boxErr := layoutengine.NewRect(borderX, borderY, borderWidth, borderHeight)
 			if boxErr != nil {
 				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] border box: %w", blockIndex, boxErr)
+			}
+			marginBox, boxErr := layoutengine.NewRect(body.X, cursorY, body.Width, outerHeight)
+			if boxErr != nil {
+				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] margin box: %w", blockIndex, boxErr)
+			}
+			paddingBox, boxErr := borderBox.Inset(block.box.style.Border)
+			if boxErr != nil {
+				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] padding box: %w", blockIndex, boxErr)
 			}
 			contentX, boxErr := borderX.Add(block.box.style.Border.Left)
 			if boxErr == nil {
@@ -1415,7 +1629,8 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			fragmentID := layoutengine.FragmentID(len(geometry.Fragments) + 1)
 			geometry.Fragments = append(geometry.Fragments, layoutengine.Fragment{
 				ID: fragmentID, Node: block.node, Key: block.key, Instance: block.instance,
-				Page: pageNumber, Region: layoutengine.RegionBody, BorderBox: borderBox, ContentBox: contentBox,
+				Page: pageNumber, Region: layoutengine.RegionBody, MarginBox: marginBox, BorderBox: borderBox,
+				PaddingBox: paddingBox, ContentBox: contentBox,
 				Continuation: layoutengine.ContinuationWhole, Source: block.source,
 			})
 			page.Fragments.Count++
@@ -1454,6 +1669,9 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 					localRun.Source = block.source
 					runs = append(runs, localRun)
 					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(len(runs) - 1)})
+				}
+				if err := appendMeasuredDecorations(block, uint32(sourceLine), layoutengine.PlannedLine{Fragment: fragmentID, Index: uint32(sourceLine), Bounds: bounds, Baseline: baseline, Source: lineInput.Source}, fragmentID); err != nil {
+					return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] box line %d decoration: %w", blockIndex, sourceLine, err)
 				}
 				lineY, lineErr = lineY.Add(lineInput.Height)
 				if lineErr != nil {
@@ -1523,11 +1741,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			}
 
 			if regionEmpty {
-				geometry.Pages = append(geometry.Pages, layoutengine.PlannedPage{
-					Number: pageNumber, Size: pageSize,
-					Fragments: layoutengine.IndexRange{Start: uint32(len(geometry.Fragments))},
-					Lines:     layoutengine.IndexRange{Start: uint32(len(geometry.Lines))},
-				})
+				startBodyPage()
 			}
 			page := &geometry.Pages[len(geometry.Pages)-1]
 			fragmentID := layoutengine.FragmentID(len(geometry.Fragments) + 1)
@@ -1597,6 +1811,9 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 					localRun.Source = block.source
 					runs = append(runs, localRun)
 					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(len(runs) - 1)})
+				}
+				if err := appendMeasuredDecorations(block, sourceLine, layoutengine.PlannedLine{Fragment: fragmentID, Index: sourceLine, Bounds: bounds, Baseline: baseline, Source: lineInput.Source}, fragmentID); err != nil {
+					return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] line %d decoration: %w", blockIndex, sourceLine, err)
 				}
 				lineY, err = lineY.Add(lineInput.Height)
 				if err != nil {
@@ -1716,7 +1933,7 @@ func attachPlanSemantics(plan layoutengine.LayoutPlan, measured []paperMeasuredB
 		}
 		return parent
 	}
-	appendNode := func(node layoutengine.NodeID, key layoutengine.NodeKey, instance layoutengine.InstanceID, source layoutengine.SourceSpan, role layoutengine.SemanticRole, text string, ancestors []typedSemanticAncestor) {
+	appendNode := func(node layoutengine.NodeID, key layoutengine.NodeKey, instance layoutengine.InstanceID, source layoutengine.SourceSpan, role layoutengine.SemanticRole, text string, headingLevel uint8, ancestors []typedSemanticAncestor) {
 		if !node.Valid() || byNode[node].Valid() {
 			return
 		}
@@ -1725,8 +1942,12 @@ func attachPlanSemantics(plan layoutengine.LayoutPlan, measured []paperMeasuredB
 		}
 		parent := ensureAncestors(ancestors)
 		id := layoutengine.SemanticNodeID(len(nodes) + 1)
+		attributes := typedPlanSemanticAttributes(role, text)
+		if role == layoutengine.SemanticRoleHeading {
+			attributes.HeadingLevel = headingLevel
+		}
 		nodes = append(nodes, layoutengine.SemanticNode{ID: id, Parent: parent, Role: role, Key: key, Instance: instance,
-			Source: source, Attributes: typedPlanSemanticAttributes(role, text)})
+			Source: source, Attributes: attributes})
 		byNode[node] = id
 	}
 	for _, block := range measured {
@@ -1743,7 +1964,7 @@ func attachPlanSemantics(plan layoutengine.LayoutPlan, measured []paperMeasuredB
 				if cell.artifactOnly {
 					role = layoutengine.SemanticRoleArtifact
 				}
-				appendNode(cell.node, identity.key, identity.instance, identity.source, role, cell.semanticText, block.semanticAncestors)
+				appendNode(cell.node, identity.key, identity.instance, identity.source, role, cell.semanticText, 0, block.semanticAncestors)
 			}
 			continue
 		}
@@ -1766,7 +1987,7 @@ func attachPlanSemantics(plan layoutengine.LayoutPlan, measured []paperMeasuredB
 			}
 			continue
 		}
-		appendNode(block.node, block.key, block.instance, block.source, block.semanticRole, block.semanticText, block.semanticAncestors)
+		appendNode(block.node, block.key, block.instance, block.source, block.semanticRole, block.semanticText, block.headingLevel, block.semanticAncestors)
 	}
 	associations := make([]layoutengine.SemanticFragmentAssociation, 0, len(projection.Fragments))
 	reading := make([]layoutengine.ReadingOccurrence, 0, len(projection.Fragments))
@@ -2282,6 +2503,9 @@ func paperExpandPlanningBlock(ctx context.Context, expanded *[]paperPlanningBloc
 		if heading, isHeading := block.(layout.HeadingBlock); isHeading {
 			role = layoutengine.SemanticRoleHeading
 			appendSemanticParagraph(paragraph, path, role, layout.TextSegmentsPlainText(heading.Segments), false)
+			if heading.Level >= 1 && heading.Level <= 6 {
+				(*expanded)[len(*expanded)-1].headingLevel = uint8(heading.Level)
+			}
 		} else {
 			appendSemanticParagraph(paragraph, path, role, layout.TextSegmentsPlainText(paragraph.Segments), false)
 		}

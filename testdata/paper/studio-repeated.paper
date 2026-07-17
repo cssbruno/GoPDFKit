@@ -1,0 +1,69 @@
+document @report:
+  title: "Studio repeated fragments"
+  page @sheet:
+    width: 841.88976378pt
+    height: 1190.551181102pt
+    margin: 6pt
+    body @body:
+      table @ledger:
+        repeat-header: true
+        split: "rows"
+        table-track @left:
+          width: 84pt
+        table-track @right:
+          width: 84pt
+        table-header @head:
+          table-row @head-row:
+            cell @head-cell:
+              colspan: 2
+              text: "REPEATED HEADER"
+        table-row @row-0:
+          cell @label-0:
+            text: "Row 0"
+          cell @value-0:
+            text: "Value 0"
+        table-row @row-1:
+          cell @label-1:
+            text: "Row 1"
+          cell @value-1:
+            text: "Value 1"
+        table-row @row-2:
+          cell @label-2:
+            text: "Row 2"
+          cell @value-2:
+            text: "Value 2"
+        table-row @row-3:
+          cell @label-3:
+            text: "Row 3"
+          cell @value-3:
+            text: "Value 3"
+        table-row @row-4:
+          cell @label-4:
+            text: "Row 4"
+          cell @value-4:
+            text: "Value 4"
+        table-row @row-5:
+          cell @label-5:
+            text: "Row 5"
+          cell @value-5:
+            text: "Value 5"
+        table-row @row-6:
+          cell @label-6:
+            text: "Row 6"
+          cell @value-6:
+            text: "Value 6"
+        table-row @row-7:
+          cell @label-7:
+            text: "Row 7"
+          cell @value-7:
+            text: "Value 7"
+        table-row @row-8:
+          cell @label-8:
+            text: "Row 8"
+          cell @value-8:
+            text: "Value 8"
+        table-row @row-9:
+          cell @label-9:
+            text: "Row 9"
+          cell @value-9:
+            text: "Value 9"

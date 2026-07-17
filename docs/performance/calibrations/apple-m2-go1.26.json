@@ -17,6 +17,11 @@
       "max_bytes_per_op": 2621440,
       "max_allocs_per_op": 4000
     },
+    "BenchmarkPaperEngineProductionDefault": {
+      "max_median_ns_per_op": 5000000,
+      "max_bytes_per_op": 7340032,
+      "max_allocs_per_op": 20000
+    },
     "BenchmarkPaperEngineEndToEndTyped": {
       "max_median_ns_per_op": 4500000,
       "max_bytes_per_op": 7340032,

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -342,6 +342,14 @@ func buildPageMasterPlan(masters PageMasterSet, pageCount uint32, placements []m
 	for page := uint32(1); page <= pageCount; page++ {
 		start := len(planInput.Fragments)
 		master := masters.selectValidated(page)
+		for _, region := range []struct {
+			id     RegionID
+			bounds Rect
+		}{{RegionHeader, master.Header}, {RegionBody, master.Body}, {RegionFooter, master.Footer}} {
+			if region.bounds != (Rect{}) {
+				planInput.PageRegions = append(planInput.PageRegions, PlannedPageRegion{Page: page, Region: region.id, Bounds: region.bounds, Master: master.ID})
+			}
+		}
 		for _, placement := range byPage[page] {
 			id := FragmentID(len(planInput.Fragments) + 1)
 			ids[placement.key] = id

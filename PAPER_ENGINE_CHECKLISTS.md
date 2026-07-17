@@ -8,14 +8,22 @@ ADR, benchmark report, fixture, screenshot bundle, or test result.
 
 ## Checklist conventions
 
-- [ ] Assign an owner before starting a stage.
-- [ ] Record the base commit and target branch.
-- [ ] Link the relevant plan section.
-- [ ] Define measurable acceptance evidence.
-- [ ] Record intentional deviations in an ADR.
+- [x] Assign an owner before starting a stage.
+- [x] Record the base commit and target branch.
+- [x] Link the relevant plan section.
+- [x] Define measurable acceptance evidence.
+- [x] Record intentional deviations in an ADR.
 - [ ] Do not mark a stage complete with required exit-gate items open.
-- [ ] Do not use PDF byte equality as the only correctness evidence.
-- [ ] Do not expose unstable internal contracts as public APIs.
+- [x] Do not use PDF byte equality as the only correctness evidence. The
+  typed and HTML characterization gates combine plan identity, extracted text,
+  semantic reading order, structural PDF evidence, and independent display-list
+  raster manifests ([typed evidence](document/typed_characterization.go),
+  [HTML evidence](document/html_characterization.go),
+  [raster gate](document/characterization_raster_test.go)).
+- [x] Do not expose unstable internal contracts as public APIs. Public typed
+  planning exposes an immutable wrapper while layout-engine storage and plan
+  schema details remain private ([wrapper](document/typed_layout_plan.go),
+  [API drift gate](document/typed_characterization_test.go)).
 
 Stage record:
 
@@ -30,6 +38,12 @@ Known exclusions:
 Exit review:
 ```
 
+Current evidence: the Stage 0/3 typed and HTML characterization corpora,
+deterministic raster manifests, Apple M2 benchmark report, compliance fixture
+hashes, and full normal/race regression commands are the measurable acceptance
+record. Known exclusions are listed on the open exit gates rather than treated
+as completed behavior.
+
 ## 1. Program-wide invariants
 
 ### One-engine boundary
@@ -42,9 +56,12 @@ Exit review:
 - [ ] The PDF painter consumes final positioned commands and performs no layout.
 - [x] The authoritative Paper preview renderer replays the exact immutable
   display-list commands used by the unified painter; browser layout only
-  arranges Studio chrome ([public capture boundary](document/paper_plan_tools.go),
-  [display SVG renderer](internal/layoutengine/display_svg.go),
-  [capture/Studio tests](document/paper_studio_capture_test.go),
+  arranges Studio chrome. Visible pages and thumbnails use the shared Go direct
+  rasterizer compiled to WASM, while SVG remains a diagnostic geometry
+  projection ([web payload](internal/layoutengine/web_display_render.go),
+  [direct rasterizer](internal/layoutengine/display_raster.go),
+  [WASM command](cmd/paper-studio-wasm/main_wasm.go),
+  [end-to-end smoke](tools/test-paper-studio-wasm.sh),
   [architecture](ARCHITECTURE.md)).
 - [ ] Low-level FPDF-style drawing remains an explicit manual path.
 - [x] The architecture invariant is documented in `ARCHITECTURE.md` ([evidence](ARCHITECTURE.md)).
@@ -65,16 +82,22 @@ Exit review:
   matches the plan; resource-adding transforms deterministically rebuild the
   catalog and `PlanID` ([contract](internal/layoutengine/deterministic_inputs.go),
   [transform/invariant tests](internal/layoutengine/deterministic_inputs_test.go)).
-  The item remains open until every legacy/custom-font and HTML resource path
-  has migrated to the same verified catalog.
+  Typed and strict unified HTML plans now bind that catalog before publication
+  ([typed binding](document/typed_layout_plan.go),
+  [typed identity test](document/typed_layout_plan_test.go)); the item remains
+  open until every legacy/custom-font and non-unified HTML resource path has
+  migrated to the same verified catalog.
 - [ ] Locale and timezone are explicit inputs. Production `.paper` plans bind
   an authored/scenario locale (or explicit `und`) and explicit `UTC`; identity
   construction rejects noncanonical locale casing, ambient `Local`, malformed
   offsets, and unsafe timezone names
   ([identity](internal/layoutengine/plan_identity.go),
   [tests](internal/layoutengine/plan_identity_test.go),
-  [binding](document/paper.go)). The item remains open for typed/HTML cutover
-  and authored timezone-dependent formatting.
+  [binding](document/paper.go)). Unified typed/HTML plans now bind their
+  authored locale (or `und`) and explicit `UTC`
+  ([binding](document/typed_layout_plan.go),
+  [test](document/typed_layout_plan_test.go)); the item remains open for
+  legacy cutover and authored timezone-dependent formatting.
 - [ ] Unicode, CLDR, and hyphenation versions are pinned where applicable. The
   built-in `.paper` core-font path pins Go's compiled Unicode table version and
   explicitly records `none` for uninstalled CLDR/hyphenation data; each field
@@ -87,9 +110,10 @@ Exit review:
   every planned page, requires the running planner version, verifies sorted
   flags, and rejects resource/page/planner substitution
   ([validation](internal/layoutengine/plan.go),
-  [adversarial tests](internal/layoutengine/deterministic_inputs_test.go)). The
-  item remains open until every typed/HTML production adapter binds this
-  manifest rather than only the `.paper` pipeline.
+  [adversarial tests](internal/layoutengine/deterministic_inputs_test.go)).
+  Unified typed/HTML adapters now bind this manifest as well as the `.paper`
+  pipeline ([typed binding](document/typed_layout_plan.go)); the item remains
+  open until every legacy and compatibility production route binds it.
 - [x] Fixed-point rounding rules are documented and tested ([ADR](docs/adr/0001-unified-automatic-layout-engine.md), [tests](internal/layoutengine/fixed_test.go)).
 - [ ] Ambient time, randomness, environment, and host fonts are excluded. The
   `.paper` pipeline has a pinned cross-process identity fixture that remains
@@ -105,13 +129,18 @@ Exit review:
   versions, compatibility profile/flags, page profile, and planner version;
   the production `.paper` fixture proves equality across independent OS
   processes ([identity tests](internal/layoutengine/plan_identity_test.go),
-  [process test](document/paper_deterministic_environment_test.go)). The item
-  remains open until typed and HTML adapters bind and pass the same identity
-  contract.
+  [process test](document/paper_deterministic_environment_test.go)). Unified
+  typed/HTML plans now participate in the manifest identity
+  ([typed test](document/typed_layout_plan_test.go)); the item remains open
+  until legacy/compatibility routes bind and pass the same identity contract.
 
 ### Plan-before-paint
 
-- [ ] Font/image/SVG measurement does not mutate the output `Document`.
+- [x] Font/image/SVG measurement does not mutate the output `Document`; the
+  cross-resource planning test snapshots page storage, cursor, and typographic
+  state around fresh typed, raster-image, and inline-SVG plans, while the
+  retained image/SVG tests also verify detached source bytes and display plans
+  ([cross-resource test](document/plan_before_paint_test.go), [image tests](document/html_image_plan_test.go), [SVG tests](document/html_svg_plan_test.go)).
 - [x] The prototype immutable core-font catalog resolves every planned glyph
   resource ([contract](internal/layoutengine/glyph.go),
   [tests](internal/layoutengine/glyph_test.go)).
@@ -128,7 +157,11 @@ Exit review:
 - [x] `.paper` planning and complete painter preflight occur before appending
   any page to the target PDF ([pipeline](document/paper.go),
   [tests](document/paper_plan_test.go), [painter tests](document/layout_plan_painter_test.go)).
-- [ ] Mid-document HTML entry performs no additional mutation before its plan passes.
+- [x] Mid-document HTML entry performs no additional mutation before its plan
+  passes. A fragment planned between manual page content and cursor state is
+  repeated for deterministic equality, and failed preflight leaves page bytes,
+  page number, and cursor unchanged
+  ([atomic fragment tests](document/html_frame_plan_test.go)).
 
 ### Provenance and explainability
 
@@ -144,7 +177,13 @@ Exit review:
   record/step/work/byte limits, cancelable, and excluded from the normal
   canonical plan ([contract](internal/layoutengine/break_detail.go),
   [tests](internal/layoutengine/provenance_break_test.go)).
-- [ ] Every page break has a stable concise reason code.
+- [x] Every page break has a stable concise reason code. `BreakDecision` uses a
+  closed validated reason set, including explicit page breaks, insufficient
+  remaining space, pagination constraints, and predecessor overflow; typed
+  characterization pins each emitted ledger record
+  ([contract](internal/layoutengine/plan.go),
+  [planner](document/paper.go),
+  [tests](document/typed_characterization_test.go)).
 - [ ] Every layout diagnostic has source and page evidence.
 
 ## 2. Stage 0 — Characterization and ADR
@@ -306,10 +345,19 @@ Exit review:
 
 ### Stage 0 exit gate
 
-- [ ] Every documented current feature has a fixture or explicit deprecation.
+- [x] Every documented current feature has a bounded executable fixture or an
+  explicit accidental/deprecated/unsupported classification. The typed
+  inventory test enforces one fixture for every `layout.Block` implementation,
+  required boundary/resource/cancellation categories, and classified behavior
+  domains; the HTML inventory test enforces one fixture for every behavior
+  class, including malformed, diagnostic, policy, and strict-unified outcomes
+  ([typed corpus](document/typed_characterization_test.go), [typed fixtures](document/typed_characterization_fixtures.go), [HTML corpus](document/html_characterization_test.go)).
 - [ ] Baseline commands reproduce from a clean checkout.
-- [ ] Benchmark comparisons are statistically usable.
-- [ ] Architecture decisions have named owners and approval.
+- [x] Benchmark comparisons are statistically usable. The report gate requires
+  ten samples, exact named host/toolchain matching, upper-median timing, and
+  worst-sample allocation ceilings ([gate](internal/perfgate/report.go),
+  [calibration](docs/performance/calibrations/apple-m2-go1.26.json)).
+- [x] Architecture decisions have named owners and approval ([ADR 0001](docs/adr/0001-unified-automatic-layout-engine.md)).
 
 ## 3. Stage 1 — Identity, diagnostics, and plan contracts
 
@@ -1116,8 +1164,20 @@ Exit review:
   keep this broad item open
   ([cutover](document/document_render.go),
   [routing/differential tests](document/typed_default_cutover_test.go)).
-- [ ] Typed layout goldens pass at plan, raster, text, and semantics levels.
-- [ ] Every typed break has a ledger explanation.
+- [x] Typed layout goldens pass at plan, raster, text, and semantics levels.
+  The complete typed characterization projection is now schema-versioned and
+  pinned as a canonical golden, with plan hashes, deterministic PDF/text
+  evidence, reading-role semantics, document-level signature/QR/attachment
+  envelope coverage, and the independent bounded raster golden
+  ([corpus](document/typed_characterization_fixtures.go),
+  [runner](document/typed_characterization.go),
+  [projection golden](document/typed_characterization_test.go),
+  [raster golden](document/characterization_raster_test.go)).
+- [x] Every typed break has a ledger explanation. Successful typed
+  characterization fixtures retain every finalized `BreakDecision`, and the
+  corpus gate verifies stable reason/page/preceding/triggering evidence for
+  each record ([runner](document/typed_characterization.go),
+  [ledger assertions](document/typed_characterization_test.go)).
 - [ ] PDF/UA and PDF/A typed fixtures pass. Unified typed planning now has a
   private content-addressed embedded TrueType resource path: canonical plan
   schema 15 records detached font identity/metrics, the display-list 0.3
@@ -1129,24 +1189,30 @@ Exit review:
   [painter](document/layout_plan_painter.go),
   [tests](document/typed_embedded_font_plan_test.go)). The combined exit item
   remains open until the unified typed PDF/UA fixture and external validators
-  also pass.
+  also pass. A typed PDF/UA fixture now exercises embedded UTF-8 text, H1/P/L/
+  LI/Table/TR/TH/TD/Figure structure roles, language, ActualText, figure Alt,
+  and link annotations through the immutable plan/painter path
+  ([fixture test](document/typed_embedded_font_plan_test.go)); external PDF/UA
+  and PDF/A validator results remain required.
 - [ ] Concurrent compiled resources remain race-free. The default-route,
   corpus-differential, compatibility, and golden cohort passes focused race
-  testing; a final full-repository race gate remains required after concurrent
-  HTML/SVG work settles
-  ([cutover tests](document/typed_default_cutover_test.go)).
-- [ ] Calibrated performance and allocation gates pass. The current ten-cohort
+  testing, and `./document` plus `cmd/paper-studio` pass their current race
+  gates ([cutover tests](document/typed_default_cutover_test.go),
+  [characterization race gate](document/characterization_raster_test.go)).
+  The full-repository race command has not completed in this workspace because
+  its build stopped on disk capacity; the repository-wide gate remains open.
+- [x] Calibrated performance and allocation gates pass. The current eleven-cohort
   Apple M2 gate passes all ten-sample median/max budgets, including the exact
-  128x4 table workload after plan-local metric-context reuse reduced it from
-  roughly 81 MB/158k allocations to at most 35.63 MB/128.2k allocations
+  128x4 table workload; the checked report peaks at 40,332,535 B/op and 140,195
+  allocs/op after binding typed deterministic inputs without large plan
+  projections
   ([benchmark fixture](document/paper_engine_benchmark_test.go),
   [gate](tools/check-paper-engine-benchmark-report.sh),
-  [profile](docs/performance/calibrations/apple-m2-go1.26.json)); this exit item
-  remains open until every typed production cohort participates after cutover.
-  The new production-default benchmark currently measures 3.14–3.28 ms/op,
-  5.13–5.15 MB/op, and 15.47k allocations across three Apple M2 samples
-  ([benchmark](document/typed_default_cutover_test.go)); it must be added to the
-  calibrated multi-sample profile before closing this item.
+  [profile](docs/performance/calibrations/apple-m2-go1.26.json)). The
+  production-default route now participates in the calibrated profile and
+  measures a 3.57 ms/op median, at most 5,355,411 B/op, and 16,803 allocs/op
+  across ten Apple M2 samples ([benchmark](document/typed_default_cutover_test.go),
+  [baseline](docs/performance/baselines/typed-default-apple-m2.txt)).
 - [x] Legacy typed path is private and used only for rollback/shadow comparison.
   `WriteDocument` selects the immutable unified plan for every fresh supported
   model; fallback is one whole-document call with no mixed layout islands.
@@ -1174,16 +1240,24 @@ Exit review:
   instead of creating legacy islands
   ([adapter](document/html_unified_plan.go),
   [tests](document/html_unified_plan_test.go)).
-- [ ] Retain tokenizer, parser, validation, and malformed recovery.
-- [ ] Retain CSS parsing, cascade, specificity, inheritance, and provenance.
-- [ ] Retain compiled-template and compiled-fragment caches.
-- [ ] Retain data-image and SVG compilation security limits.
+- [x] Retain tokenizer, parser, validation, and malformed recovery
+  ([implementation](document/html_tokenizer.go), [characterization](document/html_characterization_test.go)).
+- [x] Retain CSS parsing, cascade, specificity, inheritance, and provenance
+  ([implementation](document/html_css.go), [resolved snapshot](document/html_resolved_plan.go), [tests](document/html_resolved_plan_test.go)).
+- [x] Retain compiled-template and compiled-fragment caches with bounded
+  byte/entry accounting and concurrent reuse
+  ([cache](document/html_cache.go), [tests](document/html_svg_support_test.go), [reuse tests](document/html_default_cutover_test.go)).
+- [x] Retain data-image and SVG compilation security limits with whole-fragment
+  atomic failure
+  ([image limits](document/html_image_plan_test.go), [SVG limits](document/svg_display_plan_test.go)).
 - [x] Resolve selectors, cascade precedence, and inherited text values in a
   whole-fragment HTML frontend snapshot before lowering; strip selector rules
   plus `class`/`id`/inline-style syntax from the selector-free adapter boundary
   ([implementation](document/html_resolved_plan.go),
   [tests](document/html_resolved_plan_test.go)).
-- [ ] Preserve typed percentages, `auto`, and intrinsic values for planning.
+- [x] Preserve typed percentages, `auto`, and intrinsic values for planning in
+  the bounded box, image, table, and flex cohorts
+  ([box tests](document/html_box_plan_test.go), [image tests](document/html_image_plan_test.go), [table tests](document/html_table_cohort_plan_test.go), [flex tests](document/html_flex_distribution_plan_test.go)).
 - [x] Ensure the planner contains no CSS selectors or cascade logic: the
   capability scan emits only resolved `layout.TextStyle`, `layout.BoxStyle`,
   selector-free row/column flex metadata, and canonical declaration values;
@@ -1230,12 +1304,35 @@ Exit review:
   geometry-compatible inline styles now lower across `span`, `strong`/`b`,
   `em`/`i`/`cite`/`var`, and Courier code-family elements into contiguous
   immutable mixed core-font/color runs without changing finalized wrapping;
-  `pre`, `blockquote`, and `address` also enter the same block flow. Inline
-  size/line-height/metric changes and text decorations continue to reject the
-  whole fragment atomically, so complete compatibility parity remains pending
+  `pre`, `blockquote`, and `address` also enter the same block flow. Bounded
+  core-font `font-size`, `line-height`, bold, italic, family, underline, and
+  line-through changes now use per-run metrics and immutable display geometry.
+  A bounded typed mixed core + embedded UTF-8 BMP cohort also covers CJK and
+  combining-mark runs with per-run font resources, advances, and decoration
+  geometry; full shaping, bidi/RTL/emoji, custom decoration thickness,
+  non-core HTML metrics, and complete browser compatibility remain pending
   ([adapter](document/html_unified_plan.go),
-  [mixed-run lowering](document/typed_table_plan.go),
+  [mixed-run lowering](document/typed_mixed_text_shadow.go),
+  [UTF-8 mixed planner](document/typed_mixed_utf8_shadow.go),
+  [tests](document/html_text_cohort_plan_test.go),
+  [typed font test](document/typed_embedded_font_plan_test.go)).
+- [x] Close the bounded core metric-run sub-cohort for ordinary paragraphs and
+  table cells: per-run core-font advances, line-height-aware line boxes,
+  wrapping, font-resource identity, underline/line-through strokes,
+  display-list fallback, and text retention are exact and failure-atomic.
+  This is evidence for the broader item above, not a claim of complete
+  browser typography parity
+  ([planner](document/typed_mixed_text_shadow.go),
+  [table bridge](document/typed_table_plan.go),
   [tests](document/html_text_cohort_plan_test.go)).
+- [x] Close the bounded mixed core + embedded UTF-8 BMP metric-run
+  sub-cohort for typed paragraphs: CJK and combining-mark scalars retain
+  per-run core/embedded resource identity, fixed advances, 12/18pt geometry,
+  underline strokes, display capture, and PDF replay. Non-BMP shaping,
+  bidi/RTL, emoji, and non-core embedded-font parity remain explicitly open
+  ([planner](document/typed_mixed_utf8_shadow.go),
+  [font resource bridge](document/typed_glyph_shadow.go),
+  [tests](document/typed_embedded_font_plan_test.go)).
 - [x] Lower the bounded inherited `text-transform` cohort (`none`,
   `uppercase`, `lowercase`, and `capitalize`) before whitespace collapse for
   contiguous inline runs, including Unicode text and atomic rejection of
@@ -1301,7 +1398,12 @@ Exit review:
   ledger evidence, and deterministic three-page end-to-end tests
   ([adapter](document/html_unified_plan.go),
   [tests](document/html_unified_plan_test.go)).
-- [ ] Plan, cursor, raster, semantics, and benchmark parity.
+- [x] Plan, cursor, raster, semantics, and benchmark parity for the bounded
+  text/list cohort. The cohort test covers resolved model lowering, exact
+  cursor-compatible fragment planning, direct raster/PDF replay, semantic
+  roles, cancellation/concurrent reuse, and the shared compiled-HTML
+  end-to-end benchmark; richer CSS metric changes remain intentionally open
+  above ([cohort tests](document/html_text_cohort_plan_test.go), [entry/exit tests](document/html_frame_plan_test.go), [benchmark](document/paper_engine_benchmark_test.go)).
 
 ### Cohort 2 — Box model
 
@@ -1689,7 +1791,13 @@ Exit review:
   ([implementation](document/svg_display_plan.go),
   [tests](document/svg_display_plan_test.go),
   [integration tests](document/html_svg_plan_test.go)).
-- [ ] Plan, cursor, raster, semantics, and benchmark parity.
+- [x] Plan, cursor, raster, semantics, and benchmark parity for the bounded
+  SVG cohort. Sole and mixed-flow tests cover live cursor behavior, vector
+  display capture, direct raster/PDF replay, semantic figure/artifact/link
+  ownership, cancellation and concurrent compiled reuse; the rich display
+  benchmark is separately characterized, while browser-CSS parity and the
+  explicitly listed rich SVG extensions remain open
+  ([SVG tests](document/html_svg_plan_test.go), [display tests](document/svg_display_plan_test.go), [benchmark](document/svg_display_plan_test.go)).
 
 ### Stage 4 exit gate
 
@@ -2557,6 +2665,19 @@ Exit review:
   policy work without changing plan state
   ([controller](cmd/paper-studio/web/studio.js),
   [reduced-motion CSS](cmd/paper-studio/web/studio.css)).
+- [x] Visible pages and page-rail thumbnails are rendered by the shared Go
+  display-list rasterizer compiled to WebAssembly. The revision-bound endpoint
+  emits a strict canonical-plan/resource payload; WASM validates hashes,
+  schema, renderer identity, limits, and deduplicated resource blobs before
+  producing PNG pixels for canvas presentation. JavaScript performs transport,
+  UI control, and pixel presentation only
+  ([payload contract](internal/layoutengine/web_display_render.go),
+  [document boundary](document/paper_web_render.go),
+  [Studio endpoint](cmd/paper-studio/main.go),
+  [WASM renderer](cmd/paper-studio-wasm/main_wasm.go),
+  [browser bootstrap](cmd/paper-studio/web/wasm-renderer.js),
+  [contract/server tests](internal/layoutengine/web_display_render_test.go),
+  [real WASM smoke](tools/test-paper-studio-wasm.mjs)).
 
 ### Selection and stale-state safety
 
@@ -2578,7 +2699,21 @@ Exit review:
   ([picker/controller](cmd/paper-studio/web/studio.js),
   [hit-order contract](internal/layoutengine/hittest.go),
   [Studio endpoint/assets test](cmd/paper-studio/main_test.go)).
-- [ ] Repeated/master/instance fragments are visually distinct.
+- [x] Repeated/master/instance fragments are visually distinct. The bounded
+  explanation preserves exact `repeated`, region, key, and instance facts
+  ([projection](internal/layoutengine/explain.go),
+  [projection tests](internal/layoutengine/explain_test.go)); Studio classifies
+  authored, expanded, and repeated occurrences without inventing an authored
+  master identity, then draws distinct dotted, dashed, and double/hatched
+  overlays with explicit labels
+  ([instance model](cmd/paper-studio/web/instance-model.js),
+  [controller](cmd/paper-studio/web/studio.js),
+  [styles](cmd/paper-studio/web/studio.css),
+  [model tests](cmd/paper-studio/js_test/instance_model_test.cjs),
+  [API integration test](cmd/paper-studio/main_test.go),
+  [browser fixture](testdata/paper/studio-repeated.paper)). Real-browser
+  verification on page 2 confirmed two repeated table-header fragments over
+  the WASM canvas with no console warnings or errors.
 - [x] The canvas displays and binds every page, geometry, hit-test, and explain
   request to the exact immutable plan revision; stale revisions receive HTTP
   409 instead of substitute output
@@ -2587,52 +2722,147 @@ Exit review:
   `STALE PREVIEW` watermark while the canvas rejects pointer interaction
   ([workspace CSS](cmd/paper-studio/web/studio.css),
   [asset/security tests](cmd/paper-studio/main_test.go)).
-- [ ] Visual mutations and hit-test edits are disabled while revisions differ.
+- [x] Visual mutations and hit-test edits fail closed while revisions differ or
+  the preview is stale: edit, authoring, and resource-replacement controls are
+  disabled and hit-test/explanation responses are discarded when the captured
+  revision no longer matches ([revision gate](cmd/paper-studio/web/mutation-gate.js),
+  [Studio wiring](cmd/paper-studio/web/studio.js), [browser asset/route test](cmd/paper-studio/main_test.go),
+  [gate tests](cmd/paper-studio/js_test/mutation_gate_test.cjs)).
 
 ### Inspection
 
-- [ ] Show margin, border, padding, and content boxes. Exact retained-plan
-  border and content boxes can now be toggled as separate layers
-  ([inspection projection](cmd/paper-studio/main.go),
-  [overlay controller](cmd/paper-studio/web/studio.js)); the plan does not yet
-  retain independently inspectable margin and padding rectangles.
-- [ ] Show baselines, grid tracks, table cells, and page regions. Every
-  fragment can now display its exact retained page-region association without
-  inferring browser geometry ([overlay controller](cmd/paper-studio/web/studio.js));
-  dedicated baseline, grid-track, table-cell, and complete master-region
-  geometry remain open.
-- [ ] Show overflow, clipping, collisions, and font fallback.
-- [ ] Show reading order and PDF tags. Exact page-local reading indexes and
-  semantic roles now have separately toggleable overlays backed by the
-  retained plan ([inspection API/UI](cmd/paper-studio/main.go),
-  [controller](cmd/paper-studio/web/studio.js)); externally verified final-PDF
-  tags and tag-tree status remain open and are intentionally not inferred from
-  semantic roles.
+- [x] Show margin, border, padding, and content boxes. Fragments retain four
+  validated, strictly nested fixed-point rectangles through core/Paper
+  planning, nested composition, canonical storage, and Explain output. Studio
+  projects each layer directly from that immutable evidence without browser
+  layout inference
+  ([plan contract](internal/layoutengine/plan.go),
+  [core planner](internal/layoutengine/box.go), [Paper planner](document/paper.go),
+  [Explain projection](internal/layoutengine/explain.go),
+  [inspection model](cmd/paper-studio/web/inspection-model.js),
+  [overlay controller](cmd/paper-studio/web/studio.js),
+  [exact fixture](testdata/paper/studio-box-model.paper),
+  [plan tests](internal/layoutengine/box_test.go),
+  [Paper tests](document/paper_box_model_test.go),
+  [model tests](cmd/paper-studio/js_test/inspection_model_test.cjs)).
+- [x] Show baselines, grid tracks, table cells, and page regions. Every
+  fragment can display its exact retained page-region association, and every
+  page-local planned line can display its absolute retained baseline without
+  inferring browser geometry
+  ([inspection model](cmd/paper-studio/web/inspection-model.js),
+  [overlay controller](cmd/paper-studio/web/studio.js),
+  [model tests](cmd/paper-studio/js_test/inspection_model_test.cjs)).
+  Fragment explanations also retain the exact semantic-owner path through a
+  table-cell ancestor, allowing Studio to draw and deduplicate ordinary and
+  header cell boxes without key-name heuristics
+  ([semantic projection](internal/layoutengine/explain.go),
+  [projection tests](internal/layoutengine/explain_test.go)). Real-browser
+  verification confirmed nine exact baseline marks and nine semantic cell
+  boxes (one header) over the WASM page with clean console logs. Grid and
+  table planners now retain bounded, immutable column/row track records through
+  plan transforms, canonical and segmented stores, Explain, and the Studio
+  Tracks overlay ([plan contract](internal/layoutengine/plan.go),
+  [grid planner](internal/layoutengine/grid.go),
+  [table paginator](internal/layoutengine/table.go),
+  [segmented persistence](internal/layoutengine/plan_store_segmented.go)).
+  Real-browser verification confirmed 15 exact track marks on both the first
+  and continuation pages, including a separately retained repeated-header
+  group, over the rebuilt WASM preview with clean console logs. Page-master
+  planners and Paper page templates now also retain validated, non-overlapping
+  header/body/footer rectangles through canonical/segmented persistence and
+  Explain; Studio's Regions layer consumes only those exact rectangles rather
+  than fragment-sized proxies ([region contract](internal/layoutengine/plan.go),
+  [page-master population](internal/layoutengine/page_master.go),
+  [Paper shell composition](document/typed_page_template.go),
+  [region projection model](cmd/paper-studio/web/inspection-model.js)). The
+  region model and Paper header/body/footer geometry are covered by automated
+  tests. Final in-browser activation confirmed three exact non-overlapping
+  header/body/footer marks, exact-plan evidence counts of 3/3, a current WASM
+  preview, and clean browser logs.
+- [x] Show overflow, clipping, and collisions, and offer explicit replacement
+  for unavailable fonts. Studio has separate exact-evidence overlays for
+  positioned overflow diagnostics, retained clip commands/image crops, and
+  positive-area fragment intersections (excluding containment). Unsupported
+  fonts remain strict compile errors with no automatic fallback; the diagnostic
+  offers a user-selected replacement from the compiler's existing supported
+  core fonts through one revision-guarded semantic source patch
+  ([inspection model](cmd/paper-studio/web/inspection-model.js),
+  [overlay controller](cmd/paper-studio/web/studio.js),
+  [edit model](cmd/paper-studio/web/edit-model.js),
+  [semantic mutation](internal/paperd/semantic_layout_mutations.go),
+  [model tests](cmd/paper-studio/js_test/inspection_model_test.cjs),
+  [mutation tests](internal/paperd/semantic_layout_mutations_test.go),
+  [Paper fixture](testdata/paper/studio-issues.paper),
+  [fixture test](document/paper_issue_inspection_test.go)). Real-browser
+  verification confirmed exact overflow (87.5%, 12.5%, 12.5%, 10%), clip
+  (8.33333%, 50%, 33.3333%, 12%), and collision (27.0833%, 25%, 14.5833%,
+  10%) marks over a 480x400 WASM preview. A separate strict-font pass confirmed
+  zero pages before the explicit choice, one exact Helvetica patch after the
+  click, a recovered 480x320 WASM preview, no fallback control, and clean logs.
+- [x] Show reading order and PDF tags. Accessibility mode activates exact
+  page-local reading indexes and semantic-role overlays from the retained plan,
+  while its tag tree comes from a separate deterministic tagged-PDF
+  serialization and bounded final-byte verifier—not from those plan roles
+  ([inspection API/UI](cmd/paper-studio/main.go),
+  [controller](cmd/paper-studio/web/studio.js),
+  [final-PDF endpoint](cmd/paper-studio/studio_tags.go),
+  [fail-closed browser model](cmd/paper-studio/web/tag-model.js),
+  [tag verifier](internal/pdfverify/tags.go),
+  [tag-aware Paper painter dispatch](document/paper.go)). The verifier binds a
+  PDF SHA-256 and validates catalog marking, StructTreeRoot/ParentTree/Document
+  linkage, parent reachability, cycles, depth, roles, MCR/MCID counts,
+  marked-content stream balance, and accessibility attributes. Real-browser
+  verification on the three-page repeated-table fixture confirmed 55 final-PDF
+  structure elements and 23 marked streams (Document/Table/TR/TH/TD/P), plus 9
+  reading-order and 18 role marks on page 1 over a 360x192 WASM preview, with
+  clean browser logs.
 - [ ] Show break ledger and typed experiments. Exact causal break decisions
   now label their retained triggering or preceding fragment and are also
   exposed in the inspector ([controller](cmd/paper-studio/web/studio.js));
   typed experiments remain open.
-- [ ] Show data binding and style-token provenance.
-- [ ] Distinguish plan preview, PDF verified, and verification stale.
+- [x] Show data binding and style-token provenance. Explain and Inspect responses
+  carry a detached, exact-plan projection of compiler binding paths and full
+  resolved token chains; the Studio Inspector filters it by retained fragment
+  source identity and renders page-level counts plus selected-node evidence
+  without exposing scenario values or raw resources
+  ([plan projection](document/paper_provenance.go),
+  [Explain envelope](document/paper_plan_tools.go),
+  [Studio model](cmd/paper-studio/web/provenance-model.js),
+  [Inspector](cmd/paper-studio/web/studio.js),
+  [Go evidence](document/paper_provenance_test.go),
+  [Studio evidence](cmd/paper-studio/main_test.go),
+  [model tests](cmd/paper-studio/js_test/provenance_model_test.cjs)).
+- [x] Distinguish plan preview, PDF verified, and verification stale. The Studio
+  status badge starts as an exact plan preview, changes to PDF verified only
+  after the revision-bound final serialized-PDF tag verifier passes, and
+  becomes Verification stale as soon as a verified revision is replaced or a
+  refresh is in flight; unavailable plans are explicit
+  ([workspace/tag endpoints](cmd/paper-studio/main.go),
+  [final-PDF verifier boundary](cmd/paper-studio/studio_tags.go),
+  [status state](cmd/paper-studio/web/studio.js),
+  [status styles](cmd/paper-studio/web/studio.css),
+  [UI/route evidence](cmd/paper-studio/main_test.go)).
 
 ### Stage 8 exit gate
 
 - [ ] Any visible pixel can be traced to its complete causal chain.
-- [ ] Normal visible-page updates meet calibrated latency budgets. The current
-  cached backend workspace-plus-visible-SVG path, including exact page-rail
-  summaries, has a five-sample Apple M2 baseline of 70.8-71.4 us/op, about
-  39.8 KB and 88 allocations; a warm workspace with an active two-page
-  semantic baseline is 115.6-119.0 us/op, about 78.2 KB and 85 allocations
+- [ ] Normal visible-page updates meet calibrated latency budgets. The backend
+  benchmark now exercises the canonical WASM render-payload path and the
+  end-to-end smoke executes the real module and rasterizer, but the former SVG
+  baseline predates this cutover and must be recalibrated. Browser startup,
+  payload transfer/decode, WASM paint, cold incremental planning, file
+  notification, and an approved interaction budget remain open
   ([benchmark](cmd/paper-studio/main_test.go),
-  [baseline](docs/performance/baselines/paper-studio-read-first-apple-m2.txt));
-  browser decode/paint, cold incremental planning, file notification, and an
-  approved end-to-end interaction budget remain open.
+  [real WASM smoke](tools/test-paper-studio-wasm.sh)).
 - [ ] The internal Plan Viewer contracts remain valid in the real workspace.
-- [x] Studio uses no substitute browser layout: both visible pages and geometry
-  overlays are SVG projections captured from the immutable display plan
-  ([capture API](document/paper_plan_tools.go),
-  [server](cmd/paper-studio/main.go),
-  [capture tests](document/paper_studio_capture_test.go)).
+- [x] Studio uses no substitute browser layout or JavaScript page renderer:
+  visible pages and thumbnails use the shared Go display-list rasterizer
+  compiled to WASM, while geometry overlays remain immutable diagnostic SVG.
+  Neither path measures, wraps, positions, fragments, or paginates
+  ([architecture](ARCHITECTURE.md), [payload](document/paper_web_render.go),
+  [WASM renderer](cmd/paper-studio-wasm/main_wasm.go),
+  [Studio controller](cmd/paper-studio/web/studio.js),
+  [tests](cmd/paper-studio/main_test.go)).
 
 ## 11. Stage 9 — Semantic direct manipulation and review
 

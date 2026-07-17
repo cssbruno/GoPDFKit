@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -268,6 +268,11 @@ func (html *HTML) planCompiledHTMLFragmentContext(ctx context.Context, lineHeigh
 		}
 		projection = planned.Projection()
 	}
+	planned, err = bindTypedDeterministicInputs(planned, tree, model)
+	if err != nil {
+		return htmlFragmentPlan{}, fmt.Errorf("document: bind HTML fragment deterministic inputs: %w", err)
+	}
+	projection = planned.Projection()
 	hash, err := planned.Hash()
 	if err != nil {
 		return htmlFragmentPlan{}, fmt.Errorf("document: hash HTML fragment plan: %w", err)
@@ -424,6 +429,7 @@ func (html *HTML) writeCompiledUnifiedFragmentContext(ctx context.Context, lineH
 	projection := fragment.plan.plan.Projection()
 	withDisplay := len(projection.ImageResources) != 0 || len(projection.Links) != 0 || len(projection.Destinations) != 0 ||
 		len(projection.Paths) != 0 || len(projection.Fills) != 0 || len(projection.Strokes) != 0 || len(projection.Clips) != 0 || len(projection.Transforms) != 0
+	withDisplay = withDisplay || layoutPlanHasMultipleGlyphRunsPerLine(projection)
 	if withDisplay {
 		prepared, preflightErr := html.pdf.preflightDisplayLayoutPlanPDFContextForTarget(ctx, fragment.plan.plan, fragment.plan.imageSources, true)
 		if preflightErr != nil {

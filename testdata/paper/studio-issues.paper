@@ -1,0 +1,38 @@
+document @issues:
+  title: "Inspection issues"
+  language: "en"
+  page @sheet:
+    width: 240pt
+    height: 200pt
+    margin: 20pt
+    body @content:
+      canvas @diagram:
+        width: 200pt
+        height: 80pt
+        anchor @base:
+          width: 70pt
+          height: 40pt
+          left: "canvas.left + 10pt"
+          top: "canvas.top + 10pt"
+          background: "#DCEAF7"
+          alt: "Base panel"
+        anchor @overlap:
+          width: 70pt
+          height: 40pt
+          left: "@base.left + 35pt"
+          top: "@base.top + 20pt"
+          background: "#F7E6C9"
+          alt: "Overlapping panel"
+        anchor @spill:
+          width: 30pt
+          height: 20pt
+          left: "canvas.right - 10pt"
+          top: "canvas.top + 5pt"
+          background: "#F4C7C3"
+          alt: "Overflow panel"
+      image @crop:
+        source: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+        width: 80pt
+        height: 24pt
+        fit: "cover"
+        alt: "Cropped evidence pixel"

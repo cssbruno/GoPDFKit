@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 // Package papercompile lowers the syntax-only paperlang AST into the shared
@@ -115,6 +115,19 @@ func CompileWithAssets(ast paperlang.AST, assets AssetCatalog) Result {
 	return compileWithLimits(ast, ExpansionLimits{}, SchemaLimits{}, assets)
 }
 
+// CompileWithResolver compiles a document whose root may declare one or more
+// source-relative design imports. The resolver is the only authority allowed
+// to provide imported source bytes.
+func CompileWithResolver(ast paperlang.AST, resolver ImportResolver) Result {
+	return compileWithLimitsAndResolver(ast, ExpansionLimits{}, SchemaLimits{}, AssetCatalog{}, resolver)
+}
+
+// CompileWithAssetsAndResolver combines explicit asset and source import
+// boundaries.
+func CompileWithAssetsAndResolver(ast paperlang.AST, assets AssetCatalog, resolver ImportResolver) Result {
+	return compileWithLimitsAndResolver(ast, ExpansionLimits{}, SchemaLimits{}, assets, resolver)
+}
+
 // CompileWithExpansionLimits compiles with explicit bounded component
 // expansion. A zero limits value selects conservative defaults.
 func CompileWithExpansionLimits(ast paperlang.AST, limits ExpansionLimits) Result {
@@ -127,10 +140,16 @@ func CompileWithSchemaLimits(ast paperlang.AST, limits SchemaLimits) Result {
 }
 
 func compileWithLimits(ast paperlang.AST, expansionLimits ExpansionLimits, schemaLimits SchemaLimits, assets AssetCatalog) Result {
-	return compilePipeline(ast, expansionLimits, schemaLimits, nil, assets)
+	return compileWithLimitsAndResolver(ast, expansionLimits, schemaLimits, assets, nil)
 }
 
-func compilePipeline(ast paperlang.AST, expansionLimits ExpansionLimits, schemaLimits SchemaLimits, scenario *scenarioCompileRequest, assets AssetCatalog) Result {
+func compileWithLimitsAndResolver(ast paperlang.AST, expansionLimits ExpansionLimits, schemaLimits SchemaLimits, assets AssetCatalog, resolver ImportResolver) Result {
+	return compilePipeline(ast, expansionLimits, schemaLimits, nil, assets, resolver)
+}
+
+func compilePipeline(ast paperlang.AST, expansionLimits ExpansionLimits, schemaLimits SchemaLimits, scenario *scenarioCompileRequest, assets AssetCatalog, resolver ImportResolver) Result {
+	imports := resolveImports(ast, resolver, ImportLimits{})
+	ast = imports.ast
 	schemas := analyzeSchemas(ast, schemaLimits)
 	themes := ExtractThemes(ast)
 	selectedScenario := ""
@@ -156,6 +175,7 @@ func compilePipeline(ast paperlang.AST, expansionLimits ExpansionLimits, schemaL
 	}
 	c.result.Diagnostics = append(c.result.Diagnostics, schemas.diagnostics...)
 	c.result.Diagnostics = append(c.result.Diagnostics, themes.Diagnostics...)
+	c.result.Diagnostics = append(c.result.Diagnostics, imports.diagnostics...)
 	c.result.Diagnostics = append(c.result.Diagnostics, expanded.diagnostics...)
 	c.result.Diagnostics = append(c.result.Diagnostics, bindings.diagnostics...)
 	root := expanded.ast.Root
@@ -168,6 +188,7 @@ func compilePipeline(ast paperlang.AST, expansionLimits ExpansionLimits, schemaL
 		c.result.Document = nil
 		return c.result
 	}
+	c.collectStyleRules(ast.Root)
 	c.mapNode(root, -1, -1)
 	properties, children := c.members(root, documentProperties)
 	c.compileDocumentProperties(properties)
@@ -208,9 +229,10 @@ type compiler struct {
 	selectedTheme    string
 	themeSelected    bool
 	assets           AssetCatalog
+	styleRules       map[string]styleRule
 }
 
-var documentProperties = map[string]bool{"title": true, "language": true, "theme": true}
+var documentProperties = map[string]bool{"title": true, "language": true, "theme": true, "import": true}
 var pageProperties = map[string]bool{
 	"size": true, "width": true, "height": true, "margin": true,
 	"margin-top": true, "margin-right": true, "margin-bottom": true, "margin-left": true,
@@ -234,12 +256,14 @@ var bindingTextProperties = func() map[string]bool {
 	return properties
 }()
 var boxPropertyNames = []string{
+	"margin", "margin-top", "margin-right", "margin-bottom", "margin-left",
 	"padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
 	"border-width", "border-top-width", "border-right-width", "border-bottom-width", "border-left-width",
 	"border-color", "border-radius", "background",
 }
 var boxedTextProperties = func() map[string]bool {
 	properties := copyPropertySet(bindingTextProperties)
+	properties["style"] = true
 	for _, name := range boxPropertyNames {
 		properties[name] = true
 	}
@@ -247,6 +271,7 @@ var boxedTextProperties = func() map[string]bool {
 }()
 var listProperties = func() map[string]bool {
 	properties := copyPropertySet(textStyleProperties)
+	properties["style"] = true
 	properties["ordered"] = true
 	properties["marker"] = true
 	properties["when"] = true
@@ -271,6 +296,7 @@ var imageProperties = func() map[string]bool {
 		"fit": true, "focus-x": true, "focus-y": true, "align": true,
 		"alt": true, "decorative": true, "caption": true, "when": true,
 	}
+	properties["style"] = true
 	for _, name := range boxPropertyNames {
 		properties[name] = true
 	}
@@ -325,10 +351,14 @@ func (c *compiler) compilePage(node *paperlang.Node) {
 			switch strings.ToLower(strings.TrimSpace(name)) {
 			case "a4":
 				c.result.Page = PageSpec{Width: 595.275590551, Height: 841.88976378}
+			case "a3":
+				c.result.Page = PageSpec{Width: 841.88976378, Height: 1190.551181102}
 			case "letter":
 				c.result.Page = PageSpec{Width: 612, Height: 792}
+			case "legal":
+				c.result.Page = PageSpec{Width: 612, Height: 1008}
 			default:
-				c.add("PAPER_COMPILE_PAGE_SIZE", fmt.Sprintf("unsupported page size %q", name), "use A4, Letter, or explicit width and height", property.Value.Span)
+				c.add("PAPER_COMPILE_PAGE_SIZE", fmt.Sprintf("unsupported page size %q", name), "use A3, A4, Letter, Legal, or explicit width and height", property.Value.Span)
 			}
 		}
 	}
@@ -1306,6 +1336,26 @@ func (c *compiler) compileTextStyle(node *paperlang.Node, properties map[string]
 
 func (c *compiler) compileBoxStyle(properties map[string]paperlang.Property) layout.BoxStyle {
 	var box layout.BoxStyle
+	if property, ok := properties["margin"]; ok {
+		if value, valid := c.lengthProperty(property, false); valid {
+			box.Margin = layout.Spacing{Top: value, Right: value, Bottom: value, Left: value}
+		}
+	}
+	for _, side := range []struct {
+		name string
+		set  func(float64)
+	}{
+		{"margin-top", func(value float64) { box.Margin.Top = value }},
+		{"margin-right", func(value float64) { box.Margin.Right = value }},
+		{"margin-bottom", func(value float64) { box.Margin.Bottom = value }},
+		{"margin-left", func(value float64) { box.Margin.Left = value }},
+	} {
+		if property, ok := properties[side.name]; ok {
+			if value, valid := c.lengthProperty(property, false); valid {
+				side.set(value)
+			}
+		}
+	}
 	if property, ok := properties["padding"]; ok {
 		if value, valid := c.lengthProperty(property, false); valid {
 			box.Padding = layout.Spacing{Top: value, Right: value, Bottom: value, Left: value}
@@ -1601,6 +1651,9 @@ func (c *compiler) members(node *paperlang.Node, supported map[string]bool) (map
 		}
 		property := *member.Property
 		if _, duplicate := properties[property.Name]; duplicate {
+			if node.Kind == paperlang.NodeDocument && property.Name == "import" {
+				continue
+			}
 			c.add("PAPER_COMPILE_DUPLICATE_PROPERTY", fmt.Sprintf("property %q is repeated on %s", property.Name, node.Kind), "remove the duplicate; the first value is retained", property.Span)
 			continue
 		}
@@ -1609,7 +1662,7 @@ func (c *compiler) members(node *paperlang.Node, supported map[string]bool) (map
 			c.add("PAPER_COMPILE_UNSUPPORTED_PROPERTY", fmt.Sprintf("property %q is unsupported on %s", property.Name, node.Kind), "remove it or use a supported property", property.Span)
 		}
 	}
-	return properties, children
+	return c.applyStyle(properties, supported), children
 }
 
 func (c *compiler) stringProperty(property paperlang.Property) (string, bool) {

@@ -1,6 +1,6 @@
 //go:build aix || dragonfly || freebsd || netbsd || openbsd || solaris
 
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd

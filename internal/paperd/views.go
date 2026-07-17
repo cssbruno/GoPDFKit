@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -335,7 +335,7 @@ func (w *Workspace) Render(handle RevisionHandle) (RenderResult, error) {
 	if !record.parsed.OK() || !record.compiled.OK() {
 		return RenderResult{Revision: handle}, workspaceError("INVALID_SOURCE", "source is not renderable", ErrInvalidSource)
 	}
-	plan, _, err := document.PlanPaper(record.file, record.source)
+	plan, _, err := document.PlanPaperWithImports(record.file, record.source, document.PaperImportResolver(w.importResolver))
 	if err != nil {
 		return RenderResult{Revision: handle}, err
 	}

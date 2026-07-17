@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -68,6 +68,9 @@ func (f *Document) planTypedParagraphLineShadowContext(ctx context.Context, doc 
 	paragraph, ok := blocks[0].(layout.ParagraphBlock)
 	if !ok {
 		return typedLineShadowResult{}, newTypedShadowUnsupported(typedShadowBlockKind, fmt.Sprintf("body[0] is %s", blocks[0].DocumentBlockKind()))
+	}
+	if typedParagraphNeedsMixedCoreShadow(paragraph, f) {
+		return f.planTypedParagraphMixedCoreShadowContext(ctx, doc, paragraph)
 	}
 	if detail := typedLineShadowParagraphUnsupported(paragraph, f.coreFonts); detail != "" {
 		return typedLineShadowResult{}, newTypedShadowUnsupported(typedShadowParagraphContract, detail)

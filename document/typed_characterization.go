@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -20,7 +20,7 @@ import (
 )
 
 const TypedCharacterizationSchemaVersion uint16 = 1
-const TypedCharacterizationProjectionSchemaVersion uint16 = 2
+const TypedCharacterizationProjectionSchemaVersion uint16 = 3
 
 type TypedBehaviorStatus string
 
@@ -181,6 +181,7 @@ type TypedFixtureResult struct {
 	Outcome      string                          `json:"outcome"`
 	Pages        int                             `json:"pages"`
 	PlanHash     string                          `json:"plan_hash,omitempty"`
+	BreakLedger  []layoutengine.BreakDecision    `json:"break_ledger,omitempty"`
 	ReadingRoles []layoutengine.SemanticRole     `json:"reading_roles"`
 	PDF          *CharacterizationPDFEvidence    `json:"pdf,omitempty"`
 	RasterStatus string                          `json:"raster_status"`
@@ -271,6 +272,7 @@ func RunTypedCharacterization(ctx context.Context, limits TypedCharacterizationL
 			entry.Outcome = "rejected"
 		}
 		if planErr == nil {
+			entry.BreakLedger = append([]layoutengine.BreakDecision(nil), plan.plan.Projection().Breaks...)
 			evidence, roles, evidenceErr := typedCharacterizationPDFEvidence(plan, fixture.pageHeight)
 			if evidenceErr != nil {
 				return TypedCharacterizationProjection{}, evidenceErr
@@ -299,6 +301,7 @@ func RunTypedCharacterization(ctx context.Context, limits TypedCharacterizationL
 			close(failures)
 			if err := <-failures; err != nil {
 				entry.Outcome, entry.Pages, entry.PlanHash = "rejected", 0, ""
+				entry.BreakLedger = nil
 			}
 		}
 		result.Fixtures = append(result.Fixtures, entry)

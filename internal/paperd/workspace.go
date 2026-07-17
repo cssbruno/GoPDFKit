@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 // Package paperd provides the bounded, in-process state model used by an
@@ -395,6 +395,7 @@ type Workspace struct {
 	acceptancePolicy              CandidateAcceptancePolicy
 	acceptancePolicyHash          string
 	assetCatalog                  papercompile.AssetCatalog
+	importResolver                papercompile.ImportResolver
 }
 
 func NewWorkspace(limits Limits) (*Workspace, error) {
@@ -428,6 +429,9 @@ type WorkspaceOptions struct {
 	// AssetResources is an explicit immutable catalog used only for semantic
 	// compilation; the workspace never searches paths or the network.
 	AssetResources []papercompile.AssetResource
+	// ImportResolver is the explicit source boundary for reusable .paper
+	// themes and styles. It is never inferred from ambient process state.
+	ImportResolver papercompile.ImportResolver
 }
 
 func NewWorkspaceWithOptions(options WorkspaceOptions) (*Workspace, error) {
@@ -505,6 +509,7 @@ func NewWorkspaceWithOptions(options WorkspaceOptions) (*Workspace, error) {
 		acceptancePolicy:             acceptancePolicy,
 		acceptancePolicyHash:         acceptancePolicyHash,
 		assetCatalog:                 assetCatalog,
+		importResolver:               options.ImportResolver,
 	}, nil
 }
 
@@ -595,7 +600,7 @@ func (w *Workspace) prepareRevision(file, source string) (*revisionRecord, error
 		parsed: parsed, nodes: nodes,
 	}
 	if parsed.OK() {
-		record.compiled = papercompile.CompileWithAssets(parsed.AST, w.assetCatalog)
+		record.compiled = papercompile.CompileWithAssetsAndResolver(parsed.AST, w.assetCatalog, w.importResolver)
 	}
 	return record, nil
 }

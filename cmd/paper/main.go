@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 // Command paper provides deterministic, bounded tools for .paper documents.
@@ -455,10 +455,29 @@ func runScenario(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 func planPaper(file, source, scenario string, assets document.PaperAssetCatalog) (document.PaperPlan, document.PaperPlanResult, error) {
+	resolver := paperFileImportResolver()
 	if scenario != "" {
-		return document.PlanPaperScenarioWithAssets(file, source, scenario, assets)
+		return document.PlanPaperScenarioWithAssetsAndImports(file, source, scenario, assets, resolver)
 	}
-	return document.PlanPaperWithAssets(file, source, assets)
+	return document.PlanPaperWithAssetsAndImports(file, source, assets, resolver)
+}
+
+func paperFileImportResolver() document.PaperImportResolver {
+	return func(importerFile, importPath string) (string, string, error) {
+		base := filepath.Dir(importerFile)
+		if importerFile == "" || importerFile == "stdin.paper" {
+			base = "."
+		}
+		file := filepath.Clean(filepath.Join(base, filepath.FromSlash(importPath)))
+		source, err := os.ReadFile(file)
+		if err != nil {
+			return "", "", err
+		}
+		if len(source) > maxSourceBytes {
+			return "", "", fmt.Errorf("imported source exceeds %d bytes", maxSourceBytes)
+		}
+		return file, string(source), nil
+	}
 }
 
 func displayFile(file string) string {

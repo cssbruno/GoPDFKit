@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -97,6 +97,29 @@ func TestPlanPaperFailureReturnsNoUsablePlan(t *testing.T) {
 	target, _ := NewDocument(WithUnit(UnitPoint))
 	if painted, paintErr := target.WritePaperPlan(plan); paintErr == nil || painted.Pages != 0 || target.PageCount() != 0 {
 		t.Fatalf("WritePaperPlan(zero) = %#v, %v, pages=%d", painted, paintErr, target.PageCount())
+	}
+}
+
+func TestWritePaperPlanTaggedOutputUsesSemanticDisplayPainter(t *testing.T) {
+	const source = "document @report:\n  page @sheet:\n    body @body:\n      paragraph @copy:\n        text: \"Tagged Paper\"\n"
+	plan, result, err := PlanPaper("tagged.paper", source)
+	if err != nil || !result.OK() {
+		t.Fatalf("PlanPaper() = %#v, %v", result, err)
+	}
+	pdf := MustNew(WithUnit(UnitPoint), WithDeterministicOutput())
+	pdf.EnableTaggedPDF()
+	pdf.SetCompression(false)
+	if rendered, err := pdf.WritePaperPlan(plan); err != nil || rendered.Pages != 1 {
+		t.Fatalf("WritePaperPlan() = %#v, %v", rendered, err)
+	}
+	var output bytes.Buffer
+	if err := pdf.OutputWithOptions(&output, OutputOptions{Deterministic: true}); err != nil {
+		t.Fatal(err)
+	}
+	for _, marker := range []string{"/MarkInfo", "/Marked true", "/StructTreeRoot", "/S /Document", "/S /P", "/MCID 0", "BDC"} {
+		if !bytes.Contains(output.Bytes(), []byte(marker)) {
+			t.Fatalf("tagged Paper output is missing %q", marker)
+		}
 	}
 }
 

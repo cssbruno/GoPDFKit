@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/cssbruno/gopdfkit/internal/layoutengine"
 )
 
 const studioFixture = "document @report:\n" +
@@ -46,16 +48,56 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 	response := studioRequest(t, handler, http.MethodGet, "/", nil, "")
 	if response.StatusCode != http.StatusOK || !bytes.Contains(response.Body, []byte("Paper Studio")) ||
 		!bytes.Contains(response.Body, []byte(`id="inspection-layer"`)) ||
+		!bytes.Contains(response.Body, []byte(`class="inspector-disclosure overlay-disclosure"`)) ||
+		!bytes.Contains(response.Body, []byte(`class="inspector-disclosure authoring-disclosure"`)) ||
 		!bytes.Contains(response.Body, []byte(`id="baseline-state"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/rail-model.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`data-overlay="reading"`)) ||
 		!bytes.Contains(response.Body, []byte(`id="overlap-picker"`)) ||
 		!bytes.Contains(response.Body, []byte(`id="edit-controls"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/edit-model.js"`)) ||
+		!bytes.Contains(response.Body, []byte(`src="/mutation-gate.js"`)) ||
+		!bytes.Contains(response.Body, []byte(`src="/instance-model.js"`)) ||
+		!bytes.Contains(response.Body, []byte(`src="/inspection-model.js"`)) ||
+		!bytes.Contains(response.Body, []byte(`src="/provenance-model.js"`)) ||
+		!bytes.Contains(response.Body, []byte(`src="/tag-model.js"`)) ||
+		!bytes.Contains(response.Body, []byte(`src="/syntax-model.js"`)) ||
+		!bytes.Contains(response.Body, []byte(`src="/page-setup-model.js"`)) ||
+		!bytes.Contains(response.Body, []byte(`src="/issue-model.js"`)) ||
+		!bytes.Contains(response.Body, []byte(`id="page-setup-controls"`)) ||
+		!bytes.Contains(response.Body, []byte(`id="tag-tree"`)) ||
+		!bytes.Contains(response.Body, []byte(`data-overlay="margin"`)) ||
+		!bytes.Contains(response.Body, []byte(`data-overlay="padding"`)) ||
+		!bytes.Contains(response.Body, []byte(`data-overlay="overflow"`)) ||
+		!bytes.Contains(response.Body, []byte(`data-overlay="clips"`)) ||
+		!bytes.Contains(response.Body, []byte(`data-overlay="collisions"`)) ||
+		!bytes.Contains(response.Body, []byte(`data-overlay="instances"`)) ||
+		!bytes.Contains(response.Body, []byte(`data-overlay="baselines"`)) ||
+		!bytes.Contains(response.Body, []byte(`data-overlay="cells"`)) ||
+		!bytes.Contains(response.Body, []byte(`id="page-image" role="img"`)) ||
+		!bytes.Contains(response.Body, []byte(`<footer class="statusbar">`)) ||
+		!bytes.Contains(response.Body, []byte(`id="verification-state"`)) ||
+		!bytes.Contains(response.Body, []byte(`id="page-label" class="page-label"`)) ||
+		!bytes.Contains(response.Body, []byte(`id="zoom-out" aria-label="Zoom out"`)) ||
+		!bytes.Contains(response.Body, []byte(`src="/wasm_exec.js"`)) ||
+		!bytes.Contains(response.Body, []byte(`src="/wasm-renderer.js"`)) ||
+		bytes.Contains(response.Body, []byte(`id="preview-status"`)) ||
+		bytes.Contains(response.Body, []byte(`class="canvas-toolbar"`)) ||
+		bytes.Contains(response.Body, []byte(`status-dot`)) ||
+		bytes.Contains(response.Body, []byte(`WASM plan preview`)) ||
 		!strings.Contains(response.Header.Get("Content-Security-Policy"), "frame-ancestors 'none'") ||
+		!strings.Contains(response.Header.Get("Content-Security-Policy"), "script-src 'self' 'wasm-unsafe-eval'") ||
+		strings.Contains(response.Header.Get("Content-Security-Policy"), "'unsafe-eval'") ||
 		!strings.Contains(response.Header.Get("Content-Security-Policy"), "img-src 'self' data: blob:") ||
 		response.Header.Get("Cross-Origin-Resource-Policy") != "same-origin" {
 		t.Fatalf("index status/security/body = %d / %q / %s", response.StatusCode, response.Header, response.Body)
+	}
+	canvasStart := bytes.Index(response.Body, []byte(`<section id="canvas-region"`))
+	inspectorStart := bytes.Index(response.Body, []byte(`<aside id="inspector"`))
+	sourceStart := bytes.Index(response.Body, []byte(`<section id="source-panel"`))
+	inspectionControls := bytes.Index(response.Body, []byte(`id="inspection-controls"`))
+	if canvasStart < 0 || inspectorStart < 0 || sourceStart < 0 || inspectionControls < inspectorStart || inspectionControls >= sourceStart {
+		t.Fatalf("inspection controls must live in the Inspector sidebar, not the document canvas")
 	}
 	railModel := studioRequest(t, handler, http.MethodGet, "/rail-model.js", nil, "")
 	if railModel.StatusCode != http.StatusOK || !bytes.Contains(railModel.Body, []byte("baselineLabel")) ||
@@ -64,27 +106,106 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 	}
 	javascript := studioRequest(t, handler, http.MethodGet, "/studio.js", nil, "")
 	if javascript.StatusCode != http.StatusOK || !bytes.Contains(javascript.Body, []byte("renderSelectionRects")) ||
+		!bytes.Contains(javascript.Body, []byte("renderInspectorRows")) ||
+		bytes.Contains(javascript.Body, []byte("slice(0, 120)")) ||
 		!bytes.Contains(javascript.Body, []byte("loadInspection")) ||
 		!bytes.Contains(javascript.Body, []byte("renderInspectionOverlays")) ||
 		!bytes.Contains(javascript.Body, []byte("renderBaseline")) ||
 		!bytes.Contains(javascript.Body, []byte("selectRailIssue")) ||
 		!bytes.Contains(javascript.Body, []byte("summary.change_kind")) ||
 		!bytes.Contains(javascript.Body, []byte("topmost first")) ||
+		!bytes.Contains(javascript.Body, []byte("visualMutationsLocked")) ||
+		!bytes.Contains(javascript.Body, []byte("previewRevisionLocked")) ||
+		!bytes.Contains(javascript.Body, []byte("loadWASMPage")) ||
+		!bytes.Contains(javascript.Body, []byte("paintWASMCanvas")) ||
+		!bytes.Contains(javascript.Body, []byte("PaperStudioSyntaxModel.highlight")) ||
+		!bytes.Contains(javascript.Body, []byte("PaperStudioIssueModel.sourceAnnotations")) ||
+		!bytes.Contains(javascript.Body, []byte("source-diagnostic")) ||
+		!bytes.Contains(javascript.Body, []byte("commitPageSetup")) ||
+		bytes.Contains(javascript.Body, []byte("Apply page size")) ||
+		!bytes.Contains(javascript.Body, []byte(".render?revision=")) ||
+		bytes.Contains(javascript.Body, []byte("preview-status")) ||
+		bytes.Contains(javascript.Body, []byte("WASM plan preview")) ||
+		bytes.Contains(javascript.Body, []byte("loadSVG(page, 'display')")) ||
 		!bytes.Contains(javascript.Body, []byte("await showPage(fragment.page)")) ||
 		!bytes.Contains(javascript.Body, []byte("markOutlineKey(fragment.Key)")) {
 		t.Fatalf("studio synchronization script = %d / %s", javascript.StatusCode, javascript.Body)
+	}
+	stylesheetVerification := studioRequest(t, handler, http.MethodGet, "/studio.css", nil, "")
+	if stylesheetVerification.StatusCode != http.StatusOK || !bytes.Contains(stylesheetVerification.Body, []byte("verification-state.is-verified")) || !bytes.Contains(stylesheetVerification.Body, []byte("verification-state.is-stale")) {
+		t.Fatalf("verification status styles = %d / %s", stylesheetVerification.StatusCode, stylesheetVerification.Body)
 	}
 	editModel := studioRequest(t, handler, http.MethodGet, "/edit-model.js", nil, "")
 	if editModel.StatusCode != http.StatusOK || !bytes.Contains(editModel.Body, []byte("buildPayload")) ||
 		!bytes.Contains(editModel.Body, []byte("source_revision")) || !bytes.Contains(editModel.Body, []byte("plan_revision")) {
 		t.Fatalf("edit model = %d / %s", editModel.StatusCode, editModel.Body)
 	}
+	mutationGate := studioRequest(t, handler, http.MethodGet, "/mutation-gate.js", nil, "")
+	if mutationGate.StatusCode != http.StatusOK || !bytes.Contains(mutationGate.Body, []byte("visualMutationsLocked")) || !bytes.Contains(mutationGate.Body, []byte("revisionsLocked")) {
+		t.Fatalf("mutation gate = %d / %s", mutationGate.StatusCode, mutationGate.Body)
+	}
+	instanceModel := studioRequest(t, handler, http.MethodGet, "/instance-model.js", nil, "")
+	if instanceModel.StatusCode != http.StatusOK || !bytes.Contains(instanceModel.Body, []byte("classifyFragments")) ||
+		!bytes.Contains(instanceModel.Body, []byte("is-instance-${kind}")) {
+		t.Fatalf("instance model = %d / %s", instanceModel.StatusCode, instanceModel.Body)
+	}
+	inspectionModel := studioRequest(t, handler, http.MethodGet, "/inspection-model.js", nil, "")
+	if inspectionModel.StatusCode != http.StatusOK || !bytes.Contains(inspectionModel.Body, []byte("baselineMarks")) ||
+		!bytes.Contains(inspectionModel.Body, []byte("tableCellMarks")) || !bytes.Contains(inspectionModel.Body, []byte("gridTrackMarks")) || !bytes.Contains(inspectionModel.Body, []byte("pageRegionMarks")) ||
+		!bytes.Contains(inspectionModel.Body, []byte("boxModelMarks")) ||
+		!bytes.Contains(inspectionModel.Body, []byte("issueMarks")) ||
+		!bytes.Contains(inspectionModel.Body, []byte("baseline ${line.index + 1}")) || !bytes.Contains(inspectionModel.Body, []byte("grid ${track.group}")) {
+		t.Fatalf("inspection model = %d / %s", inspectionModel.StatusCode, inspectionModel.Body)
+	}
+	provenanceModel := studioRequest(t, handler, http.MethodGet, "/provenance-model.js", nil, "")
+	if provenanceModel.StatusCode != http.StatusOK || !bytes.Contains(provenanceModel.Body, []byte("forFragments")) || !bytes.Contains(provenanceModel.Body, []byte("tokenLabel")) {
+		t.Fatalf("provenance model = %d / %s", provenanceModel.StatusCode, provenanceModel.Body)
+	}
+	tagModel := studioRequest(t, handler, http.MethodGet, "/tag-model.js", nil, "")
+	if tagModel.StatusCode != http.StatusOK || !bytes.Contains(tagModel.Body, []byte("final_serialized_pdf")) ||
+		!bytes.Contains(tagModel.Body, []byte("content_marked")) || !bytes.Contains(tagModel.Body, []byte("normalize")) {
+		t.Fatalf("tag model = %d / %s", tagModel.StatusCode, tagModel.Body)
+	}
+	syntaxModel := studioRequest(t, handler, http.MethodGet, "/syntax-model.js", nil, "")
+	if syntaxModel.StatusCode != http.StatusOK || !bytes.Contains(syntaxModel.Body, []byte("function highlight")) ||
+		!bytes.Contains(syntaxModel.Body, []byte("kind = 'keyword'")) || !bytes.Contains(syntaxModel.Body, []byte("escapeHTML")) {
+		t.Fatalf("syntax model = %d / %s", syntaxModel.StatusCode, syntaxModel.Body)
+	}
+	pageSetupModel := studioRequest(t, handler, http.MethodGet, "/page-setup-model.js", nil, "")
+	if pageSetupModel.StatusCode != http.StatusOK || !bytes.Contains(pageSetupModel.Body, []byte("buildPayload")) || !bytes.Contains(pageSetupModel.Body, []byte("A3")) {
+		t.Fatalf("page setup model = %d / %s", pageSetupModel.StatusCode, pageSetupModel.Body)
+	}
+	issueModel := studioRequest(t, handler, http.MethodGet, "/issue-model.js", nil, "")
+	if issueModel.StatusCode != http.StatusOK || !bytes.Contains(issueModel.Body, []byte("function format")) {
+		t.Fatalf("issue model = %d / %s", issueModel.StatusCode, issueModel.Body)
+	}
+	wasmBootstrap := studioRequest(t, handler, http.MethodGet, "/wasm-renderer.js", nil, "")
+	if wasmBootstrap.StatusCode != http.StatusOK || !bytes.Contains(wasmBootstrap.Body, []byte("WebAssembly.instantiateStreaming")) ||
+		!bytes.Contains(wasmBootstrap.Body, []byte("PaperStudioWASMRenderer")) || !bytes.Contains(wasmBootstrap.Body, []byte("renderResponse")) {
+		t.Fatalf("wasm bootstrap = %d / %s", wasmBootstrap.StatusCode, wasmBootstrap.Body)
+	}
+	wasmRuntime := studioRequest(t, handler, http.MethodGet, "/wasm_exec.js", nil, "")
+	if wasmRuntime.StatusCode != http.StatusOK || !bytes.Contains(wasmRuntime.Body, []byte("globalThis.Go")) {
+		t.Fatalf("wasm runtime = %d / %d bytes", wasmRuntime.StatusCode, len(wasmRuntime.Body))
+	}
+	wasmModule := studioRequest(t, handler, http.MethodGet, "/paper-studio.wasm", nil, "")
+	if wasmModule.StatusCode != http.StatusOK || len(wasmModule.Body) < 8 || !bytes.Equal(wasmModule.Body[:4], []byte{'\x00', 'a', 's', 'm'}) {
+		t.Fatalf("wasm module = %d / %d bytes", wasmModule.StatusCode, len(wasmModule.Body))
+	}
 	stylesheet := studioRequest(t, handler, http.MethodGet, "/studio.css", nil, "")
 	if stylesheet.StatusCode != http.StatusOK || !bytes.Contains(stylesheet.Body, []byte("STALE PREVIEW")) ||
 		!bytes.Contains(stylesheet.Body, []byte(".inspection-mark.is-reading")) ||
+		!bytes.Contains(stylesheet.Body, []byte(".inspection-mark.is-instance-repeated")) ||
+		!bytes.Contains(stylesheet.Body, []byte(".inspection-mark.is-baseline")) ||
+		!bytes.Contains(stylesheet.Body, []byte(".inspection-mark.is-table-cell")) ||
 		!bytes.Contains(stylesheet.Body, []byte(".overlap-picker")) ||
 		!bytes.Contains(stylesheet.Body, []byte(".region-state.is-repeated")) ||
 		!bytes.Contains(stylesheet.Body, []byte(".rail-badge.is-change")) ||
+		!bytes.Contains(stylesheet.Body, []byte(".syntax-keyword")) ||
+		!bytes.Contains(stylesheet.Body, []byte("white-space: pre")) ||
+		bytes.Contains(stylesheet.Body, []byte(".canvas-toolbar")) ||
+		bytes.Contains(stylesheet.Body, []byte(".preview-authority")) ||
+		bytes.Contains(stylesheet.Body, []byte(".status-dot")) ||
 		!bytes.Contains(stylesheet.Body, []byte("pointer-events: none")) {
 		t.Fatalf("studio stale-state stylesheet = %d / %s", stylesheet.StatusCode, stylesheet.Body)
 	}
@@ -112,6 +233,23 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 			t.Fatalf("page %s = %d %q %d", suffix, page.StatusCode, page.Header, len(page.Body))
 		}
 	}
+	webRender := studioRequest(t, handler, http.MethodGet, fmt.Sprintf("/api/page/1.render?revision=%s", workspace.Revision), nil, "")
+	if webRender.StatusCode != http.StatusOK || webRender.Header.Get("Content-Type") != "application/vnd.gopdfkit.display-render" {
+		t.Fatalf("web render payload = %d %q %s", webRender.StatusCode, webRender.Header, webRender.Body)
+	}
+	artifact, err := layoutengine.RenderWebDisplayPayload(t.Context(), webRender.Body)
+	if err != nil || artifact.Manifest().PlanHash != workspace.Revision || artifact.Manifest().Page != 1 || len(artifact.PNG()) == 0 {
+		t.Fatalf("web render evidence = %+v / %d bytes / %v", artifact.Manifest(), len(artifact.PNG()), err)
+	}
+	highDPI := studioRequest(t, handler, http.MethodGet, fmt.Sprintf("/api/page/1.render?revision=%s&dpi=288", workspace.Revision), nil, "")
+	highArtifact, highErr := layoutengine.RenderWebDisplayPayload(t.Context(), highDPI.Body)
+	if highDPI.StatusCode != http.StatusOK || highErr != nil || highArtifact.Manifest().Profile.DPI != 288 || highArtifact.Manifest().PixelWidth <= artifact.Manifest().PixelWidth {
+		t.Fatalf("high-DPI web render = %d / %+v / %v", highDPI.StatusCode, highArtifact.Manifest(), highErr)
+	}
+	badDPI := studioRequest(t, handler, http.MethodGet, fmt.Sprintf("/api/page/1.render?revision=%s&dpi=999", workspace.Revision), nil, "")
+	if badDPI.StatusCode != http.StatusBadRequest {
+		t.Fatalf("bad render DPI status = %d", badDPI.StatusCode)
+	}
 
 	hit := postStudioJSON(t, handler, "/api/hit", map[string]any{"revision": workspace.Revision, "page": 1, "x_fixed": 10 * 1024, "y_fixed": 10 * 1024})
 	if hit.StatusCode != http.StatusOK || !strings.Contains(hit.Body, `"Page":1`) {
@@ -126,7 +264,7 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 	if inspection.StatusCode != http.StatusOK || !strings.Contains(inspection.Body, `"plan_hash":"`+workspace.Revision+`"`) ||
 		!strings.Contains(inspection.Body, `"selector":{"page":1,"max_results":128}`) ||
 		!strings.Contains(inspection.Body, `"border_box"`) || !strings.Contains(inspection.Body, `"content_box"`) ||
-		!strings.Contains(inspection.Body, `"reading_order"`) || !strings.Contains(inspection.Body, `"semantics"`) {
+		!strings.Contains(inspection.Body, `"reading_order"`) || !strings.Contains(inspection.Body, `"semantics"`) || !strings.Contains(inspection.Body, `"provenance":`) {
 		t.Fatalf("inspection = %d %s", inspection.StatusCode, inspection.Body)
 	}
 	staleInspection := postStudioJSON(t, handler, "/api/inspect", map[string]any{"revision": "wrong", "page": 1})
@@ -140,6 +278,62 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 	stale := studioRequest(t, handler, http.MethodGet, "/api/page/1.svg?revision=wrong", nil, "")
 	if stale.StatusCode != http.StatusConflict {
 		t.Fatalf("stale status = %d", stale.StatusCode)
+	}
+	staleRender := studioRequest(t, handler, http.MethodGet, "/api/page/1.render?revision=wrong", nil, "")
+	if staleRender.StatusCode != http.StatusConflict {
+		t.Fatalf("stale web render status = %d", staleRender.StatusCode)
+	}
+}
+
+func TestPaperStudioInspectionRetainsRepeatedFragmentEvidence(t *testing.T) {
+	var source strings.Builder
+	source.WriteString("document @report:\n  page @sheet:\n    width: 180pt\n    height: 96pt\n    margin: 6pt\n    body @body:\n      table @ledger:\n        repeat-header: true\n        split: \"rows\"\n        table-track @left:\n          width: 84pt\n        table-track @right:\n          width: 84pt\n        table-header @head:\n          table-row @head-row:\n            cell @head-cell:\n              colspan: 2\n              text: \"REPEATED HEADER\"\n")
+	for index := 0; index < 10; index++ {
+		fmt.Fprintf(&source, "        table-row @row-%d:\n          cell @label-%d:\n            text: \"Row %d\"\n          cell @value-%d:\n            text: \"Value %d\"\n", index, index, index, index, index)
+	}
+	file := filepath.Join(t.TempDir(), "repeated.paper")
+	if err := os.WriteFile(file, []byte(source.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	studio, err := newStudioServer(file, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := fetchStudioWorkspace(t, studio.routes())
+	if workspace.Pages < 2 {
+		t.Fatalf("repeated fixture pages = %d", workspace.Pages)
+	}
+	inspection := postStudioJSON(t, studio.routes(), "/api/inspect", map[string]any{"revision": workspace.Revision, "page": 2})
+	if inspection.StatusCode != http.StatusOK || !strings.Contains(inspection.Body, `"repeated":true`) ||
+		!strings.Contains(inspection.Body, `"region":"body"`) || !strings.Contains(inspection.Body, `"instance":"@typed-table-r1-c1"`) ||
+		!strings.Contains(inspection.Body, `"semantic_ownership":{"owner":`) || !strings.Contains(inspection.Body, `"table_header":true`) {
+		t.Fatalf("repeated inspection = %d %s", inspection.StatusCode, inspection.Body)
+	}
+}
+
+func TestPaperStudioInspectionShowsBindingAndTokenProvenance(t *testing.T) {
+	source := "document @report:\n" +
+		"  theme: \"@print\"\n" +
+		"  theme @print:\n" +
+		"    token @font:\n      type: \"string\"\n      value: \"Courier\"\n" +
+		"    token @size:\n      type: \"length\"\n      value: 11pt\n" +
+		"  schema @invoice:\n" +
+		"    field @total:\n      type: \"number\"\n" +
+		"  page:\n    width: 160pt\n    height: 80pt\n    margin: 8pt\n" +
+		"    body:\n      paragraph @message:\n" +
+		"        bind: \"@invoice.total\"\n        font-token: \"font\"\n        size-token: \"size\"\n        text: \"Visible\"\n"
+	file := filepath.Join(t.TempDir(), "provenance.paper")
+	if err := os.WriteFile(file, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	studio, err := newStudioServer(file, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := fetchStudioWorkspace(t, studio.routes())
+	inspection := postStudioJSON(t, studio.routes(), "/api/inspect", map[string]any{"revision": workspace.Revision, "page": 1})
+	if inspection.StatusCode != http.StatusOK || !strings.Contains(inspection.Body, `"bindings":[`) || !strings.Contains(inspection.Body, `"path":"@invoice.total"`) || !strings.Contains(inspection.Body, `"style_tokens":[`) || !strings.Contains(inspection.Body, `"token":"font"`) {
+		t.Fatalf("provenance inspection = %d %s", inspection.StatusCode, inspection.Body)
 	}
 }
 
@@ -271,7 +465,7 @@ func BenchmarkPaperStudioWarmWorkspaceWithPageRailBaseline(b *testing.B) {
 	}
 }
 
-func BenchmarkPaperStudioWarmWorkspaceAndVisiblePage(b *testing.B) {
+func BenchmarkPaperStudioWarmWorkspaceAndVisibleRenderPayload(b *testing.B) {
 	file := filepath.Join(b.TempDir(), "fixture.paper")
 	if err := os.WriteFile(file, []byte(studioFixture), 0o600); err != nil {
 		b.Fatal(err)
@@ -285,7 +479,7 @@ func BenchmarkPaperStudioWarmWorkspaceAndVisiblePage(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	target := fmt.Sprintf("/api/page/1.svg?revision=%s", workspace.Revision)
+	target := fmt.Sprintf("/api/page/1.render?revision=%s", workspace.Revision)
 	if response := studioRequest(nil, handler, http.MethodGet, target, nil, ""); response.StatusCode != http.StatusOK {
 		b.Fatalf("warm page status = %d", response.StatusCode)
 	}

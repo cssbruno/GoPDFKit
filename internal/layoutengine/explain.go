@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	ExplainLayoutSchemaVersion         uint16 = 1
+	ExplainLayoutSchemaVersion         uint16 = 2
 	ExplainLayoutMaxSelectors          uint32 = 32
 	ExplainLayoutMaxCanonicalBytes     uint32 = 8 << 20
 	ExplainLayoutDefaultCanonicalBytes uint32 = 1 << 20
@@ -58,6 +58,8 @@ type ExplainSelectionSummary struct {
 	Pages        uint32             `json:"pages"`
 	Fragments    ExplainLayoutCount `json:"fragments"`
 	Lines        ExplainLayoutCount `json:"lines"`
+	PageRegions  ExplainLayoutCount `json:"page_regions"`
+	GridTracks   ExplainLayoutCount `json:"grid_tracks"`
 	Commands     ExplainLayoutCount `json:"commands"`
 	Breaks       ExplainLayoutCount `json:"breaks"`
 	Diagnostics  ExplainLayoutCount `json:"diagnostics"`
@@ -85,19 +87,33 @@ type ExplainSourceIdentity struct {
 	Source   SourceSpan `json:"source"`
 }
 
+// ExplainSemanticOwnership is the bounded semantic-owner path for one visual
+// fragment. Roles are ordered from the directly associated owner toward the
+// document root. Cell identifies an exact table-cell ancestor when present.
+type ExplainSemanticOwnership struct {
+	Owner       SemanticNodeID `json:"owner"`
+	Roles       []SemanticRole `json:"roles"`
+	Cell        SemanticNodeID `json:"cell,omitempty"`
+	TableHeader bool           `json:"table_header,omitempty"`
+}
+
 // ExplainFragment is a flattened, detached fragment record including its
 // owning page geometry.
 type ExplainFragment struct {
-	Index        uint64                `json:"index"`
-	PageIndex    uint32                `json:"page_index"`
-	PageSize     Size                  `json:"page_size"`
-	ID           FragmentID            `json:"id"`
-	Source       ExplainSourceIdentity `json:"source_identity"`
-	Page         uint32                `json:"page"`
-	Region       RegionID              `json:"region"`
-	BorderBox    Rect                  `json:"border_box"`
-	ContentBox   Rect                  `json:"content_box"`
-	Continuation FragmentContinuation  `json:"continuation"`
+	Index        uint64                    `json:"index"`
+	PageIndex    uint32                    `json:"page_index"`
+	PageSize     Size                      `json:"page_size"`
+	ID           FragmentID                `json:"id"`
+	Source       ExplainSourceIdentity     `json:"source_identity"`
+	Semantic     *ExplainSemanticOwnership `json:"semantic_ownership,omitempty"`
+	Page         uint32                    `json:"page"`
+	Region       RegionID                  `json:"region"`
+	Repeated     bool                      `json:"repeated,omitempty"`
+	MarginBox    Rect                      `json:"margin_box"`
+	BorderBox    Rect                      `json:"border_box"`
+	PaddingBox   Rect                      `json:"padding_box"`
+	ContentBox   Rect                      `json:"content_box"`
+	Continuation FragmentContinuation      `json:"continuation"`
 }
 
 type ExplainLine struct {
@@ -107,6 +123,16 @@ type ExplainLine struct {
 	Source    ExplainSourceIdentity `json:"source_identity"`
 	Region    RegionID              `json:"region"`
 	Line      PlannedLine           `json:"line"`
+}
+
+type ExplainGridTrack struct {
+	Index uint64           `json:"index"`
+	Track PlannedGridTrack `json:"track"`
+}
+
+type ExplainPageRegion struct {
+	Index  uint64            `json:"index"`
+	Region PlannedPageRegion `json:"region"`
 }
 
 type ExplainCommand struct {
@@ -153,6 +179,8 @@ type ExplainLayoutTarget struct {
 	Fragments             []ExplainFragment             `json:"fragments,omitempty"`
 	ContinuationFragments []ExplainFragment             `json:"continuation_fragments,omitempty"`
 	Lines                 []ExplainLine                 `json:"lines,omitempty"`
+	PageRegions           []ExplainPageRegion           `json:"page_regions,omitempty"`
+	GridTracks            []ExplainGridTrack            `json:"grid_tracks,omitempty"`
 	Commands              []ExplainCommand              `json:"commands,omitempty"`
 	Glyphs                []ExplainGlyph                `json:"glyphs,omitempty"`
 	Images                []ExplainImage                `json:"images,omitempty"`
@@ -222,7 +250,7 @@ func (p LayoutPlan) ExplainLayoutContext(ctx context.Context, selectors []Struct
 	if uint64(len(selectors)) > uint64(limits.MaxSelectors) {
 		return LayoutExplanation{}, fmt.Errorf("%w: selectors=%d limit=%d", ErrExplainLayoutInvalidLimits, len(selectors), limits.MaxSelectors)
 	}
-	state := uint64(len(p.pages)) + uint64(len(p.fragments)) + uint64(len(p.lines)) + uint64(len(p.commands)) +
+	state := uint64(len(p.pages)) + uint64(len(p.fragments)) + uint64(len(p.lines)) + uint64(len(p.pageRegions)) + uint64(len(p.gridTracks)) + uint64(len(p.commands)) +
 		uint64(len(p.breaks)) + uint64(len(p.diagnostics)) + uint64(len(p.semanticNodes)) + uint64(len(p.readingOrder)) + 1
 	requiredWork := state * uint64(len(selectors)) * 8
 	if maxWork == 0 || requiredWork > maxWork {
@@ -276,6 +304,7 @@ func (p LayoutPlan) explainLayoutTarget(selector StructuralQuery, query Structur
 	target.ReadingOrder = append(target.ReadingOrder, query.ReadingOrder...)
 	pageSizes := make(map[uint32]Size, len(p.pages))
 	fragmentsByID := make(map[FragmentID]Fragment, len(p.fragments))
+	semanticByFragment := make(map[FragmentID]SemanticNodeID, len(p.semanticFragments))
 	nodeKeys := make(map[NodeID]NodeKey)
 	keyNodes := make(map[NodeKey]NodeID)
 	fragmentIndexes := make(map[FragmentID]struct {
@@ -297,8 +326,12 @@ func (p LayoutPlan) explainLayoutTarget(selector StructuralQuery, query Structur
 		nodeKeys[fragment.Node] = fragment.Key
 		keyNodes[fragment.Key] = fragment.Node
 	}
+	for _, association := range p.semanticFragments {
+		semanticByFragment[association.Fragment] = association.Semantic
+	}
 	for _, fragment := range query.Fragments {
-		target.Fragments = append(target.Fragments, explainFragment(fragment.Index, fragment.PageIndex, pageSizes[fragment.Fragment.Page], fragment.Fragment))
+		target.Fragments = append(target.Fragments, explainFragment(fragment.Index, fragment.PageIndex, pageSizes[fragment.Fragment.Page], fragment.Fragment,
+			explainSemanticOwnership(fragment.Fragment.ID, semanticByFragment, p.semanticNodes)))
 	}
 	for _, line := range query.Lines {
 		fragment := fragmentsByID[line.Line.Fragment]
@@ -307,6 +340,28 @@ func (p LayoutPlan) explainLayoutTarget(selector StructuralQuery, query Structur
 			Source: ExplainSourceIdentity{Node: line.Node, Key: line.Key, Instance: line.Instance, Source: fragment.Source},
 			Region: line.Region, Line: line.Line,
 		})
+	}
+	if selector.Page != 0 {
+		for index, region := range p.pageRegions {
+			if region.Page != selector.Page {
+				continue
+			}
+			target.Selection.PageRegions.Matches++
+			if uint32(len(target.PageRegions)) < selector.MaxResults {
+				target.PageRegions = append(target.PageRegions, ExplainPageRegion{Index: uint64(index), Region: region})
+			}
+		}
+		finalizeExplainCount(&target.Selection.PageRegions, len(target.PageRegions))
+		for index, track := range p.gridTracks {
+			if track.Page != selector.Page {
+				continue
+			}
+			target.Selection.GridTracks.Matches++
+			if uint32(len(target.GridTracks)) < selector.MaxResults {
+				target.GridTracks = append(target.GridTracks, ExplainGridTrack{Index: uint64(index), Track: track})
+			}
+		}
+		finalizeExplainCount(&target.Selection.GridTracks, len(target.GridTracks))
 	}
 	for _, command := range query.Commands {
 		item := ExplainCommand{
@@ -357,7 +412,8 @@ func (p LayoutPlan) explainLayoutTarget(selector StructuralQuery, query Structur
 		if uint32(len(target.ContinuationFragments)) < selector.MaxResults {
 			position := fragmentIndexes[fragment.ID]
 			target.ContinuationFragments = append(target.ContinuationFragments,
-				explainFragment(position.index, position.pageIndex, pageSizes[fragment.Page], fragment))
+				explainFragment(position.index, position.pageIndex, pageSizes[fragment.Page], fragment,
+					explainSemanticOwnership(fragment.ID, semanticByFragment, p.semanticNodes)))
 		}
 	}
 	finalizeExplainCount(&target.Evidence.ContinuationFragments, len(target.ContinuationFragments))
@@ -431,13 +487,36 @@ func finalizeExplainCount(count *ExplainLayoutCount, returned int) {
 	count.Truncated = uint64(returned) < count.Matches
 }
 
-func explainFragment(index uint64, pageIndex uint32, pageSize Size, fragment Fragment) ExplainFragment {
+func explainFragment(index uint64, pageIndex uint32, pageSize Size, fragment Fragment, semantic *ExplainSemanticOwnership) ExplainFragment {
 	return ExplainFragment{
 		Index: index, PageIndex: pageIndex, PageSize: pageSize, ID: fragment.ID,
-		Source: ExplainSourceIdentity{Node: fragment.Node, Key: fragment.Key, Instance: fragment.Instance, Source: fragment.Source},
-		Page:   fragment.Page, Region: fragment.Region, BorderBox: fragment.BorderBox,
+		Source:   ExplainSourceIdentity{Node: fragment.Node, Key: fragment.Key, Instance: fragment.Instance, Source: fragment.Source},
+		Semantic: semantic,
+		Page:     fragment.Page, Region: fragment.Region, Repeated: fragment.Repeated,
+		MarginBox: fragment.MarginBox, BorderBox: fragment.BorderBox, PaddingBox: fragment.PaddingBox,
 		ContentBox: fragment.ContentBox, Continuation: fragment.Continuation,
 	}
+}
+
+func explainSemanticOwnership(fragment FragmentID, owners map[FragmentID]SemanticNodeID, nodes []SemanticNode) *ExplainSemanticOwnership {
+	owner := owners[fragment]
+	if !owner.Valid() {
+		return nil
+	}
+	result := &ExplainSemanticOwnership{Owner: owner, Roles: make([]SemanticRole, 0, 4)}
+	for id, depth := owner, uint32(0); id.Valid() && depth <= SemanticMaxDepth; depth++ {
+		if uint64(id) > uint64(len(nodes)) {
+			return nil
+		}
+		node := nodes[id-1]
+		result.Roles = append(result.Roles, node.Role)
+		if node.Role == SemanticRoleCell && !result.Cell.Valid() {
+			result.Cell = node.ID
+			result.TableHeader = node.Attributes.TableHeader
+		}
+		id = node.Parent
+	}
+	return result
 }
 
 func diagnosticMatchesExplainChain(diagnostic Diagnostic, chainIDs map[FragmentID]struct{}, identities map[explainChainIdentity]explainChainContext) bool {

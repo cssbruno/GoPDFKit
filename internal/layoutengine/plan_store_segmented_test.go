@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -10,6 +10,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -66,6 +67,39 @@ func TestMemorySegmentedPlanStoreReconstructsCanonicalPlanAndReadsMetadataAlone(
 	}
 	if _, err := store.Put(context.Background(), plan); !errors.Is(err, ErrPlanStoreCorrupt) {
 		t.Fatalf("idempotent Put did not detect missing retained segment: %v", err)
+	}
+}
+
+func TestMemorySegmentedPlanStoreRoundTripsRetainedGridTracks(t *testing.T) {
+	result, err := PlanGrid(GridPlanInput{
+		PageSize: Size{Width: 100, Height: 100}, Region: Rect{Width: 100, Height: 20},
+		Columns: []GridTrack{{Kind: GridTrackFixed, Size: 40}, {Kind: GridTrackFixed, Size: 55}},
+		Rows:    []GridTrack{{Kind: GridTrackFixed, Size: 20}}, ColumnGap: 5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewMemorySegmentedPlanStore(DefaultSegmentedPlanStoreLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash, err := store.Put(context.Background(), result.Plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := decodeSegmentedManifest(store.manifests[hash], hash)
+	if err != nil || manifest.Counts.GridTracks != 3 || manifest.Counts.PageRegions != 1 {
+		t.Fatalf("grid-track manifest = %+v, %v", manifest.Counts, err)
+	}
+	loaded, err := store.Get(context.Background(), hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := loaded.Projection().GridTracks, result.Plan.Projection().GridTracks; !reflect.DeepEqual(got, want) {
+		t.Fatalf("segmented grid tracks = %+v, want %+v", got, want)
+	}
+	if got, want := loaded.Projection().PageRegions, result.Plan.Projection().PageRegions; !reflect.DeepEqual(got, want) {
+		t.Fatalf("segmented page regions = %+v, want %+v", got, want)
 	}
 }
 
