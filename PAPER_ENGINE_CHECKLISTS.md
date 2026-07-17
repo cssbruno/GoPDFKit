@@ -2857,13 +2857,16 @@ as completed behavior.
   bounded Explain command/fragment evidence ([hit-to-explain test](cmd/paper-studio/main_test.go),
   [controller](cmd/paper-studio/web/studio.js)).
 - [ ] Normal visible-page updates meet calibrated latency budgets. The backend
-  benchmark now exercises the canonical WASM render-payload path and the
-  end-to-end smoke executes the real module and rasterizer, but the former SVG
-  baseline predates this cutover and must be recalibrated. Browser startup,
-  payload transfer/decode, WASM paint, cold incremental planning, file
-  notification, and an approved interaction budget remain open
-  ([benchmark](cmd/paper-studio/main_test.go),
-  [real WASM smoke](tools/test-paper-studio-wasm.sh)).
+  now exercises the canonical WASM render-payload path with ten-sample stage
+  timings, a calibrated backend/WASM budget checker, and a revision-safe source
+  change stream; the Apple M2 report records cold planning, payload transfer/
+  decode, WASM paint, file notification, and incremental replanning
+  ([benchmark](tools/benchmark-paper-studio-wasm.mjs),
+  [report](docs/performance/baselines/paper-studio-wasm-latency-apple-m2.txt),
+  [budget checker](tools/check-paper-studio-latency-report.mjs),
+  [change stream](cmd/paper-studio/main.go)). Browser startup, browser image
+  decode/compositing, a real-browser interaction trace, and the approved final
+  interaction budget remain open ([real WASM smoke](tools/test-paper-studio-wasm.sh)).
 - [x] The internal Plan Viewer contracts remain valid in the real workspace.
   The real Paper Studio workspace exercises revision-bound page, hit, explain,
   inspect, provenance, typed-experiment, SVG, and WASM display-payload routes
@@ -2922,10 +2925,11 @@ as completed behavior.
   [browser model](cmd/paper-studio/web/authoring-model.js),
   [palette tests](internal/paperd/authoring_mutations_test.go),
   [Studio integration](cmd/paper-studio/studio_edit_test.go)).
-- [x] Slot-aware drop targets. The editing-contract panel projects body/row/
+- [x] Slot-aware target analysis. The internal review model projects body/row/
   column destinations and unfilled component slots with their declared
   accepted primitive kinds, never treating an expanded instance as an authored
-  target ([review model](cmd/paper-studio/web/review-model.js),
+  target; the current Studio UI does not expose the editing-contract workflow
+  ([review model](cmd/paper-studio/web/review-model.js),
   [model tests](cmd/paper-studio/js_test/review_model_test.cjs),
   [slot authority](internal/paperd/domain_mutations.go)).
 - [ ] Resource manager for fonts/assets/licenses/fallback/crop focus. Paper
@@ -3088,14 +3092,14 @@ as completed behavior.
   ([production evidence](document/paper_page_regions_test.go),
   [mutation tests](internal/paperd/semantic_layout_mutations_test.go)). The item
   remains open for named/custom regions and page-master creation UX.
-- [x] Dynamic text distinguishes binding from fixture editing. The editing
-  contract classifies bound nodes, names the exact fixture path, and tells the
-  author to edit the selected scenario value instead of silently rewriting
-  rendered text ([review model](cmd/paper-studio/web/review-model.js),
+- [x] Dynamic text distinguishes binding from fixture editing. The internal
+  review model classifies bound nodes and names the exact fixture path; the
+  current Studio UI does not expose the editing-contract workflow
+  ([review model](cmd/paper-studio/web/review-model.js),
   [tests](cmd/paper-studio/js_test/review_model_test.cjs)).
 - [x] Repeated rows distinguish template, invocation, slot, and fixture
-  targets. The same contract distinguishes repeated templates, component
-  invocations, slot fills, and scenario fixture nodes before a visual edit
+  targets. The internal model distinguishes repeated templates, component
+  invocations, slot fills, and scenario fixture nodes
   ([review model](cmd/paper-studio/web/review-model.js),
   [tests](cmd/paper-studio/js_test/review_model_test.cjs)).
 - [x] Page-break dragging opens a policy chooser. Addressable page-breaks now
@@ -3110,11 +3114,10 @@ as completed behavior.
   ([Studio controls](cmd/paper-studio/web/studio.js),
   [styles](cmd/paper-studio/web/studio.css),
   [model tests](cmd/paper-studio/js_test/review_model_test.cjs)).
-- [x] Blast radius is shown before shared token/component/master edits. The
-  editing-contract panel enumerates affected component invocations and shared
-  style consumers before the commit control remains available
+- [x] Shared-edit blast radius is computed. The internal review model enumerates
+  affected component invocations and shared style consumers; the current
+  Studio UI does not expose the editing-contract workflow
   ([review model](cmd/paper-studio/web/review-model.js),
-  [Studio panel](cmd/paper-studio/web/studio.js),
   [tests](cmd/paper-studio/js_test/review_model_test.cjs)).
 
 ### Working copy and review

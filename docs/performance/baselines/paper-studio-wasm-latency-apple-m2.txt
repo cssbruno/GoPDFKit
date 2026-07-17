@@ -1,0 +1,37 @@
+# Paper Studio WASM latency baseline
+# Date: 2026-07-17
+# Source revision: c3c7646 (dirty worktree; unrelated fixture edits preserved)
+# Environment: darwin/arm64, Apple M2, Go 1.26.5, Node 22.16.0
+# Fixture: temporary copy of testdata/paper/studio-box-model.paper
+# Command:
+# PAPER_STUDIO_BENCH_SAMPLES=10 sh tools/benchmark-paper-studio-wasm.sh
+#
+# This is a backend plus Node/WASM baseline. It does not include browser startup,
+# browser image decode/compositing, or a real browser interaction trace.
+
+renderer_version: layoutengine/go-display-raster@2
+samples: 10
+cold_workspace_ms: 52.554291
+wasm_module_bytes: 5764571
+wasm_fetch_decode_ms: 11.087292
+wasm_compile_ms: 39.807917
+wasm_runtime_start_ms: 17.700375
+first_visible_page_payload_ms: 3.149708
+first_visible_page_paint_ms: 114.704959
+first_visible_page_total_ms: 117.854667
+warm_workspace_p50_ms: 1.291458
+warm_workspace_p95_ms: 1.818625
+warm_payload_p50_ms: 1.370916
+warm_payload_p95_ms: 2.221292
+warm_paint_p50_ms: 52.629083
+warm_paint_p95_ms: 56.173000
+warm_visible_update_p50_ms: 55.659041
+warm_visible_update_p95_ms: 58.642249
+change_notification_ms: 254.457167
+incremental_workspace_ms: 1.378958
+
+# Calibrated backend/WASM budgets used by
+# tools/check-paper-studio-latency-report.mjs:
+# cold workspace <= 500 ms; WASM initialization <= 500 ms; first visible page
+# <= 500 ms; warm visible update p95 <= 100 ms; source-change notification <=
+# 1000 ms; incremental workspace <= 500 ms.

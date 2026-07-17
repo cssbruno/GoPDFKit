@@ -21,7 +21,6 @@ const state = {
   authoring: null,
   authoringDraft: {operation: 'template'},
   authoringFeedback: null,
-  reviewContract: null,
   breakPolicy: 'hard',
   pageSetupDraft: null,
   pageSetupFeedback: null,
@@ -36,6 +35,7 @@ const state = {
   deliveryRevision: '',
   deliveryLoading: false,
   deliveryError: '',
+  changeStream: null,
   poll: null,
 };
 
@@ -65,7 +65,6 @@ function setPreviewStale(stale) {
   renderVerificationState();
   renderEditControls();
   renderAuthoringControls();
-  renderReviewContract();
   renderPageSetup();
   renderResources();
   document.querySelectorAll('.font-replacement-apply').forEach((button) => { button.disabled = visualMutationsLocked(); });
@@ -146,6 +145,31 @@ async function performRefresh({quiet = false} = {}) {
   }
 }
 
+function connectChangeStream() {
+  state.changeStream?.close?.();
+  state.changeStream = null;
+  const query = new URLSearchParams();
+  if (state.scenario) query.set('scenario', state.scenario);
+  if (state.sourceRevision) query.set('source_revision', state.sourceRevision);
+  if (typeof EventSource === 'function') {
+    const stream = new EventSource(`/api/changes?${query.toString()}`);
+    stream.addEventListener('changed', (event) => {
+      let message;
+      try { message = JSON.parse(event.data); } catch (_) { return; }
+      const expected = String(message.source_revision || '');
+      if (!expected || expected === state.sourceRevision) return;
+      refresh({quiet: true}).then(() => {
+        if (state.sourceRevision !== expected) return refresh({quiet: true});
+      });
+    });
+    state.changeStream = stream;
+    return;
+  }
+  // EventSource is available in supported browsers. Keep a bounded fallback
+  // for embedded shells that do not expose it yet.
+  state.poll = window.setInterval(() => refresh({quiet: true}), 2000);
+}
+
 async function loadAuthoring(revision) {
   const scenario = state.scenario ? `&scenario=${encodeURIComponent(state.scenario)}` : '';
   try {
@@ -207,7 +231,6 @@ function renderWorkspace() {
   renderBaseline(workspace.baseline || {status: 'none'});
   reconcileEditSelection();
   renderAuthoringControls();
-  renderReviewContract();
   renderPageSetup();
   renderDelivery();
   renderStatus();
@@ -421,80 +444,6 @@ function authoringSelect(labelText, values, selected, change) {
 
 function authoringInput(labelText, value, change) {
   const field=document.createElement('label');field.className='edit-field';const caption=document.createElement('span');caption.textContent=labelText;const input=document.createElement('input');input.type='text';input.value=value;input.maxLength=128;input.disabled=visualMutationsLocked();input.addEventListener('input',()=>change(input.value));field.append(caption,input);return field;
-}
-
-function renderReviewContract() {
-  const target = $('#review-contract');
-  const status = $('#review-contract-status');
-  if (!target || !status) return;
-  target.replaceChildren();
-  const selection = state.editSelection;
-  const model = globalThis.PaperStudioReviewModel;
-  if (!selection || !model) {
-    status.textContent = 'Select a node';
-    const empty = document.createElement('div');
-    empty.className = 'review-contract-empty';
-    empty.textContent = 'Select a source node to see whether it is authored, bound, repeated, invoked, or a slot fill.';
-    target.append(empty);
-    return;
-  }
-  const description = model.describe(selection.node, state.workspace?.ast?.root);
-  const radius = model.blastRadius(selection.node, state.workspace?.ast?.root);
-  status.textContent = description.title;
-  const heading = document.createElement('div');
-  heading.className = 'review-contract-heading';
-  const title = document.createElement('span');
-  title.textContent = `${description.title} · ${selection.target}`;
-  const mode = document.createElement('span');
-  mode.className = 'review-contract-mode';
-  mode.textContent = description.mode;
-  heading.append(title, mode);
-  target.append(heading);
-  const detail = document.createElement('div');
-  detail.className = 'review-contract-detail';
-  detail.textContent = description.detail;
-  target.append(detail);
-  const dropTargets = model.dropTargets(state.workspace?.ast?.root);
-  if (dropTargets.length) {
-    const dropList = document.createElement('div');
-    dropList.className = 'review-contract-list';
-    for (const drop of dropTargets.slice(0, 8)) {
-      const item = document.createElement('div');
-      item.className = 'review-contract-item';
-      item.innerHTML = '<span></span><small></small>';
-      item.querySelector('span').textContent = drop.slot ? `${drop.target} · slot ${drop.slot}` : `${drop.target} · ${drop.kind}`;
-      item.querySelector('small').textContent = drop.accepts.join(' · ');
-      dropList.append(item);
-    }
-    target.append(dropList);
-  }
-  if (description.binding) {
-    const binding = document.createElement('div');
-    binding.className = 'review-contract-item';
-    binding.innerHTML = '<span>Fixture source</span><small></small>';
-    binding.querySelector('small').textContent = description.binding;
-    target.append(binding);
-  }
-  if (radius.scope === 'shared') {
-    const warning = document.createElement('div');
-    warning.className = 'review-contract-warning';
-    warning.textContent = `Shared blast radius · ${radius.count} invocation${radius.count === 1 ? '' : 's'} will observe this change.`;
-    target.append(warning);
-    const list = document.createElement('div');
-    list.className = 'review-contract-list';
-    for (const id of radius.targets.slice(0, 8)) {
-      const item = document.createElement('div');
-      item.className = 'review-contract-item';
-      item.innerHTML = `<span>${id}</span><small>affected</small>`;
-      list.append(item);
-    }
-    target.append(list);
-  } else if (radius.scope === 'local') {
-    const local = document.createElement('div');
-    local.className = 'review-contract-item';
-    local.innerHTML = '<span>Blast radius</span><small>one authored target</small>';
-    target.append(local);
-  }
 }
 
 function renderSource(source, issues = []) {
@@ -1329,7 +1278,6 @@ function selectEditableTarget(target) {
   state.editDraft = null;
   state.editFeedback = null;
   renderEditControls();
-  renderReviewContract();
 }
 
 function reconcileEditSelection() {
@@ -1337,7 +1285,6 @@ function reconcileEditSelection() {
     state.editSelection = PaperStudioEditModel.findSelection(state.workspace?.ast?.root, state.editSelection.target);
   }
   renderEditControls();
-  renderReviewContract();
 }
 
 function renderEditControls() {
@@ -1659,8 +1606,7 @@ window.addEventListener('keydown', (event) => {
     selectEditableTarget('');
   }
 });
-window.addEventListener('beforeunload', clearObjectURLs);
+window.addEventListener('beforeunload', () => { state.changeStream?.close?.(); clearObjectURLs(); });
 
 setZoom(1);
-refresh();
-state.poll = window.setInterval(() => refresh({quiet: true}), 2000);
+refresh().finally(connectChangeStream);

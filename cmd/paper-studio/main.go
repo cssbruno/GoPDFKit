@@ -36,6 +36,8 @@ const (
 	studioSourceLimit        = 8 << 20
 	studioJSONLimit          = 1 << 20
 	studioAPITimeout         = 15 * time.Second
+	studioChangePollInterval = 250 * time.Millisecond
+	studioChangeKeepAlive    = 15 * time.Second
 	studioScenarioCacheLimit = 32
 	studioInspectionLimit    = 128
 	studioPageRailLimit      = 10_000
@@ -191,6 +193,7 @@ func newStudioServer(file, scenario string) (*studioServer, error) {
 func (s *studioServer) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/workspace", s.handleWorkspace)
+	mux.HandleFunc("/api/changes", s.handleChanges)
 	mux.HandleFunc("/api/page/", s.handlePage)
 	mux.HandleFunc("/api/hit", s.handleHit)
 	mux.HandleFunc("/api/explain", s.handleExplain)
@@ -352,6 +355,87 @@ func (s *studioServer) handleWorkspace(w http.ResponseWriter, r *http.Request) {
 		SourceRevision: studioSourceRevision(snapshot.source),
 		PlanHash:       snapshot.plan.Hash(), Pages: snapshot.pages, Source: snapshot.source, AST: snapshot.ast,
 		Diagnostics: snapshot.diagnostics, Scenario: snapshot.scenario, Preview: status, PageRail: pageRail, Baseline: baseline})
+}
+
+// handleChanges keeps the browser informed without making it poll the full
+// workspace response. It watches only the source digest, never sends source
+// bytes, and leaves exact plan construction to the next revision-bound
+// workspace request. The small server-side interval keeps this dependency-free
+// while the browser receives changes as soon as the file is observed.
+func (s *studioServer) handleChanges(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeStudioError(w, http.StatusInternalServerError, errors.New("paper-studio: change stream requires streaming response support"))
+		return
+	}
+	_, sourceHash, err := readStudioSource(s.file)
+	if err != nil {
+		writeStudioError(w, http.StatusUnprocessableEntity, err)
+		return
+	}
+	lastRevision := studioSourceRevisionFromHash(sourceHash)
+	expectedRevision := strings.TrimSpace(r.URL.Query().Get("source_revision"))
+
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("X-Accel-Buffering", "no")
+	_, _ = io.WriteString(w, "retry: 1000\n\n: connected\n\n")
+	flusher.Flush()
+
+	writeChanged := func(revision string) bool {
+		payload, marshalErr := json.Marshal(map[string]string{
+			"source_revision": revision,
+			"scenario":        strings.TrimSpace(r.URL.Query().Get("scenario")),
+		})
+		if marshalErr != nil {
+			return false
+		}
+		if _, writeErr := fmt.Fprintf(w, "event: changed\ndata: %s\n\n", payload); writeErr != nil {
+			return false
+		}
+		flusher.Flush()
+		return true
+	}
+	if expectedRevision != "" && expectedRevision != lastRevision && !writeChanged(lastRevision) {
+		return
+	}
+
+	poll := time.NewTicker(studioChangePollInterval)
+	defer poll.Stop()
+	keepAlive := time.NewTicker(studioChangeKeepAlive)
+	defer keepAlive.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-poll.C:
+			_, hash, readErr := readStudioSource(s.file)
+			if readErr != nil {
+				continue
+			}
+			revision := studioSourceRevisionFromHash(hash)
+			if revision == lastRevision {
+				continue
+			}
+			lastRevision = revision
+			if !writeChanged(revision) {
+				return
+			}
+		case <-keepAlive.C:
+			if _, writeErr := io.WriteString(w, ": keep-alive\n\n"); writeErr != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
+}
+
+func studioSourceRevisionFromHash(hash [32]byte) string {
+	return hex.EncodeToString(hash[:])
 }
 
 func (s *studioServer) pageRail(snapshot *studioSnapshot) ([]studioPageRailSummary, studioBaselineResponse) {

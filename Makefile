@@ -29,8 +29,9 @@ ALLOC_PROFILE_BENCHTIME ?= 20x
 TRACE_BENCHTIME ?= 1s
 PAPER_ENGINE_PROFILE_CPU_SECONDS ?= 2
 PAPER_ENGINE_PROFILE_ALLOC_ITERATIONS ?= 20
+PAPER_STUDIO_LATENCY_REPORT ?= artifacts/paper-studio-wasm-latency.json
 
-.PHONY: all documentation cov coverage-check test race vet fmt-check check modules tools tools-clean benchstat lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget bench-paper-engine bench-paper-engine-ci bench-paper-engine-budget bench-paper-studio test-paper-studio-js test-paper-studio-wasm characterize-paper-engine paper-studio-wasm paper-studio profile-paper-engine profile-paper-engine-check profile profile-cpu profile-alloc profile-block profile-mutex profile-trace compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate pdf-reader-smoke clean
+.PHONY: all documentation cov coverage-check test race vet fmt-check check modules tools tools-clean benchstat lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget bench-paper-engine bench-paper-engine-ci bench-paper-engine-budget bench-paper-studio bench-paper-studio-wasm-latency bench-paper-studio-wasm-latency-budget test-paper-studio-js test-paper-studio-wasm characterize-paper-engine paper-studio-wasm paper-studio profile-paper-engine profile-paper-engine-check profile profile-cpu profile-alloc profile-block profile-mutex profile-trace compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate pdf-reader-smoke clean
 
 cov : all
 	go test $(GO_PACKAGES) -coverprofile=coverage && go tool cover -html=coverage -o=coverage.html
@@ -148,6 +149,12 @@ bench-paper-engine-budget : bench-paper-engine-ci
 
 bench-paper-studio :
 	go test ./cmd/paper-studio -run '^$$' -bench BenchmarkPaperStudio -benchmem -benchtime=250ms -count=5
+
+bench-paper-studio-wasm-latency : paper-studio-wasm
+	PAPER_STUDIO_BENCH_SAMPLES="$${PAPER_STUDIO_BENCH_SAMPLES:-10}" PAPER_STUDIO_LATENCY_REPORT="$(PAPER_STUDIO_LATENCY_REPORT)" sh tools/benchmark-paper-studio-wasm.sh
+
+bench-paper-studio-wasm-latency-budget : bench-paper-studio-wasm-latency
+	node tools/check-paper-studio-latency-report.mjs "$(PAPER_STUDIO_LATENCY_REPORT)"
 
 test-paper-studio-js :
 	node --test cmd/paper-studio/js_test/*.cjs

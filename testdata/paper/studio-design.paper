@@ -1,143 +1,172 @@
 document @prescription-design:
   style @base:
-    font: "Helvetica"
-    size: 10pt
-    line-height: 14pt
+    font: "Times"
+    size: 10.5pt
+    line-height: 15pt
     color: "#243746"
+
   style @brand-name:
     style: "@base"
-    size: 16pt
-    line-height: 19pt
+    size: 15pt
+    line-height: 20pt
     bold: true
-    color: "#14324A"
+    color: "#12324A"
+    letter-spacing: 0.3pt
+    margin-top: 7pt
+
   style @header-meta:
     style: "@base"
-    size: 8.5pt
-    line-height: 11.5pt
+    size: 9pt
+    line-height: 13pt
     align: "right"
-    color: "#526878"
+    color: "#4D6877"
+    margin-top: 7pt
+
   style @footer:
     style: "@base"
-    size: 8pt
-    line-height: 10pt
+    size: 8.5pt
+    line-height: 12pt
     align: "center"
     color: "#607787"
     border-top-width: 1pt
     border-color: "#B9CDD3"
-    padding-top: 6pt
-  style @eyebrow:
-    style: "@base"
-    size: 8.5pt
-    line-height: 11pt
-    bold: true
-    color: "#1F7A72"
-    margin-bottom: 3pt
+    padding-top: 7pt
+
   style @title:
     style: "@base"
-    font: "Times"
-    size: 30pt
-    line-height: 34pt
+    size: 29pt
+    line-height: 38pt
     bold: true
-    color: "#14324A"
+    color: "#12324A"
+    margin-top: 7pt
+
   style @status-card:
     style: "@base"
     size: 9pt
-    line-height: 12pt
+    line-height: 14pt
     bold: true
     align: "right"
-    color: "#17665F"
+    color: "#176B64"
+    background: "#EAF5F2"
+    border-width: 1pt
+    border-color: "#B8DCD5"
+    border-radius: 4pt
+    padding: 8pt
+    margin-top: 7pt
+
   style @section:
     style: "@base"
-    size: 9.5pt
-    line-height: 12.5pt
+    size: 10pt
+    line-height: 14pt
     bold: true
     color: "#FFFFFF"
-    background: "#14324A"
-    padding: 6pt
-    margin-top: 10pt
-    margin-bottom: 5pt
+    background: "#12324A"
+    padding-top: 6pt
+    padding-right: 8pt
+    padding-bottom: 6pt
+    padding-left: 8pt
+    margin-top: 9pt
+    margin-bottom: 4pt
+
   style @meta-label:
     style: "@base"
-    size: 8pt
-    line-height: 11pt
+    size: 8.5pt
+    line-height: 13pt
     bold: true
-    color: "#526878"
-    background: "#F1F6F7"
+    color: "#55717E"
+    background: "#EDF5F5"
     border-width: 1pt
-    border-color: "#D4E1E4"
+    border-color: "#D3E1E3"
     padding: 6pt
+
   style @meta-value:
     style: "@base"
-    size: 9.5pt
-    line-height: 12pt
+    size: 10pt
+    line-height: 14pt
     bold: true
     color: "#1C3444"
     border-width: 1pt
-    border-color: "#D4E1E4"
+    border-color: "#D3E1E3"
     padding: 6pt
+
   style @table-head:
     style: "@base"
-    size: 8.5pt
-    line-height: 11pt
+    size: 9pt
+    line-height: 13pt
     bold: true
     color: "#FFFFFF"
-    background: "#1F7A72"
+    background: "#21786F"
     border-width: 1pt
     border-color: "#17665F"
     padding: 6pt
+
   style @medicine:
     style: "@base"
     size: 10pt
-    line-height: 13pt
+    line-height: 15pt
     bold: true
-    color: "#14324A"
+    color: "#12324A"
     border-width: 1pt
-    border-color: "#CFDCDF"
+    border-color: "#D0DEE0"
     padding: 7pt
+
+  style @medicine-alt:
+    style: "@medicine"
+    background: "#F4F8F8"
+
   style @table-cell:
     style: "@base"
-    size: 9pt
-    line-height: 12pt
-    color: "#324B5B"
+    size: 9.5pt
+    line-height: 14pt
+    color: "#304B5B"
     border-width: 1pt
-    border-color: "#CFDCDF"
+    border-color: "#D0DEE0"
     padding: 7pt
+
+  style @table-cell-alt:
+    style: "@table-cell"
+    background: "#F4F8F8"
+
   style @instruction:
     style: "@base"
     size: 9.5pt
-    line-height: 13.5pt
+    line-height: 15pt
     color: "#4B3B17"
-    background: "#FFF8E7"
+    background: "#FFF7E3"
     border-left-width: 4pt
-    border-color: "#E0A326"
+    border-color: "#D69A1E"
     padding: 9pt
-    margin-top: 8pt
+    margin-top: 7pt
+
   style @clinical-card:
     style: "@base"
-    size: 8.5pt
-    line-height: 12pt
+    size: 9pt
+    line-height: 14pt
     color: "#314C5C"
-    background: "#F5F9FA"
+    background: "#F1F7F7"
     border-width: 1pt
-    border-color: "#CFDCDF"
+    border-color: "#D0DEE0"
     border-radius: 4pt
     padding: 8pt
+
   style @signature:
     style: "@base"
-    size: 8.5pt
-    line-height: 12pt
+    size: 9pt
+    line-height: 14pt
     color: "#314C5C"
     border-top-width: 1pt
     border-color: "#7F98A6"
-    padding-top: 7pt
+    padding-top: 8pt
+
   style @verification:
     style: "@base"
-    size: 8.5pt
-    line-height: 11pt
+    size: 9pt
+    line-height: 13pt
+    bold: true
     align: "center"
     color: "#17665F"
-    background: "#E9F6F3"
+    background: "#E7F5F1"
     border-width: 1pt
     border-color: "#A8D6CF"
     border-radius: 4pt
-    padding: 7pt
+    padding: 8pt

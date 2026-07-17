@@ -4,17 +4,20 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cssbruno/gopdfkit/internal/layoutengine"
 )
@@ -50,7 +53,7 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		!bytes.Contains(response.Body, []byte(`id="inspection-layer"`)) ||
 		!bytes.Contains(response.Body, []byte(`class="inspector-disclosure overlay-disclosure"`)) ||
 		!bytes.Contains(response.Body, []byte(`class="inspector-disclosure authoring-disclosure"`)) ||
-		!bytes.Contains(response.Body, []byte(`id="review-contract"`)) ||
+		bytes.Contains(response.Body, []byte(`review-contract-disclosure`)) ||
 		bytes.Contains(response.Body, []byte(`review-notes-disclosure`)) ||
 		!bytes.Contains(response.Body, []byte(`id="baseline-state"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/rail-model.js"`)) ||
@@ -64,7 +67,7 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		!bytes.Contains(response.Body, []byte(`src="/provenance-model.js"`)) ||
 		bytes.Contains(response.Body, []byte(`experiments-disclosure`)) ||
 		bytes.Contains(response.Body, []byte(`src="/typed-experiment-model.js"`)) ||
-		!bytes.Contains(response.Body, []byte(`src="/review-model.js"`)) ||
+		bytes.Contains(response.Body, []byte(`src="/review-model.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/tag-model.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/syntax-model.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/page-setup-model.js"`)) ||
@@ -131,6 +134,7 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		!bytes.Contains(javascript.Body, []byte("refreshPromise")) ||
 		!bytes.Contains(javascript.Body, []byte("loadDeliveryStatus")) ||
 		bytes.Contains(javascript.Body, []byte("loadReview(")) || bytes.Contains(javascript.Body, []byte("submitReview(")) ||
+		!bytes.Contains(javascript.Body, []byte("EventSource")) ||
 		bytes.Contains(javascript.Body, []byte("draft.orientation = 'portrait'")) ||
 		bytes.Contains(javascript.Body, []byte("Apply page size")) ||
 		!bytes.Contains(javascript.Body, []byte(".render?revision=")) ||
@@ -326,6 +330,80 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		t.Fatalf("stale web render status = %d", staleRender.StatusCode)
 	}
 }
+
+func TestPaperStudioChangeStreamSignalsSourceRevision(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "fixture.paper")
+	if err := os.WriteFile(file, []byte(studioFixture), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	studio, err := newStudioServer(file, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := fetchStudioWorkspace(t, studio.routes())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	request := httptest.NewRequest(http.MethodGet, "/api/changes?source_revision="+workspace.SourceRevision, nil).WithContext(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream := &studioStreamRecorder{header: make(http.Header), chunks: make(chan string, 16)}
+	done := make(chan struct{})
+	go func() {
+		studio.routes().ServeHTTP(stream, request)
+		close(done)
+	}()
+	if stream.status != 0 && stream.status != http.StatusOK {
+		t.Fatalf("change stream = %d %q", stream.status, stream.header)
+	}
+	readStream := func(marker string) string {
+		var content strings.Builder
+		timer := time.NewTimer(2 * time.Second)
+		defer timer.Stop()
+		for {
+			select {
+			case chunk := <-stream.chunks:
+				content.WriteString(chunk)
+				if strings.Contains(content.String(), marker) {
+					return content.String()
+				}
+			case <-timer.C:
+				t.Fatalf("timed out waiting for %q; stream=%q", marker, content.String())
+				return content.String()
+			}
+		}
+	}
+	readStream(": connected")
+
+	changedSource := strings.Replace(studioFixture, "Studio fixture", "Studio fixture changed", 1)
+	if err := os.WriteFile(file, []byte(changedSource), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	event := readStream("event: changed")
+	if !strings.Contains(event, "\"source_revision\":\""+studioSourceRevision(changedSource)+"\"") {
+		t.Fatalf("change event = %q", event)
+	}
+	cancel()
+	<-done
+}
+
+type studioStreamRecorder struct {
+	header http.Header
+	chunks chan string
+	status int
+}
+
+func (w *studioStreamRecorder) Header() http.Header    { return w.header }
+func (w *studioStreamRecorder) WriteHeader(status int) { w.status = status }
+func (w *studioStreamRecorder) Write(p []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	w.chunks <- string(p)
+	return len(p), nil
+}
+func (w *studioStreamRecorder) Flush() {}
 
 func TestPaperStudioInspectionRetainsRepeatedFragmentEvidence(t *testing.T) {
 	var source strings.Builder
