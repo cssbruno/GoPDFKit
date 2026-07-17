@@ -1,34 +1,195 @@
-document @studio-demo:
-  title: "Paper Studio"
+document @prescription:
+  title: "Harbor Health Prescription"
   language: "en"
   import: "studio-design.paper"
   scenario @review:
   scenario @accessibility:
   page @sheet:
-    width: 595pt
-    height: 842pt
-    margin: 54pt
-    body @content:
-      heading @title:
-        level: 1
-        style: "@title"
-        text: "A document you can inspect"
-        font: "Courier"
-      paragraph @intro:
-        style: "@body"
-        text: "Every visible mark comes from the immutable Paper display plan. Click the page to trace its source and layout decision."
-      heading @details:
-        level: 2
+    width: 595.275590551pt
+    height: 841.88976378pt
+    margin-top: 38pt
+    margin-right: 42pt
+    margin-bottom: 34pt
+    margin-left: 42pt
+    header @clinic-header:
+      row @clinic-brand-row:
+        gap: 18pt
+        cross-align: "center"
+        heading @clinic-name:
+          track: "fraction"
+          track-weight: 2
+          level: 2
+          style: "@brand-name"
+          text: "HARBOR HEALTH CLINIC"
+        paragraph @clinic-contact:
+          track: "fraction"
+          track-weight: 1
+          style: "@header-meta"
+          text: "+1 415 555 0142  |  care@harborhealth.example\n120 Harbor Way, San Francisco, CA"
+    footer @legal-footer:
+      paragraph @footer-copy:
+        style: "@footer"
+        text: "SAMPLE CLINICAL DOCUMENT - NOT VALID FOR DISPENSING  |  Harbor Health Clinic  |  Page 1"
+    body @prescription-body:
+      row @title-row:
+        gap: 16pt
+        cross-align: "center"
+        heading @prescription-title:
+          track: "fraction"
+          track-weight: 3
+          level: 1
+          style: "@title"
+          text: "Prescription"
+        paragraph @document-status:
+          track: "fixed"
+          track-size: 146pt
+          style: "@status-card"
+          text: "DIGITALLY ISSUED\n17 JUL 2026  |  RX-0042"
+
+      paragraph @patient-section:
         style: "@section"
-        text: "Exact by construction"
-      paragraph @body-copy:
-        style: "@code"
-        text: "Source -> semantic tree -> planner -> display list -> preview and PDF."
-      page-break @chapter-two:
-      heading @second-page:
-        level: 2
-        style: "@second-page"
-        text: "Second page"
-      paragraph @review-copy:
-        style: "@body"
-        text: "Review mode overlays fragments, diagnostics, and committed page-break evidence without using browser layout."
+        text: "PATIENT INFORMATION"
+      table @patient-details:
+        table-track @patient-label-one:
+          width: 72pt
+        table-track @patient-value-one:
+          width: 183pt
+        table-track @patient-label-two:
+          width: 72pt
+        table-track @patient-value-two:
+          width: 184pt
+        table-row @patient-row-one:
+          cell @patient-name-label:
+            style: "@meta-label"
+            text: "PATIENT"
+          cell @patient-name:
+            style: "@meta-value"
+            text: "Jordan Rivera"
+          cell @patient-dob-label:
+            style: "@meta-label"
+            text: "DATE OF BIRTH"
+          cell @patient-dob:
+            style: "@meta-value"
+            text: "14 February 1988"
+        table-row @patient-row-two:
+          cell @patient-id-label:
+            style: "@meta-label"
+            text: "PATIENT ID"
+          cell @patient-id:
+            style: "@meta-value"
+            text: "HH-2048-731"
+          cell @patient-contact-label:
+            style: "@meta-label"
+            text: "CONTACT"
+          cell @patient-contact:
+            style: "@meta-value"
+            text: "+1 415 555 0198"
+
+      paragraph @medication-section:
+        style: "@section"
+        text: "PRESCRIBED MEDICATIONS"
+      table @medications:
+        repeat-header: true
+        split: "rows"
+        table-track @medication-name-track:
+          width: 172pt
+        table-track @medication-dose-track:
+          width: 86pt
+        table-track @medication-directions-track:
+          width: 181pt
+        table-track @medication-duration-track:
+          width: 72pt
+        table-header @medication-header:
+          table-row @medication-header-row:
+            cell @medication-header-name:
+              style: "@table-head"
+              text: "MEDICATION"
+            cell @medication-header-dose:
+              style: "@table-head"
+              text: "DOSE"
+            cell @medication-header-directions:
+              style: "@table-head"
+              text: "DIRECTIONS"
+            cell @medication-header-duration:
+              style: "@table-head"
+              text: "DURATION"
+        table-row @medication-one:
+          cell @medication-one-name:
+            style: "@medicine"
+            text: "Amoxicillin\n500 mg capsule"
+          cell @medication-one-dose:
+            style: "@table-cell"
+            text: "1 capsule"
+          cell @medication-one-directions:
+            style: "@table-cell"
+            text: "Take by mouth every 8 hours with food."
+          cell @medication-one-duration:
+            style: "@table-cell"
+            text: "7 days"
+        table-row @medication-two:
+          cell @medication-two-name:
+            style: "@medicine"
+            text: "Ibuprofen\n400 mg tablet"
+          cell @medication-two-dose:
+            style: "@table-cell"
+            text: "1 tablet"
+          cell @medication-two-directions:
+            style: "@table-cell"
+            text: "Take by mouth every 8 hours as needed for pain."
+          cell @medication-two-duration:
+            style: "@table-cell"
+            text: "Up to 5 days"
+        table-row @medication-three:
+          cell @medication-three-name:
+            style: "@medicine"
+            text: "Saline nasal spray\n0.65%"
+          cell @medication-three-dose:
+            style: "@table-cell"
+            text: "2 sprays"
+          cell @medication-three-directions:
+            style: "@table-cell"
+            text: "Use in each nostril three times daily as needed."
+          cell @medication-three-duration:
+            style: "@table-cell"
+            text: "10 days"
+
+      paragraph @instructions:
+        style: "@instruction"
+        text: "IMPORTANT - Complete the full antibiotic course even if symptoms improve. Take doses at evenly spaced times. Seek urgent care for difficulty breathing, facial swelling, or a severe rash."
+
+      paragraph @clinical-section:
+        style: "@section"
+        text: "CLINICAL DETAILS"
+      table @clinical-details:
+        table-track @clinical-track-one:
+          width: 166pt
+        table-track @clinical-track-two:
+          width: 166pt
+        table-track @clinical-track-three:
+          width: 179pt
+        table-row @clinical-details-row:
+          cell @diagnosis:
+            style: "@clinical-card"
+            text: "DIAGNOSIS\nAcute bacterial sinusitis"
+          cell @allergies:
+            style: "@clinical-card"
+            text: "KNOWN ALLERGIES\nNo known drug allergies"
+          cell @follow-up:
+            style: "@clinical-card"
+            text: "FOLLOW-UP\nReview in 7-10 days if not improving"
+
+      paragraph @authorization-section:
+        style: "@section"
+        text: "PRESCRIBER AUTHORIZATION"
+      table @authorization:
+        table-track @signature-track:
+          width: 347pt
+        table-track @verification-track:
+          width: 164pt
+        table-row @authorization-row:
+          cell @prescriber-signature:
+            style: "@signature"
+            text: "Dr. Maya Chen, MD\nFamily Medicine  |  License CA-A123456\nElectronically signed 17 July 2026 at 14:32 PDT"
+          cell @verification-code:
+            style: "@verification"
+            text: "VERIFY PRESCRIPTION\nHH-RX-2026-0042\nValid for 30 days from issue"
