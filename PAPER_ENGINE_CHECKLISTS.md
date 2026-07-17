@@ -3154,26 +3154,23 @@ as completed behavior.
   ([implementation](internal/paperd/changeset_review.go),
   [normal/race/adversarial/bounds/recovery tests](internal/paperd/changeset_review_test.go),
   [visual evidence engine](internal/layoutengine/review_bundle.go)).
-- [x] Screenshot/lasso annotations store page coordinates and transforms. Studio
-  now stores bounded page-space rectangles plus the six-value affine transform
-  in a revision-independent review sidecar, projects them back to authored IDs,
-  and exposes Shift-drag capture in the real inspector
+- [x] Screenshot/lasso annotations store page coordinates and transforms. The
+  internal review API stores bounded page-space rectangles plus the six-value
+  affine transform in a revision-independent sidecar and projects them back to
+  authored IDs; the current Studio UI does not expose the review-notes workflow
   ([server](cmd/paper-studio/studio_review.go),
-  [UI](cmd/paper-studio/web/studio.js),
   [persistence test](cmd/paper-studio/studio_review_test.go)).
 - [x] Reference PDFs/images support bounded, digest-verified artifacts and
   deterministic raster diffs. Studio stores reference artifacts beside the
   review sidecar, rasterizes PDF pages through the pinned Poppler verifier, and
   serves the reference and diff only for the exact current source and plan
   revisions ([server](cmd/paper-studio/studio_review.go),
-  [UI](cmd/paper-studio/web/studio.js),
   [image/PDF/artifact tests](cmd/paper-studio/studio_review_test.go)).
 - [x] Comments survive formatting and ordinary movement. Comments are anchored
   to authored IDs rather than source offsets, persisted atomically beside the
   source, and reprojected as resolved/unresolved against the current AST after
   source changes ([server](cmd/paper-studio/studio_review.go),
-  [persistence test](cmd/paper-studio/studio_review_test.go),
-  [UI](cmd/paper-studio/web/studio.js)).
+  [persistence test](cmd/paper-studio/studio_review_test.go)).
 
 ### Stage 9 exit gate
 

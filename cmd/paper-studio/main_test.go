@@ -51,7 +51,7 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		!bytes.Contains(response.Body, []byte(`class="inspector-disclosure overlay-disclosure"`)) ||
 		!bytes.Contains(response.Body, []byte(`class="inspector-disclosure authoring-disclosure"`)) ||
 		!bytes.Contains(response.Body, []byte(`id="review-contract"`)) ||
-		!bytes.Contains(response.Body, []byte(`id="review-notes"`)) ||
+		bytes.Contains(response.Body, []byte(`review-notes-disclosure`)) ||
 		!bytes.Contains(response.Body, []byte(`id="baseline-state"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/rail-model.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`data-overlay="reading"`)) ||
@@ -130,7 +130,7 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		!bytes.Contains(javascript.Body, []byte("commitPageSetup")) ||
 		!bytes.Contains(javascript.Body, []byte("refreshPromise")) ||
 		!bytes.Contains(javascript.Body, []byte("loadDeliveryStatus")) ||
-		!bytes.Contains(javascript.Body, []byte("loadReview")) || !bytes.Contains(javascript.Body, []byte("submitReview")) ||
+		bytes.Contains(javascript.Body, []byte("loadReview(")) || bytes.Contains(javascript.Body, []byte("submitReview(")) ||
 		bytes.Contains(javascript.Body, []byte("draft.orientation = 'portrait'")) ||
 		bytes.Contains(javascript.Body, []byte("Apply page size")) ||
 		!bytes.Contains(javascript.Body, []byte(".render?revision=")) ||

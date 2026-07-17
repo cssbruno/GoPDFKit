@@ -22,10 +22,6 @@ const state = {
   authoringDraft: {operation: 'template'},
   authoringFeedback: null,
   reviewContract: null,
-  review: null,
-  reviewRevision: '',
-  reviewLoading: false,
-  reviewError: '',
   breakPolicy: 'hard',
   pageSetupDraft: null,
   pageSetupFeedback: null,
@@ -51,7 +47,6 @@ const inspectionLayer = $('#inspection-layer');
 const overlapPicker = $('#overlap-picker');
 const selectionLayer = $('#selection-layer');
 const canvasScroll = $('#canvas-scroll');
-let reviewLasso = null;
 
 function previewRevisionLocked() {
   return PaperStudioMutationGate.revisionsLocked(
@@ -71,7 +66,6 @@ function setPreviewStale(stale) {
   renderEditControls();
   renderAuthoringControls();
   renderReviewContract();
-  renderReviewNotes();
   renderPageSetup();
   renderResources();
   document.querySelectorAll('.font-replacement-apply').forEach((button) => { button.disabled = visualMutationsLocked(); });
@@ -130,15 +124,11 @@ async function performRefresh({quiet = false} = {}) {
       state.delivery = null;
       state.deliveryRevision = '';
       state.deliveryError = '';
-      state.review = null;
-      state.reviewRevision = '';
-      state.reviewError = '';
       closeOverlapPicker();
       state.page = Math.min(Math.max(1, state.page), Math.max(1, workspace.pages));
       renderWorkspace();
       await loadResources(workspace.revision);
       await loadAuthoring(workspace.revision);
-      await loadReview(workspace.revision);
       loadDeliveryStatus(workspace.revision);
       if (workspace.pages) await showPage(state.page);
       if (workspace.pages && app.dataset.mode === 'accessibility') await loadPDFTags();
@@ -166,52 +156,6 @@ async function loadAuthoring(revision) {
     if (error.status !== 409 && revision === state.revision) state.authoring = null;
   }
   renderAuthoringControls();
-}
-
-async function loadReview(revision, force = false) {
-  if (!revision || state.reviewLoading || (!force && state.reviewRevision === revision)) return;
-  state.reviewLoading = true;
-  state.reviewError = '';
-  renderReviewNotes();
-  const scenario = state.scenario ? `&scenario=${encodeURIComponent(state.scenario)}` : '';
-  try {
-    const payload = await api(`/api/review?revision=${encodeURIComponent(revision)}&source_revision=${encodeURIComponent(state.workspace?.source_revision || '')}${scenario}`);
-    if (revision !== state.revision) return;
-    state.review = PaperStudioReviewModel.normalizeReview(payload, state.workspace);
-    state.reviewRevision = revision;
-  } catch (error) {
-    if (error.status !== 409 && revision === state.revision) state.reviewError = error.message;
-  } finally {
-    if (revision === state.revision) state.reviewLoading = false;
-    renderReviewNotes();
-  }
-}
-
-async function submitReview(kind, body = '', rect = null) {
-  const selection = state.editSelection;
-  if (visualMutationsLocked() || !state.workspace || !selection) return;
-  let payload;
-  try {
-    payload = kind === 'comment'
-      ? PaperStudioReviewModel.commentPayload(state.workspace, selection.target, state.page, body, 'local-user')
-      : PaperStudioReviewModel.annotationPayload(state.workspace, selection.target, state.page, body, rect || undefined);
-  } catch (error) {
-    state.reviewError = error.message;
-    renderReviewNotes();
-    return;
-  }
-  state.reviewLoading = true;
-  renderReviewNotes();
-  try {
-    await api('/api/review', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(payload)});
-    state.reviewLoading = false;
-    await loadReview(state.revision, true);
-  } catch (error) {
-    state.reviewError = error.status === 409 ? 'Review state is stale · refresh and try again' : error.message;
-  } finally {
-    state.reviewLoading = false;
-    renderReviewNotes();
-  }
 }
 
 async function loadResources(revision) {
@@ -264,7 +208,6 @@ function renderWorkspace() {
   reconcileEditSelection();
   renderAuthoringControls();
   renderReviewContract();
-  renderReviewNotes();
   renderPageSetup();
   renderDelivery();
   renderStatus();
@@ -478,114 +421,6 @@ function authoringSelect(labelText, values, selected, change) {
 
 function authoringInput(labelText, value, change) {
   const field=document.createElement('label');field.className='edit-field';const caption=document.createElement('span');caption.textContent=labelText;const input=document.createElement('input');input.type='text';input.value=value;input.maxLength=128;input.disabled=visualMutationsLocked();input.addEventListener('input',()=>change(input.value));field.append(caption,input);return field;
-}
-
-function renderReviewNotes() {
-  const target = $('#review-notes');
-  const status = $('#review-notes-status');
-  if (!target || !status) return;
-  target.replaceChildren();
-  if (state.reviewLoading) {
-    status.textContent = 'Saving…';
-    target.innerHTML = '<span class="quiet">Loading exact review metadata…</span>';
-    return;
-  }
-  if (state.reviewError) {
-    status.textContent = 'Unavailable';
-    target.textContent = state.reviewError;
-    return;
-  }
-  const review = state.review;
-  const count = (review?.comments?.length || 0) + (review?.annotations?.length || 0);
-  status.textContent = `${count} note${count === 1 ? '' : 's'}`;
-  if (review) {
-    const context = document.createElement('div');
-    context.className = 'review-reference';
-    context.textContent = `Scenario ${review.scenario || 'default'} · exact source/plan review`;
-    target.append(context);
-    if (review.accessibility) {
-      const check = document.createElement('div');
-      check.className = 'review-check';
-      const label = review.accessibility.status === 'verified' ? 'Accessibility verified' : review.accessibility.status === 'failed' ? 'Accessibility checks failed' : 'Accessibility checks unavailable';
-      check.textContent = `${label} · final serialized PDF`;
-      target.append(check);
-      for (const failure of review.accessibility.failures || []) {
-        const detail = document.createElement('div');
-        detail.className = 'review-reference';
-        detail.textContent = failure;
-        target.append(detail);
-      }
-    }
-  }
-  if (review?.reference) {
-    const reference = document.createElement('div');
-    reference.className = 'review-reference';
-    reference.textContent = `Reference ${review.reference.kind} · page ${review.reference.page} · ${review.reference.digest.slice(0, 12)}…`;
-    target.append(reference);
-    const query = `?revision=${encodeURIComponent(state.revision)}&source_revision=${encodeURIComponent(state.sourceRevision)}`;
-    const artifact = document.createElement('a');
-    artifact.className = 'review-reference-link';
-    artifact.href = `/api/review/reference${query}`;
-    artifact.textContent = 'Open reference';
-    artifact.target = '_blank';
-    target.append(artifact);
-    if (review.reference.diffDigest) {
-      const diff = document.createElement('a');
-      diff.className = 'review-reference-link';
-      diff.href = `/api/review/reference${query}&artifact=diff`;
-      diff.textContent = `Open raster diff · ${review.reference.changedPixels} changed pixels`;
-      diff.target = '_blank';
-      target.append(diff);
-    }
-  }
-  for (const item of [...(review?.annotations || []), ...(review?.comments || [])]) {
-    const row = document.createElement('article');
-    row.className = `review-note is-${item.body ? 'comment' : 'annotation'}`;
-    const heading = document.createElement('strong');
-    heading.textContent = `${item.target} · page ${item.page}`;
-    const stateLabel = document.createElement('span');
-    stateLabel.className = item.resolved ? 'review-note-state is-resolved' : 'review-note-state';
-    stateLabel.textContent = item.resolved ? 'resolved' : 'unresolved';
-    row.append(heading, stateLabel);
-    const body = document.createElement('div');
-    body.textContent = item.body || item.note || item.label || 'Pinned annotation';
-    row.append(body);
-    target.append(row);
-  }
-  const selection = state.editSelection;
-  if (!selection) {
-    const empty = document.createElement('span');
-    empty.className = 'quiet';
-    empty.textContent = count ? 'Select an authored node to add another note.' : 'Select an authored node to pin a coordinate annotation or comment.';
-    target.append(empty);
-    return;
-  }
-  const lassoHint = document.createElement('div');
-  lassoHint.className = 'quiet';
-  lassoHint.textContent = 'Shift-drag the exact page to store a page-coordinate lasso with its affine transform.';
-  target.append(lassoHint);
-  const form = document.createElement('form');
-  form.className = 'review-note-form';
-  const input = document.createElement('textarea');
-  input.rows = 2;
-  input.maxLength = 4096;
-  input.placeholder = `Comment on ${selection.target}`;
-  input.setAttribute('aria-label', `Comment on ${selection.target}`);
-  const actions = document.createElement('div');
-  actions.className = 'review-note-actions';
-  const comment = document.createElement('button');
-  comment.type = 'submit';
-  comment.className = 'edit-commit';
-  comment.textContent = 'Add comment';
-  const annotation = document.createElement('button');
-  annotation.type = 'button';
-  annotation.className = 'edit-secondary';
-  annotation.textContent = 'Pin selection';
-  annotation.addEventListener('click', () => submitReview('annotation', input.value));
-  actions.append(comment, annotation);
-  form.append(input, actions);
-  form.addEventListener('submit', (event) => { event.preventDefault(); submitReview('comment', input.value); });
-  target.append(form);
 }
 
 function renderReviewContract() {
@@ -1326,51 +1161,6 @@ async function hitPage(event) {
   }
 }
 
-function reviewPagePoint(event) {
-  const meta = state.activePageMeta;
-  const bounds = pageImage.getBoundingClientRect();
-  const viewBox = meta?.viewBox || [0, 0, bounds.width, bounds.height];
-  return {
-    x: viewBox[0] + ((event.clientX - bounds.left) / Math.max(1, bounds.width)) * viewBox[2],
-    y: viewBox[1] + ((event.clientY - bounds.top) / Math.max(1, bounds.height)) * viewBox[3],
-  };
-}
-
-function updateReviewLasso(event) {
-  if (!reviewLasso) return;
-  const left = Math.min(reviewLasso.start.clientX, event.clientX);
-  const top = Math.min(reviewLasso.start.clientY, event.clientY);
-  const width = Math.abs(event.clientX - reviewLasso.start.clientX);
-  const height = Math.abs(event.clientY - reviewLasso.start.clientY);
-  const bounds = selectionLayer.getBoundingClientRect();
-  reviewLasso.element.style.left = `${left - bounds.left}px`;
-  reviewLasso.element.style.top = `${top - bounds.top}px`;
-  reviewLasso.element.style.width = `${width}px`;
-  reviewLasso.element.style.height = `${height}px`;
-}
-
-function beginReviewLasso(event) {
-  if (!event.shiftKey || previewRevisionLocked() || !state.editSelection || !state.activePageMeta) return;
-  event.preventDefault();
-  const element = document.createElement('div');
-  element.className = 'review-lasso';
-  selectionLayer.append(element);
-  reviewLasso = {start: {clientX: event.clientX, clientY: event.clientY, point: reviewPagePoint(event)}, element};
-  pageImage.setPointerCapture?.(event.pointerId);
-}
-
-function finishReviewLasso(event) {
-  if (!reviewLasso) return;
-  event.preventDefault();
-  const start = reviewLasso.start;
-  const end = reviewPagePoint(event);
-  const element = reviewLasso.element;
-  const rect = {x: Math.min(start.point.x, end.x), y: Math.min(start.point.y, end.y), width: Math.abs(end.x - start.point.x), height: Math.abs(end.y - start.point.y)};
-  reviewLasso = null;
-  element.remove();
-  if (rect.width > 0 && rect.height > 0) submitReview('annotation', 'Shift-drag selection', rect);
-}
-
 async function selectHitFragment(result, fragment) {
   const revision = state.revision;
   try {
@@ -1540,7 +1330,6 @@ function selectEditableTarget(target) {
   state.editFeedback = null;
   renderEditControls();
   renderReviewContract();
-  renderReviewNotes();
 }
 
 function reconcileEditSelection() {
@@ -1549,7 +1338,6 @@ function reconcileEditSelection() {
   }
   renderEditControls();
   renderReviewContract();
-  renderReviewNotes();
 }
 
 function renderEditControls() {
@@ -1854,10 +1642,6 @@ $('#zoom-value').addEventListener('keydown', event => {
   event.currentTarget.blur();
 });
 pageImage.addEventListener('click', hitPage);
-pageImage.addEventListener('pointerdown', beginReviewLasso);
-pageImage.addEventListener('pointermove', updateReviewLasso);
-pageImage.addEventListener('pointerup', finishReviewLasso);
-pageImage.addEventListener('pointercancel', finishReviewLasso);
 window.addEventListener('keydown', (event) => {
   if (event.target.matches('pre')) return;
   if (event.key === 'ArrowLeft') showPage(state.page - 1);
