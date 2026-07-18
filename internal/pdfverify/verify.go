@@ -186,7 +186,7 @@ func Verify(ctx context.Context, request Request, rasterizer Rasterizer) (Report
 	if limits == (Limits{}) {
 		limits = DefaultLimits()
 	}
-	if !limits.valid() || len(request.PDF) == 0 || uint64(len(request.PDF)) > limits.MaxPDFBytes || len(request.ExpectedPages) == 0 || uint32(len(request.ExpectedPages)) > limits.MaxPages {
+	if !limits.valid() || len(request.PDF) == 0 || uint64(len(request.PDF)) > limits.MaxPDFBytes || len(request.ExpectedPages) == 0 || uint32(len(request.ExpectedPages)) > limits.MaxPages { // #nosec G115 -- request sizes are checked against bounded verifier limits.
 		return Report{}, ErrLimit
 	}
 	if err := ctx.Err(); err != nil {
@@ -205,7 +205,7 @@ func Verify(ctx context.Context, request Request, rasterizer Rasterizer) (Report
 	report.PDFVersion, report.PageCount, report.Structure = fixture.PDFVersion, fixture.Pages, fixture.Structure
 	textHash := sha256.Sum256([]byte(fixture.Text))
 	report.TextSHA256 = hex.EncodeToString(textHash[:])
-	if report.PageCount != uint32(len(request.ExpectedPages)) {
+	if report.PageCount != uint32(len(request.ExpectedPages)) { // #nosec G115 -- the expected-page slice is bounded by MaxPages above.
 		report.Failures = append(report.Failures, "final PDF page count differs from expected plan raster pages")
 	}
 	dimensions := make([]image.Point, len(request.ExpectedPages))
@@ -223,7 +223,7 @@ func Verify(ctx context.Context, request Request, rasterizer Rasterizer) (Report
 		if err != nil || decoded.Bounds().Min != (image.Point{}) || decoded.Bounds().Empty() {
 			return Report{}, fmt.Errorf("%w: expected page %d PNG", ErrInvalid, expected.Page)
 		}
-		pixels := uint64(decoded.Bounds().Dx()) * uint64(decoded.Bounds().Dy())
+		pixels := uint64(decoded.Bounds().Dx()) * uint64(decoded.Bounds().Dy()) // #nosec G115 -- decoded dimensions are bounded by MaxPixelsPerPage before use.
 		if pixels == 0 || pixels > limits.MaxPixelsPerPage {
 			return Report{}, ErrLimit
 		}
@@ -286,7 +286,7 @@ func comparePage(ctx context.Context, page uint32, expected ExpectedRasterPage, 
 	expectedHash := sha256.Sum256(expected.PNG)
 	actualHash := sha256.Sum256(actualPNG)
 	bounds := expectedImage.Bounds()
-	total := uint64(bounds.Dx()) * uint64(bounds.Dy())
+	total := uint64(bounds.Dx()) * uint64(bounds.Dy()) // #nosec G115 -- the expected raster dimensions were validated against the pixel limit.
 	var changed, channelSum uint64
 	var maximum uint8
 	diff := DiffBounds{MinX: bounds.Max.X, MinY: bounds.Max.Y, MaxX: -1, MaxY: -1}
@@ -327,8 +327,8 @@ func comparePage(ctx context.Context, page uint32, expected ExpectedRasterPage, 
 	ppm := uint32(0)
 	mean := uint32(0)
 	if total != 0 {
-		ppm = uint32((changed*1_000_000 + total/2) / total)
-		mean = uint32((channelSum*1000 + total*2) / (total * 4))
+		ppm = uint32((changed*1_000_000 + total/2) / total)      // #nosec G115 -- changed and total are bounded pixel counts, so the ratio is below one million.
+		mean = uint32((channelSum*1000 + total*2) / (total * 4)) // #nosec G115 -- channelSum and total are bounded by the verified raster dimensions.
 	}
 	var diffBounds *DiffBounds
 	if changed != 0 {

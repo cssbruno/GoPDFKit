@@ -130,7 +130,7 @@ func InspectTags(ctx context.Context, pdf []byte, limits TagInspectionLimits) (T
 			report.DocumentElement = firstTagReference(tagRootKid, dictionary)
 			report.ParentTree = firstTagReference(tagParentTree, dictionary)
 		case tagElementType.Match(dictionary):
-			if uint32(len(nodes)) >= limits.MaxNodes {
+			if uint32(len(nodes)) >= limits.MaxNodes { // #nosec G115 -- nodes are appended only after this MaxNodes bound check.
 				return TagReport{}, ErrLimit
 			}
 			role := firstTagName(tagRole, dictionary)
@@ -140,12 +140,12 @@ func InspectTags(ctx context.Context, pdf []byte, limits TagInspectionLimits) (T
 			}
 			nodes[object.number] = &parsedTagNode{evidence: TagNodeEvidence{
 				Object: object.number, Parent: firstTagReference(tagParent, dictionary), Role: role,
-				PageObject: firstTagReference(tagPage, dictionary), MarkedContent: uint32(len(tagMCID.FindAll(dictionary, -1))),
+				PageObject: firstTagReference(tagPage, dictionary), MarkedContent: uint32(len(tagMCID.FindAll(dictionary, -1))), // #nosec G115 -- the bounded tag parser limits matched marked-content entries.
 				HasAlt: tagAlt.Match(dictionary), HasActualText: tagActualText.Match(dictionary), HasLanguage: tagLanguage.Match(dictionary),
 			}}
 		}
 	}
-	report.StructureElements = uint32(len(nodes))
+	report.StructureElements = uint32(len(nodes)) // #nosec G115 -- nodes are bounded by MaxNodes during parsing.
 	if !report.Marked {
 		report.Failures = append(report.Failures, "catalog is not marked as tagged")
 	}
@@ -192,7 +192,7 @@ func InspectTags(ctx context.Context, pdf []byte, limits TagInspectionLimits) (T
 			}
 			active[number], visited[number] = true, true
 			sort.Slice(node.children, func(i, j int) bool { return node.children[i] < node.children[j] })
-			node.evidence.Depth, node.evidence.Children = depth, uint32(len(node.children))
+			node.evidence.Depth, node.evidence.Children = depth, uint32(len(node.children)) // #nosec G115 -- children originate from the bounded parsed node graph.
 			report.MarkedContent += node.evidence.MarkedContent
 			report.Nodes = append(report.Nodes, node.evidence)
 			for _, child := range node.children {
@@ -254,7 +254,7 @@ func isPDFOperatorSpace(value byte) bool {
 
 func scanTagObjects(ctx context.Context, pdf []byte, max uint32) ([]tagObject, error) {
 	matches := tagObjectHeader.FindAllSubmatchIndex(pdf, -1)
-	if uint32(len(matches)) > max {
+	if uint32(len(matches)) > max { // #nosec G115 -- the regex match count is compared to the caller's bounded limit.
 		return nil, ErrLimit
 	}
 	objects := make([]tagObject, 0, len(matches))

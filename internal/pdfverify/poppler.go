@@ -22,7 +22,7 @@ type PopplerRasterizer struct {
 }
 
 func (r PopplerRasterizer) Rasterize(ctx context.Context, pdf []byte, dpi uint32, dimensions []image.Point, limits Limits) (RasterOutput, error) {
-	if ctx == nil || r.Binary == "" || !validLabel(r.Version) || len(dimensions) == 0 || uint32(len(dimensions)) > limits.MaxPages {
+	if ctx == nil || r.Binary == "" || !validLabel(r.Version) || len(dimensions) == 0 || uint32(len(dimensions)) > limits.MaxPages { // #nosec G115 -- dimensions is bounded by the verifier page limit before rasterization.
 		return RasterOutput{}, ErrInvalid
 	}
 	var versionOutput boundedBuffer
@@ -61,7 +61,7 @@ func (r PopplerRasterizer) Rasterize(ctx context.Context, pdf []byte, dpi uint32
 		}
 		path := prefix + ".png"
 		info, err := os.Stat(path)
-		if err != nil || info.Size() <= 0 || uint64(info.Size()) > limits.MaxRasterBytesPage || uint64(info.Size()) > limits.MaxTotalRasterBytes-total {
+		if err != nil || info.Size() <= 0 || uint64(info.Size()) > limits.MaxRasterBytesPage || uint64(info.Size()) > limits.MaxTotalRasterBytes-total { // #nosec G115 -- the generated raster file is checked against both bounded byte limits.
 			return RasterOutput{}, ErrLimit
 		}
 		data, err := os.ReadFile(path) // #nosec G304 -- path is a generated page artifact under the caller-provided verifier root.

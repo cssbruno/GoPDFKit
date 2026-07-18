@@ -70,6 +70,25 @@ func TestHTMLDefaultCutoverRoutesEveryRenderingEntryPoint(t *testing.T) {
 	}
 }
 
+func TestHTMLCharacterizationCorpusUsesUnifiedRoute(t *testing.T) {
+	for _, fixture := range htmlCharacterizationFixtures() {
+		if fixture.Classification != "recognized-rendered" && fixture.Classification != "recognized-ignored-metadata" {
+			continue
+		}
+		t.Run(fixture.Name, func(t *testing.T) {
+			var observed []typedRouteObservation
+			pdf := htmlCutoverDocument(&observed)
+			html := pdf.HTMLNew()
+			if err := html.WriteContext(t.Context(), 10, fixture.Source); err != nil {
+				t.Fatal(err)
+			}
+			if len(observed) != 1 || observed[0] != (typedRouteObservation{entryPoint: "HTML.WriteContext", engine: "unified", reason: ""}) {
+				t.Fatalf("route = %#v", observed)
+			}
+		})
+	}
+}
+
 func TestHTMLDefaultCutoverFallbackCategoriesArePrivateAndRateReady(t *testing.T) {
 	const secret = "customer-secret-selector-and-path"
 	var observed []typedRouteObservation
