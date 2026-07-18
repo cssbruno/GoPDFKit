@@ -1,0 +1,158 @@
+document @lab-report:
+  title: "Laudo laboratorial"
+  language: "pt-BR"
+
+  schema @lab:
+    field @laboratory:
+      type: "string"
+    field @reportId:
+      type: "string"
+    field @patient:
+      type: "object"
+      field @name:
+        type: "string"
+      field @cpf:
+        type: "string"
+    field @results:
+      type: "list"
+      item-type: "object"
+      max-items: 200
+      field @name:
+        type: "string"
+      field @value:
+        type: "number"
+      field @unit:
+        type: "string"
+      field @reference:
+        type: "string"
+
+  style @base:
+    font: "body-font"
+    size: 10pt
+    line-height: 14pt
+    color: "#243746"
+
+  style @title:
+    style: "@base"
+    size: 20pt
+    line-height: 26pt
+    color: "#12324A"
+
+  style @label:
+    style: "@base"
+    size: 8pt
+    line-height: 12pt
+    color: "#55717E"
+
+  style @value:
+    style: "@base"
+    size: 10pt
+    line-height: 14pt
+
+  style @result:
+    style: "@base"
+    size: 9pt
+    line-height: 13pt
+    color: "#304B5B"
+
+  page @a4:
+    size: "A4"
+    margin: 28pt
+
+    header @header:
+      paragraph @laboratory:
+        style: "@title"
+        bind: "@lab.laboratory"
+        text: "Laboratorio"
+
+      paragraph @report-id:
+        style: "@label"
+        bind: "@lab.reportId"
+        text: "Laudo"
+
+    footer @footer:
+      paragraph @page-number:
+        style: "@label"
+        align: "center"
+        text: "Documento demonstrativo | Pagina {page} de {pages}"
+
+    body @body:
+      paragraph @patient-label:
+        style: "@label"
+        text: "PACIENTE"
+
+      paragraph @patient-name:
+        style: "@value"
+        bind: "@lab.patient.name"
+        text: "Nome"
+
+      paragraph @patient-cpf:
+        style: "@value"
+        bind: "@lab.patient.cpf"
+        text: "CPF"
+
+      row @result-header:
+        gap: 6pt
+
+        paragraph @header-name:
+          track: "fraction"
+          track-weight: 3
+          style: "@label"
+          text: "EXAME"
+
+        paragraph @header-value:
+          track: "fraction"
+          track-weight: 1
+          style: "@label"
+          text: "RESULTADO"
+
+        paragraph @header-unit:
+          track: "fraction"
+          track-weight: 1
+          style: "@label"
+          text: "UNIDADE"
+
+        paragraph @header-reference:
+          track: "fraction"
+          track-weight: 2
+          style: "@label"
+          text: "REFERENCIA"
+
+      repeat @result-rows:
+        source: "@lab.results"
+        instance-prefix: "results"
+        max-items: 200
+
+        row @result-row:
+          gap: 6pt
+
+          paragraph @result-name:
+            track: "fraction"
+            track-weight: 3
+            style: "@result"
+            bind: "name"
+            text: "Exame"
+
+          paragraph @result-value:
+            track: "fraction"
+            track-weight: 1
+            style: "@result"
+            bind: "value"
+            format: "decimal"
+            format-min-fraction: 2
+            format-max-fraction: 4
+            text: "0"
+
+          paragraph @result-unit:
+            track: "fraction"
+            track-weight: 1
+            style: "@result"
+            bind: "unit"
+            text: "Unidade"
+
+          paragraph @result-reference:
+            track: "fraction"
+            track-weight: 2
+            style: "@result"
+            bind: "reference"
+            text: "Referencia"

@@ -56,7 +56,8 @@ authoring form.
 
 Every planning CLI command (`check`, `render`, `capture`, and `explain`) and
 Paper Studio accepts assets only when the manifest is explicitly named. The
-same flags work for ordinary and `--scenario` planning:
+same flags work for ordinary, `--scenario`, `--data`, and generated edge-case
+planning:
 
 ```json
 {"assets":[
@@ -73,6 +74,8 @@ go run ./cmd/paper-studio -assets project.assets.json -asset-root . report.paper
 go run ./cmd/paper check -assets project.assets.json -asset-root . report.paper
 go run ./cmd/paper render -assets project.assets.json -asset-root . -o report.pdf report.paper
 go run ./cmd/paper capture -assets project.assets.json -asset-root . --scenario preview report.paper
+go run ./cmd/paper render -assets project.assets.json -asset-root . --data report.json -o report.pdf report.paper
+go run ./cmd/paper check -assets project.assets.json -asset-root . --edge-cases 12 --seed 42 report.paper
 ```
 
 When `-asset-root` is omitted, the explicit manifest's directory is the root.
@@ -85,7 +88,8 @@ metadata and source usage only—never raw bytes or filesystem paths.
 
 Font entries support metadata for `font/ttf`, `font/otf`, and `font/woff2`, with validated
 file signatures, family, weight, style, and an SPDX-style license selected from
-the enforced `OFL-1.1`, `Apache-2.0`, `MIT`, `CC0-1.0`, or `Proprietary` policy.
+the enforced `OFL-1.1`, `Apache-2.0`, `Bitstream-Vera`, `MIT`, `CC0-1.0`, or
+`Proprietary` policy.
 An acyclic fallback list is validated with the same policy. `replaces` forms an
 acyclic same-kind lifecycle edge. Image
 entries may provide default crop focus; an authored image focus remains the

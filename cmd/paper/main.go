@@ -93,6 +93,30 @@ type assetOptions struct {
 	root     *string
 }
 
+type dataOptions struct {
+	file   *string
+	schema *string
+	locale *string
+}
+
+func addDataFlags(set *flag.FlagSet) dataOptions {
+	return dataOptions{
+		file:   set.String("data", "", "validate and render an external JSON object from FILE"),
+		schema: set.String("schema", "", "select a declared schema for external or generated data"),
+		locale: set.String("locale", "", "use an explicit locale for external or generated data"),
+	}
+}
+
+func (options dataOptions) load(sourceFile string, stdin io.Reader) ([]byte, error) {
+	if *options.file == "" {
+		return nil, nil
+	}
+	if sourceFile == "-" && *options.file == "-" {
+		return nil, errors.New("document source and JSON data cannot both use stdin")
+	}
+	return readBoundedFile(*options.file, stdin, maxSourceBytes, "JSON data")
+}
+
 func addAssetFlags(set *flag.FlagSet) assetOptions {
 	return assetOptions{
 		manifest: set.String("assets", "", "load an explicit content-addressed asset manifest"),
@@ -115,6 +139,7 @@ func (options assetOptions) load() (document.PaperAssetCatalog, error) {
 	for index, resource := range loaded {
 		resources[index] = document.PaperAssetResource{
 			Name: resource.Name, MediaType: resource.MediaType, Digest: resource.Digest, Data: resource.Data,
+			Family: resource.Family, Style: resource.Style, Weight: resource.Weight, License: resource.License,
 		}
 	}
 	return document.NewPaperAssetCatalog(resources)
@@ -177,6 +202,11 @@ func runCheck(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	set := flags("check", stderr)
 	jsonMode := set.Bool("json", false, "write a JSON result")
 	scenario := set.String("scenario", "", "plan with the selected scenario")
+	data := addDataFlags(set)
+	edgeCases := set.Uint("edge-cases", 0, "generate and fully render COUNT deterministic edge cases")
+	edgeSeed := set.Int64("seed", 1, "seed for reproducible edge-case data")
+	edgeMaxItems := set.Uint("edge-max-items", 64, "maximum generated items per schema list")
+	edgeOutput := set.String("edge-output", "", "write generated JSON and PDF cases under DIR")
 	assets := addAssetFlags(set)
 	file, code := parseOneFile(set, args)
 	if code >= 0 {
@@ -190,7 +220,33 @@ func runCheck(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if err != nil {
 		return commandError(*jsonMode, stdout, stderr, "check", err)
 	}
-	_, result, planErr := planPaper(displayFile(file), string(source), *scenario, catalog)
+	if *scenario != "" && *data.file != "" {
+		return commandError(*jsonMode, stdout, stderr, "check", errors.New("--scenario and --data are mutually exclusive"))
+	}
+	if *edgeCases != 0 {
+		if *scenario != "" || *data.file != "" {
+			return commandError(*jsonMode, stdout, stderr, "check", errors.New("--edge-cases cannot be combined with --scenario or --data"))
+		}
+		return checkGeneratedEdgeCases(edgeCheckRequest{
+			file: displayFile(file), source: string(source), schema: *data.schema, locale: *data.locale,
+			count: *edgeCases, seed: *edgeSeed, maxItems: *edgeMaxItems, outputDir: *edgeOutput,
+			assets: catalog, jsonMode: *jsonMode,
+		}, stdout, stderr)
+	}
+	if *edgeOutput != "" {
+		return commandError(*jsonMode, stdout, stderr, "check", errors.New("--edge-output requires --edge-cases"))
+	}
+	input, err := data.load(file, stdin)
+	if err != nil {
+		return commandError(*jsonMode, stdout, stderr, "check", err)
+	}
+	var result document.PaperPlanResult
+	var planErr error
+	if input != nil {
+		_, result, planErr = planPaperJSON(displayFile(file), string(source), input, *data.schema, *data.locale, "external-data", catalog)
+	} else {
+		_, result, planErr = planPaper(displayFile(file), string(source), *scenario, catalog)
+	}
 	if *jsonMode {
 		out := struct {
 			OK          bool                       `json:"ok"`
@@ -216,6 +272,7 @@ func runRender(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	output := set.String("o", "", "write PDF atomically to FILE (default: stdout)")
 	jsonMode := set.Bool("json", false, "write a JSON result; requires -o")
 	scenario := set.String("scenario", "", "plan with the selected scenario")
+	data := addDataFlags(set)
 	assets := addAssetFlags(set)
 	file, code := parseOneFile(set, args)
 	if code >= 0 {
@@ -232,7 +289,20 @@ func runRender(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if err != nil {
 		return commandError(*jsonMode, stdout, stderr, "render", err)
 	}
-	plan, planned, err := planPaper(displayFile(file), string(source), *scenario, catalog)
+	if *scenario != "" && *data.file != "" {
+		return commandError(*jsonMode, stdout, stderr, "render", errors.New("--scenario and --data are mutually exclusive"))
+	}
+	input, err := data.load(file, stdin)
+	if err != nil {
+		return commandError(*jsonMode, stdout, stderr, "render", err)
+	}
+	var plan document.PaperPlan
+	var planned document.PaperPlanResult
+	if input != nil {
+		plan, planned, err = planPaperJSON(displayFile(file), string(source), input, *data.schema, *data.locale, "external-data", catalog)
+	} else {
+		plan, planned, err = planPaper(displayFile(file), string(source), *scenario, catalog)
+	}
 	if err != nil {
 		return paperDiagnostics(*jsonMode, stdout, stderr, "render", planned.Diagnostics)
 	}
@@ -462,6 +532,12 @@ func planPaper(file, source, scenario string, assets document.PaperAssetCatalog)
 	return document.PlanPaperWithAssetsAndImports(file, source, assets, resolver)
 }
 
+func planPaperJSON(file, source string, data []byte, schema, locale, name string, assets document.PaperAssetCatalog) (document.PaperPlan, document.PaperPlanResult, error) {
+	return document.PlanPaperJSONWithAssetsAndImports(file, source, data, document.PaperJSONOptions{
+		Name: name, Schema: schema, Locale: locale,
+	}, assets, paperFileImportResolver())
+}
+
 func paperFileImportResolver() document.PaperImportResolver {
 	return func(importerFile, importPath string) (string, string, error) {
 		base := filepath.Dir(importerFile)
@@ -505,6 +581,34 @@ func readSource(file string, stdin io.Reader) ([]byte, error) {
 	}
 	if len(data) > maxSourceBytes {
 		return nil, fmt.Errorf("source exceeds %d-byte limit", maxSourceBytes)
+	}
+	return data, nil
+}
+
+func readBoundedFile(file string, stdin io.Reader, limit int64, label string) ([]byte, error) {
+	reader := stdin
+	var opened *os.File
+	if file != "-" {
+		info, err := os.Stat(file)
+		if err != nil {
+			return nil, err
+		}
+		if info.Size() < 0 || info.Size() > limit {
+			return nil, fmt.Errorf("%s exceeds %d-byte limit", label, limit)
+		}
+		opened, err = os.Open(file) // #nosec G304 -- file is the explicit CLI input path; no shell is involved.
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = opened.Close() }()
+		reader = opened
+	}
+	data, err := io.ReadAll(io.LimitReader(reader, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("%s exceeds %d-byte limit", label, limit)
 	}
 	return data, nil
 }

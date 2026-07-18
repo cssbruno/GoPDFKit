@@ -57,6 +57,36 @@ const scenarioRepeatSource = `document @doc:
           text: "Scenario line"
 `
 
+const externalDataSource = `document @report:
+  language: "pt-BR"
+  schema @lab:
+    field @patient:
+      type: "string"
+    field @results:
+      type: "list"
+      item-type: "object"
+      max-items: 6
+      field @name:
+        type: "string"
+      field @value:
+        type: "number"
+  page:
+    size: "A4"
+    margin: 24pt
+    body:
+      heading @patient:
+        level: 1
+        bind: "@lab.patient"
+        text: "Patient"
+      repeat @results:
+        source: "@lab.results"
+        instance-prefix: "results"
+        max-items: 6
+        paragraph @result:
+          bind: "name"
+          text: "Result"
+`
+
 func invoke(args []string, input string) (int, string, string) {
 	var stdout, stderr bytes.Buffer
 	code := run(args, strings.NewReader(input), &stdout, &stderr)
@@ -103,6 +133,31 @@ func writeAssetFixture(t *testing.T) (manifest, root string) {
 	return manifest, root
 }
 
+func writeFontAssetFixture(t *testing.T) (manifest, root string) {
+	t.Helper()
+	font, err := os.ReadFile("../../assets/static/font/calligra.ttf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root = t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "body.ttf"), font, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(font)
+	payload, err := json.Marshal(map[string]any{"assets": []map[string]any{{
+		"name": "body-font", "media_type": "font/ttf", "sha256": hex.EncodeToString(digest[:]), "path": "body.ttf",
+		"family": "Specimen Sans", "weight": 400, "style": "normal", "license": "OFL-1.1",
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest = filepath.Join(root, "assets.json")
+	if err := os.WriteFile(manifest, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return manifest, root
+}
+
 func TestRunFmtAndCheckJSON(t *testing.T) {
 	const unformatted = "document:\n  page:\n    size: \"A4\"\n    margin: 10pt\n    body:\n      text: \"hello\"\n"
 	code, stdout, stderr := invoke([]string{"fmt", "-"}, unformatted)
@@ -126,6 +181,71 @@ func TestRunFmtAndCheckJSON(t *testing.T) {
 	code, stdout, stderr = invoke([]string{"check", "--json", "-"}, "document:\n  page\n")
 	if code != exitFailure || stderr != "" || !strings.Contains(stdout, `"ok":false`) || !strings.Contains(stdout, `"diagnostics"`) {
 		t.Fatalf("invalid check = %d, %q, %q", code, stdout, stderr)
+	}
+}
+
+func TestRunCheckAndRenderExternalJSONAndGeneratedEdges(t *testing.T) {
+	const source = `document @report:
+  schema @invoice:
+    field @customer:
+      type: "string"
+    field @items:
+      type: "list"
+      item-type: "object"
+      max-items: 4
+      field @name:
+        type: "string"
+  page:
+    body:
+      heading:
+        bind: "@invoice.customer"
+        text: "Customer"
+      repeat @items-repeat:
+        source: "@invoice.items"
+        instance-prefix: "items"
+        max-items: 4
+        paragraph @item-name:
+          bind: "name"
+          text: "Item"
+`
+	dir := t.TempDir()
+	paperFile := filepath.Join(dir, "invoice.paper")
+	dataFile := filepath.Join(dir, "invoice.json")
+	if err := os.WriteFile(paperFile, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dataFile, []byte(`{"customer":"Ana","items":[{"name":"One"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout, stderr := invoke([]string{"check", "--json", "--data", dataFile, "--schema", "invoice", paperFile}, "")
+	if code != exitOK || stderr != "" || !strings.Contains(stdout, `"ok":true`) {
+		t.Fatalf("external JSON check = %d, %q, %q", code, stdout, stderr)
+	}
+	pdfFile := filepath.Join(dir, "invoice.pdf")
+	code, stdout, stderr = invoke([]string{"render", "--json", "--data", dataFile, "-o", pdfFile, paperFile}, "")
+	if code != exitOK || stderr != "" || !strings.Contains(stdout, `"ok":true`) {
+		t.Fatalf("external JSON render = %d, %q, %q", code, stdout, stderr)
+	}
+	pdf, err := os.ReadFile(pdfFile)
+	if err != nil || !bytes.HasPrefix(pdf, []byte("%PDF-")) {
+		t.Fatalf("external JSON PDF = %d bytes, %v", len(pdf), err)
+	}
+
+	edgeDir := filepath.Join(dir, "edges")
+	code, stdout, stderr = invoke([]string{"check", "--json", "--edge-cases", "3", "--seed", "42", "--edge-max-items", "3", "--edge-output", edgeDir, paperFile}, "")
+	if code != exitOK || stderr != "" || !strings.Contains(stdout, `"ok":true`) || !strings.Contains(stdout, `"name":"dense-lists"`) {
+		t.Fatalf("edge check = %d, %q, %q", code, stdout, stderr)
+	}
+	jsonFiles, _ := filepath.Glob(filepath.Join(edgeDir, "*.json"))
+	pdfFiles, _ := filepath.Glob(filepath.Join(edgeDir, "*.pdf"))
+	if len(jsonFiles) != 3 || len(pdfFiles) != 3 {
+		t.Fatalf("edge artifacts = %d JSON / %d PDF", len(jsonFiles), len(pdfFiles))
+	}
+
+	code, stdout, stderr = invoke([]string{"check", "--json", "--edge-cases", "4", "--seed", "42", paperFile}, "")
+	if code != exitFailure || stderr != "" || !strings.Contains(stdout, `"name":"unicode-pt-br"`) || !strings.Contains(stdout, `"code":"PAPER_PLAN_UNSUPPORTED"`) {
+		t.Fatalf("failing edge report = %d, %q, %q", code, stdout, stderr)
 	}
 }
 
@@ -187,6 +307,26 @@ func TestOperationalCommandsUseExplicitAssetCatalog(t *testing.T) {
 	code, stdout, stderr = invoke([]string{"explain", "--json", "--scenario", "preview", "--key", "@hero", "--assets", manifest, "--asset-root", root, "-"}, assetImageSource)
 	if code != exitOK || stderr != "" || !strings.Contains(stdout, `"key":"@hero"`) {
 		t.Fatalf("scenario asset explain = %d, %q, %q", code, stdout, stderr)
+	}
+}
+
+func TestOperationalCommandsPreserveFontManifestMetadata(t *testing.T) {
+	manifest, root := writeFontAssetFixture(t)
+	const source = `document @report:
+  page:
+    body:
+      paragraph:
+        font: "Specimen Sans"
+        text: "Embedded font"
+`
+	output := filepath.Join(t.TempDir(), "font.pdf")
+	code, stdout, stderr := invoke([]string{"render", "--json", "--assets", manifest, "--asset-root", root, "-o", output, "-"}, source)
+	if code != exitOK || stderr != "" || !strings.Contains(stdout, `"ok":true`) {
+		t.Fatalf("font render = %d, %q, %q", code, stdout, stderr)
+	}
+	pdf, err := os.ReadFile(output)
+	if err != nil || !bytes.Contains(pdf, []byte("/FontFile2")) {
+		t.Fatalf("font PDF = %d bytes, %v", len(pdf), err)
 	}
 }
 
@@ -330,6 +470,78 @@ func TestOperationalCommandsSelectScenarioRepeat(t *testing.T) {
 	code, stdout, stderr = invoke([]string{"explain", "--json", "--scenario", "preview", "--instance", "preview-lines[alpha]", "-"}, scenarioRepeatSource)
 	if code != exitOK || stderr != "" || !strings.Contains(stdout, `"instance":"preview-lines[alpha]"`) {
 		t.Fatalf("scenario explain = %d, %q, %q", code, stdout, stderr)
+	}
+}
+
+func TestCheckAndRenderAcceptStrictExternalJSONData(t *testing.T) {
+	dir := t.TempDir()
+	template := filepath.Join(dir, "lab.paper")
+	data := filepath.Join(dir, "lab.json")
+	output := filepath.Join(dir, "lab.pdf")
+	if err := os.WriteFile(template, []byte(externalDataSource), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(data, []byte(`{"patient":"Ana","results":[{"name":"Hemoglobina","value":12.5}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := invoke([]string{"check", "--json", "--data", data, template}, "")
+	if code != exitOK || stderr != "" || !strings.Contains(stdout, `"ok":true`) || !strings.Contains(stdout, `"pages":1`) {
+		t.Fatalf("data check = %d, %q, %q", code, stdout, stderr)
+	}
+	code, stdout, stderr = invoke([]string{"render", "--json", "--data", data, "-o", output, template}, "")
+	if code != exitOK || stderr != "" || !strings.Contains(stdout, `"ok":true`) {
+		t.Fatalf("data render = %d, %q, %q", code, stdout, stderr)
+	}
+	rendered, err := os.ReadFile(output)
+	if err != nil || !bytes.HasPrefix(rendered, []byte("%PDF-")) || !bytes.Contains(rendered, []byte("%%EOF")) {
+		t.Fatalf("rendered data PDF = %d bytes, %v", len(rendered), err)
+	}
+
+	if err := os.WriteFile(data, []byte(`{"patient":42,"results":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr = invoke([]string{"check", "--json", "--data", data, template}, "")
+	if code != exitFailure || stderr != "" || !strings.Contains(stdout, `"code":"PAPER_DATA_JSON"`) || !strings.Contains(stdout, `#/patient`) {
+		t.Fatalf("invalid data check = %d, %q, %q", code, stdout, stderr)
+	}
+}
+
+func TestCheckGeneratesReproducibleEdgeCasesAndCompletePDFs(t *testing.T) {
+	dir := t.TempDir()
+	template := filepath.Join(dir, "lab.paper")
+	if err := os.WriteFile(template, []byte(externalDataSource), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"check", "--json", "--edge-cases", "3", "--edge-max-items", "4", "--seed", "42", template}
+	firstCode, firstOutput, firstError := invoke(args, "")
+	secondCode, secondOutput, secondError := invoke(args, "")
+	if firstCode != exitOK || secondCode != exitOK || firstError != "" || secondError != "" || firstOutput != secondOutput {
+		t.Fatalf("edge checks = (%d, %q), (%d, %q), equal=%v", firstCode, firstError, secondCode, secondError, firstOutput == secondOutput)
+	}
+	var report edgeCheckResult
+	if err := json.Unmarshal([]byte(firstOutput), &report); err != nil || !report.OK || report.Seed != 42 || report.Schema != "@lab" || len(report.Cases) != 3 {
+		t.Fatalf("report = %#v, %v", report, err)
+	}
+	for _, checked := range report.Cases {
+		if !checked.OK || checked.PlanHash == "" || checked.Pages == 0 || checked.PDFBytes == 0 {
+			t.Fatalf("edge case = %#v", checked)
+		}
+	}
+
+	outputDir := filepath.Join(dir, "edge-output")
+	code, stdout, stderr := invoke([]string{"check", "--json", "--edge-cases", "2", "--seed", "42", "--edge-output", outputDir, template}, "")
+	if code != exitOK || stderr != "" {
+		t.Fatalf("edge output = %d, %q, %q", code, stdout, stderr)
+	}
+	files, err := filepath.Glob(filepath.Join(outputDir, "*"))
+	if err != nil || len(files) != 4 {
+		t.Fatalf("generated files = %#v, %v", files, err)
+	}
+	for _, name := range files {
+		payload, readErr := os.ReadFile(name)
+		if readErr != nil || len(payload) == 0 {
+			t.Fatalf("generated %s = %d bytes, %v", name, len(payload), readErr)
+		}
 	}
 }
 

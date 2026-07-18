@@ -25,6 +25,7 @@ go run ./examples/import-page
 go run ./examples/invoice
 go run ./examples/lab-hemograma-html
 go run ./examples/lab-hemograma-report
+# See examples/paper-lab-report for the data-driven .paper CLI example.
 go run ./examples/merge-pdf-pages
 go run ./examples/pagination-document
 go run ./examples/pagination-table
@@ -71,6 +72,7 @@ go run ./examples/watermark-pdf
 | Invoice | `go run ./examples/invoice` | `invoice.pdf` |
 | Brazilian lab hemograma HTML template | `go run ./examples/lab-hemograma-html` | `lab-hemograma-html.pdf` |
 | Brazilian lab hemograma report | `go run ./examples/lab-hemograma-report` | `lab-hemograma-report.pdf` |
+| Data-driven Brazilian `.paper` lab report | See `examples/paper-lab-report/README.md` | `/tmp/lab-report.pdf` |
 | Merge pages | `go run ./examples/merge-pdf-pages` | `merged-pages.pdf` |
 | Document pagination | `go run ./examples/pagination-document` | `pagination-document.pdf` |
 | Manual table pagination | `go run ./examples/pagination-table` | `pagination-table.pdf` |

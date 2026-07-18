@@ -157,6 +157,32 @@ Run `make test-paper-studio-js` for the dependency-free page-rail model tests.
 See [`PAPER_ENGINE_PLAN.md`](PAPER_ENGINE_PLAN.md) and the
 [`.paper` asset guide](docs/paper-assets.md) for the current design.
 
+### Render application JSON and check generated edge cases
+
+A `.paper` document can declare one typed schema and receive ordinary JSON at
+render time. The JSON adapter rejects unknown fields, missing required fields,
+wrong types, duplicate keys, and lists beyond their declared bounds before any
+PDF state is changed.
+
+```shell
+go run ./cmd/paper check --data report.json report.paper
+go run ./cmd/paper render --data report.json -o report.pdf report.paper
+```
+
+`check --edge-cases` generates fixed boundary cases followed by seeded random
+cases, validates each against the schema, and runs the complete plan/paint/PDF
+output path. A seed makes failures replayable; `--edge-output` keeps the JSON
+and PDF artifacts for inspection.
+
+```shell
+go run ./cmd/paper check --edge-cases 16 --seed 42 report.paper
+go run ./cmd/paper check --edge-cases 16 --seed 42 --edge-output ./edge-artifacts report.paper
+```
+
+Use `--schema NAME` when the document declares multiple schemas and
+`--locale pt-BR` when presentation does not already inherit an explicit
+locale. See the [Brazilian lab example](examples/paper-lab-report/README.md).
+
 ## Examples
 
 Runnable examples live under [`examples/`][examples]. They write generated PDFs

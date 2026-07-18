@@ -73,6 +73,16 @@ type PaperAssetCatalog struct {
 // returns the imported file's stable name plus source bytes.
 type PaperImportResolver func(importerFile, importPath string) (file, source string, err error)
 
+// PaperJSONOptions selects the declared schema and locale for strict external
+// JSON data. Schema may include or omit its leading @. Name is a stable,
+// human-readable fixture identity used in diagnostics and deterministic input
+// manifests; it defaults to external-data.
+type PaperJSONOptions struct {
+	Name   string
+	Schema string
+	Locale string
+}
+
 func NewPaperAssetCatalog(resources []PaperAssetResource) (PaperAssetCatalog, error) {
 	compiled := make([]papercompile.AssetResource, len(resources))
 	for index, resource := range resources {
@@ -256,6 +266,37 @@ func (f *Document) WritePaperScenarioWithAssetsAndImports(file, source, scenario
 	return rendered, err
 }
 
+// WritePaperJSON validates one external JSON object against a declared schema,
+// expands bounded repeats, and paints the resulting plan. It is the concise
+// data-driven path for application-generated documents.
+func (f *Document) WritePaperJSON(file, source string, data []byte) (PaperRenderResult, error) {
+	return f.WritePaperJSONWithOptions(file, source, data, PaperJSONOptions{})
+}
+
+// WritePaperJSONWithOptions is WritePaperJSON with explicit schema, locale,
+// and fixture identity selection.
+func (f *Document) WritePaperJSONWithOptions(file, source string, data []byte, options PaperJSONOptions) (PaperRenderResult, error) {
+	plan, planned, err := PlanPaperJSONWithOptions(file, source, data, options)
+	if err != nil {
+		return PaperRenderResult{Diagnostics: planned.Diagnostics}, err
+	}
+	rendered, err := f.WritePaperPlan(plan)
+	rendered.Diagnostics = append(append([]PaperDiagnostic(nil), planned.Diagnostics...), rendered.Diagnostics...)
+	return rendered, err
+}
+
+// WritePaperJSONWithAssetsAndImports combines the concise external JSON path
+// with explicit immutable assets and reusable source imports.
+func (f *Document) WritePaperJSONWithAssetsAndImports(file, source string, data []byte, options PaperJSONOptions, assets PaperAssetCatalog, resolver PaperImportResolver) (PaperRenderResult, error) {
+	plan, planned, err := PlanPaperJSONWithAssetsAndImports(file, source, data, options, assets, resolver)
+	if err != nil {
+		return PaperRenderResult{Diagnostics: planned.Diagnostics}, err
+	}
+	rendered, err := f.WritePaperPlan(plan)
+	rendered.Diagnostics = append(append([]PaperDiagnostic(nil), planned.Diagnostics...), rendered.Diagnostics...)
+	return rendered, err
+}
+
 // PlanPaper performs the complete read-only .paper pipeline. It never paints
 // and cannot mutate a caller-owned Document.
 func PlanPaper(file, source string) (PaperPlan, PaperPlanResult, error) {
@@ -334,7 +375,38 @@ func PlanPaperScenarioWithAssetsAndImportsContext(ctx context.Context, file, sou
 	return planPaperSource(ctx, file, source, scenario, true, assets.compile, papercompile.ImportResolver(resolver))
 }
 
+// PlanPaperJSON plans strict external JSON data using the document's only
+// declared schema. It performs no I/O and does not mutate a Document.
+func PlanPaperJSON(file, source string, data []byte) (PaperPlan, PaperPlanResult, error) {
+	return PlanPaperJSONWithOptions(file, source, data, PaperJSONOptions{})
+}
+
+// PlanPaperJSONWithOptions is PlanPaperJSON with explicit schema, locale, and
+// fixture identity selection.
+func PlanPaperJSONWithOptions(file, source string, data []byte, options PaperJSONOptions) (PaperPlan, PaperPlanResult, error) {
+	return planPaperJSONSource(context.Background(), file, source, data, options, papercompile.AssetCatalog{}, nil)
+}
+
+// PlanPaperJSONWithAssetsAndImports combines strict external JSON data with
+// explicit immutable asset and source-import boundaries.
+func PlanPaperJSONWithAssetsAndImports(file, source string, data []byte, options PaperJSONOptions, assets PaperAssetCatalog, resolver PaperImportResolver) (PaperPlan, PaperPlanResult, error) {
+	return planPaperJSONSource(context.Background(), file, source, data, options, assets.compile, papercompile.ImportResolver(resolver))
+}
+
+type paperJSONSelection struct {
+	data    []byte
+	options PaperJSONOptions
+}
+
 func planPaperSource(ctx context.Context, file, source, scenario string, selectScenario bool, assets papercompile.AssetCatalog, resolver papercompile.ImportResolver) (PaperPlan, PaperPlanResult, error) {
+	return planPaperSourceSelection(ctx, file, source, scenario, selectScenario, nil, assets, resolver)
+}
+
+func planPaperJSONSource(ctx context.Context, file, source string, data []byte, options PaperJSONOptions, assets papercompile.AssetCatalog, resolver papercompile.ImportResolver) (PaperPlan, PaperPlanResult, error) {
+	return planPaperSourceSelection(ctx, file, source, "", true, &paperJSONSelection{data: data, options: options}, assets, resolver)
+}
+
+func planPaperSourceSelection(ctx context.Context, file, source, scenario string, selectScenario bool, data *paperJSONSelection, assets papercompile.AssetCatalog, resolver papercompile.ImportResolver) (PaperPlan, PaperPlanResult, error) {
 	var budgetErr error
 	ctx, budgetErr = ensureDocumentPlanningBudget(ctx)
 	if budgetErr != nil {
@@ -350,7 +422,11 @@ func planPaperSource(ctx context.Context, file, source, scenario string, selectS
 	}
 
 	compiled := papercompile.CompileWithAssetsAndResolver(parsed.AST, assets, resolver)
-	if selectScenario {
+	if data != nil {
+		compiled = papercompile.CompileJSONDataWithAssetsAndResolver(parsed.AST, data.data, papercompile.JSONDataOptions{
+			Name: data.options.Name, Schema: data.options.Schema, Locale: data.options.Locale,
+		}, assets, resolver)
+	} else if selectScenario {
 		compiled = papercompile.CompileScenarioWithAssetsAndResolver(parsed.AST, scenario, assets, resolver)
 	}
 	result.Diagnostics = append(result.Diagnostics, paperDiagnostics(PaperStageCompile, compiled.Diagnostics)...)
@@ -391,7 +467,11 @@ func planPaperSource(ctx context.Context, file, source, scenario string, selectS
 		}
 		return paperPlanStageFailureWithHint(result, PaperStagePlan, code, err, hint, file, parsed.AST.Root)
 	}
-	planned, err = bindPaperDeterministicInputs(planned, compiled, source, scenario, selectScenario)
+	selectionIdentity := scenario
+	if data != nil {
+		selectionIdentity = "data:" + compiled.ScenarioDigest
+	}
+	planned, err = bindPaperDeterministicInputs(planned, compiled, source, selectionIdentity, selectScenario)
 	if err != nil {
 		return paperPlanStageFailure(result, PaperStagePlan, "PAPER_PLAN_INPUT_IDENTITY", err, file, parsed.AST.Root)
 	}
@@ -413,7 +493,7 @@ func planPaperSource(ctx context.Context, file, source, scenario string, selectS
 	}
 	plan := PaperPlan{plan: planned, file: file, title: compiled.Document.Title,
 		language: strings.TrimSpace(compiled.Document.Language), root: root, hash: hash.String(),
-		pages: len(planned.Projection().Pages), revisions: paperViewerRevisions(source, scenario, selectScenario),
+		pages: len(planned.Projection().Pages), revisions: paperViewerRevisions(source, selectionIdentity, selectScenario),
 		mapping:      clonePaperCompileMapping(compiled.Mapping),
 		imageSources: imageSources, fontSources: fontSources}
 	result.Pages, result.Hash = plan.PageCount(), plan.Hash()

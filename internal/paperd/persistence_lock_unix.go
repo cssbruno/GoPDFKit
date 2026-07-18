@@ -29,7 +29,7 @@ func lockPersistenceRoot(ctx context.Context, root string) (func(), error) {
 		return nil, workspaceError("PERSISTENCE_LOCK", "persistence lock path is unsafe", ErrPersistenceCorrupt)
 	}
 	for {
-		err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) // #nosec G115 -- file descriptor values are OS-bounded ints exposed as uintptr.
 		if err == nil {
 			break
 		}
@@ -49,12 +49,12 @@ func lockPersistenceRoot(ctx context.Context, root string) (func(), error) {
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+		_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) // #nosec G115 -- file descriptor values are OS-bounded ints exposed as uintptr.
 		_ = file.Close()
 		return nil, workspaceError("PERSISTENCE_CANCELLED", "persistence lock was cancelled", err)
 	}
 	return func() {
-		_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+		_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) // #nosec G115 -- file descriptor values are OS-bounded ints exposed as uintptr.
 		_ = file.Close()
 	}, nil
 }

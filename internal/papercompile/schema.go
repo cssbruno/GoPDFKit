@@ -71,6 +71,18 @@ func ExtractSchemas(ast paperlang.AST) SchemaSourceResult {
 	}
 }
 
+// ExtractSchemasWithResolver includes schemas declared by explicit design
+// imports. The resolver remains the only source boundary; no ambient files or
+// network locations are consulted by the compiler.
+func ExtractSchemasWithResolver(ast paperlang.AST, resolver ImportResolver) SchemaSourceResult {
+	imports := resolveImports(ast, resolver, ImportLimits{})
+	analysis := analyzeSchemas(imports.ast, SchemaLimits{})
+	return SchemaSourceResult{
+		Schemas:     cloneSchemaDescriptors(analysis.descriptors),
+		Diagnostics: append(append([]paperlang.Diagnostic(nil), imports.diagnostics...), analysis.diagnostics...),
+	}
+}
+
 func cloneSchemaDescriptors(input []SchemaDescriptor) []SchemaDescriptor {
 	result := make([]SchemaDescriptor, len(input))
 	for index, schema := range input {

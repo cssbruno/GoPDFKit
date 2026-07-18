@@ -99,6 +99,28 @@ func TestCompileScenarioExpandsStableKeyedRepeat(t *testing.T) {
 	}
 }
 
+func TestCompileDefersDynamicFlowWithoutSelectedScenario(t *testing.T) {
+	parsed := paperlang.Parse("repeat.paper", repeatSourceFixture)
+	if !parsed.OK() {
+		t.Fatalf("parse diagnostics = %#v", parsed.Diagnostics)
+	}
+	compiled := Compile(parsed.AST)
+	if !compiled.OK() || len(compiled.Document.Body) != 0 {
+		t.Fatalf("neutral compile = body %#v diagnostics %#v", compiled.Document.Body, compiled.Diagnostics)
+	}
+	found := false
+	for _, diagnostic := range compiled.Diagnostics {
+		found = found || diagnostic.Code == "PAPER_COMPILE_DYNAMIC_DEFERRED" && diagnostic.Severity == paperlang.SeverityWarning
+	}
+	if !found {
+		t.Fatalf("neutral compile omitted deferred warning: %#v", compiled.Diagnostics)
+	}
+	selected := CompileScenario(parsed.AST, "@sample")
+	if !selected.OK() || len(selected.Document.Body) != 2 {
+		t.Fatalf("selected compile after neutral projection = body %#v diagnostics %#v", selected.Document.Body, selected.Diagnostics)
+	}
+}
+
 func TestCompileScenarioInjectsPrimitiveAndOptionalBindingValues(t *testing.T) {
 	t.Parallel()
 
@@ -281,16 +303,6 @@ func equalStrings(left, right []string) bool {
 		}
 	}
 	return true
-}
-
-func TestCompileWithoutScenarioDoesNotExpandRepeat(t *testing.T) {
-	t.Parallel()
-
-	parsed := paperlang.Parse("repeat-default.paper", repeatSourceFixture)
-	compiled := Compile(parsed.AST)
-	if compiled.OK() || len(compiled.Document.Body) != 0 || !hasCompileDiagnostic(compiled.Diagnostics, "PAPER_COMPILE_UNSUPPORTED_NODE") {
-		t.Fatalf("default compile unexpectedly expanded repeat: body=%#v diagnostics=%#v", compiled.Document.Body, compiled.Diagnostics)
-	}
 }
 
 func TestCompileScenarioSupportsComponentTemplate(t *testing.T) {

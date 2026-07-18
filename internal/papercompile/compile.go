@@ -100,10 +100,13 @@ type Result struct {
 	// Locale is the explicit resolved scenario locale. It is empty when no
 	// scenario locale was declared; adapters must then select an explicit
 	// locale rather than consulting the host environment.
-	Locale      string
-	Mapping     CompileMapping
-	Schemas     []SchemaDescriptor
-	Diagnostics []paperlang.Diagnostic
+	Locale string
+	// ScenarioDigest identifies the exact normalized fixture selected for this
+	// compile. It is empty for template-only compilation.
+	ScenarioDigest string
+	Mapping        CompileMapping
+	Schemas        []SchemaDescriptor
+	Diagnostics    []paperlang.Diagnostic
 }
 
 func (r Result) OK() bool {
@@ -166,6 +169,9 @@ func compileWithLimitsAndResolver(ast paperlang.AST, expansionLimits ExpansionLi
 func compilePipeline(ast paperlang.AST, expansionLimits ExpansionLimits, schemaLimits SchemaLimits, scenario *scenarioCompileRequest, assets AssetCatalog, resolver ImportResolver) Result {
 	imports := resolveImports(ast, resolver, ImportLimits{})
 	ast = imports.ast
+	if scenario != nil && scenario.dataSet && strings.TrimSpace(scenario.dataOptions.Locale) == "" {
+		scenario.dataOptions.Locale = paperDocumentLanguage(ast)
+	}
 	schemas := analyzeSchemas(ast, schemaLimits)
 	themes := ExtractThemes(ast)
 	selectedScenario := ""
@@ -175,6 +181,8 @@ func compilePipeline(ast paperlang.AST, expansionLimits ExpansionLimits, schemaL
 	expanded := expandComponents(ast, expansionLimits, selectedScenario)
 	if scenario != nil {
 		expanded = expandSelectedScenario(ast, schemas, expanded, scenario)
+	} else {
+		expanded = deferDynamicFlow(expanded)
 	}
 	bindings := validateBindings(expanded.ast, expanded.provenance, schemas, schemaLimits)
 	c := compiler{
@@ -187,6 +195,7 @@ func compilePipeline(ast paperlang.AST, expansionLimits ExpansionLimits, schemaL
 		c.fixture = scenario.fixture
 		if scenario.fixture != nil {
 			c.result.Locale = scenario.fixture.Locale
+			c.result.ScenarioDigest = scenario.fixture.Digest
 		}
 	}
 	c.result.Diagnostics = append(c.result.Diagnostics, schemas.diagnostics...)
@@ -231,6 +240,44 @@ func compilePipeline(ast paperlang.AST, expansionLimits ExpansionLimits, schemaL
 		c.result.Tree = tree
 	}
 	return c.result
+}
+
+func paperDocumentLanguage(ast paperlang.AST) string {
+	if ast.Root == nil {
+		return ""
+	}
+	for _, member := range ast.Root.Members {
+		property := member.Property
+		if property != nil && property.Name == "language" && property.Value.Kind == paperlang.ScalarString && property.Value.StringValue != nil {
+			return strings.TrimSpace(*property.Value.StringValue)
+		}
+	}
+	return ""
+}
+
+// deferDynamicFlow gives the scenario-neutral compiler a stable empty-state
+// projection. Repeat and loop nodes are validated and expanded by
+// CompileScenario; without a selected fixture they contribute no flow, but do
+// not make the authored source revision invalid or uneditable.
+func deferDynamicFlow(input componentExpansionResult) componentExpansionResult {
+	var prune func(*paperlang.Node)
+	prune = func(node *paperlang.Node) {
+		if node == nil {
+			return
+		}
+		members := node.Members[:0]
+		for _, member := range node.Members {
+			if member.Node != nil && (member.Node.Kind == paperlang.NodeRepeat || member.Node.Kind == paperlang.NodeLoop) {
+				input.diagnostics = append(input.diagnostics, paperlang.Diagnostic{Code: "PAPER_COMPILE_DYNAMIC_DEFERRED", Severity: paperlang.SeverityWarning, Message: fmt.Sprintf("%s is deferred until a scenario is selected", member.Node.Kind), Hint: "compile with one declared scenario to render dynamic content", Span: member.Node.HeaderSpan})
+				continue
+			}
+			prune(member.Node)
+			members = append(members, member)
+		}
+		node.Members = members
+	}
+	prune(input.ast.Root)
+	return input
 }
 
 type compiler struct {
@@ -505,6 +552,13 @@ func (c *compiler) compileFlowChildren(children []*paperlang.Node, hint string) 
 			c.compileTable(child)
 		case paperlang.NodeCanvas:
 			c.compileCanvas(child)
+		case paperlang.NodeRepeat, paperlang.NodeLoop:
+			// Dynamic authoring remains a valid base document even when no
+			// scenario is selected. Scenario compilation expands these nodes
+			// before flow lowering; the neutral base projection intentionally
+			// omits them instead of making the source revision uneditable.
+			c.mapNode(child, -1, -1)
+			c.warn("PAPER_COMPILE_DYNAMIC_DEFERRED", fmt.Sprintf("%s is deferred until a scenario is selected", child.Kind), "compile with one declared scenario to render dynamic content", child.HeaderSpan)
 		default:
 			c.unsupportedNode(child, hint)
 		}

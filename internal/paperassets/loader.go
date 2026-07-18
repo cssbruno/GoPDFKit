@@ -21,11 +21,12 @@ import (
 const MaxManifestBytes = 1 << 20
 
 var allowedFontLicenses = map[string]struct{}{
-	"Apache-2.0":  {},
-	"CC0-1.0":     {},
-	"MIT":         {},
-	"OFL-1.1":     {},
-	"Proprietary": {},
+	"Apache-2.0":     {},
+	"Bitstream-Vera": {},
+	"CC0-1.0":        {},
+	"MIT":            {},
+	"OFL-1.1":        {},
+	"Proprietary":    {},
 }
 
 type manifest struct {
