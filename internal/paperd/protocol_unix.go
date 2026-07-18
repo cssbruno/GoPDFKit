@@ -51,14 +51,16 @@ type unixProtocolPeer struct {
 // UnixProtocolListener owns one restricted local socket and its bounded
 // connection dispatcher.
 type UnixProtocolListener struct {
-	listener *net.UnixListener
-	path     string
-	file     os.FileInfo
-	server   *ProtocolServer
-	allowed  map[uint32]struct{}
-	limit    chan struct{}
-	timeout  time.Duration
-	peer     func(*net.UnixConn) (unixProtocolPeer, error)
+	listener  *net.UnixListener
+	path      string
+	file      os.FileInfo
+	server    *ProtocolServer
+	allowed   map[uint32]struct{}
+	limit     chan struct{}
+	timeout   time.Duration
+	peer      func(*net.UnixConn) (unixProtocolPeer, error)
+	closeOnce sync.Once
+	closeErr  error
 }
 
 // ListenUnixProtocol creates a fail-closed local socket adapter. Authentication,
@@ -198,13 +200,15 @@ func (listener *UnixProtocolListener) Close() error {
 	if listener == nil || listener.listener == nil {
 		return nil
 	}
-	err := listener.listener.Close()
-	if info, statErr := os.Lstat(listener.path); statErr == nil && info.Mode()&os.ModeSocket != 0 && os.SameFile(listener.file, info) {
-		if removeErr := os.Remove(listener.path); err == nil {
-			err = removeErr
+	listener.closeOnce.Do(func() {
+		listener.closeErr = listener.listener.Close()
+		if info, statErr := os.Lstat(listener.path); statErr == nil && info.Mode()&os.ModeSocket != 0 && os.SameFile(listener.file, info) {
+			if removeErr := os.Remove(listener.path); listener.closeErr == nil {
+				listener.closeErr = removeErr
+			}
 		}
-	}
-	return err
+	})
+	return listener.closeErr
 }
 
 // Serve accepts bounded one-request connections until ctx is cancelled. Each
