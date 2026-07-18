@@ -23,7 +23,8 @@ Studio authoring foundation.
   generation budgets, and the calibrated Paper Engine benchmark gate pass on
   the release candidate branch.
 - The stabilization-window record and formal rollback closure remain release
-  prerequisites; no release tag is implied by this changelog entry.
+  prerequisites; the `v0.15.0` release tag starts the stabilization window and
+  does not itself close Stage 10.
 
 ## v0.14.0 - 2026-07-16
 
