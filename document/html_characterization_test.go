@@ -235,6 +235,41 @@ func TestHTMLCharacterizationCursorLimitsCancellationAndConcurrentReuse(t *testi
 	}
 }
 
+func TestHTMLCharacterizationRenderedCohortsMatchExplicitPlanCursor(t *testing.T) {
+	for _, fixture := range htmlCharacterizationFixtures() {
+		if fixture.Classification != "recognized-rendered" && fixture.Classification != "recognized-ignored-metadata" && fixture.Classification != "strict-unified-plannable" {
+			continue
+		}
+		t.Run(fixture.Name, func(t *testing.T) {
+			compiled, err := CompileHTML(fixture.Source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			planner := newHTMLCharacterizationDocument(true)
+			plannerHTML := planner.HTMLNew()
+			fragment, err := plannerHTML.planCompiledHTMLFragmentContext(t.Context(), 10, compiled)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fragment.plan.Hash() == "" || fragment.plan.PageCount() == 0 {
+				t.Fatalf("characterization fragment plan is incomplete: hash=%q pages=%d", fragment.plan.Hash(), fragment.plan.PageCount())
+			}
+			direct := newHTMLCharacterizationDocument(true)
+			renderer := direct.HTMLNew()
+			renderer.WriteCompiled(10, compiled)
+			if err := direct.Error(); err != nil {
+				t.Fatal(err)
+			}
+			if direct.PageCount() != fragment.final.page || direct.PageNo() != fragment.final.page ||
+				direct.GetX() != fragment.final.x || direct.GetY() != fragment.final.y {
+				t.Fatalf("direct cursor differs from immutable fragment plan: page=%d/%d xy=%.9f,%.9f want page=%d xy=%.9f,%.9f",
+					direct.PageCount(), direct.PageNo(), direct.GetX(), direct.GetY(),
+					fragment.final.page, fragment.final.x, fragment.final.y)
+			}
+		})
+	}
+}
+
 func characterizationPDF() *Document {
 	pdf := MustNew(WithUnit(UnitPoint), WithCustomPageSize(Size{Wd: 200, Ht: 160}), WithNoCompression())
 	pdf.SetMargins(18, 18, 18)
