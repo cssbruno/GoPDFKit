@@ -8,13 +8,14 @@ evidence and approvals.
 ## Release identity
 
 - Release: `v0.15.0-rc.1`
-- Candidate commit: pending — record the annotated tag target after publication
-- Window start (UTC): pending — record the successful prerelease workflow start
+- Candidate commit: `b290cdf9ef135ae4dd273113b02970b37224cd0a`
+- Window start (UTC): `2026-07-18T11:05:56Z` (prerelease workflow start)
 - Window end (UTC): pending — the stabilization window is active
 - Owner: pending — release owner confirmation is required
 - Decision: `pending`
-- Release workflow: pending
+- Release workflow: <https://github.com/cssbruno/GoPDFKit/actions/runs/29641974462>
 - Published prerelease: <https://github.com/cssbruno/GoPDFKit/releases/tag/v0.15.0-rc.1>
+- Published (UTC): `2026-07-18T11:08:09Z`
 
 ## Candidate corpus and routes
 
