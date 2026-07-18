@@ -163,7 +163,7 @@ func NewFilePlanStore(directory string, limits PlanStoreLimits) (*FilePlanStore,
 		return nil, errors.New("layoutengine: plan store directory is empty")
 	}
 	clean := filepath.Clean(directory)
-	if err := os.MkdirAll(clean, 0o755); err != nil {
+	if err := os.MkdirAll(clean, 0o700); err != nil {
 		return nil, fmt.Errorf("layoutengine: create plan store directory: %w", err)
 	}
 	info, err := os.Stat(clean)
@@ -239,7 +239,7 @@ func (store *FilePlanStore) path(hash PlanHash) string {
 }
 
 func (store *FilePlanStore) readLocked(path string) ([]byte, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- path is a content-addressed child of the validated store directory.
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("%w: %s", ErrPlanStoreNotFound, filepath.Base(path))
 	}

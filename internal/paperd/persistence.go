@@ -723,7 +723,7 @@ func readSecureFile(root, name string, limit int) ([]byte, bool, error) {
 	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 || info.Size() > int64(limit) {
 		return nil, false, workspaceError("PERSISTENCE_FILE", "persisted file type, permissions, or size is invalid", ErrPersistenceCorrupt)
 	}
-	encoded, err := os.ReadFile(path)
+	encoded, err := os.ReadFile(path) // #nosec G304 -- name is validated and rooted under the authenticated persistence directory.
 	if err != nil {
 		return nil, false, workspaceError("PERSISTENCE_READ", "persisted file cannot be read", ErrPersistence)
 	}
@@ -773,7 +773,7 @@ func writeImmutable(root, name string, encoded []byte) error {
 		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
 			return workspaceError("PERSISTENCE_FILE", "snapshot path is unsafe", ErrPersistence)
 		}
-		existing, readErr := os.ReadFile(path)
+		existing, readErr := os.ReadFile(path) // #nosec G304 -- name is validated and rooted under the authenticated persistence directory.
 		if readErr != nil || !bytes.Equal(existing, encoded) {
 			return workspaceError("PERSISTENCE_COLLISION", "immutable snapshot content does not match its digest name", ErrPersistenceCorrupt)
 		}
@@ -834,7 +834,7 @@ func atomicWrite(root, name string, encoded []byte, noReplace bool) error {
 		return workspaceError("PERSISTENCE_COMMIT", "snapshot cannot be atomically committed", ErrPersistence)
 	}
 	persistenceFault("after_" + kind + "_replace")
-	directory, err := os.Open(root)
+	directory, err := os.Open(root) // #nosec G304 -- root is the authenticated persistence directory.
 	if err == nil {
 		err = directory.Sync()
 		_ = directory.Close()

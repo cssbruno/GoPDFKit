@@ -637,7 +637,7 @@ func writeStudioSourceCAS(file string, expected [32]byte, source string) error {
 	if err := os.Rename(temporaryName, file); err != nil {
 		return err
 	}
-	if directoryHandle, openErr := os.Open(directory); openErr == nil {
+	if directoryHandle, openErr := os.Open(directory); openErr == nil { // #nosec G304 -- directory is the validated source file's parent.
 		_ = directoryHandle.Sync()
 		_ = directoryHandle.Close()
 	}

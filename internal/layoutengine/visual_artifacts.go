@@ -204,7 +204,7 @@ func cloneAgentVisualMetadata(values []AgentVisualArtifactMetadata) []AgentVisua
 	}
 	result := append([]AgentVisualArtifactMetadata(nil), values...)
 	for index := range result {
-		result[index].PageTransforms = append([]AgentVisualPageTransform(nil), values[index].PageTransforms...)
+		result[index].PageTransforms = append([]AgentVisualPageTransform(nil), values[index].PageTransforms...) // #nosec G602 -- result and values have identical lengths from the copy above.
 	}
 	return result
 }

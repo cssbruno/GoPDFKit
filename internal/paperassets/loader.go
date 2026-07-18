@@ -328,7 +328,7 @@ func publishProjectManifest(manifestPath string, resources []ProjectResource) er
 	if err := os.Rename(temporaryName, manifestPath); err != nil {
 		return err
 	}
-	if directoryHandle, err := os.Open(directory); err == nil {
+	if directoryHandle, err := os.Open(directory); err == nil { // #nosec G304 -- directory is the validated asset manifest root.
 		_ = directoryHandle.Sync()
 		_ = directoryHandle.Close()
 	}
@@ -533,7 +533,7 @@ func readRegularBounded(path string, limit int) ([]byte, error) {
 	if info.Size() < 0 || info.Size() > int64(limit) {
 		return nil, errors.New("file exceeds limit")
 	}
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- path was lstat-validated as a regular non-symlink asset file.
 	if err != nil {
 		return nil, err
 	}

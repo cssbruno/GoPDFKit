@@ -10,7 +10,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505 -- RFC 6455 requires SHA-1 for the WebSocket accept key.
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -63,7 +63,7 @@ func CaptureFirefox(ctx context.Context, source, rectExpression string, options 
 	if err != nil {
 		return Capture{}, err
 	}
-	versionBytes, err := exec.CommandContext(ctx, executable, "--version").CombinedOutput()
+	versionBytes, err := exec.CommandContext(ctx, executable, "--version").CombinedOutput() // #nosec G204 -- executable is selected by bounded Firefox discovery; no shell is used.
 	if err != nil {
 		return Capture{}, fmt.Errorf("%w: version probe: %w", ErrBrowserUnavailable, err)
 	}
@@ -173,7 +173,7 @@ func startFirefox(ctx context.Context, executable string, width, height int) (*b
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, executable, "--headless", "--no-remote", "--remote-debugging-port", strconv.Itoa(port), "--profile", profile, "--width", strconv.Itoa(width), "--height", strconv.Itoa(height), "about:blank")
+	cmd := exec.CommandContext(ctx, executable, "--headless", "--no-remote", "--remote-debugging-port", strconv.Itoa(port), "--profile", profile, "--width", strconv.Itoa(width), "--height", strconv.Itoa(height), "about:blank") // #nosec G204 -- executable is selected by bounded Firefox discovery and all arguments are generated locally.
 	var diagnostic boundedBuffer
 	cmd.Stdout, cmd.Stderr = &diagnostic, &diagnostic
 	if err := cmd.Start(); err != nil {
@@ -286,7 +286,7 @@ func dialWebSocket(ctx context.Context, address, path string) (net.Conn, error) 
 	if response.Body != nil {
 		_ = response.Body.Close()
 	}
-	want := sha1.Sum([]byte(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
+	want := sha1.Sum([]byte(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")) // #nosec G401 -- RFC 6455 mandates SHA-1 for Sec-WebSocket-Accept; this is not password hashing.
 	if response.StatusCode != http.StatusSwitchingProtocols || response.Header.Get("Sec-WebSocket-Accept") != base64.StdEncoding.EncodeToString(want[:]) {
 		_ = conn.Close()
 		return nil, errors.New("browseroracle: WebSocket upgrade rejected")

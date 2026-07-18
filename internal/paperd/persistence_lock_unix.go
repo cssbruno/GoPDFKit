@@ -19,7 +19,7 @@ func lockPersistenceRoot(ctx context.Context, root string) (func(), error) {
 		return nil, workspaceError("PERSISTENCE_CANCELLED", "persistence lock was cancelled", err)
 	}
 	path := filepath.Join(root, ".paperd.lock")
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304 -- root is the validated workspace persistence directory.
 	if err != nil {
 		return nil, workspaceError("PERSISTENCE_LOCK", "persistence lock cannot be opened", ErrPersistence)
 	}

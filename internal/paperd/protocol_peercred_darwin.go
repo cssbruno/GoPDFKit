@@ -42,8 +42,8 @@ func unixSocketPeerCredentials(connection *net.UnixConn) (unixProtocolPeer, erro
 	var controlErr error
 	err = raw.Control(func(fd uintptr) {
 		credentialSize := uint32(unsafe.Sizeof(credential))
-		_, _, errno := syscall.Syscall6(syscall.SYS_GETSOCKOPT, fd, darwinSOLLocal, darwinLocalPeerCred,
-			uintptr(unsafe.Pointer(&credential)), uintptr(unsafe.Pointer(&credentialSize)), 0)
+		_, _, errno := syscall.Syscall6(syscall.SYS_GETSOCKOPT, fd, darwinSOLLocal, darwinLocalPeerCred, // #nosec G103 -- Darwin LOCAL_PEERCRED is the platform peer-identity API.
+			uintptr(unsafe.Pointer(&credential)), uintptr(unsafe.Pointer(&credentialSize)), 0) // #nosec G103 -- pointers are required by the Darwin getsockopt ABI.
 		if errno != 0 {
 			controlErr = errno
 			return
@@ -53,8 +53,8 @@ func unixSocketPeerCredentials(connection *net.UnixConn) (unixProtocolPeer, erro
 			return
 		}
 		pidSize := uint32(unsafe.Sizeof(pid))
-		_, _, errno = syscall.Syscall6(syscall.SYS_GETSOCKOPT, fd, darwinSOLLocal, darwinLocalPeerPID,
-			uintptr(unsafe.Pointer(&pid)), uintptr(unsafe.Pointer(&pidSize)), 0)
+		_, _, errno = syscall.Syscall6(syscall.SYS_GETSOCKOPT, fd, darwinSOLLocal, darwinLocalPeerPID, // #nosec G103 -- Darwin LOCAL_PEERPID is the platform peer-identity API.
+			uintptr(unsafe.Pointer(&pid)), uintptr(unsafe.Pointer(&pidSize)), 0) // #nosec G103 -- pointers are required by the Darwin getsockopt ABI.
 		if errno != 0 {
 			controlErr = errno
 			return

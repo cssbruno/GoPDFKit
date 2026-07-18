@@ -64,7 +64,7 @@ func (r PopplerRasterizer) Rasterize(ctx context.Context, pdf []byte, dpi uint32
 		if err != nil || info.Size() <= 0 || uint64(info.Size()) > limits.MaxRasterBytesPage || uint64(info.Size()) > limits.MaxTotalRasterBytes-total {
 			return RasterOutput{}, ErrLimit
 		}
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(path) // #nosec G304 -- path is a generated page artifact under the caller-provided verifier root.
 		if err != nil {
 			return RasterOutput{}, err
 		}

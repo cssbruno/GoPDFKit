@@ -492,7 +492,7 @@ func readSource(file string, stdin io.Reader) ([]byte, error) {
 	var opened *os.File
 	if file != "-" {
 		var err error
-		opened, err = os.Open(file)
+		opened, err = os.Open(file) // #nosec G304 -- file is the explicit CLI input path; no shell is involved.
 		if err != nil {
 			return nil, err
 		}

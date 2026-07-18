@@ -123,7 +123,7 @@ func NewPackageCache(cacheRoot string, limits CacheLimits) (*PackageCache, error
 	if err := os.MkdirAll(cacheRoot, 0o700); err != nil {
 		return nil, fmt.Errorf("%w: create cache root: %w", ErrCacheInvalid, err)
 	}
-	if err := os.Chmod(cacheRoot, 0o700); err != nil {
+	if err := os.Chmod(cacheRoot, 0o700); err != nil { // #nosec G302 -- directories require the execute bit; 0700 is owner-only.
 		return nil, fmt.Errorf("%w: restrict cache root: %w", ErrCacheInvalid, err)
 	}
 	root, err := os.OpenRoot(cacheRoot)

@@ -345,7 +345,7 @@ func NewFileSegmentedPlanStore(directory string, limits SegmentedPlanStoreLimits
 		return nil, errors.New("layoutengine: segmented plan store directory is empty")
 	}
 	clean := filepath.Clean(directory)
-	if err := os.MkdirAll(clean, 0o755); err != nil {
+	if err := os.MkdirAll(clean, 0o700); err != nil {
 		return nil, err
 	}
 	entries, err := os.ReadDir(clean)
@@ -358,7 +358,7 @@ func NewFileSegmentedPlanStore(directory string, limits SegmentedPlanStoreLimits
 		}
 	}
 	segmentDirectory := filepath.Join(clean, "segments")
-	if err := os.MkdirAll(segmentDirectory, 0o755); err != nil {
+	if err := os.MkdirAll(segmentDirectory, 0o700); err != nil {
 		return nil, err
 	}
 	store := &FileSegmentedPlanStore{directory: clean, segmentDirectory: segmentDirectory, limits: limits}
@@ -955,7 +955,7 @@ func segmentedPageMetadata(ctx context.Context, encoded []byte, hash PlanHash, p
 }
 
 func readSegmentedFile(path string, limit uint64) ([]byte, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- path is a validated content-addressed segment under the store root.
 	if err != nil {
 		return nil, err
 	}

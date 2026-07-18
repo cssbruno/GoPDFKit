@@ -320,7 +320,7 @@ func studioFileImportResolver() document.PaperImportResolver {
 }
 
 func readStudioSource(file string) (string, [32]byte, error) {
-	input, err := os.Open(file)
+	input, err := os.Open(file) // #nosec G304 -- file is the explicit Studio source path selected by the caller.
 	if err != nil {
 		return "", [32]byte{}, err
 	}

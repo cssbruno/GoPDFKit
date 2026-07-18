@@ -92,7 +92,7 @@ func run(ctx context.Context, names []string, command string) error {
 		if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || uint64(info.Size()) > limits.MaxPDFBytes || uint64(info.Size()) > limits.MaxTotalBytes-total {
 			return fmt.Errorf("paper-characterize: invalid or over-budget fixture %q", name)
 		}
-		content, err := os.ReadFile(name)
+		content, err := os.ReadFile(name) // #nosec G304 -- name is an explicit characterization fixture path validated above.
 		if err != nil {
 			return fmt.Errorf("paper-characterize: read %q: %w", name, err)
 		}
