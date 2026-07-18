@@ -59,9 +59,17 @@ func BenchmarkDisplayRasterPrescriptionPayload(b *testing.B) {
 	}
 	b.ReportAllocs()
 	b.SetBytes(int64(len(payload)))
+	var cache WebDisplayRenderCache
+	useCache := os.Getenv("GOPDFKIT_RASTER_BENCH_CACHE") == "1"
 	b.ResetTimer()
 	for range b.N {
-		artifact, renderErr := RenderWebDisplayPayload(context.Background(), payload)
+		var artifact DisplayRasterArtifact
+		var renderErr error
+		if useCache {
+			artifact, renderErr = RenderWebDisplayPayloadCached(context.Background(), payload, &cache)
+		} else {
+			artifact, renderErr = RenderWebDisplayPayload(context.Background(), payload)
+		}
 		if renderErr != nil {
 			b.Fatal(renderErr)
 		}

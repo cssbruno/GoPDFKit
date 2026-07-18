@@ -178,6 +178,34 @@ func TestRasterOpacityAlphaRoundsAndPreservesMaximum(t *testing.T) {
 	}
 }
 
+func TestRasterSourceNRGBAFastPathsMatchGenericColorConversion(t *testing.T) {
+	ycbcr := image.NewYCbCr(image.Rect(0, 0, 5, 3), image.YCbCrSubsampleRatio420)
+	for index := range ycbcr.Y {
+		ycbcr.Y[index] = uint8(32 + index*7)
+	}
+	for index := range ycbcr.Cb {
+		ycbcr.Cb[index] = uint8(80 + index*9)
+		ycbcr.Cr[index] = uint8(170 - index*5)
+	}
+	for y := ycbcr.Bounds().Min.Y; y < ycbcr.Bounds().Max.Y; y++ {
+		for x := ycbcr.Bounds().Min.X; x < ycbcr.Bounds().Max.X; x++ {
+			want := color.NRGBAModel.Convert(ycbcr.At(x, y)).(color.NRGBA)
+			if got := rasterSourceNRGBA(ycbcr, x, y); got != want {
+				t.Fatalf("YCbCr pixel (%d,%d) = %+v, want %+v", x, y, got, want)
+			}
+		}
+	}
+	rgba := image.NewRGBA(image.Rect(0, 0, 2, 1))
+	rgba.SetRGBA(0, 0, color.RGBA{R: 20, G: 30, B: 40, A: 255})
+	rgba.SetRGBA(1, 0, color.RGBA{R: 10, G: 15, B: 20, A: 128})
+	for x := range 2 {
+		want := color.NRGBAModel.Convert(rgba.At(x, 0)).(color.NRGBA)
+		if got := rasterSourceNRGBA(rgba, x, 0); got != want {
+			t.Fatalf("RGBA pixel %d = %+v, want %+v", x, got, want)
+		}
+	}
+}
+
 func TestRasterCoreFontSubstituteFitsPlannedRunWithoutGlyphCollisions(t *testing.T) {
 	fontBytes, err := os.ReadFile("../../assets/static/font/DejaVuSansCondensed.ttf")
 	if err != nil {

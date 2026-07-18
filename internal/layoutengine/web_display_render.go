@@ -139,6 +139,17 @@ func EncodeWebDisplayRenderPayload(plan LayoutPlan, sources DisplayRasterSources
 // RenderWebDisplayPayload validates and paints an encoded browser payload with
 // the shared direct display-list rasterizer. It performs no layout operation.
 func RenderWebDisplayPayload(ctx context.Context, encoded []byte) (DisplayRasterArtifact, error) {
+	return renderWebDisplayPayload(ctx, encoded, nil)
+}
+
+// RenderWebDisplayPayloadCached validates and paints an encoded payload while
+// reusing immutable decoded resources from the same plan identity. The cache
+// never bypasses payload, digest, limit, or plan validation.
+func RenderWebDisplayPayloadCached(ctx context.Context, encoded []byte, cache *WebDisplayRenderCache) (DisplayRasterArtifact, error) {
+	return renderWebDisplayPayload(ctx, encoded, cache)
+}
+
+func renderWebDisplayPayload(ctx context.Context, encoded []byte, cache *WebDisplayRenderCache) (DisplayRasterArtifact, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -183,6 +194,7 @@ func RenderWebDisplayPayload(ctx context.Context, encoded []byte) (DisplayRaster
 	if hex.EncodeToString(actualPlanHash[:]) != payload.PlanHash {
 		return DisplayRasterArtifact{}, fmt.Errorf("%w: plan hash mismatch", ErrWebDisplayRenderPayload)
 	}
+	cache.prepare(payload.PlanHash)
 	plan, err := decodeStoredPlan(payload.Plan, PlanHash(actualPlanHash))
 	if err != nil {
 		return DisplayRasterArtifact{}, fmt.Errorf("%w: plan: %w", ErrWebDisplayRenderPayload, err)
@@ -206,7 +218,7 @@ func RenderWebDisplayPayload(ctx context.Context, encoded []byte) (DisplayRaster
 		sourceBytes += uint64(len(blob.Bytes))
 		blobs[blob.SHA256] = blob.Bytes
 	}
-	sources := DisplayRasterSources{FontPrograms: make(map[CoreFontMetricsDigest][]byte), Images: make(DisplaySVGImageSources)}
+	sources := DisplayRasterSources{FontPrograms: make(map[CoreFontMetricsDigest][]byte), Images: make(DisplaySVGImageSources), cache: cache}
 	seenBindings := make(map[string]bool, len(payload.Bindings))
 	usedBlobs := make(map[string]bool, len(payload.Blobs))
 	for _, binding := range payload.Bindings {

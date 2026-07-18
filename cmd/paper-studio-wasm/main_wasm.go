@@ -14,6 +14,7 @@ import (
 )
 
 var renderFunction js.Func
+var renderCache layoutengine.WebDisplayRenderCache
 
 func main() {
 	renderFunction = js.FuncOf(renderPage)
@@ -44,7 +45,7 @@ func renderPage(_ js.Value, arguments []js.Value) any {
 			return nil
 		}
 		go func() {
-			artifact, err := layoutengine.RenderWebDisplayPayload(context.Background(), payload)
+			artifact, err := layoutengine.RenderWebDisplayPayloadCached(context.Background(), payload, &renderCache)
 			if err != nil {
 				reject.Invoke(jsError(err))
 				return
