@@ -12,6 +12,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"os"
 	"strings"
 	"testing"
 
@@ -112,6 +113,43 @@ func TestPaperAssetReferenceIsHumanReadableContentAddressedAndAmbientFree(t *tes
 	scenarioPlan, scenarioResult, err := PlanPaperScenarioWithAssets("asset-scenario.paper", scenarioSource, "preview", catalog)
 	if err != nil || !scenarioResult.OK() || scenarioPlan.PageCount() != 1 {
 		t.Fatalf("PlanPaperScenarioWithAssets() = %#v, %v", scenarioResult, err)
+	}
+}
+
+func TestPaperManifestFontIsEmbeddedAndSubsetAtPDFPaint(t *testing.T) {
+	fontBytes, err := os.ReadFile("../assets/static/font/NotoNaskhArabic-Regular.ttf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(fontBytes)
+	catalog, err := NewPaperAssetCatalog([]PaperAssetResource{{Name: "body-font", MediaType: "font/ttf", Digest: hex.EncodeToString(digest[:]), Data: fontBytes, Family: "Specimen Sans", Style: "normal", Weight: 400, License: "OFL-1.1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := "document @report:\n" +
+		"  page @sheet:\n" +
+		"    width: 180pt\n" +
+		"    height: 80pt\n" +
+		"    margin: 8pt\n" +
+		"    body @body:\n" +
+		"      paragraph @copy:\n" +
+		"        font: \"Specimen Sans\"\n" +
+		"        text: \"Embedded custom font\"\n"
+	plan, planned, err := PlanPaperWithAssets("font.paper", source, catalog)
+	if err != nil || !planned.OK() {
+		t.Fatalf("custom font plan = %#v, %v", planned, err)
+	}
+	if len(plan.plan.Projection().Fonts) != 1 || plan.plan.Projection().Fonts[0].EmbeddedUTF8 == nil || len(plan.fontSources) != 1 {
+		t.Fatalf("custom font projection/sources = %#v / %d", plan.plan.Projection().Fonts, len(plan.fontSources))
+	}
+	pdf := MustNew(WithUnit(UnitPoint), WithNoCompression())
+	rendered, err := pdf.WritePaperPlan(plan)
+	if err != nil || !rendered.OK() {
+		t.Fatalf("custom font PDF paint = %#v, %v", rendered, err)
+	}
+	var output bytes.Buffer
+	if err := pdf.Output(&output); err != nil || !bytes.Contains(output.Bytes(), []byte("/FontFile2")) {
+		t.Fatalf("custom font output = %v, embedded font marker missing", err)
 	}
 }
 

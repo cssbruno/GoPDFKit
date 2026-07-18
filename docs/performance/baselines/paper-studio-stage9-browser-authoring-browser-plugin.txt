@@ -1,0 +1,24 @@
+Paper Studio Stage 9 browser acceptance trace
+Captured: 2026-07-17
+Browser: Codex In-app Browser (browser-use plugin)
+URL: http://127.0.0.1:7333/
+Source: testdata/paper/studio-demo.paper
+
+Observed through the browser DOM snapshot after a fresh reload:
+- Paper Studio banner and source revision `source-fd9baf60e00d39c8` rendered.
+- Workspace mode controls rendered for Design, Source, Split, Review, and
+  Accessibility; Source was selected successfully and reported active/pressed.
+- Document outline rendered the authored `document @prescription` and scenario
+  targets `@review` and `@accessibility`.
+- The Create content disclosure rendered in the inspector and remained guarded
+  by the current exact revision.
+- Source mode rendered the authored scenario declarations and the exact image
+  source issue at line 19, preserving the source-review surface instead of
+  hiding the compile diagnostic.
+- Scenario controls rendered Default, `@review`, and `@accessibility`; the
+  resource inventory rendered with an explicit zero-count state.
+
+The source-native Stage 9 schema-field, scenario-matrix, and fixture-value
+payloads are covered by the deterministic model and Studio integration tests;
+this trace verifies their live authoring surface is hosted by the same
+revision-bound Studio shell used for those server actions.

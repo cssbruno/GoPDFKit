@@ -101,8 +101,8 @@ func (s *studioServer) setProjectManifest(manifestPath, assetRoot string, projec
 func (s *studioServer) setProjectResources(project []paperassets.ProjectResource) error {
 	resources := make([]document.PaperAssetResource, 0, len(project))
 	for _, r := range project {
-		if r.MediaType == "image/png" || r.MediaType == "image/jpeg" {
-			resources = append(resources, document.PaperAssetResource{Name: r.Name, MediaType: r.MediaType, Digest: r.Digest, Data: r.Data})
+		if r.MediaType == "image/png" || r.MediaType == "image/jpeg" || r.MediaType == "font/ttf" || r.MediaType == "font/otf" {
+			resources = append(resources, document.PaperAssetResource{Name: r.Name, MediaType: r.MediaType, Digest: r.Digest, Data: r.Data, Family: r.Family, Style: r.Style, Weight: r.Weight, License: r.License})
 		}
 	}
 	catalog, err := document.NewPaperAssetCatalog(resources)
@@ -111,7 +111,7 @@ func (s *studioServer) setProjectResources(project []paperassets.ProjectResource
 	}
 	detached := make([]document.PaperAssetResource, len(resources))
 	for i, resource := range resources {
-		detached[i] = document.PaperAssetResource{Name: resource.Name, MediaType: resource.MediaType, Digest: resource.Digest, Data: append([]byte(nil), resource.Data...)}
+		detached[i] = document.PaperAssetResource{Name: resource.Name, MediaType: resource.MediaType, Digest: resource.Digest, Data: append([]byte(nil), resource.Data...), Family: resource.Family, Style: resource.Style, Weight: resource.Weight, License: resource.License}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -357,6 +357,74 @@ func TestPaperStudioAuthoringMetadataAndJournaledCreateToConnectFlow(t *testing.
 	}
 }
 
+func TestPaperStudioSchemaFieldMatrixAndFixtureValueControls(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "matrix-authoring.paper")
+	source := "document @report:\n" +
+		"  schema @invoice:\n" +
+		"    field @customer:\n" +
+		"      type: \"object\"\n" +
+		"      field @name:\n" +
+		"        type: \"string\"\n" +
+		"  page @sheet:\n" +
+		"    body @body:\n" +
+		"      paragraph @copy:\n" +
+		"        text: \"Invoice\"\n" +
+		"  scenario @review:\n" +
+		"    object @fixture-customer:\n" +
+		"      value @name: \"Ada\"\n"
+	if err := os.WriteFile(file, []byte(source), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	studio, err := newStudioServer(file, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := studio.routes()
+	before := fetchStudioWorkspace(t, handler)
+	metadataResponse := studioRequest(t, handler, http.MethodGet, "/api/authoring?revision="+before.Revision, nil, "")
+	var metadata studioAuthoringResponse
+	if err := json.Unmarshal(metadataResponse.Body, &metadata); err != nil {
+		t.Fatal(err)
+	}
+	if len(metadata.SchemaFields) == 0 || len(metadata.ScenarioValues) != 1 || metadata.ScenarioValues[0].Path != "fixture-customer.name" {
+		t.Fatalf("extended authoring metadata = %+v", metadata)
+	}
+	field := postStudioJSON(t, handler, "/api/edit", map[string]any{
+		"source_revision": before.SourceRevision, "plan_revision": before.Revision,
+		"operation": "schema-field", "target": "@customer", "property": "", "id": "@email", "kind": "string",
+	})
+	if field.StatusCode != http.StatusOK {
+		t.Fatalf("schema field = %d %s", field.StatusCode, field.Body)
+	}
+	afterField := fetchStudioWorkspace(t, handler)
+	matrix := postStudioJSON(t, handler, "/api/edit", map[string]any{
+		"source_revision": afterField.SourceRevision, "plan_revision": afterField.Revision,
+		"operation": "scenario-matrix", "target": "@report", "property": "", "schema": "@invoice",
+		"cases": []map[string]any{{"name": "@empty", "preset": "empty"}, {"name": "@stress", "preset": "stress"}},
+	})
+	if matrix.StatusCode != http.StatusOK {
+		t.Fatalf("scenario matrix = %d %s", matrix.StatusCode, matrix.Body)
+	}
+	selectedResponse := studioRequest(t, handler, http.MethodGet, "/api/workspace?scenario=%40review", nil, "")
+	var selected studioWorkspaceResponse
+	if err := json.Unmarshal(selectedResponse.Body, &selected); err != nil {
+		t.Fatal(err)
+	}
+	value := postStudioJSON(t, handler, "/api/edit", map[string]any{
+		"source_revision": selected.SourceRevision, "plan_revision": selected.Revision, "scenario": "@review",
+		"operation": "scenario-value", "target": "@review", "property": "", "path": "fixture-customer.name", "kind": "string", "text": "Grace",
+	})
+	if value.StatusCode != http.StatusOK {
+		t.Fatalf("scenario value = %d %s", value.StatusCode, value.Body)
+	}
+	after := fetchStudioWorkspace(t, handler)
+	for _, want := range []string{"field @email:", "scenario @empty:", "scenario @stress:", `value @name: "Grace"`} {
+		if !strings.Contains(after.Source, want) {
+			t.Fatalf("extended authoring source omitted %q:\n%s", want, after.Source)
+		}
+	}
+}
+
 func TestPaperStudioTypedPaletteInsertsPrimitiveAndComponentInstances(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "palette.paper")
 	source := "document @report:\n" +

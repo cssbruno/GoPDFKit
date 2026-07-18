@@ -56,6 +56,10 @@ type PaperAssetResource struct {
 	MediaType string
 	Digest    string
 	Data      []byte
+	Family    string
+	Style     string
+	Weight    uint16
+	License   string
 }
 
 // PaperAssetCatalog is an opaque, immutable content-addressed input. Construct
@@ -72,7 +76,7 @@ type PaperImportResolver func(importerFile, importPath string) (file, source str
 func NewPaperAssetCatalog(resources []PaperAssetResource) (PaperAssetCatalog, error) {
 	compiled := make([]papercompile.AssetResource, len(resources))
 	for index, resource := range resources {
-		compiled[index] = papercompile.AssetResource{Name: resource.Name, MediaType: resource.MediaType, Digest: resource.Digest, Data: resource.Data}
+		compiled[index] = papercompile.AssetResource{Name: resource.Name, MediaType: resource.MediaType, Digest: resource.Digest, Data: resource.Data, Family: resource.Family, Style: resource.Style, Weight: resource.Weight, License: resource.License}
 	}
 	catalog, err := papercompile.NewAssetCatalog(compiled)
 	if err != nil {
@@ -358,6 +362,9 @@ func planPaperSource(ctx context.Context, file, source, scenario string, selectS
 	if err != nil {
 		return paperPlanStageFailure(result, PaperStagePlan, "PAPER_PLAN_PAGE", err, file, parsed.AST.Root)
 	}
+	if err := installPaperCatalogFonts(planner, assets); err != nil {
+		return paperPlanStageFailure(result, PaperStagePlan, "PAPER_PLAN_FONT_RESOURCES", err, file, parsed.AST.Root)
+	}
 	var planned layoutengine.LayoutPlan
 	blocks := layout.NormalizeBlocks(compiled.Document.Body)
 	if len(blocks) == 1 && typedShadowTemplateHasOnlyMargins(compiled.Document.PageTemplate) {
@@ -410,6 +417,30 @@ func planPaperSource(ctx context.Context, file, source, scenario string, selectS
 		imageSources: imageSources, fontSources: fontSources}
 	result.Pages, result.Hash = plan.PageCount(), plan.Hash()
 	return plan, result, nil
+}
+
+func installPaperCatalogFonts(planner *Document, assets papercompile.AssetCatalog) error {
+	if planner == nil {
+		return errors.New("paper font planner is nil")
+	}
+	for _, resource := range assets.FontResources() {
+		family := resource.Name
+		style := ""
+		if resource.Weight >= 600 {
+			style = "B"
+		}
+		if resource.Style == "italic" || resource.Style == "oblique" {
+			if style == "B" {
+				style = "BI"
+			} else {
+				style = "I"
+			}
+		}
+		if err := planner.AddUTF8FontFromBytesError(family, style, resource.Data); err != nil {
+			return fmt.Errorf("install project font %q: %w", resource.Name, err)
+		}
+	}
+	return nil
 }
 
 func bindPaperDeterministicInputs(plan layoutengine.LayoutPlan, compiled papercompile.Result, source, scenario string, selected bool) (layoutengine.LayoutPlan, error) {
@@ -484,6 +515,12 @@ func (f *Document) WritePaperPlan(plan PaperPlan) (PaperRenderResult, error) {
 	}
 	projection := plan.plan.Projection()
 	needsDisplayPainter := f.tagged.enabled || len(projection.ImageResources) != 0 || layoutPlanHasMultipleGlyphRunsPerLine(projection)
+	for _, font := range projection.Fonts {
+		if font.EmbeddedUTF8 != nil {
+			needsDisplayPainter = true
+			break
+		}
+	}
 	for _, command := range projection.Commands {
 		if command.Kind != layoutengine.CommandGlyphRun {
 			needsDisplayPainter = true
@@ -491,7 +528,7 @@ func (f *Document) WritePaperPlan(plan PaperPlan) (PaperRenderResult, error) {
 		}
 	}
 	if needsDisplayPainter {
-		prepared, err := f.preflightDisplayLayoutPlanPDFResourcesContextForTarget(context.Background(), plan.plan, plan.imageSources, nil, false)
+		prepared, err := f.preflightDisplayLayoutPlanPDFResourcesContextForTarget(context.Background(), plan.plan, plan.imageSources, plan.fontSources, false)
 		if err != nil {
 			return paperStageFailureWithSpan(result, PaperStagePaint, "PAPER_PAINT_PREFLIGHT", err,
 				"render into a fresh document with compatible image limits", plan.root)

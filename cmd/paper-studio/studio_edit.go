@@ -29,37 +29,43 @@ const studioEditFieldLimit = 256
 // browser supplies review facts and a closed semantic intent; all opaque edit,
 // candidate, revision, and authority handles remain inside the server.
 type studioEditRequest struct {
-	SourceRevision string   `json:"source_revision"`
-	PlanRevision   string   `json:"plan_revision"`
-	Scenario       string   `json:"scenario,omitempty"`
-	Operation      string   `json:"operation"`
-	Target         string   `json:"target"`
-	Property       string   `json:"property"`
-	Points         *float64 `json:"points,omitempty"`
-	Number         *float64 `json:"number,omitempty"`
-	Width          *float64 `json:"width_points,omitempty"`
-	Height         *float64 `json:"height_points,omitempty"`
-	Color          string   `json:"color,omitempty"`
-	Kind           string   `json:"kind,omitempty"`
-	Weight         *uint32  `json:"weight,omitempty"`
-	Text           string   `json:"text,omitempty"`
-	Bool           *bool    `json:"bool,omitempty"`
-	Split          string   `json:"split,omitempty"`
-	Path           string   `json:"path,omitempty"`
-	Required       *bool    `json:"required,omitempty"`
-	Format         string   `json:"format,omitempty"`
-	FormatLocale   string   `json:"format_locale,omitempty"`
-	FormatCurrency string   `json:"format_currency,omitempty"`
-	MinFraction    *uint32  `json:"format_min_fraction,omitempty"`
-	MaxFraction    *uint32  `json:"format_max_fraction,omitempty"`
-	Template       string   `json:"template,omitempty"`
-	Component      string   `json:"component,omitempty"`
-	ImportPath     string   `json:"import_path,omitempty"`
-	ID             string   `json:"id,omitempty"`
-	NewParent      string   `json:"new_parent,omitempty"`
-	Schema         string   `json:"schema,omitempty"`
-	Preset         string   `json:"preset,omitempty"`
-	BreakPolicy    string   `json:"break_policy,omitempty"`
+	SourceRevision string                     `json:"source_revision"`
+	PlanRevision   string                     `json:"plan_revision"`
+	Scenario       string                     `json:"scenario,omitempty"`
+	Operation      string                     `json:"operation"`
+	Target         string                     `json:"target"`
+	Property       string                     `json:"property"`
+	Points         *float64                   `json:"points,omitempty"`
+	Number         *float64                   `json:"number,omitempty"`
+	Width          *float64                   `json:"width_points,omitempty"`
+	Height         *float64                   `json:"height_points,omitempty"`
+	Color          string                     `json:"color,omitempty"`
+	Kind           string                     `json:"kind,omitempty"`
+	Weight         *uint32                    `json:"weight,omitempty"`
+	Text           string                     `json:"text,omitempty"`
+	Bool           *bool                      `json:"bool,omitempty"`
+	Split          string                     `json:"split,omitempty"`
+	Path           string                     `json:"path,omitempty"`
+	Required       *bool                      `json:"required,omitempty"`
+	Format         string                     `json:"format,omitempty"`
+	FormatLocale   string                     `json:"format_locale,omitempty"`
+	FormatCurrency string                     `json:"format_currency,omitempty"`
+	MinFraction    *uint32                    `json:"format_min_fraction,omitempty"`
+	MaxFraction    *uint32                    `json:"format_max_fraction,omitempty"`
+	Template       string                     `json:"template,omitempty"`
+	Component      string                     `json:"component,omitempty"`
+	ImportPath     string                     `json:"import_path,omitempty"`
+	ID             string                     `json:"id,omitempty"`
+	NewParent      string                     `json:"new_parent,omitempty"`
+	Schema         string                     `json:"schema,omitempty"`
+	Preset         string                     `json:"preset,omitempty"`
+	Cases          []studioScenarioMatrixCase `json:"cases,omitempty"`
+	BreakPolicy    string                     `json:"break_policy,omitempty"`
+}
+
+type studioScenarioMatrixCase struct {
+	Name   string `json:"name"`
+	Preset string `json:"preset"`
 }
 
 type studioEditAuthorization struct {
@@ -135,7 +141,7 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 		return studioEditResponse{}, err
 	}
 	fontRepair := request.Operation == "text" && request.Property == "font"
-	if request.SourceRevision != studioSourceRevision(snapshot.source) || request.PlanRevision != snapshot.revision || (snapshot.pages == 0 && request.Operation != "template" && request.Operation != "import" && request.Operation != "schema" && request.Operation != "scenario" && !fontRepair) {
+	if request.SourceRevision != studioSourceRevision(snapshot.source) || request.PlanRevision != snapshot.revision || (snapshot.pages == 0 && request.Operation != "template" && request.Operation != "import" && request.Operation != "schema" && request.Operation != "schema-field" && request.Operation != "scenario" && request.Operation != "scenario-create" && request.Operation != "scenario-matrix" && request.Operation != "scenario-value" && !fontRepair) {
 		return studioEditResponse{}, fmt.Errorf("%w: source or plan changed after selection", errStudioStaleEdit)
 	}
 
@@ -199,6 +205,12 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 		operation = paperd.MutationInsertTemplate
 	case "scenario-create":
 		operation = paperd.MutationCreateScenario
+	case "scenario-matrix":
+		operation = paperd.MutationCreateScenarioMatrix
+	case "schema-field":
+		operation = paperd.MutationAddSchemaField
+	case "scenario-value":
+		operation = paperd.MutationSetScenarioValue
 	case "scenario":
 		operation = paperd.MutationManageScenario
 	}
@@ -206,7 +218,7 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 	s.mu.Lock()
 	assetResources := make([]papercompile.AssetResource, len(s.assets))
 	for i, asset := range s.assets {
-		assetResources[i] = papercompile.AssetResource{Name: asset.Name, MediaType: asset.MediaType, Digest: asset.Digest, Data: append([]byte(nil), asset.Data...)}
+		assetResources[i] = papercompile.AssetResource{Name: asset.Name, MediaType: asset.MediaType, Digest: asset.Digest, Data: append([]byte(nil), asset.Data...), Family: asset.Family, Style: asset.Style, Weight: asset.Weight, License: asset.License}
 	}
 	s.mu.Unlock()
 	workspace, err := paperd.NewWorkspaceWithOptions(paperd.WorkspaceOptions{
@@ -325,7 +337,7 @@ func validateStudioEditRequest(request studioEditRequest) error {
 	if request.Width != nil && (math.IsNaN(*request.Width) || math.IsInf(*request.Width, 0)) || request.Height != nil && (math.IsNaN(*request.Height) || math.IsInf(*request.Height, 0)) {
 		return fmt.Errorf("%w: page dimensions must be finite", errStudioInvalidEdit)
 	}
-	if request.Operation != "box" && request.Operation != "text" && request.Operation != "grid" && request.Operation != "image" && request.Operation != "table" && request.Operation != "page" && request.Operation != "page-size" && request.Operation != "canvas" && request.Operation != "region" && request.Operation != "binding" && request.Operation != "template" && request.Operation != "import" && request.Operation != "schema" && request.Operation != "scenario-create" && request.Operation != "scenario" && request.Operation != "flow" {
+	if request.Operation != "box" && request.Operation != "text" && request.Operation != "grid" && request.Operation != "image" && request.Operation != "table" && request.Operation != "page" && request.Operation != "page-size" && request.Operation != "canvas" && request.Operation != "region" && request.Operation != "binding" && request.Operation != "template" && request.Operation != "import" && request.Operation != "schema" && request.Operation != "schema-field" && request.Operation != "scenario-create" && request.Operation != "scenario-matrix" && request.Operation != "scenario-value" && request.Operation != "scenario" && request.Operation != "flow" {
 		return fmt.Errorf("%w: operation is outside the closed Studio authoring vocabulary", errStudioInvalidEdit)
 	}
 	if request.Operation == "scenario" {
@@ -338,6 +350,12 @@ func validateStudioEditRequest(request studioEditRequest) error {
 		if request.Property == "delete" && request.ID != "" {
 			return fmt.Errorf("%w: scenario delete cannot carry a replacement @id", errStudioInvalidEdit)
 		}
+	}
+	if request.Operation == "scenario-value" && request.Path == "" {
+		return fmt.Errorf("%w: scenario value operation requires a fixture path", errStudioInvalidEdit)
+	}
+	if request.Operation == "scenario-matrix" && (len(request.Cases) == 0 || len(request.Cases) > 16) {
+		return fmt.Errorf("%w: scenario matrix requires between one and sixteen cases", errStudioInvalidEdit)
 	}
 	if request.Operation == "flow" && (request.NewParent == "" || request.NewParent[0] != '@') {
 		return fmt.Errorf("%w: flow operation requires a readable destination @id", errStudioInvalidEdit)
@@ -367,6 +385,23 @@ func applyStudioSemanticMutation(workspace *paperd.Workspace, guard paperd.Paper
 	}
 	if request.Operation == "scenario-create" {
 		return workspace.PaperCreateScenario(paperd.PaperCreateScenarioRequest{Guard: guard, Name: request.ID, Schema: request.Schema, Preset: request.Preset})
+	}
+	if request.Operation == "scenario-matrix" {
+		cases := make([]paperd.PaperScenarioMatrixCase, len(request.Cases))
+		for index, matrixCase := range request.Cases {
+			cases[index] = paperd.PaperScenarioMatrixCase{Name: matrixCase.Name, Preset: matrixCase.Preset}
+		}
+		return workspace.PaperCreateScenarioMatrix(paperd.PaperCreateScenarioMatrixRequest{Guard: guard, Schema: request.Schema, Cases: cases})
+	}
+	if request.Operation == "schema-field" {
+		maxItems := uint32(0)
+		if request.Weight != nil {
+			maxItems = *request.Weight
+		}
+		return workspace.PaperAddSchemaField(paperd.PaperAddSchemaFieldRequest{Guard: guard, ID: request.ID, Type: request.Kind, ItemType: request.Text, MaxItems: maxItems})
+	}
+	if request.Operation == "scenario-value" {
+		return workspace.PaperSetScenarioFixtureValue(paperd.PaperSetScenarioFixtureValueRequest{Guard: guard, Path: request.Path, Kind: request.Kind, Text: request.Text, Bool: request.Bool, Number: request.Number})
 	}
 	if request.Operation == "scenario" {
 		return workspace.PaperManageScenario(paperd.PaperManageScenarioRequest{Guard: guard, Action: request.Property, NewName: request.ID})

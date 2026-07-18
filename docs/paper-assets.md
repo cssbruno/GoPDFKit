@@ -37,7 +37,8 @@ plan, result, err := document.PlanPaperWithAssets("report.paper", source, assets
 The boundary is intentionally strict:
 
 - names are portable lowercase identifiers;
-- only decodable, bounded PNG and JPEG resources are currently accepted;
+- only decodable, bounded PNG/JPEG and signed, bounded TTF/OTF resources are
+  admitted to the immutable planner catalog;
 - encoded bytes and decoded pixel counts have independent hard limits;
 - every digest is mandatory and must match the supplied bytes;
 - catalogs are detached from caller-owned memory and resolve deterministically;
@@ -82,7 +83,7 @@ is created. The CLI and Studio share this loader and never search beside a
 source or stdin for an implicit manifest. Browser inventory responses contain
 metadata and source usage only—never raw bytes or filesystem paths.
 
-Font entries support `font/ttf`, `font/otf`, and `font/woff2`, with validated
+Font entries support metadata for `font/ttf`, `font/otf`, and `font/woff2`, with validated
 file signatures, family, weight, style, and an SPDX-style license selected from
 the enforced `OFL-1.1`, `Apache-2.0`, `MIT`, `CC0-1.0`, or `Proprietary` policy.
 An acyclic fallback list is validated with the same policy. `replaces` forms an
@@ -90,8 +91,11 @@ acyclic same-kind lifecycle edge. Image
 entries may provide default crop focus; an authored image focus remains the
 explicit usage-level override. Studio can apply a declared image replacement
 to one exact source node through its source/plan-bound semantic journal. Font
-metadata is inspectable but font bytes are not sent to the browser or silently
-installed into the production renderer.
+metadata is inspectable but font bytes are not sent to the browser. TTF/OTF
+entries are installed only in the detached planner, their metrics and bytes
+are content-addressed, and the PDF painter uses the existing UTF-8 subsetter
+before embedding the used glyphs. WOFF2 remains metadata-only until a bounded
+WOFF2-to-TrueType adapter is admitted.
 
 When Studio is started with `-assets`, its Resources panel also exposes a
 small catalog-management workflow. Add requests name a project-relative file

@@ -170,6 +170,17 @@ type SetProperties struct {
 
 func (SetProperties) paperEditOperation() {}
 
+// SetNodeValue replaces one scalar fixture value below an exact authored
+// root. Root-relative paths keep repeated schema/scenario field IDs distinct
+// without exposing an ambient or fuzzy target lookup.
+type SetNodeValue struct {
+	Root  string
+	Path  string
+	Value Value
+}
+
+func (SetNodeValue) paperEditOperation() {}
+
 // AppendProperty emits one additional property declaration. It is reserved
 // for grammar properties that intentionally repeat, such as document imports.
 type AppendProperty struct {
@@ -193,6 +204,16 @@ type InsertNode struct {
 }
 
 func (InsertNode) paperEditOperation() {}
+
+// InsertNodes inserts a bounded authored group at one parent. It is used for
+// atomic scenario-matrix creation so all cases share one source patch and
+// one compile-before-publish decision.
+type InsertNodes struct {
+	Parent string
+	Nodes  []NodeSpec
+}
+
+func (InsertNodes) paperEditOperation() {}
 
 type DeleteNode struct {
 	Target string
@@ -519,11 +540,15 @@ func operationTargetIDs(operation Operation) []string {
 		return []string{edit.Target}
 	case SetProperties:
 		return []string{edit.Target}
+	case SetNodeValue:
+		return []string{edit.Root}
 	case AppendProperty:
 		return []string{edit.Target}
 	case ReplaceText:
 		return []string{edit.Target}
 	case InsertNode:
+		return []string{edit.Parent}
+	case InsertNodes:
 		return []string{edit.Parent}
 	case DeleteNode:
 		return []string{edit.Target}
@@ -739,6 +764,27 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 		}
 		return patches, patch.target, nil
 
+	case SetNodeValue:
+		patch.target = edit.Root
+		root, err := targetNode(index, edit.Root)
+		if err != nil {
+			return nil, patch.target, err
+		}
+		node, err := relativeNode(root, edit.Path)
+		if err != nil {
+			return nil, patch.target, err
+		}
+		if node.Kind != paperlang.NodeValue || node.Value == nil {
+			return nil, patch.target, fmt.Errorf("fixture path %q does not resolve to a scalar value", edit.Path)
+		}
+		value, err := renderValue(edit.Value)
+		if err != nil {
+			return nil, patch.target, err
+		}
+		patch.start, patch.end = int(node.Value.Span.Start.Offset), int(node.Value.Span.End.Offset)
+		patch.replacement = value
+		return []sourcePatch{patch}, patch.target, nil
+
 	case AppendProperty:
 		patch.target = edit.Target
 		node, err := targetNode(index, edit.Target)
@@ -786,6 +832,33 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 		point, prefix, _ := insertionPoint(source, int(parent.Span.End.Offset))
 		patch.start, patch.end = point, point
 		patch.replacement = prefix + rendered
+		return []sourcePatch{patch}, patch.target, nil
+
+	case InsertNodes:
+		patch.target = edit.Parent
+		parent, err := targetNode(index, edit.Parent)
+		if err != nil {
+			return nil, patch.target, err
+		}
+		if len(edit.Nodes) == 0 || len(edit.Nodes) > MaxOperations {
+			return nil, patch.target, errors.New("node group must contain a bounded non-empty list")
+		}
+		indent := childIndent(parent)
+		newline := newlineForOffset(source, int(parent.HeaderSpan.End.Offset))
+		point, prefix, _ := insertionPoint(source, int(parent.Span.End.Offset))
+		var builder strings.Builder
+		builder.WriteString(prefix)
+		for _, node := range edit.Nodes {
+			if !editorAllowedChild(parent.Kind, node.Kind) {
+				return nil, patch.target, fmt.Errorf("%s cannot contain inserted %s", parent.Kind, node.Kind)
+			}
+			rendered, renderErr := renderNode(node, indent, newline)
+			if renderErr != nil {
+				return nil, patch.target, renderErr
+			}
+			builder.WriteString(rendered)
+		}
+		patch.start, patch.end, patch.replacement = point, point, builder.String()
 		return []sourcePatch{patch}, patch.target, nil
 
 	case DeleteNode:
@@ -1011,6 +1084,8 @@ func editorAllowedChild(parent, child paperlang.NodeKind) bool {
 		return child == paperlang.NodeValue || child == paperlang.NodeObject || child == paperlang.NodeKeyedList
 	case paperlang.NodeSchema:
 		return child == paperlang.NodeField
+	case paperlang.NodeField:
+		return child == paperlang.NodeField
 	default:
 		return false
 	}
@@ -1031,6 +1106,37 @@ func targetNode(index sourceIndex, target string) (*paperlang.Node, error) {
 		return nil, fmt.Errorf("target %s was not found in the source revision", target)
 	}
 	return node, nil
+}
+
+func relativeNode(root *paperlang.Node, path string) (*paperlang.Node, error) {
+	if root == nil || path == "" {
+		return nil, errors.New("fixture path must be non-empty")
+	}
+	current := root
+	for _, part := range strings.Split(path, ".") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			return nil, fmt.Errorf("fixture path %q contains an empty segment", path)
+		}
+		if part[0] != '@' {
+			part = "@" + part
+		}
+		var found *paperlang.Node
+		for _, member := range current.Members {
+			if member.Node == nil || member.Node.ID != part {
+				continue
+			}
+			if found != nil {
+				return nil, fmt.Errorf("fixture path %q is ambiguous below %s", path, root.ID)
+			}
+			found = member.Node
+		}
+		if found == nil {
+			return nil, fmt.Errorf("fixture path %q was not found below %s", path, root.ID)
+		}
+		current = found
+	}
+	return current, nil
 }
 
 func renderValue(value Value) (string, error) {
@@ -1404,6 +1510,8 @@ func invalidationScope(index sourceIndex, operations []Operation) *InvalidationS
 			addNodeAndAncestors(edit.Target)
 		case SetProperties:
 			addNodeAndAncestors(edit.Target)
+		case SetNodeValue:
+			addNodeAndAncestors(edit.Root)
 		case AppendProperty:
 			addNodeAndAncestors(edit.Target)
 		case ReplaceText:
@@ -1411,6 +1519,11 @@ func invalidationScope(index sourceIndex, operations []Operation) *InvalidationS
 		case InsertNode:
 			addNodeAndAncestors(edit.Parent)
 			addSpec(edit.Node)
+		case InsertNodes:
+			addNodeAndAncestors(edit.Parent)
+			for _, node := range edit.Nodes {
+				addSpec(node)
+			}
 		case DeleteNode:
 			addNodeAndAncestors(edit.Target)
 			addSubtree(edit.Target)

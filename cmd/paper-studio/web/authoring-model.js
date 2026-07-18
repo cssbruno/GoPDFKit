@@ -16,7 +16,9 @@
       templateTargets: Object.freeze((payload.template_targets || []).map(Object.freeze)),
       bindingTargets: Object.freeze((payload.binding_targets || []).map(Object.freeze)),
       schemas: Object.freeze((payload.schemas || []).map(schema => Object.freeze({name: schema.name, fields: Object.freeze((schema.fields || []).map(Object.freeze))}))),
+      schemaFields: Object.freeze((payload.schema_field_targets || []).map(Object.freeze)),
       scenarios: Object.freeze([...(payload.scenarios || [])]),
+      scenarioValues: Object.freeze((payload.scenario_values || []).map(Object.freeze)),
       presets: Object.freeze([...(payload.stress_presets || [])]),
       components: Object.freeze([...(payload.components || [])]),
     });
@@ -65,6 +67,32 @@
       if (!metadata.documentTarget || draft.target !== metadata.documentTarget || !metadata.schemas.some(item => item.name === draft.schema) || !metadata.presets.includes(draft.preset) || !readableID(draft.id)) throw new Error('Choose a schema, stress preset, and readable scenario @id');
       if (metadata.scenarios.includes(draft.id)) throw new Error('Scenario ID already exists');
       return {...base, target: draft.target, id: draft.id, schema: draft.schema, preset: draft.preset};
+    }
+    if (draft.operation === 'scenario-matrix') {
+      if (!metadata.documentTarget || draft.target !== metadata.documentTarget || !metadata.schemas.some(item => item.name === draft.schema)) throw new Error('Choose a schema for the scenario matrix');
+      const cases = String(draft.cases || '').split(',').map(value => value.trim()).filter(Boolean).map(value => {
+        const [name, preset = 'typical'] = value.split(':').map(part => part.trim());
+        return {name, preset};
+      });
+      if (!cases.length || cases.length > 16 || cases.some(item => !readableID(item.name) || !metadata.presets.includes(item.preset)) || new Set(cases.map(item => item.name)).size !== cases.length) throw new Error('Use unique cases such as @empty:empty,@typical:typical,@stress:stress');
+      if (cases.some(item => metadata.scenarios.includes(item.name))) throw new Error('A matrix case ID already exists');
+      return {...base, target: draft.target, schema: draft.schema, cases};
+    }
+    if (draft.operation === 'schema-field') {
+      const target = metadata.schemaFields.find(item => item.id === draft.target);
+      const types = ['string', 'number', 'bool', 'object', 'list'];
+      if (!target || !types.includes(draft.kind) || !readableID(draft.id)) throw new Error('Choose an object/schema target, field type, and readable @id');
+      if (draft.kind === 'list' && !['string', 'number', 'bool', 'object'].includes(draft.itemType)) throw new Error('Choose a supported list item type');
+      const payload = {...base, target: draft.target, id: draft.id, kind: draft.kind};
+      if (draft.kind === 'list') { payload.text = draft.itemType; payload.weight = Number(draft.maxItems || 16); }
+      return payload;
+    }
+    if (draft.operation === 'scenario-value') {
+      const choice = metadata.scenarioValues.find(item => item.scenario === draft.target && item.path === draft.path);
+      if (!choice) throw new Error('Choose an exact scenario fixture value');
+      if (choice.kind === 'bool' && draft.text !== 'true' && draft.text !== 'false') throw new Error('Boolean fixture values must be true or false');
+      if (choice.kind === 'number' && !Number.isFinite(Number(draft.text))) throw new Error('Number fixture values must be finite');
+      return {...base, target: draft.target, path: draft.path, kind: choice.kind, text: String(draft.text ?? '')};
     }
     throw new Error('Unsupported authoring operation');
   }

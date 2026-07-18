@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cssbruno/gopdfkit/internal/papercompile"
@@ -27,24 +28,40 @@ type studioSchemaChoice struct {
 	Fields []studioBindingChoice `json:"fields"`
 }
 
+type studioSchemaFieldTarget struct {
+	ID     string `json:"id"`
+	Kind   string `json:"kind"`
+	Schema string `json:"schema"`
+	Path   string `json:"path"`
+}
+
+type studioScenarioValue struct {
+	Scenario string `json:"scenario"`
+	Path     string `json:"path"`
+	Kind     string `json:"kind"`
+	Value    string `json:"value"`
+}
+
 type studioAuthoringTarget struct {
 	ID   string `json:"id"`
 	Kind string `json:"kind"`
 }
 
 type studioAuthoringResponse struct {
-	FormatVersion   uint16                  `json:"format_version"`
-	Revision        string                  `json:"revision"`
-	SourceRevision  string                  `json:"source_revision"`
-	PlanHash        string                  `json:"plan_hash"`
-	Scenario        string                  `json:"scenario,omitempty"`
-	DocumentTarget  string                  `json:"document_target,omitempty"`
-	TemplateTargets []studioAuthoringTarget `json:"template_targets"`
-	BindingTargets  []studioAuthoringTarget `json:"binding_targets"`
-	Schemas         []studioSchemaChoice    `json:"schemas"`
-	Scenarios       []string                `json:"scenarios"`
-	StressPresets   []string                `json:"stress_presets"`
-	Components      []string                `json:"components"`
+	FormatVersion   uint16                    `json:"format_version"`
+	Revision        string                    `json:"revision"`
+	SourceRevision  string                    `json:"source_revision"`
+	PlanHash        string                    `json:"plan_hash"`
+	Scenario        string                    `json:"scenario,omitempty"`
+	DocumentTarget  string                    `json:"document_target,omitempty"`
+	TemplateTargets []studioAuthoringTarget   `json:"template_targets"`
+	BindingTargets  []studioAuthoringTarget   `json:"binding_targets"`
+	Schemas         []studioSchemaChoice      `json:"schemas"`
+	SchemaFields    []studioSchemaFieldTarget `json:"schema_field_targets"`
+	Scenarios       []string                  `json:"scenarios"`
+	ScenarioValues  []studioScenarioValue     `json:"scenario_values"`
+	StressPresets   []string                  `json:"stress_presets"`
+	Components      []string                  `json:"components"`
 }
 
 func (s *studioServer) handleAuthoring(w http.ResponseWriter, r *http.Request) {
@@ -76,7 +93,7 @@ func buildStudioAuthoringResponse(snapshot *studioSnapshot, ast paperlang.AST) s
 	response := studioAuthoringResponse{
 		FormatVersion: 1, Revision: snapshot.revision, SourceRevision: studioSourceRevision(snapshot.source),
 		PlanHash: snapshot.plan.Hash(), Scenario: snapshot.scenario, StressPresets: []string{"empty", "typical", "stress"},
-		TemplateTargets: []studioAuthoringTarget{}, BindingTargets: []studioAuthoringTarget{}, Schemas: []studioSchemaChoice{}, Scenarios: []string{}, Components: []string{},
+		TemplateTargets: []studioAuthoringTarget{}, BindingTargets: []studioAuthoringTarget{}, Schemas: []studioSchemaChoice{}, SchemaFields: []studioSchemaFieldTarget{}, Scenarios: []string{}, ScenarioValues: []studioScenarioValue{}, Components: []string{},
 	}
 	hasPage := false
 	var walk func(*paperlang.Node)
@@ -115,6 +132,7 @@ func buildStudioAuthoringResponse(snapshot *studioSnapshot, ast paperlang.AST) s
 		flattenStudioFields(&choice.Fields, schema.Name, schema.Fields, false)
 		response.Schemas = append(response.Schemas, choice)
 	}
+	collectStudioSchemaFieldTargets(ast.Root, "", "", &response.SchemaFields)
 	scenarios := papercompile.ExtractScenarios(ast)
 	if scenarios.OK() {
 		if fixtures, err := paperscenario.Resolve(scenarios.Scenarios, paperscenario.Limits{}); err == nil {
@@ -123,9 +141,111 @@ func buildStudioAuthoringResponse(snapshot *studioSnapshot, ast paperlang.AST) s
 			}
 		}
 	}
+	collectStudioScenarioValues(ast.Root, &response.ScenarioValues)
 	sort.Strings(response.Scenarios)
+	sort.Slice(response.SchemaFields, func(i, j int) bool {
+		if response.SchemaFields[i].Schema != response.SchemaFields[j].Schema {
+			return response.SchemaFields[i].Schema < response.SchemaFields[j].Schema
+		}
+		return response.SchemaFields[i].Path < response.SchemaFields[j].Path
+	})
+	sort.Slice(response.ScenarioValues, func(i, j int) bool {
+		if response.ScenarioValues[i].Scenario != response.ScenarioValues[j].Scenario {
+			return response.ScenarioValues[i].Scenario < response.ScenarioValues[j].Scenario
+		}
+		return response.ScenarioValues[i].Path < response.ScenarioValues[j].Path
+	})
 	sort.Strings(response.Components)
 	return response
+}
+
+func collectStudioSchemaFieldTargets(node *paperlang.Node, schema, prefix string, output *[]studioSchemaFieldTarget) {
+	if node == nil {
+		return
+	}
+	if node.Kind == paperlang.NodeSchema {
+		schema = node.ID
+		prefix = ""
+		if node.ID != "" {
+			*output = append(*output, studioSchemaFieldTarget{ID: node.ID, Kind: string(node.Kind), Schema: schema, Path: ""})
+		}
+	}
+	if node.Kind == paperlang.NodeField && node.ID != "" && schema != "" {
+		path := strings.TrimPrefix(prefix+"."+strings.TrimPrefix(node.ID, "@"), ".")
+		if node.Kind == paperlang.NodeField && schemaFieldTargetCanContainChildren(node) {
+			*output = append(*output, studioSchemaFieldTarget{ID: node.ID, Kind: string(node.Kind), Schema: schema, Path: path})
+		}
+		prefix = path
+	}
+	for _, member := range node.Members {
+		collectStudioSchemaFieldTargets(member.Node, schema, prefix, output)
+	}
+}
+
+func schemaFieldTargetCanContainChildren(node *paperlang.Node) bool {
+	typeName, itemType := "", ""
+	for _, member := range node.Members {
+		if member.Property == nil || member.Property.Value.StringValue == nil {
+			continue
+		}
+		switch member.Property.Name {
+		case "type":
+			typeName = *member.Property.Value.StringValue
+		case "item-type":
+			itemType = *member.Property.Value.StringValue
+		}
+	}
+	return typeName == "object" || typeName == "list" && itemType == "object"
+}
+
+func collectStudioScenarioValues(root *paperlang.Node, output *[]studioScenarioValue) {
+	var walk func(*paperlang.Node, string, string)
+	walk = func(node *paperlang.Node, scenario, prefix string) {
+		if node == nil {
+			return
+		}
+		if node.Kind == paperlang.NodeScenario {
+			scenario = node.ID
+			prefix = ""
+		}
+		if scenario == "" {
+			for _, member := range node.Members {
+				walk(member.Node, scenario, prefix)
+			}
+			return
+		}
+		if node.ID != "" && node.Kind != paperlang.NodeScenario {
+			prefix = strings.TrimPrefix(prefix+"."+strings.TrimPrefix(node.ID, "@"), ".")
+		}
+		if node.Kind == paperlang.NodeValue && node.Value != nil && node.ID != "" {
+			kind, value, ok := studioScenarioScalar(node.Value)
+			if ok {
+				*output = append(*output, studioScenarioValue{Scenario: scenario, Path: prefix, Kind: kind, Value: value})
+			}
+		}
+		for _, member := range node.Members {
+			walk(member.Node, scenario, prefix)
+		}
+	}
+	walk(root, "", "")
+}
+
+func studioScenarioScalar(value *paperlang.Scalar) (string, string, bool) {
+	switch value.Kind {
+	case paperlang.ScalarString:
+		if value.StringValue != nil {
+			return "string", *value.StringValue, true
+		}
+	case paperlang.ScalarBool:
+		if value.BoolValue != nil {
+			return "bool", strconv.FormatBool(*value.BoolValue), true
+		}
+	case paperlang.ScalarNumber:
+		if value.NumberValue != nil {
+			return "number", strconv.FormatFloat(*value.NumberValue, 'g', -1, 64), true
+		}
+	}
+	return "", "", false
 }
 
 func flattenStudioFields(output *[]studioBindingChoice, prefix string, fields []papercompile.FieldDescriptor, collection bool) {

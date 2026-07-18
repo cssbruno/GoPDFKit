@@ -90,6 +90,10 @@ func TestLoadProjectManifestValidatesFontsFallbackReplacementAndFocus(t *testing
 	if err != nil || len(images) != 2 {
 		t.Fatalf("image catalog=%#v err=%v", images, err)
 	}
+	production, err := LoadManifestResources(manifest, dir)
+	if err != nil || len(production) != 4 || production[0].Family == "" {
+		t.Fatalf("production catalog=%#v err=%v", production, err)
+	}
 }
 
 func TestLoadProjectManifestRejectsLifecycleCycles(t *testing.T) {

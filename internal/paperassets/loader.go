@@ -84,6 +84,24 @@ func LoadManifest(manifestPath, assetRoot string) ([]papercompile.AssetResource,
 	return resources, nil
 }
 
+// LoadManifestResources projects the explicit image catalog plus embeddable
+// TrueType/OpenType fonts for production PDF planning. WOFF2 remains valid
+// manifest metadata but is intentionally not admitted to the PDF byte path.
+func LoadManifestResources(manifestPath, assetRoot string) ([]papercompile.AssetResource, error) {
+	project, err := LoadProjectManifest(manifestPath, assetRoot)
+	if err != nil {
+		return nil, err
+	}
+	resources := make([]papercompile.AssetResource, 0, len(project))
+	for _, item := range project {
+		if item.MediaType != "image/png" && item.MediaType != "image/jpeg" && item.MediaType != "font/ttf" && item.MediaType != "font/otf" {
+			continue
+		}
+		resources = append(resources, papercompile.AssetResource{Name: item.Name, MediaType: item.MediaType, Digest: item.Digest, Data: append([]byte(nil), item.Data...), Family: item.Family, Weight: item.Weight, Style: item.Style, License: item.License})
+	}
+	return resources, nil
+}
+
 // LoadProjectManifest validates the complete explicit resource catalog,
 // including non-layout font metadata and replacement/fallback relationships.
 func LoadProjectManifest(manifestPath, assetRoot string) ([]ProjectResource, error) {

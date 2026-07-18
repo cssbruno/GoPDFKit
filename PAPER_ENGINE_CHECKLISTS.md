@@ -2895,7 +2895,7 @@ as completed behavior.
   [UI](cmd/paper-studio/web/authoring-model.js),
   [tests](internal/paperd/authoring_mutations_test.go),
   [Studio delivery test](cmd/paper-studio/studio_edit_test.go)).
-- [ ] Schema connection and binding picker. The compiler now exposes detached
+- [x] Schema connection and binding picker. The compiler now exposes detached
   schema descriptors from its existing analysis; Studio projects exact
   primitive/list paths and bindable source targets, rejects stale source/plan
   metadata, and commits through `PaperSetBinding` rather than inventing a
@@ -2904,9 +2904,12 @@ as completed behavior.
   the schema starter also creates a valid first field without raw CST input
   ([metadata](internal/papercompile/schema.go),
   [server](cmd/paper-studio/studio_authoring.go),
-  [browser model](cmd/paper-studio/web/authoring-model.js)). The item remains
-  open for richer object/list binding UX and editing nested schema fields.
-- [ ] Scenario creation and stress matrix. Studio offers bounded empty,
+  [browser model](cmd/paper-studio/web/authoring-model.js)). Nested object/list
+  field insertion is now atomic and compiler-validated, with exact nested
+  field targets exposed to the picker ([mutation](internal/paperd/authoring_mutations.go),
+  [source edit](internal/paperedit/edit.go),
+  [tests](internal/paperd/authoring_mutations_test.go)).
+- [x] Scenario creation and stress matrix. Studio offers bounded empty,
   typical, and stress presets generated from compiler-owned schema metadata;
   one selected case becomes one authority-bound journal insertion with stable
   keyed-list items and exact stale rejection. Authored scenarios can now also
@@ -2914,8 +2917,13 @@ as completed behavior.
   exposes those actions beside each matrix row
   ([mutation](internal/paperd/authoring_mutations.go),
   [UI](cmd/paper-studio/web/studio.js),
-  [end-to-end test](cmd/paper-studio/studio_edit_test.go)). The item remains
-  open for editing fixture values in place and combinatorial matrix cases.
+  [end-to-end test](cmd/paper-studio/studio_edit_test.go)). Matrix creation now
+  accepts bounded unique `id:preset` cases atomically, and scalar fixture values
+  can be edited by scenario-relative path with exact type preservation
+  ([source edit](internal/paperedit/edit.go),
+  [browser model](cmd/paper-studio/web/authoring-model.js),
+  [tests](internal/paperd/authoring_mutations_test.go),
+  [Studio integration](cmd/paper-studio/studio_edit_test.go)).
 - [x] Initial page-master bootstrap creation. A parseable document with no page
   can now receive one exact `page`/`body`/starter-paragraph template through
   the journal, while existing-page documents reject the bootstrap shape;
@@ -2940,7 +2948,7 @@ as completed behavior.
   ([review model](cmd/paper-studio/web/review-model.js),
   [model tests](cmd/paper-studio/js_test/review_model_test.cjs),
   [slot authority](internal/paperd/domain_mutations.go)).
-- [ ] Resource manager for fonts/assets/licenses/fallback/crop focus. Paper
+- [x] Resource manager for fonts/assets/licenses/fallback/crop focus. Paper
   Studio now has a bounded read-first resource inventory tied to the exact
   source revision, scenario, and immutable plan. It shows content name, media
   type, SHA-256, byte size, decoded dimensions, alt/decorative usage, crop
@@ -2966,9 +2974,14 @@ as completed behavior.
   atomically publishes the manifest before reloading the immutable planning
   catalog ([catalog editor](internal/paperassets/loader.go), [mutation route
   and tests](cmd/paper-studio/studio_resource_catalog.go)). The browser still
-  receives no paths or bytes. The broad checkbox remains open for production
-  custom-font embedding/subsetting and richer resource lifecycle management;
-  license admission is now enforceable at manifest load and add.
+  receives no paths or bytes. Production TTF/OTF resources now enter the
+  immutable planner catalog, participate in exact font lookup and metrics, and
+  are passed to the existing UTF-8 subsetter during PDF painting; manifest
+  lifecycle and license admission remain enforced ([catalog](internal/papercompile/asset_catalog.go),
+  [planner/PDF path](document/paper.go),
+  [loader projection](internal/paperassets/loader.go),
+  [embedding test](document/paper_image_test.go)). WOFF2 remains metadata-only
+  until a compatible shaping/subsetting adapter is added.
 - [x] Preflight, explicit PDF verification, export, and publish status. Studio
   now exposes revision-bound preflight, independent final-PDF tag verification,
   a verified-PDF export endpoint, and an explicit separate-authorized publish
@@ -3193,7 +3206,8 @@ as completed behavior.
 ### Stage 9 exit gate
 
 - [x] Complete create-to-deliver workflow works without source degradation. The
-  journaled template, binding, scenario, preflight, verified-PDF export, and
+  journaled template, binding, schema-field, scenario-matrix, fixture-value,
+  preflight, verified-PDF export, and
   separate publish-status path are exercised as one exact-revision flow while
   preserving source comments and trivia
   ([integration test](cmd/paper-studio/studio_edit_test.go)).

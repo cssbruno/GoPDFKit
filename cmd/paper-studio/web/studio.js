@@ -452,8 +452,11 @@ function renderAuthoringControls() {
   if (metadata.templateTargets.length) available.push('template');
   if (metadata.documentTarget) available.push('import');
   if (metadata.documentTarget) available.push('schema');
+  if (metadata.schemaFields.length) available.push('schema-field');
   if (metadata.bindingTargets.length && metadata.schemas.some(schema => schema.fields.length)) available.push('binding');
   if (metadata.documentTarget && metadata.schemas.length) available.push('scenario-create');
+  if (metadata.documentTarget && metadata.schemas.length) available.push('scenario-matrix');
+  if (metadata.scenarioValues.length) available.push('scenario-value');
   if (!available.length) { const quiet=document.createElement('span'); quiet.className='quiet'; quiet.textContent='Add readable IDs and a schema to enable authoring'; target.append(quiet); return; }
   const draft = state.authoringDraft;
   draft.operation = available.includes(draft.operation) ? draft.operation : available[0];
@@ -493,6 +496,24 @@ function renderAuthoringControls() {
       draft.minFraction=draft.minFraction ?? 0; draft.maxFraction=draft.maxFraction ?? 2;
       form.append(authoringNumberInput('Min fraction',draft.minFraction,value=>draft.minFraction=value),authoringNumberInput('Max fraction',draft.maxFraction,value=>draft.maxFraction=value));
     }
+  } else if (draft.operation === 'schema-field') {
+    const targets=metadata.schemaFields; const targetIDs=targets.map(item=>item.id); draft.target=targetIDs.includes(draft.target)?draft.target:targetIDs[0];
+    const types=['string','number','bool','object','list']; draft.kind=types.includes(draft.kind)?draft.kind:'string'; draft.id=draft.id||'@new-field';
+    form.append(authoringSelect('Parent',targetIDs,draft.target,value=>draft.target=value),authoringSelect('Field type',types,draft.kind,value=>{draft.kind=value;renderAuthoringControls();}),authoringInput('Readable ID',draft.id,value=>draft.id=value));
+    if (draft.kind === 'list') {
+      const items=['string','number','bool','object']; draft.itemType=items.includes(draft.itemType)?draft.itemType:'string'; draft.maxItems=draft.maxItems||16;
+      form.append(authoringSelect('List item type',items,draft.itemType,value=>draft.itemType=value),authoringNumberInput('Max items',draft.maxItems,value=>draft.maxItems=value,{max:'1000000'}));
+    }
+  } else if (draft.operation === 'scenario-value') {
+    const scenarios=[...new Set(metadata.scenarioValues.map(item=>item.scenario))]; draft.target=scenarios.includes(draft.target)?draft.target:scenarios[0];
+    const values=metadata.scenarioValues.filter(item=>item.scenario===draft.target); const paths=values.map(item=>item.path); draft.path=paths.includes(draft.path)?draft.path:paths[0];
+    const choice=values.find(item=>item.path===draft.path); draft.text=draft.text===undefined?choice?.value||'':draft.text;
+    form.append(authoringSelect('Scenario',scenarios,draft.target,value=>{draft.target=value;draft.path='';draft.text=undefined;renderAuthoringControls();}),authoringSelect('Fixture path',paths,draft.path,value=>{draft.path=value;const next=values.find(item=>item.path===value);draft.text=next?.value||'';renderAuthoringControls();}));
+    if (choice?.kind === 'bool') form.append(authoringSelect('Value',['true','false'],draft.text,value=>draft.text=value));
+    else form.append(authoringInput(choice?.kind === 'number' ? 'Number value' : 'String value',draft.text,value=>draft.text=value));
+  } else if (draft.operation === 'scenario-matrix') {
+    const schemas=metadata.schemas.map(item=>item.name); draft.target=metadata.documentTarget; draft.schema=schemas.includes(draft.schema)?draft.schema:schemas[0]; draft.cases=draft.cases||'@empty:empty,@typical:typical,@stress:stress';
+    form.append(authoringSelect('Schema',schemas,draft.schema,value=>draft.schema=value),authoringInput('Cases (id:preset, …)',draft.cases,value=>draft.cases=value));
   } else {
     const schemas=metadata.schemas.map(item=>item.name); draft.target=metadata.documentTarget; draft.schema=schemas.includes(draft.schema)?draft.schema:schemas[0]; draft.preset=metadata.presets.includes(draft.preset)?draft.preset:'typical'; draft.id=draft.id||'@stress-case';
     form.append(authoringSelect('Schema',schemas,draft.schema,value=>draft.schema=value),authoringSelect('Matrix case',metadata.presets,draft.preset,value=>draft.preset=value),authoringInput('Scenario ID',draft.id,value=>draft.id=value));
@@ -512,8 +533,8 @@ function authoringInput(labelText, value, change) {
   const field=document.createElement('label');field.className='edit-field';const caption=document.createElement('span');caption.textContent=labelText;const input=document.createElement('input');input.type='text';input.value=value;input.maxLength=128;input.disabled=visualMutationsLocked();input.addEventListener('input',()=>change(input.value));field.append(caption,input);return field;
 }
 
-function authoringNumberInput(labelText, value, change) {
-  const field=document.createElement('label');field.className='edit-field';const caption=document.createElement('span');caption.textContent=labelText;const input=document.createElement('input');input.type='number';input.min='0';input.max='18';input.step='1';input.value=value;input.disabled=visualMutationsLocked();input.addEventListener('input',()=>change(input.value));field.append(caption,input);return field;
+function authoringNumberInput(labelText, value, change, limits = {}) {
+  const field=document.createElement('label');field.className='edit-field';const caption=document.createElement('span');caption.textContent=labelText;const input=document.createElement('input');input.type='number';input.min=limits.min ?? '0';input.max=limits.max ?? '18';input.step=limits.step ?? '1';input.value=value;input.disabled=visualMutationsLocked();input.addEventListener('input',()=>change(input.value));field.append(caption,input);return field;
 }
 
 function renderSource(source, issues = []) {

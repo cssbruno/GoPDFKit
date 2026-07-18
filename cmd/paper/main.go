@@ -107,7 +107,7 @@ func (options assetOptions) load() (document.PaperAssetCatalog, error) {
 	if *options.manifest == "" {
 		return document.NewPaperAssetCatalog(nil)
 	}
-	loaded, err := paperassets.LoadManifest(*options.manifest, *options.root)
+	loaded, err := paperassets.LoadManifestResources(*options.manifest, *options.root)
 	if err != nil {
 		return document.PaperAssetCatalog{}, err
 	}

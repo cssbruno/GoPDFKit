@@ -23,24 +23,27 @@ var (
 type MutationOperation string
 
 const (
-	MutationSetLiteral       MutationOperation = "set_literal"
-	MutationSetRichText      MutationOperation = "set_rich_text"
-	MutationSetBinding       MutationOperation = "set_binding"
-	MutationFillSlot         MutationOperation = "fill_slot"
-	MutationApplyFix         MutationOperation = "apply_fix"
-	MutationSetBoxProperty   MutationOperation = "set_box_property"
-	MutationSetTextProperty  MutationOperation = "set_text_property"
-	MutationSetGridTrack     MutationOperation = "set_grid_track"
-	MutationSetImageProperty MutationOperation = "set_image_property"
-	MutationSetTableProperty MutationOperation = "set_table_property"
-	MutationSetPageMargin    MutationOperation = "set_page_margin"
-	MutationSetPageSize      MutationOperation = "set_page_size"
-	MutationSetCanvasAnchor  MutationOperation = "set_canvas_anchor"
-	MutationSetPageRegion    MutationOperation = "set_page_region"
-	MutationMoveNode         MutationOperation = "move_node"
-	MutationInsertTemplate   MutationOperation = "insert_template"
-	MutationCreateScenario   MutationOperation = "create_scenario"
-	MutationManageScenario   MutationOperation = "manage_scenario"
+	MutationSetLiteral           MutationOperation = "set_literal"
+	MutationSetRichText          MutationOperation = "set_rich_text"
+	MutationSetBinding           MutationOperation = "set_binding"
+	MutationFillSlot             MutationOperation = "fill_slot"
+	MutationApplyFix             MutationOperation = "apply_fix"
+	MutationSetBoxProperty       MutationOperation = "set_box_property"
+	MutationSetTextProperty      MutationOperation = "set_text_property"
+	MutationSetGridTrack         MutationOperation = "set_grid_track"
+	MutationSetImageProperty     MutationOperation = "set_image_property"
+	MutationSetTableProperty     MutationOperation = "set_table_property"
+	MutationSetPageMargin        MutationOperation = "set_page_margin"
+	MutationSetPageSize          MutationOperation = "set_page_size"
+	MutationSetCanvasAnchor      MutationOperation = "set_canvas_anchor"
+	MutationSetPageRegion        MutationOperation = "set_page_region"
+	MutationMoveNode             MutationOperation = "move_node"
+	MutationInsertTemplate       MutationOperation = "insert_template"
+	MutationCreateScenario       MutationOperation = "create_scenario"
+	MutationCreateScenarioMatrix MutationOperation = "create_scenario_matrix"
+	MutationSetScenarioValue     MutationOperation = "set_scenario_value"
+	MutationAddSchemaField       MutationOperation = "add_schema_field"
+	MutationManageScenario       MutationOperation = "manage_scenario"
 )
 
 func (operation MutationOperation) valid() bool {
@@ -48,7 +51,7 @@ func (operation MutationOperation) valid() bool {
 	case MutationSetLiteral, MutationSetRichText, MutationSetBinding, MutationFillSlot, MutationApplyFix,
 		MutationSetBoxProperty, MutationSetTextProperty, MutationSetGridTrack, MutationSetImageProperty, MutationSetTableProperty, MutationSetPageMargin, MutationSetPageSize, MutationSetCanvasAnchor, MutationSetPageRegion:
 		return true
-	case MutationMoveNode, MutationInsertTemplate, MutationCreateScenario, MutationManageScenario:
+	case MutationMoveNode, MutationInsertTemplate, MutationCreateScenario, MutationCreateScenarioMatrix, MutationSetScenarioValue, MutationAddSchemaField, MutationManageScenario:
 		return true
 	default:
 		return false

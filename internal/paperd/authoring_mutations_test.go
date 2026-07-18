@@ -99,6 +99,61 @@ func TestPaperCreateScenarioUsesCompilerSchemaAndStressPreset(t *testing.T) {
 	}
 }
 
+func TestPaperAuthoringAddsNestedSchemaFieldsAndCreatesAtomicMatrix(t *testing.T) {
+	source := "document @report:\n" +
+		"  schema @invoice:\n" +
+		"    field @customer:\n" +
+		"      type: \"object\"\n" +
+		"      field @name:\n" +
+		"        type: \"string\"\n" +
+		"  page @sheet:\n" +
+		"    body @body:\n" +
+		"      paragraph @copy:\n" +
+		"        text: \"Invoice\"\n"
+	workspace := mustWorkspace(t, Limits{})
+	guard, _, _ := mutationGuard(t, workspace, source, "@customer", "add-nested-field", CapabilityEdit)
+	result, err := workspace.PaperAddSchemaField(PaperAddSchemaFieldRequest{Guard: guard, ID: "@email", Type: "string"})
+	if err != nil || !result.Semantic.AfterCompileOK || !strings.Contains(result.Revision.Source, "field @email:") {
+		t.Fatalf("nested schema field = %v result=%#v\nsource=%s", err, result, result.Revision.Source)
+	}
+
+	matrixWorkspace := mustWorkspace(t, Limits{})
+	matrixGuard, _, _ := mutationGuard(t, matrixWorkspace, source, "@report", "matrix", CapabilityEdit)
+	matrix, err := matrixWorkspace.PaperCreateScenarioMatrix(PaperCreateScenarioMatrixRequest{Guard: matrixGuard, Schema: "@invoice", Cases: []PaperScenarioMatrixCase{
+		{Name: "@empty", Preset: "empty"}, {Name: "@typical", Preset: "typical"}, {Name: "@stress", Preset: "stress"},
+	}})
+	if err != nil || !matrix.Semantic.AfterCompileOK || len(matrix.Edit.Diff.Patches) != 1 {
+		t.Fatalf("matrix = %v result=%#v", err, matrix)
+	}
+	for _, name := range []string{"@empty", "@typical", "@stress"} {
+		if !strings.Contains(matrix.Revision.Source, "scenario "+name+":") {
+			t.Fatalf("matrix omitted %s:\n%s", name, matrix.Revision.Source)
+		}
+	}
+}
+
+func TestPaperAuthoringEditsScenarioFixtureValueByRelativePath(t *testing.T) {
+	source := "document @report:\n" +
+		"  schema @invoice:\n" +
+		"    field @customer:\n" +
+		"      type: \"object\"\n" +
+		"      field @name:\n" +
+		"        type: \"string\"\n" +
+		"  page @sheet:\n" +
+		"    body @body:\n" +
+		"      paragraph @copy:\n" +
+		"        text: \"Invoice\"\n" +
+		"  scenario @review:\n" +
+		"    object @customer:\n" +
+		"      value @name: \"Ada\"\n"
+	workspace := mustWorkspace(t, Limits{})
+	guard, _, _ := mutationGuard(t, workspace, source, "@review", "fixture-value", CapabilityEdit)
+	result, err := workspace.PaperSetScenarioFixtureValue(PaperSetScenarioFixtureValueRequest{Guard: guard, Path: "customer.name", Kind: "string", Text: "Grace"})
+	if err != nil || !result.Semantic.AfterCompileOK || !strings.Contains(result.Revision.Source, `value @name: "Grace"`) || len(result.Edit.Diff.Patches) != 1 {
+		t.Fatalf("fixture value = %v result=%#v\nsource=%s", err, result, result.Revision.Source)
+	}
+}
+
 func TestPaperInsertImportTemplateAppendsOneResolvedDesignImport(t *testing.T) {
 	workspace, err := NewWorkspaceWithOptions(WorkspaceOptions{ImportResolver: func(importerFile, importPath string) (string, string, error) {
 		if importerFile != "mutation.paper" || importPath != "styles/design.paper" {
