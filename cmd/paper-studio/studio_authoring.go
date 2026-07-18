@@ -335,7 +335,7 @@ func buildStudioAuthoringResponse(snapshot *studioSnapshot, ast paperlang.AST) s
 		if node.Kind == paperlang.NodePage {
 			hasPage = true
 		}
-		if node.ID != "" && (node.Kind == paperlang.NodeBody || node.Kind == paperlang.NodeRow || node.Kind == paperlang.NodeColumn) {
+		if node.ID != "" && (node.Kind == paperlang.NodePage || node.Kind == paperlang.NodeBody || node.Kind == paperlang.NodeHeader || node.Kind == paperlang.NodeFooter || node.Kind == paperlang.NodeRow || node.Kind == paperlang.NodeColumn) {
 			response.TemplateTargets = append(response.TemplateTargets, studioAuthoringTarget{ID: node.ID, Kind: string(node.Kind)})
 		}
 		if node.ID != "" && (node.Kind == paperlang.NodeParagraph || node.Kind == paperlang.NodeHeading || node.Kind == paperlang.NodeUse) {

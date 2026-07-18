@@ -3,7 +3,7 @@ const model = require('../web/authoring-model.js');
 const workspace = {revision:'plan-1', plan_hash:'plan-1', source_revision:'source-1', scenario:''};
 const payload = {format_version:1, revision:'plan-1', plan_hash:'plan-1', source_revision:'source-1', document_target:'@doc',
   template_targets:[{id:'@body',kind:'body'}], binding_targets:[{id:'@copy',kind:'paragraph'}],
-  schemas:[{name:'@invoice',fields:[{path:'@invoice.total',kind:'number',required:true}]}],
+  schemas:[{name:'@invoice',fields:[{path:'@invoice.total',kind:'number',required:true},{path:'@invoice.items',kind:'list',required:true}]}],
   schema_field_targets:[{id:'@invoice',kind:'schema',schema:'@invoice',path:''}],
   scenarios:['@review'], scenario_values:[{scenario:'@review',path:'total',kind:'number',value:'10'},{scenario:'@review',path:'customer.name',kind:'string',value:'Ada'}],
   stress_presets:['empty','typical','stress'], components:['@card']};
@@ -13,6 +13,9 @@ assert.deepEqual(model.buildPayload(workspace, metadata, {operation:'template',t
   {source_revision:'source-1',plan_revision:'plan-1',scenario:'',operation:'template',property:'',target:'@body',template:'section',id:'@summary'});
 const bootstrapMetadata = model.normalize({...payload, template_targets:[{id:'@doc',kind:'document'}]}, workspace);
 assert.equal(model.buildPayload(workspace, bootstrapMetadata, {operation:'template',target:'@doc',template:'page',id:'@sheet'}).template, 'page');
+assert.equal(model.buildPayload(workspace, bootstrapMetadata, {operation:'template',target:'@doc',template:'document-preset',preset:'prescription',id:'@sheet'}).preset, 'prescription');
+assert.equal(model.buildPayload(workspace, metadata, {operation:'template',target:'@body',template:'repeat',path:'@invoice.items',id:'@lines'}).path, '@invoice.items');
+assert.equal(model.buildPayload({...workspace,scenario:'@review'}, metadata, {operation:'template',target:'@body',template:'loop',id:'@copies'}).template, 'loop');
 assert.deepEqual(model.buildPayload(workspace, metadata, {operation:'import',target:'@doc',importPath:'styles/design.paper'}),
   {source_revision:'source-1',plan_revision:'plan-1',scenario:'',operation:'import',property:'',target:'@doc',import_path:'styles/design.paper'});
 assert.throws(() => model.buildPayload(workspace, bootstrapMetadata, {operation:'template',target:'@doc',template:'section',id:'@bad'}), /compatible/);

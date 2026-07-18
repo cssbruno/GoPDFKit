@@ -8,8 +8,17 @@
   const presets = Object.freeze({
     A4: Object.freeze([595.275590551, 841.88976378]),
     A3: Object.freeze([841.88976378, 1190.551181102]),
+    A5: Object.freeze([419.527559055, 595.275590551]),
+    A6: Object.freeze([297.637795276, 419.527559055]),
+    B5: Object.freeze([498.897637795, 708.661417323]),
     Letter: Object.freeze([612, 792]),
     Legal: Object.freeze([612, 1008]),
+    Executive: Object.freeze([522, 756]),
+    Tabloid: Object.freeze([792, 1224]),
+    Ledger: Object.freeze([1224, 792]),
+    'DL Envelope': Object.freeze([311.811023622, 623.622047244]),
+    'C5 Envelope': Object.freeze([459.212598425, 649.133858268]),
+    '4×6 Label': Object.freeze([288, 432]),
   });
   const unitPoints = Object.freeze({pt: 1, mm: 72 / 25.4, in: 72});
 

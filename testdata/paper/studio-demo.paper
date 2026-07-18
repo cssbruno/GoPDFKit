@@ -40,6 +40,12 @@ document @prescription:
           track-weight: 1
           style: "@header-meta"
           text: "+1 415 555 0142\ncare@harborhealth.example\n120 Harbor Way, San Francisco, CA"
+        paragraph @browser-note:
+          text: "NOTE\nAdd important supporting information here."
+          padding: 12pt
+          background: "#F1F5F9"
+          border-left-width: 3pt
+          border-color: "#2C6E7F"
 
     footer @legal-footer:
       paragraph @footer-copy:

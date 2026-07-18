@@ -6,8 +6,10 @@ const state = {
   loadedScenario: '',
   page: 1,
   zoom: 1,
+  zoomMode: 'fit-page',
   zoomRender: 0,
   zoomTimer: null,
+  resizeTimer: null,
   thumbnailRender: 0,
   detailRender: 0,
   activePageMeta: null,
@@ -469,9 +471,21 @@ function renderAuthoringControls() {
   if (draft.operation === 'template') {
     const targets=metadata.templateTargets.map(item=>item.id); draft.target=targets.includes(draft.target)?draft.target:targets[0];
     const targetKind=metadata.templateTargets.find(item=>item.id===draft.target)?.kind;
-    const choices=targetKind==='document'?['page']:targetKind==='body'?['paragraph','heading','list','row','column','page-break',...(metadata.components.length?['component']:[]),'section']:['paragraph','heading',...(metadata.components.length?['component']:[])];
+    const repeatPaths=metadata.schemas.flatMap(schema=>schema.fields.filter(field=>field.kind==='list').map(field=>field.path));
+    const flowChoices=['paragraph','heading','list','image','table','canvas','row','column','page-break','note-box','metadata-grid','signature-row','qr-verification','clause','styled-container',...(repeatPaths.length?['repeat']:[]),...(state.scenario?['loop']:[]),...(metadata.components.length?['component']:[]),'section'];
+    const choices=targetKind==='document'?['document-preset','page']:targetKind==='page'?['header','footer']:flowChoices;
     draft.template=choices.includes(draft.template)?draft.template:choices[0]; draft.id=draft.id|| (draft.template==='page'?'@sheet':'@new-content');
     form.append(authoringSelect('Inside',targets,draft.target,value=>{draft.target=value;renderAuthoringControls();}),authoringSelect('Palette',choices,draft.template,value=>{draft.template=value;renderAuthoringControls();}),authoringInput('Readable ID',draft.id,value=>draft.id=value));
+    if (draft.template === 'document-preset') {
+      const presets=['blank','letter','prescription','medical-report','invoice','contract','certificate','table-report'];
+      draft.preset=presets.includes(draft.preset)?draft.preset:'prescription';
+      form.append(authoringSelect('Document design',presets,draft.preset,value=>draft.preset=value));
+      const note=document.createElement('p');note.className='quiet';note.textContent='Creates one complete page master with header, footer, body hierarchy, metadata, and preset-specific content.';form.append(note);
+    }
+    if (draft.template === 'repeat') {
+      draft.path=repeatPaths.includes(draft.path)?draft.path:repeatPaths[0];
+      form.append(authoringSelect('Bounded list',repeatPaths,draft.path,value=>draft.path=value));
+    }
     if (draft.template === 'component') {
       draft.component=metadata.components.includes(draft.component)?draft.component:metadata.components[0];
       form.append(authoringSelect('Component',metadata.components,draft.component,value=>{draft.component=value;renderAuthoringControls();}));
@@ -1038,7 +1052,7 @@ function queueWASMPageDetail(page) {
   const serial = ++state.detailRender;
   const revision = state.revision;
   const dpi = renderDPIForZoom();
-  if (dpi === previewDPIForZoom()) return;
+  if ((state.activePageMeta?.manifest?.profile?.dpi || 0) >= dpi) return;
   const idle = (callback) => {
     if (typeof requestIdleCallback === 'function') requestIdleCallback(callback, {timeout: 400});
     else setTimeout(callback, 0);
@@ -1056,7 +1070,7 @@ function queueWASMPageDetail(page) {
 function paintWASMPage(rendered) {
   paintWASMCanvas(pageImage, rendered);
   state.activePageMeta = rendered;
-  applyPageStageWidth(rendered);
+  applyPageStageSize(rendered);
 }
 
 async function loadInspection(page) {
@@ -1493,6 +1507,9 @@ function renderInspectorRows(rows, kind) {
 
 function selectEditableTarget(target) {
   state.editSelection = target ? PaperStudioEditModel.findSelection(state.workspace?.ast?.root, target) : null;
+  if (target && state.authoring?.templateTargets?.some(item => item.id === target)) {
+    state.authoringDraft.target = target;
+  }
   state.editDraft = null;
   state.editFeedback = null;
   renderEditControls();
@@ -1704,33 +1721,67 @@ function setMode(mode) {
 }
 
 function renderDPIForZoom() {
-  return Math.max(72, Math.min(600, Math.round(144 * Math.max(1, state.zoom))));
+  return PaperStudioViewportModel.renderDPI(state.zoom, window.devicePixelRatio);
 }
 
 function previewDPIForZoom() {
-  return Math.max(72, Math.min(600, Math.round(96 * Math.max(1, state.zoom))));
+  return PaperStudioViewportModel.previewDPI(state.zoom, window.devicePixelRatio);
 }
 
-function applyPageStageWidth(rendered = state.activePageMeta) {
-  if (!rendered) return;
-  const naturalWidth = rendered.pixelWidth * 72 / rendered.manifest.profile.dpi;
-  $('#page-stage').style.width = `${Math.max(1, naturalWidth * state.zoom)}px`;
+function renderedPageSize(rendered = state.activePageMeta) {
+  if (!rendered?.manifest?.profile?.dpi) return null;
+  return {
+    width: rendered.pixelWidth * 72 / rendered.manifest.profile.dpi,
+    height: rendered.pixelHeight * 72 / rendered.manifest.profile.dpi,
+  };
 }
 
-function setZoom(next) {
-  if (!Number.isFinite(next)) {
-    $('#zoom-value').value = String(Math.round(state.zoom * 100));
-    return;
-  }
-  state.zoom = Math.max(.25, Math.min(4, Math.round(next * 100) / 100));
+function viewportPadding() {
+  const style = getComputedStyle(canvasScroll);
+  const number = (property) => Number.parseFloat(style[property]) || 0;
+  return {
+    inline: number('paddingLeft') + number('paddingRight'),
+    block: number('paddingTop') + number('paddingBottom'),
+  };
+}
+
+function fittedZoom(mode = state.zoomMode, rendered = state.activePageMeta) {
+  const page = renderedPageSize(rendered);
+  if (!page || canvasScroll.clientWidth <= 0 || canvasScroll.clientHeight <= 0) return state.zoom;
+  const padding = viewportPadding();
+  return PaperStudioViewportModel.fitZoom({
+    pageWidth: page.width,
+    pageHeight: page.height,
+    viewportWidth: canvasScroll.clientWidth,
+    viewportHeight: canvasScroll.clientHeight,
+    paddingInline: padding.inline,
+    paddingBlock: padding.block,
+    mode: mode === 'fit-width' ? 'width' : 'page',
+  });
+}
+
+function syncZoomControls() {
   $('#zoom-value').value = String(Math.round(state.zoom * 100));
-  applyPageStageWidth();
+  $('#zoom-mode').value = state.zoomMode;
+}
+
+function applyPageStageSize(rendered = state.activePageMeta) {
+  const page = renderedPageSize(rendered);
+  if (!page) return;
+  if (state.zoomMode !== 'custom') state.zoom = fittedZoom(state.zoomMode, rendered);
+  $('#page-stage').style.width = `${Math.max(1, page.width * state.zoom)}px`;
+  syncZoomControls();
+}
+
+function scheduleZoomRender() {
   const serial = ++state.zoomRender;
   ++state.detailRender;
   const page = state.page;
   const revision = state.revision;
   const dpi = renderDPIForZoom();
   clearTimeout(state.zoomTimer);
+  state.zoomTimer = null;
+  if ((state.activePageMeta?.manifest?.profile?.dpi || 0) >= dpi) return;
   state.zoomTimer = setTimeout(() => {
     state.zoomTimer = null;
     loadWASMPage(page, dpi).then(rendered => {
@@ -1740,6 +1791,39 @@ function setZoom(next) {
       renderSelectionRects();
     }).catch(error => { if (error.status === 409) refresh(); else showFailure(error); });
   }, 140);
+}
+
+function setZoom(next, mode = 'custom') {
+  if (!Number.isFinite(next)) {
+    syncZoomControls();
+    return;
+  }
+  state.zoomMode = mode;
+  state.zoom = PaperStudioViewportModel.zoom(next);
+  applyPageStageSize();
+  scheduleZoomRender();
+}
+
+function setZoomMode(mode) {
+  if (mode === 'custom') {
+    state.zoomMode = mode;
+    syncZoomControls();
+    return;
+  }
+  if (mode !== 'fit-page' && mode !== 'fit-width') return;
+  setZoom(fittedZoom(mode), mode);
+}
+
+function resizeViewportProjection() {
+  clearTimeout(state.resizeTimer);
+  if (!state.activePageMeta) return;
+  applyPageStageSize();
+  renderInspectionOverlays();
+  renderSelectionRects();
+  state.resizeTimer = setTimeout(() => {
+    state.resizeTimer = null;
+    scheduleZoomRender();
+  }, 160);
 }
 
 function renderStatus() {
@@ -1812,6 +1896,7 @@ $('#refresh').addEventListener('click', () => refresh());
 $('#resource-add')?.addEventListener('click', addResource);
 $('#zoom-in').addEventListener('click', () => setZoom(state.zoom + .1));
 $('#zoom-out').addEventListener('click', () => setZoom(state.zoom - .1));
+$('#zoom-mode').addEventListener('change', event => setZoomMode(event.currentTarget.value));
 $('#zoom-value').addEventListener('change', event => setZoom(Number(event.currentTarget.value) / 100));
 $('#zoom-value').addEventListener('keydown', event => {
   if (event.key !== 'Enter') return;
@@ -1838,6 +1923,8 @@ window.addEventListener('keydown', (event) => {
   }
 });
 window.addEventListener('beforeunload', () => { state.changeStream?.close?.(); clearObjectURLs(); });
+if (typeof ResizeObserver === 'function') new ResizeObserver(resizeViewportProjection).observe(canvasScroll);
+else window.addEventListener('resize', resizeViewportProjection);
 
-setZoom(1);
+syncZoomControls();
 refresh().finally(connectChangeStream);

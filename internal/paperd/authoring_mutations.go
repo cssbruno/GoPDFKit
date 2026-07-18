@@ -21,6 +21,8 @@ type PaperInsertTemplateRequest struct {
 	ID         string             `json:"id"`
 	Component  string             `json:"component,omitempty"`
 	ImportPath string             `json:"import_path,omitempty"`
+	Preset     string             `json:"preset,omitempty"`
+	Path       string             `json:"path,omitempty"`
 }
 
 // PaperInsertTemplate inserts one closed, typed starter shape beneath an
@@ -31,8 +33,8 @@ func (w *Workspace) PaperInsertTemplate(request PaperInsertTemplateRequest) (Pap
 		return PaperMutationResult{}, err
 	}
 	parent := findNodeByID(revision.parsed.AST.Root, request.Guard.Target)
-	if parent == nil || (parent.Kind != paperlang.NodeDocument && parent.Kind != paperlang.NodeBody && parent.Kind != paperlang.NodeRow && parent.Kind != paperlang.NodeColumn) {
-		return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_PARENT", "template parent must be a document, body, row, or column", paperedit.ErrInvalidOperation)
+	if parent == nil || (parent.Kind != paperlang.NodeDocument && parent.Kind != paperlang.NodePage && parent.Kind != paperlang.NodeBody && parent.Kind != paperlang.NodeHeader && parent.Kind != paperlang.NodeFooter && parent.Kind != paperlang.NodeRow && parent.Kind != paperlang.NodeColumn) {
+		return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_PARENT", "template parent must be a document, page, region, body, row, or column", paperedit.ErrInvalidOperation)
 	}
 	if request.Template == "import" {
 		if parent.Kind != paperlang.NodeDocument || !safeAuthoringImportPath(request.ImportPath) {
@@ -57,7 +59,7 @@ func (w *Workspace) PaperInsertTemplate(request PaperInsertTemplateRequest) (Pap
 		node = paperedit.NodeSpec{Kind: paperlang.NodeSchema, ID: request.ID, Children: []paperedit.NodeSpec{
 			{Kind: paperlang.NodeField, ID: "@" + base + "-value", Properties: []paperedit.PropertySpec{{Name: "type", Value: paperedit.StringValue("string")}}},
 		}}
-	case "page":
+	case "page", "document-preset":
 		if parent.Kind != paperlang.NodeDocument {
 			return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_PARENT", "page template must target the document", paperedit.ErrInvalidOperation)
 		}
@@ -70,11 +72,18 @@ func (w *Workspace) PaperInsertTemplate(request PaperInsertTemplateRequest) (Pap
 		if len(base) > 220 {
 			return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_ID", "template ID is too long for derived readable child IDs", ErrInvalidQuery)
 		}
-		node = paperedit.NodeSpec{Kind: paperlang.NodePage, ID: request.ID, Children: []paperedit.NodeSpec{
-			{Kind: paperlang.NodeBody, ID: "@" + base + "-body", Children: []paperedit.NodeSpec{
-				{Kind: paperlang.NodeParagraph, ID: "@" + base + "-copy", Properties: []paperedit.PropertySpec{{Name: "text", Value: paperedit.StringValue("New content")}}},
-			}},
-		}}
+		if request.Template == "document-preset" {
+			node, err = authoringDocumentPreset(request.Preset, request.ID)
+			if err != nil {
+				return PaperMutationResult{}, err
+			}
+		} else {
+			node = paperedit.NodeSpec{Kind: paperlang.NodePage, ID: request.ID, Children: []paperedit.NodeSpec{
+				{Kind: paperlang.NodeBody, ID: "@" + base + "-body", Children: []paperedit.NodeSpec{
+					{Kind: paperlang.NodeParagraph, ID: "@" + base + "-copy", Properties: []paperedit.PropertySpec{{Name: "text", Value: paperedit.StringValue("New content")}}},
+				}},
+			}}
+		}
 	case "paragraph":
 		node = paperedit.NodeSpec{Kind: paperlang.NodeParagraph, ID: request.ID, Properties: []paperedit.PropertySpec{{Name: "text", Value: paperedit.StringValue("New content")}}}
 	case "heading":
@@ -118,11 +127,206 @@ func (w *Workspace) PaperInsertTemplate(request PaperInsertTemplateRequest) (Pap
 			{Kind: paperlang.NodeHeading, ID: "@" + base + "-heading", Properties: []paperedit.PropertySpec{{Name: "text", Value: paperedit.StringValue("Section heading")}}},
 			{Kind: paperlang.NodeParagraph, ID: "@" + base + "-body", Properties: []paperedit.PropertySpec{{Name: "text", Value: paperedit.StringValue("New content")}}},
 		}}
+	case "image", "table", "canvas", "note-box", "metadata-grid", "signature-row", "qr-verification", "clause", "styled-container":
+		if parent.Kind == paperlang.NodeDocument || parent.Kind == paperlang.NodePage {
+			return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_PARENT", "flow templates require a region, body, row, or column", paperedit.ErrInvalidOperation)
+		}
+		node, err = authoringFlowTemplate(request.Template, request.ID)
+		if err != nil {
+			return PaperMutationResult{}, err
+		}
+	case "repeat", "loop":
+		if parent.Kind == paperlang.NodeDocument || parent.Kind == paperlang.NodePage {
+			return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_PARENT", "repeat and loop templates require a flow container", paperedit.ErrInvalidOperation)
+		}
+		node, err = authoringRepeaterTemplate(revision.parsed.AST, request.Template, request.ID, request.Path)
+		if err != nil {
+			return PaperMutationResult{}, err
+		}
+	case "header", "footer":
+		if parent.Kind != paperlang.NodePage {
+			return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_PARENT", "header and footer templates must target a page", paperedit.ErrInvalidOperation)
+		}
+		kind := paperlang.NodeHeader
+		if request.Template == "footer" {
+			kind = paperlang.NodeFooter
+		}
+		for _, member := range parent.Members {
+			if member.Node != nil && member.Node.Kind == kind {
+				return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE", request.Template+" already exists on this page", paperedit.ErrInvalidOperation)
+			}
+		}
+		base := strings.TrimPrefix(request.ID, "@")
+		node = paperedit.NodeSpec{Kind: kind, ID: request.ID, Children: []paperedit.NodeSpec{{Kind: paperlang.NodeParagraph, ID: "@" + base + "-copy", Properties: []paperedit.PropertySpec{{Name: "size", Value: paperedit.UnitValue(8, "pt")}, {Name: "text", Value: paperedit.StringValue(strings.ToUpper(request.Template) + " | Document title | Page")}}}}}
 	default:
-		return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE", "template must be schema, page, paragraph, heading, list, row, column, page-break, component, section, or import", ErrInvalidQuery)
+		return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE", "template is outside the closed authoring palette", ErrInvalidQuery)
 	}
 	return w.applyPaperMutation("insert_template", request.Guard, opened, revision,
 		[]string{request.Guard.Target}, []paperedit.Operation{paperedit.InsertNode{Parent: request.Guard.Target, Node: node}}, "INVALID_TEMPLATE_RESULT")
+}
+
+func authoringRepeaterTemplate(ast paperlang.AST, template, id, sourcePath string) (paperedit.NodeSpec, error) {
+	base := strings.TrimPrefix(id, "@")
+	paragraph := paperedit.NodeSpec{Kind: paperlang.NodeParagraph, ID: "@" + base + "-item", Properties: []paperedit.PropertySpec{{Name: "text", Value: paperedit.StringValue("Repeated item")}}}
+	if template == "loop" {
+		return paperedit.NodeSpec{Kind: paperlang.NodeLoop, ID: id, Properties: []paperedit.PropertySpec{
+			{Name: "from", Value: paperedit.NumberValue(1)}, {Name: "through", Value: paperedit.NumberValue(3)}, {Name: "step", Value: paperedit.NumberValue(1)}, {Name: "max-iterations", Value: paperedit.NumberValue(3)}, {Name: "instance-prefix", Value: paperedit.StringValue(base)},
+		}, Children: []paperedit.NodeSpec{paragraph}}, nil
+	}
+	sourcePath = strings.TrimSpace(sourcePath)
+	metadata := papercompile.ExtractSchemas(ast)
+	if !metadata.OK() {
+		return paperedit.NodeSpec{}, workspaceError("INVALID_TEMPLATE", "repeat requires valid compiler schema metadata", ErrInvalidSource)
+	}
+	var selected *papercompile.FieldDescriptor
+	for schemaIndex := range metadata.Schemas {
+		schema := &metadata.Schemas[schemaIndex]
+		prefix := schema.Name + "."
+		if !strings.HasPrefix(sourcePath, prefix) {
+			continue
+		}
+		parts := strings.Split(strings.TrimPrefix(sourcePath, prefix), ".")
+		fields := schema.Fields
+		for index, part := range parts {
+			selected = nil
+			for fieldIndex := range fields {
+				if fields[fieldIndex].Name == strings.TrimPrefix(part, "@") {
+					selected = &fields[fieldIndex]
+					break
+				}
+			}
+			if selected == nil || index < len(parts)-1 && selected.Kind != papercompile.SchemaObject {
+				selected = nil
+				break
+			}
+			fields = selected.Fields
+		}
+		break
+	}
+	if selected == nil || selected.Kind != papercompile.SchemaList || selected.MaxItems == 0 {
+		return paperedit.NodeSpec{}, workspaceError("INVALID_TEMPLATE", "repeat source must address one bounded schema list", ErrInvalidQuery)
+	}
+	if selected.ItemKind == papercompile.SchemaObject && len(selected.Fields) != 0 {
+		paragraph.Properties = append([]paperedit.PropertySpec{{Name: "bind", Value: paperedit.StringValue(selected.Fields[0].Name)}}, paragraph.Properties...)
+	}
+	return paperedit.NodeSpec{Kind: paperlang.NodeRepeat, ID: id, Properties: []paperedit.PropertySpec{
+		{Name: "source", Value: paperedit.StringValue(sourcePath)}, {Name: "instance-prefix", Value: paperedit.StringValue(base)}, {Name: "max-items", Value: paperedit.NumberValue(float64(selected.MaxItems))},
+	}, Children: []paperedit.NodeSpec{paragraph}}, nil
+}
+
+const authoringPixelDataURI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+
+func authoringFlowTemplate(template, id string) (paperedit.NodeSpec, error) {
+	base := strings.TrimPrefix(id, "@")
+	childID := func(suffix string) string { return "@" + base + "-" + suffix }
+	text := func(kind paperlang.NodeKind, suffix, value string) paperedit.NodeSpec {
+		return paperedit.NodeSpec{Kind: kind, ID: childID(suffix), Properties: []paperedit.PropertySpec{{Name: "text", Value: paperedit.StringValue(value)}}}
+	}
+	cell := func(suffix, value string, header bool) paperedit.NodeSpec {
+		properties := []paperedit.PropertySpec{{Name: "text", Value: paperedit.StringValue(value)}, {Name: "padding", Value: paperedit.UnitValue(6, "pt")}, {Name: "border-width", Value: paperedit.UnitValue(0.5, "pt")}, {Name: "border-color", Value: paperedit.StringValue("#CBD5E1")}}
+		if header {
+			properties = append(properties, paperedit.PropertySpec{Name: "bold", Value: paperedit.BoolValue(true)}, paperedit.PropertySpec{Name: "background", Value: paperedit.StringValue("#E8F1F5")})
+		}
+		return paperedit.NodeSpec{Kind: paperlang.NodeTableCell, ID: childID(suffix), Properties: properties}
+	}
+	switch template {
+	case "image":
+		return paperedit.NodeSpec{Kind: paperlang.NodeImage, ID: id, Properties: []paperedit.PropertySpec{
+			{Name: "source", Value: paperedit.StringValue(authoringPixelDataURI)}, {Name: "width", Value: paperedit.UnitValue(140, "pt")}, {Name: "height", Value: paperedit.UnitValue(84, "pt")}, {Name: "fit", Value: paperedit.StringValue("contain")}, {Name: "alt", Value: paperedit.StringValue("Replace with a descriptive image")},
+		}}, nil
+	case "table", "metadata-grid", "signature-row":
+		rows := []paperedit.NodeSpec{}
+		switch template {
+		case "table":
+			rows = []paperedit.NodeSpec{
+				{Kind: paperlang.NodeTableHeader, ID: childID("head"), Children: []paperedit.NodeSpec{{Kind: paperlang.NodeTableRow, ID: childID("head-row"), Children: []paperedit.NodeSpec{cell("head-one", "Item", true), cell("head-two", "Details", true)}}}},
+				{Kind: paperlang.NodeTableRow, ID: childID("row-one"), Children: []paperedit.NodeSpec{cell("one-a", "First item", false), cell("one-b", "Add details", false)}},
+				{Kind: paperlang.NodeTableRow, ID: childID("row-two"), Children: []paperedit.NodeSpec{cell("two-a", "Second item", false), cell("two-b", "Add details", false)}},
+			}
+		case "metadata-grid":
+			rows = []paperedit.NodeSpec{
+				{Kind: paperlang.NodeTableRow, ID: childID("row-one"), Children: []paperedit.NodeSpec{cell("label-one", "REFERENCE", true), cell("value-one", "DOC-0001", false)}},
+				{Kind: paperlang.NodeTableRow, ID: childID("row-two"), Children: []paperedit.NodeSpec{cell("label-two", "ISSUED", true), cell("value-two", "Add date and owner", false)}},
+			}
+		case "signature-row":
+			rows = []paperedit.NodeSpec{{Kind: paperlang.NodeTableRow, ID: childID("row"), Children: []paperedit.NodeSpec{cell("signer", "____________________________\nAuthorized signature", false), cell("date", "____________________________\nDate", false)}}}
+		}
+		return paperedit.NodeSpec{Kind: paperlang.NodeTable, ID: id, Properties: []paperedit.PropertySpec{{Name: "split", Value: paperedit.StringValue("rows")}}, Children: rows}, nil
+	case "canvas":
+		return paperedit.NodeSpec{Kind: paperlang.NodeCanvas, ID: id, Properties: []paperedit.PropertySpec{{Name: "width", Value: paperedit.UnitValue(160, "pt")}, {Name: "height", Value: paperedit.UnitValue(100, "pt")}}, Children: []paperedit.NodeSpec{
+			{Kind: paperlang.NodeAnchor, ID: childID("panel"), Properties: []paperedit.PropertySpec{{Name: "width", Value: paperedit.UnitValue(120, "pt")}, {Name: "height", Value: paperedit.UnitValue(64, "pt")}, {Name: "left", Value: paperedit.StringValue("canvas.left + 12pt")}, {Name: "top", Value: paperedit.StringValue("canvas.top + 12pt")}, {Name: "background", Value: paperedit.StringValue("#DCEAF7")}, {Name: "alt", Value: paperedit.StringValue("Positioned design panel")}}},
+		}}, nil
+	case "note-box", "styled-container":
+		label := "NOTE\nAdd important supporting information here."
+		if template == "styled-container" {
+			label = "Styled content\nUse the inspector to adjust color, border, spacing, and typography."
+		}
+		return paperedit.NodeSpec{Kind: paperlang.NodeParagraph, ID: id, Properties: []paperedit.PropertySpec{{Name: "text", Value: paperedit.StringValue(label)}, {Name: "padding", Value: paperedit.UnitValue(12, "pt")}, {Name: "background", Value: paperedit.StringValue("#F1F5F9")}, {Name: "border-left-width", Value: paperedit.UnitValue(3, "pt")}, {Name: "border-color", Value: paperedit.StringValue("#2C6E7F")}}}, nil
+	case "qr-verification":
+		return paperedit.NodeSpec{Kind: paperlang.NodeTable, ID: id, Children: []paperedit.NodeSpec{
+			{Kind: paperlang.NodeTableRow, ID: childID("row"), Children: []paperedit.NodeSpec{
+				{Kind: paperlang.NodeTableCell, ID: childID("qr"), Children: []paperedit.NodeSpec{{Kind: paperlang.NodeImage, ID: childID("image"), Properties: []paperedit.PropertySpec{{Name: "source", Value: paperedit.StringValue(authoringPixelDataURI)}, {Name: "width", Value: paperedit.UnitValue(56, "pt")}, {Name: "height", Value: paperedit.UnitValue(56, "pt")}, {Name: "alt", Value: paperedit.StringValue("Replace with verification QR code")}}}}},
+				cell("copy", "VERIFY THIS DOCUMENT\nReplace the image with a generated QR resource and add the verification URL.", false),
+			}},
+		}}, nil
+	case "clause":
+		return paperedit.NodeSpec{Kind: paperlang.NodeColumn, ID: id, Properties: []paperedit.PropertySpec{{Name: "gap", Value: paperedit.UnitValue(4, "pt")}}, Children: []paperedit.NodeSpec{text(paperlang.NodeHeading, "title", "1. Clause title"), text(paperlang.NodeParagraph, "copy", "Write the complete clause in clear, reviewable language.")}}, nil
+	default:
+		return paperedit.NodeSpec{}, workspaceError("INVALID_TEMPLATE", "unknown flow template", ErrInvalidQuery)
+	}
+}
+
+func authoringDocumentPreset(preset, id string) (paperedit.NodeSpec, error) {
+	if preset == "" {
+		preset = "blank"
+	}
+	base := strings.TrimPrefix(id, "@")
+	flow, err := authoringFlowTemplate("metadata-grid", "@"+base+"-metadata")
+	if err != nil {
+		return paperedit.NodeSpec{}, err
+	}
+	title, subtitle := "Untitled document", "Start writing with a clean, production-ready structure."
+	switch preset {
+	case "blank":
+	case "letter":
+		title, subtitle = "Business Letter", "Recipient name\nOrganization\nAddress\n\nDear recipient,"
+	case "prescription":
+		title, subtitle = "Prescription", "Patient and prescriber details"
+	case "medical-report":
+		title, subtitle = "Clinical Report", "Patient | encounter | responsible clinician"
+	case "invoice":
+		title, subtitle = "Invoice", "Bill to | invoice number | issue date"
+	case "contract":
+		title, subtitle = "Agreement", "Parties | effective date | reference"
+	case "certificate":
+		title, subtitle = "Certificate", "This certifies that"
+	case "table-report":
+		title, subtitle = "Tabular Report", "Reporting period | owner | generated date"
+	default:
+		return paperedit.NodeSpec{}, workspaceError("INVALID_TEMPLATE", "unknown document preset", ErrInvalidQuery)
+	}
+	children := []paperedit.NodeSpec{
+		{Kind: paperlang.NodeHeading, ID: "@" + base + "-title", Properties: []paperedit.PropertySpec{{Name: "level", Value: paperedit.NumberValue(1)}, {Name: "size", Value: paperedit.UnitValue(28, "pt")}, {Name: "color", Value: paperedit.StringValue("#163A46")}, {Name: "text", Value: paperedit.StringValue(title)}}},
+		{Kind: paperlang.NodeParagraph, ID: "@" + base + "-subtitle", Properties: []paperedit.PropertySpec{{Name: "color", Value: paperedit.StringValue("#475569")}, {Name: "text", Value: paperedit.StringValue(subtitle)}}},
+		flow,
+	}
+	if preset == "prescription" {
+		medications, _ := authoringFlowTemplate("table", "@"+base+"-medications")
+		children = append(children, paperedit.NodeSpec{Kind: paperlang.NodeHeading, ID: "@" + base + "-medications-title", Properties: []paperedit.PropertySpec{{Name: "level", Value: paperedit.NumberValue(2)}, {Name: "text", Value: paperedit.StringValue("Medication plan")}}}, medications)
+	} else if preset == "invoice" || preset == "table-report" {
+		table, _ := authoringFlowTemplate("table", "@"+base+"-items")
+		children = append(children, table)
+	} else if preset == "contract" {
+		clause, _ := authoringFlowTemplate("clause", "@"+base+"-clause")
+		children = append(children, clause)
+	} else {
+		children = append(children, paperedit.NodeSpec{Kind: paperlang.NodeParagraph, ID: "@" + base + "-content", Properties: []paperedit.PropertySpec{{Name: "text", Value: paperedit.StringValue("Add document content here.")}}})
+	}
+	return paperedit.NodeSpec{Kind: paperlang.NodePage, ID: id, Properties: []paperedit.PropertySpec{{Name: "width", Value: paperedit.UnitValue(595.275590551, "pt")}, {Name: "height", Value: paperedit.UnitValue(841.88976378, "pt")}, {Name: "margin", Value: paperedit.UnitValue(36, "pt")}}, Children: []paperedit.NodeSpec{
+		{Kind: paperlang.NodeHeader, ID: "@" + base + "-header", Children: []paperedit.NodeSpec{{Kind: paperlang.NodeParagraph, ID: "@" + base + "-header-copy", Properties: []paperedit.PropertySpec{{Name: "size", Value: paperedit.UnitValue(8, "pt")}, {Name: "bold", Value: paperedit.BoolValue(true)}, {Name: "color", Value: paperedit.StringValue("#2C6E7F")}, {Name: "text", Value: paperedit.StringValue("YOUR ORGANIZATION  |  DOCUMENT")}}}}},
+		{Kind: paperlang.NodeFooter, ID: "@" + base + "-footer", Children: []paperedit.NodeSpec{{Kind: paperlang.NodeParagraph, ID: "@" + base + "-footer-copy", Properties: []paperedit.PropertySpec{{Name: "size", Value: paperedit.UnitValue(8, "pt")}, {Name: "color", Value: paperedit.StringValue("#64748B")}, {Name: "text", Value: paperedit.StringValue("Confidential | Replace with document footer")}}}}},
+		{Kind: paperlang.NodeBody, ID: "@" + base + "-body", Children: children},
+	}}, nil
 }
 
 func safeAuthoringImportPath(value string) bool {

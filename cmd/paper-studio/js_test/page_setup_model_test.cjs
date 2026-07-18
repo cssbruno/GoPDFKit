@@ -16,6 +16,10 @@ test('recognizes page presets and resolves orientation', () => {
   assert.equal(current.preset, 'A4');
   assert.equal(current.orientation, 'portrait');
   assert.deepEqual(model.resolvedPoints({preset: 'A3', orientation: 'landscape'}), {width: model.presets.A3[1], height: model.presets.A3[0]});
+  for (const preset of ['A5','A6','B5','Executive','Tabloid','Ledger','DL Envelope','C5 Envelope','4×6 Label']) {
+    const resolved = model.resolvedPoints({preset, orientation: 'portrait'});
+    assert.ok(resolved.width > 0 && resolved.height >= resolved.width, preset);
+  }
 });
 
 test('builds exact preset and custom page-size payloads', () => {

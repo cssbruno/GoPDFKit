@@ -385,7 +385,7 @@ func applyStudioSemanticMutation(workspace *paperd.Workspace, guard paperd.Paper
 		})
 	}
 	if request.Operation == "template" {
-		return workspace.PaperInsertTemplate(paperd.PaperInsertTemplateRequest{Guard: guard, Template: request.Template, ID: request.ID, Component: request.Component})
+		return workspace.PaperInsertTemplate(paperd.PaperInsertTemplateRequest{Guard: guard, Template: request.Template, ID: request.ID, Component: request.Component, Preset: request.Preset, Path: request.Path})
 	}
 	if request.Operation == "import" {
 		return workspace.PaperInsertTemplate(paperd.PaperInsertTemplateRequest{Guard: guard, Template: "import", ImportPath: request.ImportPath})

@@ -1059,13 +1059,15 @@ func editorAllowedChild(parent, child paperlang.NodeKind) bool {
 	case paperlang.NodeDocument:
 		return child == paperlang.NodePage || child == paperlang.NodeComponent || child == paperlang.NodeSchema || child == paperlang.NodeScenario || child == paperlang.NodeTheme
 	case paperlang.NodePage:
-		return child == paperlang.NodeBody
-	case paperlang.NodeBody:
+		return child == paperlang.NodeBody || child == paperlang.NodeHeader || child == paperlang.NodeFooter
+	case paperlang.NodeBody, paperlang.NodeHeader, paperlang.NodeFooter:
 		return child == paperlang.NodeHeading || child == paperlang.NodeParagraph || child == paperlang.NodeList ||
 			child == paperlang.NodePageBreak || child == paperlang.NodeText || child == paperlang.NodeRow ||
-			child == paperlang.NodeColumn || child == paperlang.NodeUse || child == paperlang.NodeRepeat
+			child == paperlang.NodeColumn || child == paperlang.NodeImage || child == paperlang.NodeTable ||
+			child == paperlang.NodeCanvas || child == paperlang.NodeUse || child == paperlang.NodeRepeat || child == paperlang.NodeLoop
 	case paperlang.NodeRow, paperlang.NodeColumn:
-		return child == paperlang.NodeHeading || child == paperlang.NodeParagraph || child == paperlang.NodeUse
+		return child == paperlang.NodeHeading || child == paperlang.NodeParagraph || child == paperlang.NodeList ||
+			child == paperlang.NodeImage || child == paperlang.NodeTable || child == paperlang.NodeCanvas || child == paperlang.NodeUse
 	case paperlang.NodeList:
 		return child == paperlang.NodeItem
 	case paperlang.NodeItem:
@@ -1080,6 +1082,19 @@ func editorAllowedChild(parent, child paperlang.NodeKind) bool {
 		return child == paperlang.NodeFill
 	case paperlang.NodeRepeat:
 		return editorComponentBodyKind(child) || child == paperlang.NodeRepeat
+	case paperlang.NodeLoop:
+		return editorComponentBodyKind(child)
+	case paperlang.NodeCanvas:
+		return child == paperlang.NodeAnchor
+	case paperlang.NodeTable:
+		return child == paperlang.NodeTableTrack || child == paperlang.NodeTableHeader || child == paperlang.NodeTableRow
+	case paperlang.NodeTableHeader:
+		return child == paperlang.NodeTableRow
+	case paperlang.NodeTableRow:
+		return child == paperlang.NodeTableCell
+	case paperlang.NodeTableCell:
+		return child == paperlang.NodeHeading || child == paperlang.NodeParagraph || child == paperlang.NodeList ||
+			child == paperlang.NodeImage || child == paperlang.NodeTable || child == paperlang.NodeRow || child == paperlang.NodeColumn || child == paperlang.NodeUse
 	case paperlang.NodeScenario, paperlang.NodeObject, paperlang.NodeKeyedList:
 		return child == paperlang.NodeValue || child == paperlang.NodeObject || child == paperlang.NodeKeyedList
 	case paperlang.NodeSchema:
@@ -1094,7 +1109,8 @@ func editorAllowedChild(parent, child paperlang.NodeKind) bool {
 func editorComponentBodyKind(kind paperlang.NodeKind) bool {
 	return kind == paperlang.NodeHeading || kind == paperlang.NodeParagraph || kind == paperlang.NodeList ||
 		kind == paperlang.NodePageBreak || kind == paperlang.NodeText || kind == paperlang.NodeRow ||
-		kind == paperlang.NodeColumn || kind == paperlang.NodeUse
+		kind == paperlang.NodeColumn || kind == paperlang.NodeImage || kind == paperlang.NodeTable ||
+		kind == paperlang.NodeCanvas || kind == paperlang.NodeUse
 }
 
 func targetNode(index sourceIndex, target string) (*paperlang.Node, error) {
@@ -1211,11 +1227,13 @@ func renderNode(node NodeSpec, indent int, newline string) (string, error) {
 
 func validNodeKind(kind paperlang.NodeKind) bool {
 	switch kind {
-	case paperlang.NodeDocument, paperlang.NodePage, paperlang.NodeBody,
+	case paperlang.NodeDocument, paperlang.NodePage, paperlang.NodeBody, paperlang.NodeHeader, paperlang.NodeFooter,
+		paperlang.NodeCanvas, paperlang.NodeAnchor,
 		paperlang.NodeHeading, paperlang.NodeText, paperlang.NodeParagraph,
-		paperlang.NodeList, paperlang.NodeItem, paperlang.NodePageBreak,
+		paperlang.NodeList, paperlang.NodeItem, paperlang.NodePageBreak, paperlang.NodeImage,
+		paperlang.NodeTable, paperlang.NodeTableTrack, paperlang.NodeTableHeader, paperlang.NodeTableRow, paperlang.NodeTableCell,
 		paperlang.NodeRow, paperlang.NodeColumn, paperlang.NodeComponent,
-		paperlang.NodeSlot, paperlang.NodeUse, paperlang.NodeFill, paperlang.NodeRepeat,
+		paperlang.NodeSlot, paperlang.NodeUse, paperlang.NodeFill, paperlang.NodeRepeat, paperlang.NodeLoop,
 		paperlang.NodeSchema, paperlang.NodeField, paperlang.NodeScenario, paperlang.NodeValue, paperlang.NodeObject, paperlang.NodeKeyedList:
 		return true
 	default:

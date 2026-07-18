@@ -44,17 +44,17 @@ Raw evidence hashes:
 | candidate benchmark | `9f3625e5d169bd15ee8a51184118feb88503be739d4e23741207d7e057e701e6` |
 | legacy allocation profile | `b0200221271fb02faeb5c90751abb5ab5cbf2e2a2ce32593640deddd0837a410` |
 | candidate allocation profile | `657f0bb1f1b52047ceb63dd7f6ee8b35ed2e4c4460846ffd59d29e7f1f1b279a` |
-| passing WASM latency report | `94db71747077177fe6dd553fc2f5dfff2a1491210d64e9fc860abc4b6ecf7802` |
+| passing WASM latency report | `c87e6da658706e2ae3770d17192125ef4eb8e9a93fa9cf6d49fda3616e8f7f` |
 
 The final ten-sample Paper Studio browser/WASM budget also passes on renderer
 `layoutengine/go-display-raster@5`. The candidate serves one deterministic
 gzip module, initializes and paints in a Worker, transfers the resulting
-`ImageBitmap`, debounces zoom rendering, and retains at most six decoded page
-bitmaps. Cold workspace is 47.370 ms, WASM initialization is 94.707 ms, first
-visible page is 90.186 ms, and warm visible-update p95 is 33.583 ms against the
-100 ms budget. That final p95 is 61.3% below the earlier validated 86.744 ms
-candidate measurement. Change notification is 254.237 ms and incremental
-workspace refresh is 1.874 ms. Two attempted shared paint-state caches had
+`ImageBitmap`, debounces zoom rendering, uses device-pixel-ratio-aware fit-page
+and fit-width projection, and retains at most six decoded page bitmaps. Cold
+workspace is 24.264 ms, WASM initialization is 60.924 ms, first visible page is
+59.066 ms, and warm visible-update p95 is 17.066 ms against the 100 ms budget.
+Change notification is 253.807 ms and incremental workspace refresh is 0.992
+ms. Two attempted shared paint-state caches had
 produced reproducible 109–121 ms p95 failures and remain removed; the native
 zlib pool and digest-validated display-resource cache are retained. The
 generated report is `artifacts/paper-studio-wasm-latency.json`.

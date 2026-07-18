@@ -145,8 +145,13 @@
       <div class="footer-page-controls">
         <span id="page-label" class="page-label">No page</span>
         <div class="zoom-control" role="group" aria-label="Canvas zoom">
+          <select id="zoom-mode" aria-label="Zoom mode">
+            <option value="fit-page">Fit page</option>
+            <option value="fit-width">Fit width</option>
+            <option value="custom">Custom</option>
+          </select>
           <button id="zoom-out" aria-label="Zoom out">−</button>
-          <input id="zoom-value" type="number" min="25" max="400" step="5" value="100" aria-label="Zoom percent">
+          <input id="zoom-value" type="number" min="10" max="400" step="5" value="100" aria-label="Zoom percent">
           <button id="zoom-in" aria-label="Zoom in">+</button>
         </div>
       </div>
@@ -169,6 +174,7 @@
   <script src="/page-setup-model.js" defer></script>
   <script src="/issue-model.js" defer></script>
   <script src="/wasm-renderer.js" defer></script>
+  <script src="/viewport-model.js" defer></script>
   <script src="/studio.js" defer></script>
 </body>
 </html>

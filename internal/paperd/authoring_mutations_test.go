@@ -6,6 +6,8 @@ package paperd
 import (
 	"strings"
 	"testing"
+
+	"github.com/cssbruno/gopdfkit/document"
 )
 
 const authoringMutationFixture = "document @report:\n" +
@@ -41,15 +43,18 @@ func TestPaperInsertTemplateUsesOneJournalPatchAndPreservesTrivia(t *testing.T) 
 }
 
 func TestPaperInsertTemplatePaletteCoversTypedPrimitivesAndComponents(t *testing.T) {
-	for _, template := range []string{"paragraph", "heading", "list", "row", "column", "page-break"} {
+	for _, template := range []string{"paragraph", "heading", "list", "row", "column", "page-break", "image", "table", "canvas", "note-box", "metadata-grid", "signature-row", "qr-verification", "clause", "styled-container"} {
 		workspace := mustWorkspace(t, Limits{})
 		guard, _, _ := mutationGuard(t, workspace, authoringMutationFixture, "@body", "palette-"+template, CapabilityEdit)
 		result, err := workspace.PaperInsertTemplate(PaperInsertTemplateRequest{Guard: guard, Template: template, ID: "@new-" + template})
 		if err != nil {
-			t.Fatalf("template %s: %v", template, err)
+			t.Fatalf("template %s: %v result=%#v", template, err, result)
 		}
 		if !result.Edit.Applied || !result.Semantic.AfterCompileOK || len(result.Edit.Diff.Patches) != 1 {
 			t.Fatalf("template %s result = %#v", template, result)
+		}
+		if plan, planned, planErr := document.PlanPaper("palette.paper", result.Revision.Source); planErr != nil || !planned.OK() || plan.PageCount() == 0 {
+			t.Fatalf("template %s did not render: pages=%d result=%#v err=%v", template, plan.PageCount(), planned, planErr)
 		}
 	}
 
@@ -73,6 +78,61 @@ func TestPaperInsertTemplatePaletteCoversTypedPrimitivesAndComponents(t *testing
 	schemaResult, err := schemaWorkspace.PaperInsertTemplate(PaperInsertTemplateRequest{Guard: schemaGuard, Template: "schema", ID: "@receipt"})
 	if err != nil || !schemaResult.Semantic.AfterCompileOK || !strings.Contains(schemaResult.Revision.Source, "schema @receipt:") || !strings.Contains(schemaResult.Revision.Source, "field @receipt-value:") {
 		t.Fatalf("schema template = %v result=%#v\nsource=%s", err, schemaResult, schemaResult.Revision.Source)
+	}
+}
+
+func TestPaperInsertTemplateCreatesRegionsAndCompleteDocumentPresets(t *testing.T) {
+	for _, template := range []string{"header", "footer"} {
+		source := "document @report:\n  page @sheet:\n    body @body:\n      paragraph @copy:\n        text: \"Body\"\n"
+		workspace := mustWorkspace(t, Limits{})
+		guard, _, _ := mutationGuard(t, workspace, source, "@sheet", "region-"+template, CapabilityEdit)
+		result, err := workspace.PaperInsertTemplate(PaperInsertTemplateRequest{Guard: guard, Template: template, ID: "@running-" + template})
+		if err != nil || !result.Semantic.AfterCompileOK || !strings.Contains(result.Revision.Source, template+" @running-"+template+":") {
+			t.Fatalf("region %s = %v result=%#v\n%s", template, err, result, result.Revision.Source)
+		}
+	}
+	for _, preset := range []string{"blank", "letter", "prescription", "medical-report", "invoice", "contract", "certificate", "table-report"} {
+		workspace := mustWorkspace(t, Limits{})
+		bootstrap := "document @report:\n  component @placeholder:\n    paragraph:\n      text: \"Placeholder\"\n"
+		guard, _, _ := mutationGuard(t, workspace, bootstrap, "@report", "preset-"+preset, CapabilityEdit)
+		result, err := workspace.PaperInsertTemplate(PaperInsertTemplateRequest{Guard: guard, Template: "document-preset", Preset: preset, ID: "@sheet"})
+		if err != nil || !result.Semantic.AfterCompileOK || !strings.Contains(result.Revision.Source, "header @sheet-header:") || !strings.Contains(result.Revision.Source, "footer @sheet-footer:") || !strings.Contains(result.Revision.Source, "body @sheet-body:") {
+			t.Fatalf("document preset %s = %v result=%#v\n%s", preset, err, result, result.Revision.Source)
+		}
+		if plan, planned, planErr := document.PlanPaper("preset.paper", result.Revision.Source); planErr != nil || !planned.OK() || plan.PageCount() == 0 {
+			t.Fatalf("document preset %s did not render: pages=%d result=%#v err=%v", preset, plan.PageCount(), planned, planErr)
+		}
+	}
+}
+
+func TestPaperInsertTemplateCreatesBoundedRepeatAndLoop(t *testing.T) {
+	source := "document @report:\n" +
+		"  schema @invoice:\n" +
+		"    field @items:\n" +
+		"      type: \"list\"\n" +
+		"      item-type: \"object\"\n" +
+		"      max-items: 3\n" +
+		"      field @name:\n" +
+		"        type: \"string\"\n" +
+		"  scenario @preview:\n" +
+		"    keyed-list @items:\n" +
+		"      object @first:\n" +
+		"        value @name: \"Alpha\"\n" +
+		"  page @sheet:\n" +
+		"    body @body:\n" +
+		"      paragraph @copy:\n" +
+		"        text: \"Body\"\n"
+	for _, request := range []PaperInsertTemplateRequest{{Template: "repeat", ID: "@lines", Path: "@invoice.items"}, {Template: "loop", ID: "@copies"}} {
+		workspace := mustWorkspace(t, Limits{})
+		guard, _, _ := mutationGuard(t, workspace, source, "@body", "repeater-"+request.Template, CapabilityEdit)
+		request.Guard = guard
+		result, err := workspace.PaperInsertTemplate(request)
+		if err != nil || !result.Semantic.AfterCompileOK || !strings.Contains(result.Revision.Source, request.Template+" "+request.ID+":") {
+			t.Fatalf("%s template = %v result=%#v\n%s", request.Template, err, result, result.Revision.Source)
+		}
+		if plan, planned, planErr := document.PlanPaperScenario("repeat.paper", result.Revision.Source, "@preview"); planErr != nil || !planned.OK() || plan.PageCount() == 0 {
+			t.Fatalf("%s template did not render: pages=%d result=%#v err=%v", request.Template, plan.PageCount(), planned, planErr)
+		}
 	}
 }
 

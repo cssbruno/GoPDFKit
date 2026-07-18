@@ -89,6 +89,7 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		!bytes.Contains(response.Body, []byte(`id="zoom-out" aria-label="Zoom out"`)) ||
 		bytes.Contains(response.Body, []byte(`src="/wasm_exec.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/wasm-renderer.js"`)) ||
+		!bytes.Contains(response.Body, []byte(`src="/viewport-model.js"`)) ||
 		bytes.Contains(response.Body, []byte(`id="preview-status"`)) ||
 		bytes.Contains(response.Body, []byte(`class="canvas-toolbar"`)) ||
 		bytes.Contains(response.Body, []byte(`status-dot`)) ||
@@ -125,6 +126,8 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		!bytes.Contains(javascript.Body, []byte("visualMutationsLocked")) ||
 		!bytes.Contains(javascript.Body, []byte("previewRevisionLocked")) ||
 		!bytes.Contains(javascript.Body, []byte("loadWASMPage")) ||
+		!bytes.Contains(javascript.Body, []byte("PaperStudioViewportModel.fitZoom")) ||
+		!bytes.Contains(javascript.Body, []byte("window.devicePixelRatio")) ||
 		!bytes.Contains(javascript.Body, []byte("paintWASMCanvas")) ||
 		!bytes.Contains(javascript.Body, []byte("PaperStudioSyntaxModel.highlight")) ||
 		!bytes.Contains(javascript.Body, []byte("PaperStudioIssueModel.sourceAnnotations")) ||

@@ -15,3 +15,20 @@ document @report:
     body @body:
       paragraph @copy:
         text: "Body content"
+      table @browser-verification:
+        table-track @browser-verification-qr-track:
+          width: 72pt
+        table-track @browser-verification-verification-track:
+          width: 368pt
+        table-row @browser-verification-row:
+          cell @browser-verification-qr:
+            image @browser-verification-image:
+              source: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+              width: 56pt
+              height: 56pt
+              alt: "Replace with verification QR code"
+          cell @browser-verification-copy:
+            text: "VERIFY THIS DOCUMENT\nReplace the image with a generated QR resource and add the verification URL."
+            padding: 6pt
+            border-width: 0.5pt
+            border-color: "#CBD5E1"
