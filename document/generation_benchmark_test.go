@@ -669,11 +669,16 @@ func BenchmarkGenerationHTMLDataImageHeavy(b *testing.B) {
 }
 
 func BenchmarkGenerationHTMLLargeTableCompiled(b *testing.B) {
-	benchmarkGeneratedPDF(b, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkLargeTableHTML(600, 5)))
+	// Keep the accepted unified cohort below the bounded semantic-state limit
+	// while still exercising a multi-page, content-sized table.
+	benchmarkGeneratedPDF(b, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkLargeTableHTML(120, 5)))
 }
 
 func BenchmarkGenerationHTMLWideTableCompiled(b *testing.B) {
-	benchmarkGeneratedPDF(b, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkWideTableHTML(32, 24)))
+	// Twenty-four authored columns cannot fit the default page body without
+	// violating the planner's minimum-track contract; this remains a wide
+	// accepted cohort at twelve compact columns.
+	benchmarkGeneratedPDF(b, benchmarkGenerationCompiledHTMLBuilder(b, benchmarkWideTableHTML(24, 12)))
 }
 
 func BenchmarkGenerationHTMLSVGHeavyCompiled(b *testing.B) {

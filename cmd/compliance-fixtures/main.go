@@ -172,6 +172,10 @@ func generatePDFUAArlingtonFoundation(path, root, fontPath, boldFontPath string)
 		AltText:   "GoPDFKit logo",
 	}, 0, "")
 	pdf.Ln(18)
+	// The unified HTML cohort uses canonical core-font metrics. Keep the
+	// explicitly embedded DejaVu font for the direct PDF/UA content above,
+	// then select Helvetica for the HTML lowering adapter.
+	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
 	html.Write(6, complianceTaggedHTMLFragment())
 	pdf.Line(10, pdf.GetY()+4, 80, pdf.GetY()+4)
@@ -240,6 +244,7 @@ func generateSignedComplianceFoundation(path, root, fontPath, boldFontPath strin
 		AltText:   "GoPDFKit logo",
 	}, 0, "")
 	pdf.Ln(16)
+	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
 	html.Write(6, complianceTaggedHTMLFragment())
 	pdf.Line(10, pdf.GetY()+4, 80, pdf.GetY()+4)
@@ -287,7 +292,7 @@ func complianceSigner() (*x509.Certificate, crypto.Signer, error) {
 }
 
 func complianceTaggedHTMLFragment() string {
-	return `<ul><li>Tagged list label and body</li><li>Second semantic item</li></ul><table border="1"><caption>Tagged table caption</caption><tr><th>Name</th><th>Status</th><th>Detail</th></tr><tr><th scope="row" rowspan="2">Structure tree</th><td colspan="2"><p>Generated</p><div>Mixed block content</div><ul><li>Generated<ul><li>Nested table-cell list</li></ul></li></ul><table border="1"><tr><td>Nested table cell</td></tr></table></td></tr><tr><td>Parent tree</td><td>OK</td></tr></table>`
+	return `<ul><li>Tagged list label and body</li><li>Second semantic item</li></ul><table><caption>Tagged table caption</caption><tr><th>Name</th><th>Status</th><th>Detail</th></tr><tr><th rowspan="2">Structure tree</th><td colspan="2"><p>Generated</p><div>Mixed block content</div><ul><li>Generated<ul><li>Nested table-cell list</li></ul></li></ul><table><tr><td>Nested table cell</td></tr></table></td></tr><tr><td>Parent tree</td><td>OK</td></tr></table>`
 }
 
 func baseDocument(fontPath, boldFontPath string) *document.Document {

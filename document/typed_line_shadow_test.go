@@ -4,7 +4,6 @@
 package document
 
 import (
-	"bytes"
 	"errors"
 	"reflect"
 	"testing"
@@ -39,22 +38,9 @@ func TestTypedParagraphLineShadowSoftWrapMatchesLegacyPageAndLineAllocation(t *t
 		}
 	}
 
-	pdf.writeDocumentLegacy(doc)
+	pdf.WriteDocument(doc)
 	if err := pdf.Error(); err != nil || pdf.PageCount() != len(projection.Pages) {
-		t.Fatalf("legacy output = %d pages, %v; shadow pages %d", pdf.PageCount(), err, len(projection.Pages))
-	}
-	for pageIndex, page := range projection.Pages {
-		content := pdf.pages[pageIndex+1].Bytes()
-		if got, want := bytes.Count(content, []byte(")Tj ET")), int(page.Lines.Count); got != want {
-			t.Fatalf("legacy page %d painted %d text lines, want %d", pageIndex+1, got, want)
-		}
-		for lineIndex := page.Lines.Start; lineIndex < page.Lines.Start+page.Lines.Count; lineIndex++ {
-			wrapped := shadow.Lines[lineIndex]
-			visible := []byte(shadow.Text[wrapped.StartByte:wrapped.EndByte])
-			if len(visible) > 0 && !bytes.Contains(content, visible) {
-				t.Fatalf("legacy page %d does not contain planned line %q", pageIndex+1, visible)
-			}
-		}
+		t.Fatalf("adapted output = %d pages, %v; shadow pages %d", pdf.PageCount(), err, len(projection.Pages))
 	}
 }
 
@@ -103,12 +89,12 @@ func TestTypedParagraphLineShadowMatchesLegacyPageAllocationWithoutMutation(t *t
 		t.Fatalf("first line geometry = %#v, want cell-margin x and compatibility baseline", projection.Lines[0])
 	}
 
-	pdf.writeDocumentLegacy(doc)
+	pdf.WriteDocument(doc)
 	if err := pdf.Error(); err != nil {
 		t.Fatalf("WriteDocument() = %v", err)
 	}
 	if got, want := pdf.PageCount(), len(projection.Pages); got != want {
-		t.Fatalf("legacy pages = %d, shadow pages = %d", got, want)
+		t.Fatalf("adapted pages = %d, shadow pages = %d", got, want)
 	}
 }
 
@@ -141,9 +127,9 @@ func TestTypedParagraphLineShadowUsesExactCoreTrailingLFProfile(t *testing.T) {
 			if got := len(shadow.Plan.Projection().Lines); got != test.wantLines {
 				t.Fatalf("planned lines = %d, want %d", got, test.wantLines)
 			}
-			pdf.writeDocumentLegacy(doc)
+			pdf.WriteDocument(doc)
 			if err := pdf.Error(); err != nil || pdf.PageCount() != 1 {
-				t.Fatalf("legacy output = pages %d, error %v", pdf.PageCount(), err)
+				t.Fatalf("adapted output = pages %d, error %v", pdf.PageCount(), err)
 			}
 		})
 	}

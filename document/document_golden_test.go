@@ -19,14 +19,14 @@ func TestWriteDocumentGoldenPDFs(t *testing.T) {
 		doc  *layout.LayoutDocument
 		want string
 	}{
-		{name: "structured-report", doc: goldenStructuredReportDocument(), want: "9e08fd0a467a7fab1658e1df34833c220788df9811b5fa84d835151e9ac4c780"},
-		{name: "tabular-report", doc: goldenTabularReportDocument(), want: "af0d2bb5891e6521151bb45bed4cd92fab359bad7fa23a8090e41839d314c142"},
+		{name: "structured-report", doc: goldenStructuredReportDocument(), want: "078515a6d848b5da43e9e09cba1e0bff6d054d83ac399b7b2983ea0994490111"},
+		{name: "tabular-report", doc: goldenTabularReportDocument(), want: "514d2defcb3bc1f60cb73469e5172766ea2191c82d5a21fb937dcf5381e7036f"},
 		{name: "transactional", doc: goldenTransactionalDocument(), want: "d9ca94a76c06a2bde1bf0475b7b3a856636d3e8f3a625b0dce707c8a064647be"},
 		{name: "attestation", doc: goldenAttestationDocument(), want: "6676f027e0652101d443c66ded3e395631b43e849cb5ac6bc0c23db7e120f86d"},
 		{name: "statement", doc: goldenStatementDocument(), want: "7643877fffe620edd7ecaf6c02d7d445990ddd8d5f754a5821494280cd310aec"},
 		{name: "generic-free-text", doc: goldenGenericDocument(), want: "f6095689238721c21ca0624833ac44e1fd37e0041a0dac4bbf48acbaf4cc4e8d"},
-		{name: "long-form", doc: goldenLongFormDocument(), want: "ce9872880bca539a3ac7ee2ddc96af58b79ad52bc6bff1a234490fb3a3827c05"},
-		{name: "form", doc: FormDocumentModel(testFormDocument()), want: "b124b2d03eb2968efcaa797de152f9a57d85dc8d53b000c14e7653c00c075875"},
+		{name: "long-form", doc: goldenLongFormDocument(), want: "07f3ba6fbe620eb2719ee2915c8f6f6284e0513d574efd2f1d2d48f09a426d45"},
+		{name: "form", doc: FormDocumentModel(testFormDocument()), want: "82d02835c36fe094e50db883c00856f84e6d2017cd76c2e88f6ef616bca8ac8c"},
 		{name: "qr-signature", doc: goldenQRSignatureDocument(), want: "f1b172763a2dcabaafb89a6a430911e44dc5a02a77f95d5a59900e15f57b8d15"},
 	}
 
@@ -61,8 +61,8 @@ func goldenDocumentPDFSHA(t *testing.T, doc *layout.LayoutDocument) string {
 func goldenStructuredReportDocument() *layout.LayoutDocument {
 	doc := layout.NewLayoutDocument()
 	doc.Title = "Structured Report"
-	doc.PageTemplate.Header = &layout.HeaderBlock{Height: 8, Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Structured Header"}}, Style: layout.TextStyle{FontSize: 9}}}}
-	doc.PageTemplate.Footer = &layout.FooterBlock{Height: 8, ReservePageArea: true}
+	doc.PageTemplate.Header = &layout.HeaderBlock{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Structured Header"}}, Style: layout.TextStyle{FontSize: 9}}}}
+	doc.PageTemplate.Footer = &layout.FooterBlock{ReservePageArea: true}
 	doc.PageTemplate.PageNumbers = layout.PageNumberOptions{Enabled: true, TotalPageAlias: "{total}"}
 	doc.Body = []layout.Block{
 		layout.HeadingBlock{Level: 1, Segments: []layout.TextSegment{{Text: "Structured Report"}}},

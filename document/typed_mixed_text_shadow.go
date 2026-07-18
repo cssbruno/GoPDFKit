@@ -384,7 +384,7 @@ func (f *Document) mixedCoreFontMetrics(style layout.TextStyle) (*mixedCoreFontM
 	scratch.cMargin, scratch.ws = f.cMargin, f.ws
 	scratch.fontFamily, scratch.fontStyle = f.fontFamily, f.fontStyle
 	scratch.fontSizePt, scratch.fontSize = f.fontSizePt, f.fontSizePt/scratch.k
-	applyPDFTextStyle(scratch, style)
+	applyPlannerTextStyle(scratch, style)
 	if scratch.err != nil || scratch.isCurrentUTF8 {
 		return nil, newTypedShadowUnsupported(typedShadowFont, "mixed inline style requires a canonical core font")
 	}

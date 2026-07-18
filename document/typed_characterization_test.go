@@ -70,9 +70,6 @@ func TestTypedPublicEntryPointsAndBlockImplementationsASTDoNotDrift(t *testing.T
 		"layout.(*LayoutDocument).AddBlock":                   "func(block Block)",
 		"layout.NormalizeBlock":                               "func(block Block) (_ Block, ok bool)",
 		"layout.NormalizeBlocks":                              "func(blocks []Block) []Block",
-		"layout.NewMeasureContext":                            "func(width float64, defaultStyle TextStyle) MeasureContext",
-		"layout.MeasureBlocks":                                "func(ctx MeasureContext, blocks []Block) []BlockMeasurement",
-		"layout.MeasureBlock":                                 "func(ctx MeasureContext, block Block) BlockMeasurement",
 		"document.(*Document).WriteDocument":                  "func(doc *layout.LayoutDocument)",
 		"document.(*Document).PlanLayoutDocument":             "func(doc *layout.LayoutDocument) (LayoutDocumentPlan, error)",
 		"document.(*Document).PlanLayoutDocumentContext":      "func(ctx context.Context, doc *layout.LayoutDocument) (LayoutDocumentPlan, error)",
@@ -122,7 +119,7 @@ func parseTypedAPISignatures(t *testing.T) map[string]string {
 	result := map[string]string{}
 	fset := token.NewFileSet()
 	files := typedCharacterizationSourceFiles(t)
-	selected := map[string]bool{"NewLayoutDocument": true, "NewDocumentModel": true, "AddBlock": true, "NormalizeBlock": true, "NormalizeBlocks": true, "NewMeasureContext": true, "MeasureBlocks": true, "MeasureBlock": true, "WriteDocument": true, "PlanLayoutDocument": true, "PlanLayoutDocumentContext": true, "WriteLayoutDocumentPlan": true, "WriteLayoutDocumentPlanContext": true}
+	selected := map[string]bool{"NewLayoutDocument": true, "NewDocumentModel": true, "AddBlock": true, "NormalizeBlock": true, "NormalizeBlocks": true, "WriteDocument": true, "PlanLayoutDocument": true, "PlanLayoutDocumentContext": true, "WriteLayoutDocumentPlan": true, "WriteLayoutDocumentPlanContext": true}
 	for _, source := range files {
 		file, err := parser.ParseFile(fset, source.path, nil, 0)
 		if err != nil {
@@ -253,7 +250,7 @@ func TestTypedCharacterizationCorpusIsCompleteBoundedAndDeterministic(t *testing
 		t.Fatalf("runner is nondeterministic:\n%s\n%s", a, b)
 	}
 	digest := sha256.Sum256(a)
-	if got := hex.EncodeToString(digest[:]); got != "fb18d9e7038de0ea7c948fffbc3809a3b907972d0f6df4c346b49e35744a3d6f" {
+	if got := hex.EncodeToString(digest[:]); got != "a3e55f9b9f7bbd1448feaa0ebaf318f6cac05a179cb7fac47b2a914843bc8cd6" {
 		t.Fatalf("typed characterization golden drift: got %s", got)
 	}
 	if len(first.Fixtures) != len(inventory.Fixtures) {
@@ -308,7 +305,7 @@ func TestTypedBehaviorInventoryClassifiesStageZeroDomains(t *testing.T) {
 		"TableBlock.Pagination": TypedBehaviorDocumented, "Text.CoreFonts": TypedBehaviorDocumented,
 		"Text.UnicodeCoreFonts": TypedBehaviorUnsupported, "TextSegment.Link": TypedBehaviorDocumented,
 		"TextSegment.Destination": TypedBehaviorDocumented,
-		"ImageBlock":              TypedBehaviorDocumented, "HTML.SVG": TypedBehaviorDeprecated,
+		"ImageBlock":              TypedBehaviorDocumented, "HTML.SVG": TypedBehaviorDocumented,
 		"HTML.Forms": TypedBehaviorUnsupported, "QRVerificationBlock": TypedBehaviorDocumented,
 		"HeadingBlock.Level": TypedBehaviorAccidental,
 	}

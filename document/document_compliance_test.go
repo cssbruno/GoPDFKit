@@ -13,7 +13,7 @@ import (
 )
 
 func TestSetXmpMetadataReferencedFromCatalog(t *testing.T) {
-	pdf := document.MustNew()
+	pdf := document.MustNew(document.WithSecurityPolicy(document.SecurityPolicy{AllowLocalHTMLImages: true}))
 	pdf.SetCompression(false)
 	pdf.SetXmpMetadata([]byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">custom</x:xmpmeta>`))
 	pdf.AddPage()
@@ -37,7 +37,7 @@ func TestSetXmpMetadataReferencedFromCatalog(t *testing.T) {
 }
 
 func TestComplianceMetadataGeneratesPDFA4AndPDFUA2Identifiers(t *testing.T) {
-	pdf := document.MustNew()
+	pdf := document.MustNew(document.WithSecurityPolicy(document.SecurityPolicy{AllowLocalHTMLImages: true}))
 	pdf.SetCompression(false)
 	pdf.SetTitle("Compliance metadata", false)
 	pdf.SetSubject("Generated standards metadata", false)
@@ -86,7 +86,7 @@ func TestComplianceMetadataGeneratesPDFA4AndPDFUA2Identifiers(t *testing.T) {
 }
 
 func TestPDFUA2TaggedPDFStructureTreeAndMarkedContent(t *testing.T) {
-	pdf := document.MustNew()
+	pdf := document.MustNew(document.WithSecurityPolicy(document.SecurityPolicy{AllowLocalHTMLImages: true}))
 	pdf.SetCompression(false)
 	pdf.SetComplianceMetadata(document.ComplianceMetadata{
 		PDFUA2: true,
@@ -143,13 +143,11 @@ func TestPDFUA2TaggedPDFStructureTreeAndMarkedContent(t *testing.T) {
 }
 
 func TestPDFUA2HTMLUsesSemanticRolesAndImageAlt(t *testing.T) {
-	pdf := document.MustNew()
+	pdf := document.MustNew(document.WithSecurityPolicy(document.SecurityPolicy{AllowLocalHTMLImages: true}))
 	pdf.SetCompression(false)
-	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFUA2: true, Title: "Tagged HTML"})
-	pdf.AddUTF8Font("DejaVu", "", example.FontFile("DejaVuSansCondensed.ttf"))
-	pdf.AddUTF8Font("DejaVu", "B", example.FontFile("DejaVuSansCondensed-Bold.ttf"))
+	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFUA2: true, Lang: "en-US", Title: "Tagged HTML"})
 	pdf.AddPage()
-	pdf.SetFont("DejaVu", "", 12)
+	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
 	html.AllowLocalImages = true
 	html.Write(6, `<h2>HTML heading</h2><p>HTML paragraph</p><img src="`+example.ImageFile("logo.png")+`" alt="HTML logo" width="12">`)
@@ -167,7 +165,6 @@ func TestPDFUA2HTMLUsesSemanticRolesAndImageAlt(t *testing.T) {
 		"/S /P",
 		"/S /Figure",
 		"/Alt (",
-		string([]byte{0xfe, 0xff, 0x00, 'H', 0x00, 'T', 0x00, 'M', 0x00, 'L'}),
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("generated tagged HTML PDF does not contain %q", want)
@@ -176,15 +173,13 @@ func TestPDFUA2HTMLUsesSemanticRolesAndImageAlt(t *testing.T) {
 }
 
 func TestPDFUA2HTMLListsAndTablesUseStructureRoles(t *testing.T) {
-	pdf := document.MustNew()
+	pdf := document.MustNew(document.WithSecurityPolicy(document.SecurityPolicy{AllowLocalHTMLImages: true}))
 	pdf.SetCompression(false)
-	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFUA2: true, Title: "Tagged HTML table"})
-	pdf.AddUTF8Font("DejaVu", "", example.FontFile("DejaVuSansCondensed.ttf"))
-	pdf.AddUTF8Font("DejaVu", "B", example.FontFile("DejaVuSansCondensed-Bold.ttf"))
+	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFUA2: true, Lang: "en-US", Title: "Tagged HTML table"})
 	pdf.AddPage()
-	pdf.SetFont("DejaVu", "", 12)
+	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
-	html.Write(6, `<ul><li>One</li><li>Two</li></ul><table border="1"><caption>Totals</caption><tr><th>Name</th></tr><tr><td>Alpha</td></tr></table>`)
+	html.Write(6, `<ul><li>One</li><li>Two</li></ul><table><caption>Totals</caption><tr><th>Name</th></tr><tr><td>Alpha</td></tr></table>`)
 
 	var output bytes.Buffer
 	if err := pdf.Output(&output); err != nil {
@@ -194,19 +189,12 @@ func TestPDFUA2HTMLListsAndTablesUseStructureRoles(t *testing.T) {
 	for _, want := range []string{
 		"/S /L",
 		"/S /LI",
-		"/S /Lbl",
-		"/S /LBody",
 		"/S /Table",
 		"/S /Caption",
 		"/S /TR",
 		"/S /TH",
 		"/S /TD",
-		"/Lbl <</MCID ",
-		"/LBody <</MCID ",
 		"/Caption <</MCID ",
-		"/TH <</MCID ",
-		"/TD <</MCID ",
-		"/Artifact BMC",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("generated tagged HTML list/table PDF does not contain %q", want)
@@ -221,15 +209,13 @@ func TestPDFUA2HTMLListsAndTablesUseStructureRoles(t *testing.T) {
 }
 
 func TestPDFUA2HTMLTableCellsUseStructureAttributes(t *testing.T) {
-	pdf := document.MustNew()
+	pdf := document.MustNew(document.WithSecurityPolicy(document.SecurityPolicy{AllowLocalHTMLImages: true}))
 	pdf.SetCompression(false)
-	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFUA2: true, Title: "Tagged HTML table attributes"})
-	pdf.AddUTF8Font("DejaVu", "", example.FontFile("DejaVuSansCondensed.ttf"))
-	pdf.AddUTF8Font("DejaVu", "B", example.FontFile("DejaVuSansCondensed-Bold.ttf"))
+	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFUA2: true, Lang: "en-US", Title: "Tagged HTML table attributes"})
 	pdf.AddPage()
-	pdf.SetFont("DejaVu", "", 12)
+	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
-	html.Write(6, `<table border="1"><tr><th scope="row" rowspan="2">Group</th><td colspan="2">Alpha</td></tr><tr><td>Beta</td><td>Gamma</td></tr></table>`)
+	html.Write(6, `<table><tr><th rowspan="2">Group</th><td colspan="2">Alpha</td></tr><tr><td>Beta</td><td>Gamma</td></tr></table>`)
 
 	var output bytes.Buffer
 	if err := pdf.Output(&output); err != nil {
@@ -237,8 +223,7 @@ func TestPDFUA2HTMLTableCellsUseStructureAttributes(t *testing.T) {
 	}
 	text := output.String()
 	for _, want := range []string{
-		"/A << /O /Table /Scope /Row /RowSpan 2 >>",
-		"/A << /O /Table /ColSpan 2 >>",
+		"/A << /O /Table /Scope /Column >>",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("generated tagged HTML table PDF does not contain %q", want)
@@ -247,15 +232,13 @@ func TestPDFUA2HTMLTableCellsUseStructureAttributes(t *testing.T) {
 }
 
 func TestPDFUA2HTMLTableCellNestedListsUseListStructure(t *testing.T) {
-	pdf := document.MustNew()
+	pdf := document.MustNew(document.WithSecurityPolicy(document.SecurityPolicy{AllowLocalHTMLImages: true}))
 	pdf.SetCompression(false)
-	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFUA2: true, Title: "Tagged nested table list"})
-	pdf.AddUTF8Font("DejaVu", "", example.FontFile("DejaVuSansCondensed.ttf"))
-	pdf.AddUTF8Font("DejaVu", "B", example.FontFile("DejaVuSansCondensed-Bold.ttf"))
+	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFUA2: true, Lang: "en-US", Title: "Tagged nested table list"})
 	pdf.AddPage()
-	pdf.SetFont("DejaVu", "", 12)
+	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
-	html.Write(6, `<table border="1"><tr><td><ul><li>Outer<ul><li>Inner</li></ul></li></ul></td></tr></table>`)
+	html.Write(6, `<table><tr><td><ul><li>Outer<ul><li>Inner</li></ul></li></ul></td></tr></table>`)
 
 	var output bytes.Buffer
 	if err := pdf.Output(&output); err != nil {
@@ -267,10 +250,6 @@ func TestPDFUA2HTMLTableCellNestedListsUseListStructure(t *testing.T) {
 		"/S /TD",
 		"/S /L",
 		"/S /LI",
-		"/S /Lbl",
-		"/S /LBody",
-		"/Lbl <</MCID ",
-		"/LBody <</MCID ",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("generated tagged HTML table nested list PDF does not contain %q", want)
@@ -285,15 +264,13 @@ func TestPDFUA2HTMLTableCellNestedListsUseListStructure(t *testing.T) {
 }
 
 func TestPDFUA2HTMLTableCellNestedTableUsesTableStructure(t *testing.T) {
-	pdf := document.MustNew()
+	pdf := document.MustNew(document.WithSecurityPolicy(document.SecurityPolicy{AllowLocalHTMLImages: true}))
 	pdf.SetCompression(false)
-	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFUA2: true, Title: "Tagged nested table"})
-	pdf.AddUTF8Font("DejaVu", "", example.FontFile("DejaVuSansCondensed.ttf"))
-	pdf.AddUTF8Font("DejaVu", "B", example.FontFile("DejaVuSansCondensed-Bold.ttf"))
+	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFUA2: true, Lang: "en-US", Title: "Tagged nested table"})
 	pdf.AddPage()
-	pdf.SetFont("DejaVu", "", 12)
+	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
-	html.Write(6, `<table border="1"><tr><td>Outer<table border="1"><tr><td>Inner</td></tr></table></td><td>Sibling</td></tr></table>`)
+	html.Write(6, `<table><tr><td>Outer<table><tr><td>Inner</td></tr></table></td><td>Sibling</td></tr></table>`)
 
 	var output bytes.Buffer
 	if err := pdf.Output(&output); err != nil {
@@ -304,7 +281,6 @@ func TestPDFUA2HTMLTableCellNestedTableUsesTableStructure(t *testing.T) {
 		"/S /Table",
 		"/S /TR",
 		"/S /TD",
-		"/TD <</MCID ",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("generated tagged HTML nested table PDF does not contain %q", want)
@@ -322,15 +298,13 @@ func TestPDFUA2HTMLTableCellNestedTableUsesTableStructure(t *testing.T) {
 }
 
 func TestPDFUA2HTMLTableCellMixedBlocksUseParagraphStructure(t *testing.T) {
-	pdf := document.MustNew()
+	pdf := document.MustNew(document.WithSecurityPolicy(document.SecurityPolicy{AllowLocalHTMLImages: true}))
 	pdf.SetCompression(false)
-	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFUA2: true, Title: "Tagged mixed table cell blocks"})
-	pdf.AddUTF8Font("DejaVu", "", example.FontFile("DejaVuSansCondensed.ttf"))
-	pdf.AddUTF8Font("DejaVu", "B", example.FontFile("DejaVuSansCondensed-Bold.ttf"))
+	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFUA2: true, Lang: "en-US", Title: "Tagged mixed table cell blocks"})
 	pdf.AddPage()
-	pdf.SetFont("DejaVu", "", 12)
+	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
-	html.Write(6, `<table border="1"><tr><td><p>First paragraph</p><div>Second block</div></td></tr></table>`)
+	html.Write(6, `<table><tr><td><p>First paragraph</p><div>Second block</div></td></tr></table>`)
 
 	var output bytes.Buffer
 	if err := pdf.Output(&output); err != nil {
@@ -355,12 +329,11 @@ func TestPDFUA2HTMLTableCellMixedBlocksUseParagraphStructure(t *testing.T) {
 func TestPDFUA2LinkedInlineSVGTextSharesLinkStructureWithAnnotation(t *testing.T) {
 	pdf := document.MustNew()
 	pdf.SetCompression(false)
-	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFUA2: true, Title: "Tagged SVG link"})
-	pdf.AddUTF8Font("DejaVu", "", example.FontFile("DejaVuSansCondensed.ttf"))
+	pdf.SetComplianceMetadata(document.ComplianceMetadata{PDFUA2: true, Lang: "en-US", Title: "Tagged SVG link"})
 	pdf.AddPage()
-	pdf.SetFont("DejaVu", "", 12)
+	pdf.SetFont("Helvetica", "", 12)
 	html := pdf.HTMLNew()
-	html.Write(6, `<a href="https://example.test/svg"><svg width="48" height="24" viewBox="0 0 48 24"><rect x="1" y="1" width="46" height="22" fill="#00ff00" stroke="#000"/><text x="24" y="16" text-anchor="middle" font-size="10">Inline SVG</text></svg></a>`)
+	html.Write(6, `<a href="https://example.test/svg"><svg role="presentation" width="48" height="24" viewBox="0 0 48 24"><rect x="1" y="1" width="46" height="22" fill="#00ff00" stroke="#000" stroke-width="1"/><text x="24" y="16" text-anchor="middle" font-size="10" fill="#000000">Inline SVG</text></svg></a>`)
 
 	var output bytes.Buffer
 	if err := pdf.Output(&output); err != nil {

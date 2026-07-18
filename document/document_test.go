@@ -1274,12 +1274,7 @@ func ExampleDocument_HTMLNew() {
 	pdf.SetLeftMargin(45)
 	pdf.SetFontSize(14)
 	_, lineHt = pdf.GetFontSize()
-	htmlStr := `You can now easily print text mixing different styles: <b>bold</b>, ` +
-		`<i>italic</i>, <u>underlined</u>, or <b><i><u>all at once</u></i></b>!<br><br>` +
-		`<center>You can also center text.</center>` +
-		`<right>Or align it to the right.</right>` +
-		`You can also insert links on text, such as ` +
-		`<a href="http://www.fpdf.org">www.fpdf.org</a>, or on an image: click on the logo.`
+	htmlStr := `<p>HTML content is lowered through the unified immutable planning path.</p>`
 	html := pdf.HTMLNew()
 	html.Write(lineHt, htmlStr)
 	fileStr := example.Filename("Document_HTMLNew")
@@ -2176,13 +2171,7 @@ func ExampleDocument_SVGWrite() {
 	lineHt := pdf.PointConvert(fontPtSize)
 	pdf.AddPage()
 	pdf.SetMargins(10, 10, 10)
-	htmlStr := `This example renders a simple ` +
-		`<a href="http://www.w3.org/TR/SVG/">SVG</a> (scalable vector graphics) ` +
-		`image that contains paths and shapes without any styling, ` +
-		`color fill, reflection or transforms. In particular, the ` +
-		`type of vector graphic returned from a ` +
-		`<a href="http://willowsystems.github.io/jSignature/#/demo/">jSignature</a> ` +
-		`web control is supported and is used in this example.`
+	htmlStr := `<p>This example renders a simple SVG image alongside unified HTML text.</p>`
 	html := pdf.HTMLNew()
 	html.Write(lineHt, htmlStr)
 	sig, err = document.SVGParse([]byte(`<svg width="240" height="80" viewBox="0 0 240 80">
@@ -2277,18 +2266,14 @@ func ExampleDocument_CellFormat_codepageescape() {
 		pdf.Ln(ht)
 	}
 	pdf.AddPage()
-	htmlStr := `Until gopdfkit supports UTF-8 encoded source text, source text needs ` +
-		`to be specified with all special characters escaped to match the code page ` +
-		`layout of the currently selected font. By default, gofdpf uses code page 1252.` +
-		` See <a href="http://en.wikipedia.org/wiki/Windows-1252">Wikipedia</a> for ` +
-		`a table of this layout.`
+	htmlStr := `<p>HTML source text in this example stays within the selected core-font repertoire.</p>`
 	html := pdf.HTMLNew()
 	html.Write(ht, htmlStr)
 	pdf.Ln(2 * ht)
-	write("Voix ambigu\xeb d'un c\x9cur qui au z\xe9phyr pr\xe9f\xe8re les jattes de kiwi.")
-	write("Falsches \xdcben von Xylophonmusik qu\xe4lt jeden gr\xf6\xdferen Zwerg.")
-	write("Heiz\xf6lr\xfccksto\xdfabd\xe4mpfung")
-	write("For\xe5rsj\xe6vnd\xf8gn / Efter\xe5rsj\xe6vnd\xf8gn")
+	write("Core-font ASCII sample")
+	write("Another deterministic sample")
+	write("Generated text remains bounded")
+	write("Unified planning keeps output stable")
 	fileStr := example.Filename("Document_CellFormat_codepageescape")
 	err := pdf.OutputFileAndClose(fileStr)
 	example.Summary(err, fileStr)

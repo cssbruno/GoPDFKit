@@ -1,24 +1,22 @@
-# Typed `WriteDocument` unified-default migration
+# Typed `WriteDocument` unified migration
 
-`Document.WriteDocument` keeps its existing signature and receiver-error model,
-but fresh supported `layout.LayoutDocument` values now run through the immutable
-Paper Engine plan and painter by default. Planning finishes before the first PDF
-page is opened; invalid constraints and resource-limit failures therefore cannot
-leave a partially rendered document.
+`Document.WriteDocument` keeps its existing signature and receiver-error model.
+Fresh supported `layout.LayoutDocument` values are lowered to one immutable
+Paper Engine plan before the PDF page is opened, then painted by the unified
+painter.
 
-Applications do not need to change ordinary calls. Code that configures a custom
-page lifecycle, writes content before `WriteDocument`, or uses a typed contract
-not yet represented by the exact planner is rendered by the private legacy
-engine as one whole document. The two engines are never mixed within a model.
+Unsupported receiver state, custom mutable page lifecycle callbacks, invalid
+model contracts, and resource-limit failures store an error on the receiver
+without opening pages or retrying through a legacy renderer. Applications that
+need a hard accept/reject decision can call `PlanLayoutDocument` followed by
+`WriteLayoutDocumentPlan`.
 
-Production callers can set `Hooks.OnLayoutEngineRoute` to aggregate migration
-coverage. The callback receives `WriteDocument`, either `unified` or `legacy`,
-and a bounded category such as `document-policy`, `page-template`, or
-`unsupported-layout-contract`. Categories never include document text, source
-paths, or other authored values.
+`Hooks.OnLayoutEngineRoute` remains available for bounded observability.
+Successful automatic typed writes report `WriteDocument`/`unified`; rejected
+writes do not invoke a compatibility engine. Categories never include document
+text, source paths, or other authored values.
 
-Rollback criteria are an increase in PDF generation errors, page-count or
-extracted-text drift in the characterization corpus, a race failure, or a breach
-of the calibrated time/allocation budgets. A caller needing custom mutable page
-lifecycle behavior can retain that behavior during the compatibility window;
-the fallback event makes the remaining migration work measurable.
+The deletion release requires the accepted typed corpus to pass deterministic
+page-count, cursor, extracted-text, link, semantic, raster, benchmark, race,
+security, PDF/A, and PDF/UA checks, plus the repository static searches that
+prove automatic layout is confined to the unified planner and painter.

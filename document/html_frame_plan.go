@@ -64,8 +64,8 @@ func (f *Document) captureHTMLStartFrame() (htmlStartFrame, error) {
 	if f.curRotation != 0 {
 		return htmlStartFrame{}, htmlPlanUnsupported("frame", 0, "rotated current pages are not in the unified cohort")
 	}
-	if !typedShadowCoreFont(f.coreFonts, f.fontFamily) || f.currentFont.Name == "" || f.fontSizePt <= 0 {
-		return htmlStartFrame{}, htmlPlanUnsupported("frame", 0, "current font context must be a selected core font")
+	if f.currentFont.Name == "" || f.fontSizePt <= 0 {
+		return htmlStartFrame{}, htmlPlanUnsupported("frame", 0, "current font context must be selected")
 	}
 	_, body, err := typedShadowFixedGeometry(f, f.lMargin, f.tMargin,
 		f.w-f.lMargin-f.rMargin, f.h-f.tMargin-f.bMargin)
@@ -416,6 +416,10 @@ func (html *HTML) writeCompiledUnifiedFragmentContext(ctx context.Context, lineH
 	withDisplay := len(projection.ImageResources) != 0 || len(projection.Links) != 0 || len(projection.Destinations) != 0 ||
 		len(projection.Paths) != 0 || len(projection.Fills) != 0 || len(projection.Strokes) != 0 || len(projection.Clips) != 0 || len(projection.Transforms) != 0
 	withDisplay = withDisplay || layoutPlanHasMultipleGlyphRunsPerLine(projection)
+	// The compact core painter emits positioned glyphs only. PDF/UA fragments
+	// must use the display-list painter so their semantic structure tree and
+	// marked-content bindings are replayed together with the text.
+	withDisplay = withDisplay || html.pdf.compliance.PDFUA2
 	if withDisplay {
 		prepared, preflightErr := html.pdf.preflightDisplayLayoutPlanPDFContextForTarget(ctx, fragment.plan.plan, fragment.plan.imageSources, true)
 		if preflightErr != nil {
@@ -465,28 +469,6 @@ func (html *HTML) writeCompiledUnifiedFragmentContext(ctx context.Context, lineH
 		return true, errors.New("document: HTML fragment painter changed the captured font context")
 	}
 	return true, html.pdf.Error()
-}
-
-func htmlUnifiedFallbackCategory(compiled *CompiledHTML, err error) string {
-	if compiled != nil && len(compiled.recovery) != 0 {
-		return "malformed-recovery"
-	}
-	detail := ""
-	if err != nil {
-		detail = err.Error()
-	}
-	switch {
-	case strings.Contains(detail, "<frame>"):
-		return "frame-contract"
-	case compiled != nil && len(compiled.inlineSVGs) != 0:
-		return "svg-contract"
-	case compiled != nil && len(compiled.cssRules) != 0:
-		return "stylesheet-contract"
-	case compiledHTMLContainsTable(compiled):
-		return "table-contract"
-	default:
-		return "unsupported-layout-contract"
-	}
 }
 
 func compiledHTMLContainsTable(compiled *CompiledHTML) bool {

@@ -126,7 +126,7 @@ func TestRenderHTMLTemplateImageRendersWithHTMLNew(t *testing.T) {
 			Width:     "12mm",
 			Height:    "12mm",
 			ObjectFit: "contain",
-			Style:     "margin: 3mm 0 4mm 0",
+			Style:     "",
 		},
 	})
 	if err != nil {
@@ -155,14 +155,11 @@ func TestRenderHTMLTemplateImageRendersWithHTMLNew(t *testing.T) {
 
 func TestCompiledHTMLTemplateRendersChangingValues(t *testing.T) {
 	tmpl, err := document.CompileHTMLTemplate(`
-		<style>
-			h1 { color:#123456; }
-			td { border:1px solid #ccd3da; padding:2mm; }
-		</style>
+		<style>h1 { color:#123456; } td { border:1pt solid #ccd3da; padding:2pt; }</style>
 		<h1>{{title}}</h1>
 		<p>Customer: {{customer}}</p>
 		<p><a href="{{link}}">{{linkText}}</a></p>
-		<table border="1" cellpadding="2">
+		<table>
 			<tr><td>Invoice</td><td>{{invoice}}</td></tr>
 			<tr><td>Total</td><td>{{total}}</td></tr>
 		</table>

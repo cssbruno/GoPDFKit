@@ -54,7 +54,7 @@ func TestWriteDocumentDefaultsToExactPlanAndReportsBoundedRoute(t *testing.T) {
 	}
 }
 
-func TestWriteDocumentFallbackIsWholeDocumentObservableAndPrivate(t *testing.T) {
+func TestWriteDocumentUnsupportedPolicyFailsWithoutLegacyFallback(t *testing.T) {
 	const authoredSecret = "customer-secret-must-not-enter-telemetry"
 	model := &layout.LayoutDocument{Body: []layout.Block{
 		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: authoredSecret}}},
@@ -65,29 +65,24 @@ func TestWriteDocumentFallbackIsWholeDocumentObservableAndPrivate(t *testing.T) 
 			observed = append(observed, typedRouteObservation{entryPoint, engine, reason})
 		},
 	}))
-	// A custom lifecycle callback is intentionally outside immutable planning,
-	// but remains a supported whole-document legacy rollback contract.
+	// Custom lifecycle callbacks are outside the deletion-release contract.
 	pdf.SetHeaderFunc(func() {})
 	pdf.WriteDocument(model)
-	if err := pdf.Error(); err != nil {
-		t.Fatal(err)
+	if err := pdf.Error(); err == nil {
+		t.Fatal("WriteDocument() unexpectedly accepted a legacy-only lifecycle callback")
 	}
-	if len(observed) != 1 || observed[0].entryPoint != "WriteDocument" || observed[0].engine != "legacy" || observed[0].reason != "document-policy" {
-		t.Fatalf("fallback observation = %#v", observed)
+	if len(observed) != 0 {
+		t.Fatalf("unsupported route = %#v", observed)
 	}
-	if strings.Contains(observed[0].reason, authoredSecret) || len(observed[0].reason) > 64 {
-		t.Fatalf("fallback reason leaked authored content: %q", observed[0].reason)
+	if strings.Contains(pdf.Error().Error(), authoredSecret) {
+		t.Fatalf("error leaked authored content: %q", pdf.Error())
 	}
-	crafted := &layoutDocumentUnsupportedError{detail: "body[0]: " + authoredSecret, reason: typedShadowBlockKind}
-	if category := typedWriteDocumentFallbackCategory(crafted); category != "unsupported-layout-contract" || strings.Contains(category, authoredSecret) {
-		t.Fatalf("authored unsupported detail leaked into category %q", category)
-	}
-	if got := extractedDocumentText(t, deterministicDocumentBytes(t, pdf)); !strings.Contains(got, authoredSecret) {
-		t.Fatalf("whole-document fallback lost body text: %q", got)
+	if pdf.PageCount() != 0 {
+		t.Fatalf("unsupported policy mutated the PDF with %d pages", pdf.PageCount())
 	}
 }
 
-func TestWriteDocumentNonFreshReceiverUsesObservableWholeDocumentRollback(t *testing.T) {
+func TestWriteDocumentNonFreshReceiverFailsWithoutLegacyFallback(t *testing.T) {
 	var observed []typedRouteObservation
 	pdf := MustNew(WithNoCompression(), WithHooks(Hooks{OnLayoutEngineRoute: func(entryPoint, engine, reason string) {
 		observed = append(observed, typedRouteObservation{entryPoint, engine, reason})
@@ -96,14 +91,14 @@ func TestWriteDocumentNonFreshReceiverUsesObservableWholeDocumentRollback(t *tes
 	pdf.WriteDocument(&layout.LayoutDocument{Body: []layout.Block{
 		layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "existing-page rollback"}}},
 	}})
-	if err := pdf.Error(); err != nil {
-		t.Fatal(err)
+	if err := pdf.Error(); err == nil {
+		t.Fatal("WriteDocument() unexpectedly accepted a non-fresh receiver")
 	}
-	if len(observed) != 1 || observed[0] != (typedRouteObservation{"WriteDocument", "legacy", "non-fresh-receiver"}) {
+	if len(observed) != 0 {
 		t.Fatalf("non-fresh route = %#v", observed)
 	}
-	if got := extractedDocumentText(t, deterministicDocumentBytes(t, pdf)); !strings.Contains(got, "existing-page rollback") {
-		t.Fatalf("non-fresh whole-document route lost text: %q", got)
+	if pdf.PageCount() != 1 {
+		t.Fatalf("non-fresh call changed page count to %d", pdf.PageCount())
 	}
 }
 

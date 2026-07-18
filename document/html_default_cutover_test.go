@@ -73,38 +73,30 @@ func TestHTMLDefaultCutoverRoutesEveryRenderingEntryPoint(t *testing.T) {
 func TestHTMLDefaultCutoverFallbackCategoriesArePrivateAndRateReady(t *testing.T) {
 	const secret = "customer-secret-selector-and-path"
 	var observed []typedRouteObservation
-	write := func(source string) {
+	write := func(source string) error {
 		pdf := htmlCutoverDocument(&observed)
 		html := pdf.HTMLNew()
-		if err := html.WriteContext(context.Background(), 10, source); err != nil {
-			t.Fatalf("fallback render: %v", err)
-		}
+		return html.WriteContext(context.Background(), 10, source)
 	}
-	write(`<p>unified one</p>`)
-	write(`<table><tr><td>unified table</td></tr></table>`)
-	write(`<div><p>malformed</div>`)
-	write(`<form id="` + secret + `"><label>legacy form<input></label></form>`)
-	if len(observed) != 4 {
+	if err := write(`<p>unified one</p>`); err != nil {
+		t.Fatal(err)
+	}
+	if err := write(`<table><tr><td>unified table</td></tr></table>`); err != nil {
+		t.Fatal(err)
+	}
+	if err := write(`<div><p>malformed</div>`); err == nil {
+		t.Fatal("malformed HTML unexpectedly rendered after legacy deletion")
+	}
+	if err := write(`<form id="` + secret + `"><label>legacy form<input></label></form>`); err == nil {
+		t.Fatal("unsupported form unexpectedly rendered after legacy deletion")
+	}
+	if len(observed) != 2 {
 		t.Fatalf("route events = %#v", observed)
 	}
-	fallbacks := 0
-	seen := map[string]bool{}
 	for _, event := range observed {
-		if strings.Contains(event.reason, secret) || len(event.reason) > 64 {
-			t.Fatalf("route leaked authored content: %#v", event)
+		if event.engine != "unified" || event.reason != "" || strings.Contains(event.reason, secret) {
+			t.Fatalf("unexpected route event: %#v", event)
 		}
-		if event.engine == "legacy" {
-			fallbacks++
-			seen[event.reason] = true
-		}
-	}
-	if fallbacks != 2 || !seen["malformed-recovery"] || !seen["unsupported-layout-contract"] {
-		t.Fatalf("fallback count/categories = %d %#v", fallbacks, seen)
-	}
-	// This exact numerator/denominator is production-aggregation evidence: the
-	// hook needs no authored payload to compute a fallback rate.
-	if got := float64(fallbacks) / float64(len(observed)); got != 0.5 {
-		t.Fatalf("fallback rate = %.2f", got)
 	}
 }
 

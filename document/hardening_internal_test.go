@@ -1252,7 +1252,7 @@ func TestHTMLFragmentLinksAreRejected(t *testing.T) {
 	html := pdf.HTMLNew()
 
 	html.Write(5, `<a href="#section">section</a>`)
-	if pdf.Error() == nil || !strings.Contains(pdf.Error().Error(), "fragment links") {
+	if pdf.Error() == nil || !strings.Contains(pdf.Error().Error(), "HTML unified plan unsupported") {
 		t.Fatalf("HTML fragment link error = %v", pdf.Error())
 	}
 }

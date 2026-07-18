@@ -132,6 +132,9 @@ func (html *HTML) writeContextEntry(ctx context.Context, lineHt float64, htmlStr
 		html.pdf.SetError(ErrHTMLLimitExceeded)
 		return html.pdf.Error()
 	}
+	if err := html.ensureCurrentFont(); err != nil {
+		return err
+	}
 	useSharedCache := html.pdf != nil && html.pdf.resourceCachePolicy == ResourceCacheShared
 	compiled, err := compileHTMLForWriteContext(ctx, htmlStr, html.maxDataImageBytes(), useSharedCache)
 	if err != nil {
@@ -158,6 +161,9 @@ func (html *HTML) writeCompiledContext(ctx context.Context, lineHt float64, comp
 	}
 	if err := outputCanceledError(ctx); err != nil {
 		html.pdf.SetError(err)
+		return
+	}
+	if err := html.ensureCurrentFont(); err != nil {
 		return
 	}
 	if compiled == nil {
@@ -204,8 +210,19 @@ func (html *HTML) writeCompiledContext(ctx context.Context, lineHt float64, comp
 		html.pdf.SetError(err)
 		return
 	}
-	html.pdf.observeLayoutEngineRoute(entryPoint, "legacy", htmlUnifiedFallbackCategory(compiled, routeErr))
-	html.writeCompiledLegacy(lineHt, compiled)
+	// Unsupported fragments fail atomically in the deletion release. There is
+	// no automatic compatibility renderer or hidden pagination fallback.
+	html.pdf.SetError(routeErr)
+}
+
+func (html *HTML) ensureCurrentFont() error {
+	if html == nil || html.pdf == nil {
+		return errors.New("document: HTML receiver is nil")
+	}
+	if html.pdf.currentFont.Name == "" {
+		html.pdf.SetFont("Helvetica", "", 12)
+	}
+	return html.pdf.Error()
 }
 
 func (html *HTML) validateCompiledFallbackSafety(compiled *CompiledHTML) error {
@@ -247,48 +264,6 @@ func (html *HTML) validateCompiledTableRowLimit(compiled *CompiledHTML) error {
 		}
 	}
 	return nil
-}
-
-// writeCompiledLegacy is the private whole-fragment compatibility renderer.
-// Callers must capability-plan the complete fragment before entering it; it is
-// never invoked for a subtree or island inside a unified plan.
-func (html *HTML) writeCompiledLegacy(lineHt float64, compiled *CompiledHTML) {
-	previousStartPageCount := html.renderStartPageCount
-	previousRenderCacheActive := html.renderCacheActive
-	previousDataImageCache := html.dataImageCache
-	previousStyleDeclarationCache := html.styleDeclarationCache
-	previousCompiledStyleCache := html.compiledStyleCache
-	previousInlineSVGCache := html.inlineSVGCache
-	previousPageAddGuard := html.pdf.pageAddGuard
-	html.renderStartPageCount = html.pdf.PageCount()
-	html.pdf.pageAddGuard = func() error {
-		if previousPageAddGuard != nil {
-			if err := previousPageAddGuard(); err != nil {
-				return err
-			}
-		}
-		return html.checkGeneratedPageLimitForAdd()
-	}
-	html.renderCacheActive = true
-	html.dataImageCache = make(map[string]htmlImageSource)
-	html.styleDeclarationCache = nil
-	html.compiledStyleCache = compiled.styleDeclarations
-	html.inlineSVGCache = nil
-	defer func() {
-		pageCount := html.generatedPageCount()
-		maxPages := html.maxGeneratedPages()
-		if pageCount > maxPages {
-			html.pdf.SetErrorf("HTML rendering exceeded maximum generated pages: %d > %d", pageCount, maxPages)
-		}
-		html.renderStartPageCount = previousStartPageCount
-		html.renderCacheActive = previousRenderCacheActive
-		html.dataImageCache = previousDataImageCache
-		html.styleDeclarationCache = previousStyleDeclarationCache
-		html.compiledStyleCache = previousCompiledStyleCache
-		html.inlineSVGCache = previousInlineSVGCache
-		html.pdf.pageAddGuard = previousPageAddGuard
-	}()
-	newHTMLRenderSession(html, compiled, lineHt).render()
 }
 
 func (html *HTML) applyTextStyle(st htmlTextStyle, fallback CSSColorType) {

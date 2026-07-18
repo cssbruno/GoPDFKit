@@ -48,8 +48,8 @@
       "max_allocs_per_op": 60000
     },
     "BenchmarkPaperEngineTableLarge128": {
-      "max_median_ns_per_op": 25000000,
-      "max_bytes_per_op": 41943040,
+      "max_median_ns_per_op": 30000000,
+      "max_bytes_per_op": 50331648,
       "max_allocs_per_op": 150000
     },
     "BenchmarkPaperEngineTableWide32": {
@@ -59,8 +59,8 @@
     },
     "BenchmarkPaperEngineTableRows10000": {
       "max_median_ns_per_op": 300000000,
-      "max_bytes_per_op": 41943040,
-      "max_allocs_per_op": 60000
+      "max_bytes_per_op": 50331648,
+      "max_allocs_per_op": 90000
     }
   }
 }

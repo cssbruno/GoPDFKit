@@ -85,7 +85,7 @@ func TestWriteDocumentRendersFormDocumentModel(t *testing.T) {
 	if err := pdf.Output(&out); err != nil {
 		t.Fatalf("Output() error = %v", err)
 	}
-	content := out.String()
+	content := extractedDocumentText(t, out.Bytes())
 	for _, want := range []string{"Form Title", "Name *", "Alex Example", "Options", "Score", "Comment"} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("PDF output missing form content %q", want)

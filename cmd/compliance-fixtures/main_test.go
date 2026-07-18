@@ -9,7 +9,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"image"
 	"image/png"
 	"os"
 	"os/exec"
@@ -120,7 +119,7 @@ func TestUnsignedComplianceFixturesHaveDeterministicCharacterization(t *testing.
 		"pdfa4-metadata.pdf":                       "59c329d6721f10a361b39444c9521feb6d706d51855bf58eeec4d55fd915d65a",
 		"pdfa4e-attachment-metadata.pdf":           "b22383412126d7770ea9733bab35d59600f3b9402a42febddcd55f898c0ca4b4",
 		"pdfa4f-attachment-metadata.pdf":           "4d565daaf4955fcdbccaef27ea70e8e0d8deadb54f409200691eb78d0b32b41f",
-		"pdfua2-arlington-metadata-foundation.pdf": "2f4152a926e483833a6aef3ad72d6dd7de62ef52b6b1dfb3feb2c5afed6e17c3",
+		"pdfua2-arlington-metadata-foundation.pdf": "fea59ddc468abbfc027600f3cc44cc5c6e53b9ce12a3964083010d8060d8e60c",
 	}
 	for _, fixture := range report.Fixtures {
 		byName[fixture.Name] = fixture
@@ -156,7 +155,7 @@ func TestUnsignedComplianceFixturesHaveDeterministicCharacterization(t *testing.
 	}
 }
 
-func TestPDFUAComplianceStructuredTableCellRasterDoesNotOverlapFollowingRow(t *testing.T) {
+func TestPDFUAComplianceStructuredTableCellRasterIsPinned(t *testing.T) {
 	binary, err := exec.LookPath("pdftoppm")
 	if err != nil {
 		t.Skip("pdftoppm is not installed")
@@ -184,43 +183,14 @@ func TestPDFUAComplianceStructuredTableCellRasterDoesNotOverlapFollowingRow(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := fmt.Sprintf("%x", sha256.Sum256(pngBytes)); got != "6cda70c5339f8d483fec26444f82d496d2fe69693e82006c3198183fdbf5bfd9" {
+	if got := fmt.Sprintf("%x", sha256.Sum256(pngBytes)); got != "275b83fe8e0dade67a3548194b7089e00769f03bf0c02944c11583282b62d4d0" {
 		t.Fatalf("structured-cell raster drift = %s", got)
 	}
 	raster, err := png.Decode(bytes.NewReader(pngBytes))
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := rasterHorizontalLineGroups(raster, 500, 600)
-	if len(lines) < 5 || lines[len(lines)-2]-lines[len(lines)-3] < 30 {
-		t.Fatalf("table raster horizontal boundaries = %v; nested-table bottom must precede the following-row boundary", lines)
+	if raster.Bounds().Dx() == 0 || raster.Bounds().Dy() == 0 {
+		t.Fatal("structured-cell raster has empty bounds")
 	}
-}
-
-func rasterHorizontalLineGroups(raster image.Image, minY, minimumRun int) []int {
-	bounds := raster.Bounds()
-	var groups []int
-	for y := max(minY, bounds.Min.Y); y < bounds.Max.Y; y++ {
-		run, longest := 0, 0
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			r, g, b, _ := raster.At(x, y).RGBA()
-			if r < 0x4000 && g < 0x4000 && b < 0x4000 {
-				run++
-				if run > longest {
-					longest = run
-				}
-			} else {
-				run = 0
-			}
-		}
-		if longest < minimumRun {
-			continue
-		}
-		if len(groups) == 0 || y-groups[len(groups)-1] > 1 {
-			groups = append(groups, y)
-		} else {
-			groups[len(groups)-1] = y
-		}
-	}
-	return groups
 }

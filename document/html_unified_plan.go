@@ -16,10 +16,9 @@ import (
 	"github.com/cssbruno/gopdfkit/layout"
 )
 
-// ErrHTMLPlanUnsupported reports that a compiled HTML fragment cannot yet be
-// lowered as one unit to the unified planner. The legacy renderer may be used
-// by an explicit compatibility policy, but this entry point never creates
-// mixed legacy islands inside a unified plan.
+// ErrHTMLPlanUnsupported reports that a compiled HTML fragment cannot be
+// lowered as one unit to the unified planner. Public HTML entry points fail
+// atomically for this error; there is no automatic legacy renderer route.
 var ErrHTMLPlanUnsupported = errors.New("document: HTML unified plan unsupported")
 
 const htmlUnifiedMaxTextBytes = 4 << 20

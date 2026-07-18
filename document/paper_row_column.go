@@ -554,8 +554,8 @@ func (f *Document) measurePaperRowColumnTextIntrinsic(ctx context.Context, parag
 	scratch.cMargin, scratch.ws = f.cMargin, f.ws
 	scratch.fontFamily, scratch.fontStyle = f.fontFamily, f.fontStyle
 	scratch.fontSizePt, scratch.fontSize = f.fontSizePt, f.fontSizePt/scratch.k
-	style := layout.MergedTextStyle(newMeasureContext(scratch, f.w).DefaultStyle, paragraph.EffectiveStyle())
-	applyPDFTextStyle(scratch, style)
+	style := layout.MergedTextStyle(plannerDefaultTextStyle(scratch), paragraph.EffectiveStyle())
+	applyPlannerTextStyle(scratch, style)
 	if scratch.err != nil || scratch.isCurrentUTF8 {
 		return 0, 0, newTypedShadowUnsupported(typedShadowGeometry, "core font metrics could not be resolved for intrinsic flex sizing")
 	}

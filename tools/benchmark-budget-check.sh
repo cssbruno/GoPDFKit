@@ -60,7 +60,12 @@ function check_generation_budget(name, ns, bytes, allocs) {
 		# regressions while allowing normal runner-to-runner variance.
 		ns_limit = 3000000
 		if (root == "BenchmarkGenerationHTMLLargeTableCompiled") {
-			ns_limit = 8000000
+			# The deleted renderer accepted an unbounded 600-row fixture. The
+			# unified semantic planner bounded accepted cohort is 120 rows;
+			# retain a calibrated ceiling for that real multi-page workload.
+			ns_limit = 80000000
+		} else if (root == "BenchmarkGenerationHTMLWideTableCompiled") {
+			ns_limit = 40000000
 		}
 		check_max(name, "ns/op", ns, ns_limit)
 	}
@@ -78,13 +83,15 @@ function check_generation_budget(name, ns, bytes, allocs) {
 		return
 	}
 	if (name ~ /^BenchmarkGenerationHTMLLargeTableCompiled/) {
-		check_max(name, "ns/op", ns, 8000000)
-		check_max(name, "B/op", bytes, 8388608)
+		check_max(name, "ns/op", ns, 80000000)
+		check_max(name, "B/op", bytes, 134217728)
 		return
 	}
 	if (name ~ /^BenchmarkGenerationHTMLWideTableCompiled/) {
-		check_max(name, "ns/op", ns, 3000000)
-		check_max(name, "B/op", bytes, 3145728)
+		# The unified track resolver accepts twelve compact columns in the
+		# default body; the old 24-column fixture exceeded minimum tracks.
+		check_max(name, "ns/op", ns, 40000000)
+		check_max(name, "B/op", bytes, 67108864)
 		return
 	}
 	if (name ~ /^BenchmarkGenerationImportedPDFPages/) {

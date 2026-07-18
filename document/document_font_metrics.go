@@ -5,8 +5,9 @@ package document
 
 import "github.com/cssbruno/gopdfkit/layout"
 
-// newMeasureContext creates a measurement context for the given content width.
-func newMeasureContext(pdf *Document, width float64) layout.MeasureContext {
+// plannerDefaultTextStyle snapshots the receiver's current text defaults for
+// immutable lowering. It does not estimate a block or choose page geometry.
+func plannerDefaultTextStyle(pdf *Document) layout.TextStyle {
 	fontSize := 12.0
 	lineHeight := 5.0
 	fontFamily := "Helvetica"
@@ -23,28 +24,7 @@ func newMeasureContext(pdf *Document, width float64) layout.MeasureContext {
 			lineHeight = unitSize * 1.2
 		}
 	}
-	ctx := layout.NewMeasureContext(width, layout.TextStyle{
-		FontFamily: fontFamily,
-		FontSize:   fontSize,
-		LineHeight: lineHeight,
-	})
-	if pdf != nil {
-		ctx.TextMeasurer = documentTextMeasurer{pdf: pdf}
-	}
-	return ctx
-}
-
-type documentTextMeasurer struct {
-	pdf *Document
-}
-
-func (m documentTextMeasurer) TextLineCount(text string, style layout.TextStyle, width float64) int {
-	if m.pdf == nil {
-		return 0
-	}
-	state := applyPDFTextStyle(m.pdf, style)
-	defer restorePDFTextStyle(m.pdf, state)
-	return m.pdf.SplitTextCount(text, width)
+	return layout.TextStyle{FontFamily: fontFamily, FontSize: fontSize, LineHeight: lineHeight}
 }
 
 type pdfTextStyleState struct {
@@ -55,13 +35,12 @@ type pdfTextStyleState struct {
 	strikeout bool
 }
 
-func applyPDFTextStyle(pdf *Document, style layout.TextStyle) pdfTextStyleState {
+// applyPlannerTextStyle selects the exact font metrics needed while lowering
+// a text run. It never writes a font-selection operator into page content.
+func applyPlannerTextStyle(pdf *Document, style layout.TextStyle) pdfTextStyleState {
 	state := pdfTextStyleState{
-		family:    pdf.fontFamily,
-		style:     pdf.fontStyle,
-		sizePt:    pdf.fontSizePt,
-		underline: pdf.underline,
-		strikeout: pdf.strikeout,
+		family: pdf.fontFamily, style: pdf.fontStyle, sizePt: pdf.fontSizePt,
+		underline: pdf.underline, strikeout: pdf.strikeout,
 	}
 	if style.FontFamily == "" {
 		style.FontFamily = state.family
@@ -73,7 +52,6 @@ func applyPDFTextStyle(pdf *Document, style layout.TextStyle) pdfTextStyleState 
 	if size <= 0 {
 		size = 12
 	}
-	style.FontSize = size
 	family := firstNonEmpty(style.FontFamily, "Helvetica")
 	fontStyle := ""
 	if style.Bold {
@@ -88,12 +66,12 @@ func applyPDFTextStyle(pdf *Document, style layout.TextStyle) pdfTextStyleState 
 	if style.StrikeThrough {
 		fontStyle += "S"
 	}
-	setFontForMeasurement(pdf, family, fontStyle, size)
+	setFontForPlannerMetrics(pdf, family, fontStyle, size)
 	pdf.strikeout = style.StrikeThrough
 	return state
 }
 
-func restorePDFTextStyle(pdf *Document, state pdfTextStyleState) {
+func restorePlannerTextStyle(pdf *Document, state pdfTextStyleState) {
 	family := state.family
 	if family == "" {
 		family = "Helvetica"
@@ -102,15 +80,12 @@ func restorePDFTextStyle(pdf *Document, state pdfTextStyleState) {
 	if size <= 0 {
 		size = 12
 	}
-	setFontForMeasurement(pdf, family, state.style, size)
+	setFontForPlannerMetrics(pdf, family, state.style, size)
 	pdf.underline = state.underline
 	pdf.strikeout = state.strikeout
 }
 
-// setFontForMeasurement selects font metrics without writing a font-selection
-// operator into the current page. Measurement may populate the document's font
-// resource map, but it must not mutate rendered page content.
-func setFontForMeasurement(pdf *Document, family, style string, size float64) {
+func setFontForPlannerMetrics(pdf *Document, family, style string, size float64) {
 	page := pdf.page
 	pdf.page = 0
 	defer func() { pdf.page = page }()

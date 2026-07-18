@@ -118,6 +118,7 @@ func (f *Document) planTypedTableBodiesMapped(ctx context.Context, doc *layout.L
 }
 
 func (f *Document) planTypedTableBodies(ctx context.Context, doc *layout.LayoutDocument, table layout.TableBlock, path string, selectBody paperBodySelector) (layoutengine.LayoutPlan, error) {
+	table = typedTableWithInferredColumns(table)
 	if err := validateTypedTableSurface(table, path); err != nil {
 		return layoutengine.LayoutPlan{}, err
 	}
@@ -379,6 +380,36 @@ func validateTypedTableSurface(table layout.TableBlock, path string) error {
 	return nil
 }
 
+// typedTableWithInferredColumns keeps the public table model convenient for
+// callers that provide rows without an explicit track declaration. The
+// planner still uses a fixed, detached column slice so pagination and replay
+// remain deterministic.
+func typedTableWithInferredColumns(table layout.TableBlock) layout.TableBlock {
+	if len(table.Columns) != 0 {
+		return table
+	}
+	count := 0
+	rows := append(append(append([]layout.TableRow(nil), table.Header...), table.Body...), table.Footer...)
+	for _, row := range rows {
+		width := 0
+		for _, cell := range row.Cells {
+			span := cell.ColSpan
+			if span < 1 {
+				span = 1
+			}
+			width += span
+		}
+		if width > count {
+			count = width
+		}
+	}
+	if count == 0 {
+		return table
+	}
+	table.Columns = make([]layout.TableColumn, count)
+	return table
+}
+
 func (f *Document) measureTypedTableCellIntrinsic(ctx context.Context, doc *layout.LayoutDocument, placement typedTablePlacement, scratchByStyle map[layout.TextStyle]*Document) (layoutengine.Fixed, layoutengine.Fixed, error) {
 	if err := layoutengine.ChargePlanningWork(ctx, "typed table intrinsic measurement", 1); err != nil {
 		return 0, 0, err
@@ -462,14 +493,14 @@ func (f *Document) measureTypedTableCellIntrinsic(ctx context.Context, doc *layo
 		}
 		paragraph.Style = layout.MergedTextStyle(cell.EffectiveStyle(), paragraph.EffectiveStyle())
 		paragraph.StyleRef = nil
-		style := layout.MergedTextStyle(newMeasureContext(f, f.w).DefaultStyle, paragraph.EffectiveStyle())
+		style := layout.MergedTextStyle(plannerDefaultTextStyle(f), paragraph.EffectiveStyle())
 		scratch := scratchByStyle[style]
 		if scratch == nil {
 			scratch = documentNew("P", f.unitStr, "", f.fontDirStr, Size{Wd: f.w, Ht: f.h})
 			scratch.cMargin, scratch.ws = f.cMargin, f.ws
 			scratch.fontFamily, scratch.fontStyle = f.fontFamily, f.fontStyle
 			scratch.fontSizePt, scratch.fontSize = f.fontSizePt, f.fontSizePt/scratch.k
-			applyPDFTextStyle(scratch, style)
+			applyPlannerTextStyle(scratch, style)
 			if scratch.err == nil && !scratch.isCurrentUTF8 {
 				scratchByStyle[style] = scratch
 			}
@@ -783,7 +814,7 @@ func (f *Document) restylePaperMeasurement(measurement paperRowColumnMeasurement
 			scratch.cMargin, scratch.ws = f.cMargin, f.ws
 			scratch.fontFamily, scratch.fontStyle = f.fontFamily, f.fontStyle
 			scratch.fontSizePt, scratch.fontSize = f.fontSizePt, f.fontSizePt/scratch.k
-			applyPDFTextStyle(scratch, authored.style)
+			applyPlannerTextStyle(scratch, authored.style)
 			if scratch.err != nil || scratch.isCurrentUTF8 {
 				return paperRowColumnMeasurement{}, newTypedShadowUnsupported(typedShadowParagraphContract, "inline core font could not be resolved")
 			}
@@ -1022,6 +1053,7 @@ func typedTableValidateStructuredBox(box layout.BoxStyle, path string) error {
 }
 
 func typedNestedTableIntrinsicWidth(f *Document, table layout.TableBlock, base float64) (float64, float64, error) {
+	table = typedTableWithInferredColumns(table)
 	if err := validateTypedTableSurface(table, "nested_table"); err != nil {
 		return 0, 0, err
 	}

@@ -55,8 +55,8 @@ func TestWriteDocumentRendersLongFormHTMLDocumentModel(t *testing.T) {
 	if err := pdf.Output(&out); err != nil {
 		t.Fatalf("Output() error = %v", err)
 	}
-	content := out.String()
-	for _, want := range []string{"Long Form", "Clause One", "Body text", "First", "Footer text"} {
+	content := extractedDocumentText(t, out.Bytes())
+	for _, want := range []string{"Clause One", "Body text", "First", "Footer text"} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("PDF output missing long-form content %q", want)
 		}

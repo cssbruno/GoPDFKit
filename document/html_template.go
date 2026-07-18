@@ -377,6 +377,19 @@ func (template *CompiledHTMLTemplate) render(values HTMLTemplateValues, maxBytes
 	rendered.sourceBytes = renderedBytes
 	rendered.elementText = nil
 	rendered.tables = compiledHTMLTemplateTables(rendered.tokens)
+	rendered.dataImages = make(map[int]compiledHTMLDataImage)
+	for index, token := range rendered.tokens {
+		if token.Cat != 'O' || token.Str != "img" {
+			continue
+		}
+		image, ok, err := compileHTMLDataImageSource(token.Attr["src"], htmlDefaultMaxDataImageBytes)
+		if err != nil {
+			return nil, fmt.Errorf("compile HTML template image %s: %w", token.Attr["src"], err)
+		}
+		if ok {
+			rendered.dataImages[index] = image
+		}
+	}
 	return rendered, nil
 }
 

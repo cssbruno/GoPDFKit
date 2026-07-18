@@ -66,7 +66,7 @@ func (f *Document) mixedTextFontMetrics(style layout.TextStyle) (*mixedTextFontM
 			}
 		}
 	}
-	applyPDFTextStyle(scratch, style)
+	applyPlannerTextStyle(scratch, style)
 	if scratch.err != nil {
 		return nil, newTypedShadowUnsupported(typedShadowFont, "font metrics could not be resolved")
 	}

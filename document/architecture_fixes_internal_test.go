@@ -33,15 +33,6 @@ func TestNilSafeHTMLAndParserBoundaries(t *testing.T) {
 	if !ok || math.Abs(length-2*72/25.4) > 1e-9 {
 		t.Fatalf("parseHTMLBoxLength(2mm, nil) = (%v, %v)", length, ok)
 	}
-	el := HTMLSegmentType{Cat: 'O', Str: "div", Attr: map[string]string{"style": "border-radius: 2mm"}}
-	if !htmlBlockHasBoxStyle(el, nil) {
-		t.Fatal("border radius was not recognized as a block-box style without a Document")
-	}
-	shadow := HTMLSegmentType{Cat: 'O', Str: "div", Attr: map[string]string{"style": "box-shadow: 2px 2px 4px #000"}}
-	if !htmlBlockHasBoxStyle(shadow, nil) {
-		t.Fatal("box shadow was not recognized as a block-box style without a Document")
-	}
-
 	rendered, err := renderCompiledHTMLTemplateValue((*architectureNilStringer)(nil))
 	if err != nil || rendered != "" {
 		t.Fatalf("typed nil Stringer rendered as %q with error %v, want empty string", rendered, err)

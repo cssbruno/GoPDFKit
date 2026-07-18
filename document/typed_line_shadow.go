@@ -97,8 +97,7 @@ func (f *Document) planTypedParagraphLineShadowContext(ctx context.Context, doc 
 	scratch.fontStyle = f.fontStyle
 	scratch.fontSizePt = f.fontSizePt
 	scratch.fontSize = f.fontSizePt / scratch.k
-	measureContext := newMeasureContext(scratch, contentWidth)
-	style := layout.MergedTextStyle(measureContext.DefaultStyle, paragraph.EffectiveStyle())
+	style := layout.MergedTextStyle(plannerDefaultTextStyle(scratch), paragraph.EffectiveStyle())
 	requestedFamily := strings.ToLower(fontFamilyEscape(firstNonEmpty(style.FontFamily, f.fontFamily, "Helvetica")))
 	requestedStyle := ""
 	if style.Bold {
@@ -121,7 +120,7 @@ func (f *Document) planTypedParagraphLineShadowContext(ctx context.Context, doc 
 			return typedLineShadowResult{}, newTypedShadowUnsupported(typedShadowFont, err.Error())
 		}
 	}
-	applyPDFTextStyle(scratch, style)
+	applyPlannerTextStyle(scratch, style)
 	if scratch.err != nil {
 		return typedLineShadowResult{}, newTypedShadowUnsupported(typedShadowFont, "font metrics could not be resolved")
 	}

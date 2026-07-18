@@ -1,47 +1,37 @@
 # Legacy automatic-layout deletion
 
-Status: pre-deletion gate. The unified typed and HTML planners are the default
-for supported fresh inputs, but the private legacy renderers remain available
-during the stabilization window. This document records the breaking-release
-contract that applies only after that window is formally closed.
+The legacy automatic-layout production files have been removed. The public
+typed and HTML entry points remain as lowering adapters over the unified
+planner and painter.
 
-## Migration before the deletion release
+## Current contract
 
-Typed callers should plan and paint through `PlanLayoutDocument` and
+Typed callers should use `PlanLayoutDocument` and
 `WriteLayoutDocumentPlan` when they need an explicit compatibility check.
-Automatic `WriteDocument` calls should use a fresh document with declarative
-`PageTemplate` regions. Existing-page writes and arbitrary header, footer, or
-page-break callbacks are not immutable planner contracts; migrate those calls
-to planned page regions or explicit drawing around the automatic-layout call.
+`WriteDocument` accepts a fresh receiver and declarative `PageTemplate` model;
+unsupported receiver state or model contracts store an error without opening
+pages or retrying through a legacy renderer.
 
-HTML callers should keep fragments inside the documented strict unified cohort.
-Use `PlanCompiledHTML` to preflight a fragment when the caller needs a hard
-accept/reject decision. Forms, browser-only CSS, malformed recovery, and other
-unsupported contracts must be rewritten as supported typed/layout content or
-handled by explicit manual drawing before the deletion release.
+HTML callers should keep fragments inside the strict unified cohort. Forms,
+browser-only CSS, malformed recovery, unsupported styles, and other rejected
+contracts must be rewritten as supported typed/layout content or handled by
+explicit manual drawing. `PlanCompiledHTML` is the preflight API for callers
+that need a hard accept/reject decision.
 
-The public entry points remain source-compatible: `Document.WriteDocument`,
-`HTML.Write`, `HTML.WriteContext`, `HTML.WriteCompiled`,
-`HTML.WriteTemplate`, and `HTML.WriteTemplateContext` are retained as lowering
-adapters. After deletion, an unsupported automatic-layout contract is an
-error; it is not retried through a legacy renderer. The receiver-error model
-continues to apply to void methods, while context-returning methods return the
-same planning error.
+The public entry points remain source-compatible:
+`Document.WriteDocument`, `HTML.Write`, `HTML.WriteContext`,
+`HTML.WriteCompiled`, `HTML.WriteTemplate`, and `HTML.WriteTemplateContext`.
+Void methods preserve the receiver-error model; context-returning methods
+return the planning error. No public or private automatic engine switch remains.
 
-## Required release evidence
+## Deletion evidence
 
-The deletion release must attach evidence for all of the following on the
-accepted corpus and named platform baselines:
+The deletion implementation is covered by the typed and HTML cutover tests,
+golden and characterization baselines, public-adapter tests, route-hook tests,
+and the repository static search used during the Stage 10 exit review. The
+measurement-only `layout` APIs and the removed direct HTML renderer files are
+not part of the production surface.
 
-- one typed and one HTML stabilization release completed;
-- fallback rate at or below the accepted threshold, with no newly supported
-  cohort routed to legacy;
-- compatibility, cursor, extracted-text, link, semantic, raster, benchmark,
-  race, security, PDF/A, and PDF/UA gates passing;
-- rollback criteria formally closed; and
-- repository searches proving that automatic layout, measurement, wrapping,
-  and pagination are confined to the unified planner and painter contracts.
-
-The current migration guides and route-hook tests intentionally do not claim
-that this evidence exists. Deleting the legacy files before those gates close
-would remove the documented rollback path without proving compatibility.
+Release closure still requires the accepted stabilization-window record and
+the named platform performance/compliance evidence. Those are external release
+artifacts and must not be inferred from a local test run.

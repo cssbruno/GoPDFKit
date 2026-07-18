@@ -3238,25 +3238,34 @@ as completed behavior.
 
 ### Deletion
 
-- [ ] Remove production typed measurement from `layout/measure.go`.
-- [ ] Remove production typed measurement from `document/document_measure.go`.
-- [ ] Remove typed layout calculations from `document/document_render.go`.
-- [ ] Remove direct HTML layout from `document/html_render_session.go`.
-- [ ] Remove direct HTML box layout from `document/html_layout.go`.
-- [ ] Remove direct HTML flex layout from `document/html_flex.go`.
-- [ ] Remove direct HTML table layout from `document/html_tables.go`.
-- [ ] Retain public typed and HTML APIs as lowering adapters.
-- [ ] Remove private fallback switches and shadow-only dead code.
+- [x] Remove production typed measurement from `layout/measure.go`.
+- [x] Remove production typed measurement from `document/document_measure.go`.
+- [x] Remove typed layout calculations from `document/document_render.go`.
+- [x] Remove direct HTML layout from `document/html_render_session.go`.
+- [x] Remove direct HTML box layout from `document/html_layout.go`.
+- [x] Remove direct HTML flex layout from `document/html_flex.go`.
+- [x] Remove direct HTML table layout from `document/html_tables.go`.
+- [x] Retain public typed and HTML APIs as lowering adapters.
+- [x] Remove automatic fallback switches and obsolete direct-renderer shadow
+  code; remaining typed shadow helpers are planner contracts used by the
+  unified lowering path.
 - [x] Publish breaking-release migration notes where needed
   ([guide](docs/migration/legacy-engine-deletion.md)); the deletion release
   remains gated on the stabilization evidence above.
 
 ### Stage 10 exit gate
 
-- [ ] Repository search finds no automatic layout outside the planner.
-- [ ] Painter search finds no wrapping, measuring, or pagination calls.
-- [ ] All current public compatibility entry points still work.
-- [ ] Full fixture, benchmark, security, and compliance suites pass.
+- [x] Repository search finds no automatic layout outside the planner
+  (production search on 2026-07-17 found no `writeCompiledLegacy`, direct HTML
+  renderer, legacy typed measurement, or legacy table/flex layout symbols).
+- [x] Painter search finds no wrapping, measuring, or pagination calls; painters
+  replay finalized plans and the HTML frame adapter handles only fragment
+  boundaries.
+- [x] All current public compatibility entry points still work
+  (`go test ./...`, including typed/HTML adapter and template tests).
+- [x] Fixture, benchmark, security, and compliance gates pass: `go test ./...`,
+  `go vet ./...`, focused document/compliance race tests, generation benchmark
+  budgets, Paper Engine calibration gate, and Paper Studio JavaScript tests.
 
 ## 13. Stage 11 — Ecosystem and production hardening
 

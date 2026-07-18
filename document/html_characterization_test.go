@@ -30,7 +30,7 @@ func TestHTMLCharacterizationBaselineProjection(t *testing.T) {
 	}
 	sum := sha256.Sum256(first)
 	got := hex.EncodeToString(sum[:])
-	const want = "38863521a3a93b19c0f6bfd84e65a6c0a3eb3df688762bffeae30ea93c94edaa"
+	const want = "2a011d15f60857ac8d988f182a31a413ec6ea575e3416eb699dec369e14a6bf2"
 	if got != want {
 		t.Fatalf("HTML characterization drift: hash=%s\n%s", got, first)
 	}
@@ -102,6 +102,11 @@ func TestHTMLCharacterizationFixturesExerciseEveryClassification(t *testing.T) {
 		case "malformed-recovered":
 			if len(compiled.RecoveryIssues()) == 0 {
 				t.Fatalf("%s has no recovery evidence", fixture.Name)
+			}
+			pdf := characterizationPDF()
+			html := pdf.HTMLNew()
+			if err := html.WriteContext(context.Background(), 10, fixture.Source); err == nil || !strings.Contains(err.Error(), "recovered HTML") {
+				t.Fatalf("%s recovery handling = %v, want strict unified rejection", fixture.Name, err)
 			}
 		case "diagnostic-unsupported":
 			pdf := characterizationPDF()
