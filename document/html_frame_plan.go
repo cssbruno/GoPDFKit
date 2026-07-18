@@ -154,9 +154,6 @@ func (html *HTML) planCompiledHTMLFragmentContext(ctx context.Context, lineHeigh
 	if err != nil {
 		return htmlFragmentPlan{}, err
 	}
-	if htmlModelHasOversizedTableRow(model, availableWidth, html.pdf.PointConvert(frame.body.Height.Points())) {
-		return htmlFragmentPlan{}, fmt.Errorf("%w: structured HTML table row exceeds one page body", ErrHTMLLimitExceeded)
-	}
 	leadingBreak := false
 	for len(model.Body) != 0 {
 		pageBreak, ok := model.Body[0].(layout.PageBreakBlock)
@@ -273,6 +270,9 @@ func (html *HTML) planCompiledHTMLFragmentContext(ctx context.Context, lineHeigh
 		return htmlFragmentPlan{}, fmt.Errorf("document: bind HTML fragment deterministic inputs: %w", err)
 	}
 	projection = planned.Projection()
+	if htmlPlanHasOversizedTableRow(compiled, projection) {
+		return htmlFragmentPlan{}, fmt.Errorf("%w: structured HTML table row exceeds one page body", ErrHTMLLimitExceeded)
+	}
 	hash, err := planned.Hash()
 	if err != nil {
 		return htmlFragmentPlan{}, fmt.Errorf("document: hash HTML fragment plan: %w", err)
@@ -353,27 +353,13 @@ func htmlBlocksContainKeptTable(blocks []layout.Block) bool {
 	return false
 }
 
-func htmlModelHasOversizedTableRow(model *layout.LayoutDocument, width, bodyHeight float64) bool {
-	if model == nil || width <= 0 || bodyHeight <= 0 {
+func htmlPlanHasOversizedTableRow(compiled *CompiledHTML, projection layoutengine.LayoutPlanProjection) bool {
+	if !compiledHTMLContainsTable(compiled) {
 		return false
 	}
-	measure := layout.NewMeasureContext(width, layout.TextStyle{})
-	for _, block := range layout.NormalizeBlocks(model.Body) {
-		table, ok := block.(layout.TableBlock)
-		if !ok {
-			continue
-		}
-		rows := append(append(append([]layout.TableRow(nil), table.Header...), table.Body...), table.Footer...)
-		for _, row := range rows {
-			for _, cell := range row.Cells {
-				height := cell.Box.Padding.Top + cell.Box.Padding.Bottom
-				for _, child := range layout.NormalizeBlocks(cell.Blocks) {
-					height += layout.MeasureBlock(measure, child).Height
-				}
-				if height > bodyHeight {
-					return true
-				}
-			}
+	for _, diagnostic := range projection.Diagnostics {
+		if diagnostic.Code == layoutengine.DiagnosticUnbreakableTooTall || diagnostic.Code == layoutengine.DiagnosticTableRowspanCrossesPage {
+			return true
 		}
 	}
 	return false

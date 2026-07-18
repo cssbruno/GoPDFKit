@@ -29,7 +29,7 @@ import (
 
 var ErrBrowserUnavailable = errors.New("browseroracle: Firefox is unavailable")
 
-const PinnedFirefoxVersion = "Mozilla Firefox 152.0.5"
+const PinnedFirefoxVersion = "Mozilla Firefox 152.0.6"
 
 type Capture struct {
 	Version   string

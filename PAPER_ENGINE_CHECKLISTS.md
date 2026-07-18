@@ -3247,7 +3247,9 @@ as completed behavior.
 - [ ] Remove direct HTML table layout from `document/html_tables.go`.
 - [ ] Retain public typed and HTML APIs as lowering adapters.
 - [ ] Remove private fallback switches and shadow-only dead code.
-- [ ] Publish breaking-release migration notes where needed.
+- [x] Publish breaking-release migration notes where needed
+  ([guide](docs/migration/legacy-engine-deletion.md)); the deletion release
+  remains gated on the stabilization evidence above.
 
 ### Stage 10 exit gate
 
