@@ -22,7 +22,7 @@ html_first="$temporary/html-first.json"
 html_second="$temporary/html-second.json"
 
 cd "$checkout"
-GOCACHE="$cache" go test ./document -run '^(TestTypedCharacterizationInventory|TestHTMLCharacterizationInventory)$' -count=1
+GOCACHE="$cache" go test ./document -run '^(TestTypedCharacterizationCorpusIsCompleteBoundedAndDeterministic|TestHTMLCharacterizationFixturesExerciseEveryClassification)$' -count=1
 GOCACHE="$cache" go run ./cmd/paper-characterize -builtin typed >"$typed_first"
 GOCACHE="$cache" go run ./cmd/paper-characterize -builtin typed >"$typed_second"
 GOCACHE="$cache" go run ./cmd/paper-characterize -builtin html >"$html_first"
@@ -32,6 +32,6 @@ cmp "$html_first" "$html_second"
 
 GOCACHE="$cache" go test ./document ./internal/layoutengine -run '^$' \
   -bench '^BenchmarkPaperEngine(Planner|Painter|ProductionDefault|EndToEnd|WarmCompiled|Concurrent|Table)' \
-  -benchmem -benchtime="${CLEAN_CHECKOUT_BENCHTIME:-1x}" -count="${CLEAN_CHECKOUT_BENCH_COUNT:-1}" >/dev/null
+  -benchmem -benchtime="${CLEAN_CHECKOUT_BENCHTIME:-250ms}" -count="${CLEAN_CHECKOUT_BENCH_COUNT:-10}" >/dev/null
 
 printf 'clean checkout verified at %s\n' "$revision"
