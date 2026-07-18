@@ -128,7 +128,7 @@ func main() {
 	assetRoot := flag.String("asset-root", "", "asset root (defaults to explicit manifest directory)")
 	flag.Parse()
 	if flag.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: paper-studio [-addr 127.0.0.1:7331] [-scenario NAME] FILE.paper")
+		fmt.Fprintln(os.Stderr, "usage: paper-studio [-addr 127.0.0.1:7331] [-scenario NAME] FILE.paper|FILE.paperdoc")
 		os.Exit(2)
 	}
 	if err := validateStudioListenAddress(*addr); err != nil {
@@ -145,6 +145,9 @@ func main() {
 	}
 	if *assetRoot != "" && *assetsManifest == "" {
 		log.Fatal("paper-studio: -asset-root requires -assets")
+	}
+	if *assetsManifest != "" && isStudioPaperDocument(server.file) {
+		log.Fatal("paper-studio: a .paperdoc already contains its resource catalog")
 	}
 	if *assetsManifest != "" {
 		project, loadErr := paperassets.LoadProjectManifest(*assetsManifest, *assetRoot)
@@ -189,7 +192,13 @@ func newStudioServer(file, scenario string) (*studioServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &studioServer{file: abs, scenario: strings.TrimSpace(scenario), snapshots: make(map[string]*studioSnapshot), static: http.FileServer(http.FS(web))}, nil
+	server := &studioServer{file: abs, scenario: strings.TrimSpace(scenario), snapshots: make(map[string]*studioSnapshot), static: http.FileServer(http.FS(web))}
+	if isStudioPaperDocument(abs) {
+		if err := server.loadPaperDocument(); err != nil {
+			return nil, err
+		}
+	}
+	return server, nil
 }
 
 func (s *studioServer) routes() http.Handler {
@@ -203,9 +212,11 @@ func (s *studioServer) routes() http.Handler {
 	mux.HandleFunc("/api/pdf-tags", s.handlePDFTags)
 	mux.HandleFunc("/api/delivery", s.handleDelivery)
 	mux.HandleFunc("/api/export.pdf", s.handleExportPDF)
+	mux.HandleFunc("/api/export.paperdoc", s.handleExportPaperDocument)
 	mux.HandleFunc("/api/edit", s.handleEdit)
 	mux.HandleFunc("/api/resources", s.handleResources)
 	mux.HandleFunc("/api/authoring", s.handleAuthoring)
+	mux.HandleFunc("/api/component-preview.svg", s.handleComponentPreview)
 	mux.HandleFunc("/api/typed-experiments", s.handleTypedExperiments)
 	mux.HandleFunc("/api/review", s.handleReview)
 	mux.HandleFunc("/api/review/reference", s.handleReviewReference)
@@ -257,7 +268,7 @@ func (s *studioServer) current(ctx context.Context, requestedScenario string) (*
 	}
 	var plan document.PaperPlan
 	var planned document.PaperPlanResult
-	resolver := studioFileImportResolver()
+	resolver := s.studioImportResolver()
 	if scenario == "" {
 		plan, planned, err = document.PlanPaperWithAssetsAndImportsContext(ctx, s.file, source, s.assetCatalog, resolver)
 	} else {
@@ -301,6 +312,9 @@ func hasPaperImports(ast paperlang.AST) bool {
 
 func studioFileImportResolver() document.PaperImportResolver {
 	return func(importerFile, importPath string) (string, string, error) {
+		if isStudioPaperDocument(importerFile) {
+			return "", "", errors.New("paper-studio: Paper Document v1 cannot resolve external imports")
+		}
 		base := filepath.Dir(importerFile)
 		file := filepath.Clean(filepath.Join(base, filepath.FromSlash(importPath)))
 		input, err := os.Open(file)
@@ -320,6 +334,9 @@ func studioFileImportResolver() document.PaperImportResolver {
 }
 
 func readStudioSource(file string) (string, [32]byte, error) {
+	if isStudioPaperDocument(file) {
+		return readStudioPaperDocumentSource(file)
+	}
 	input, err := os.Open(file) // #nosec G304 -- file is the explicit Studio source path selected by the caller.
 	if err != nil {
 		return "", [32]byte{}, err

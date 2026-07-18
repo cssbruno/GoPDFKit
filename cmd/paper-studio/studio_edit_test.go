@@ -448,6 +448,21 @@ func TestPaperStudioTypedPaletteInsertsPrimitiveAndComponentInstances(t *testing
 	if metadataResponse.StatusCode != http.StatusOK || !strings.Contains(string(metadataResponse.Body), `"@card"`) {
 		t.Fatalf("component palette metadata = %d %s", metadataResponse.StatusCode, metadataResponse.Body)
 	}
+	previewPath := "/api/component-preview.svg?preview_format=2&revision=" + before.Revision + "&source_revision=" + before.SourceRevision + "&component=%40card"
+	preview := studioRequest(t, handler, http.MethodGet, previewPath, nil, "")
+	if preview.StatusCode != http.StatusOK || !strings.Contains(preview.Header.Get("Content-Type"), "image/svg+xml") ||
+		!bytes.Contains(preview.Body, []byte(`data-format="display-plan-preview"`)) || !bytes.Contains(preview.Body, []byte(">C</text>")) ||
+		preview.Header.Get("ETag") == "" {
+		t.Fatalf("component current-theme preview = %d %q %s", preview.StatusCode, preview.Header, preview.Body)
+	}
+	unchanged, err := os.ReadFile(file)
+	if err != nil || string(unchanged) != source {
+		t.Fatalf("component preview mutated source = %v\n%s", err, unchanged)
+	}
+	stale := studioRequest(t, handler, http.MethodGet, "/api/component-preview.svg?preview_format=2&revision=stale&source_revision="+before.SourceRevision+"&component=%40card", nil, "")
+	if stale.StatusCode != http.StatusConflict {
+		t.Fatalf("stale component preview = %d %s", stale.StatusCode, stale.Body)
+	}
 	request := map[string]any{
 		"source_revision": before.SourceRevision, "plan_revision": before.Revision,
 		"operation": "template", "target": "@body", "template": "component", "component": "@card", "id": "@card-instance",

@@ -167,6 +167,48 @@ func TestCompileScenarioInjectsPrimitiveAndOptionalBindingValues(t *testing.T) {
 	}
 }
 
+func TestCompileScenarioLocaleControlsDeterministicFormatting(t *testing.T) {
+	t.Parallel()
+
+	const source = `document @doc:
+  schema @invoice:
+    field @total:
+      type: "number"
+  scenario @english:
+    locale: "en-US"
+    value @total: 1234.5
+  scenario @brazil:
+    locale: "pt-BR"
+    value @total: 1234.5
+  page:
+    body:
+      paragraph @total:
+        bind: "@invoice.total"
+        format: "decimal"
+        format-min-fraction: 2
+        format-max-fraction: 2
+        text: "placeholder"
+`
+	parsed := paperlang.Parse("locale-scenarios.paper", source)
+	if !parsed.OK() {
+		t.Fatalf("parse diagnostics = %#v", parsed.Diagnostics)
+	}
+	english := CompileScenario(parsed.AST, "english")
+	brazil := CompileScenario(parsed.AST, "brazil")
+	if !english.OK() || !brazil.OK() {
+		t.Fatalf("compile diagnostics = english %#v, brazil %#v", english.Diagnostics, brazil.Diagnostics)
+	}
+	englishText := layout.TextSegmentsPlainText(english.Document.Body[0].(layout.ParagraphBlock).Segments)
+	brazilText := layout.TextSegmentsPlainText(brazil.Document.Body[0].(layout.ParagraphBlock).Segments)
+	if englishText != "1,234.50" || brazilText != "1.234,50" || englishText == brazilText {
+		t.Fatalf("locale expansion = english %q, brazil %q", englishText, brazilText)
+	}
+	again := CompileScenario(parsed.AST, "brazil")
+	if !again.OK() || layout.TextSegmentsPlainText(again.Document.Body[0].(layout.ParagraphBlock).Segments) != brazilText {
+		t.Fatalf("repeated brazil expansion = %#v", again)
+	}
+}
+
 func TestCompileScenarioDiagnosesIncompleteBindingFormat(t *testing.T) {
 	t.Parallel()
 	const source = `document:

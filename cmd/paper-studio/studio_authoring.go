@@ -5,13 +5,17 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/cssbruno/gopdfkit/document"
 	"github.com/cssbruno/gopdfkit/internal/papercompile"
+	"github.com/cssbruno/gopdfkit/internal/paperedit"
 	"github.com/cssbruno/gopdfkit/internal/paperlang"
 	"github.com/cssbruno/gopdfkit/internal/paperscenario"
 )
@@ -64,6 +68,8 @@ type studioAuthoringResponse struct {
 	Components      []string                  `json:"components"`
 }
 
+const studioComponentPreviewFormat = "2"
+
 func (s *studioServer) handleAuthoring(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, http.MethodGet)
@@ -87,6 +93,228 @@ func (s *studioServer) handleAuthoring(w http.ResponseWriter, r *http.Request) {
 	}
 	response := buildStudioAuthoringResponse(snapshot, parsed.AST)
 	writeStudioJSON(w, http.StatusOK, response)
+}
+
+type studioComponentPreviewFragment struct {
+	Instance string `json:"instance"`
+	Page     uint32 `json:"page"`
+	Margin   struct {
+		X      int64 `json:"x"`
+		Y      int64 `json:"y"`
+		Width  int64 `json:"width"`
+		Height int64 `json:"height"`
+	} `json:"margin_box"`
+}
+
+// handleComponentPreview plans one ephemeral component instance inside the
+// current document. It returns the exact display-list SVG with a viewBox
+// cropped to finalized fragment geometry; browser layout only scales that
+// immutable geometry into the authoring rail.
+func (s *studioServer) handleComponentPreview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	if r.URL.Query().Get("preview_format") != studioComponentPreviewFormat {
+		writeStudioError(w, http.StatusBadRequest, errors.New("paper-studio: unsupported component preview format"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), studioAPITimeout)
+	defer cancel()
+	snapshot, err := s.current(ctx, r.URL.Query().Get("scenario"))
+	if err != nil {
+		writeStudioError(w, http.StatusUnprocessableEntity, err)
+		return
+	}
+	if r.URL.Query().Get("revision") != snapshot.revision || r.URL.Query().Get("source_revision") != studioSourceRevision(snapshot.source) {
+		writeStudioError(w, http.StatusConflict, errors.New("paper-studio: component preview revision is stale"))
+		return
+	}
+	component := r.URL.Query().Get("component")
+	preview, planHash, err := s.componentPreview(ctx, snapshot, component)
+	if err != nil {
+		writeStudioError(w, http.StatusUnprocessableEntity, err)
+		return
+	}
+	w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	w.Header().Set("ETag", `"`+planHash+`-component-v`+studioComponentPreviewFormat+`"`)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(preview)
+}
+
+func (s *studioServer) componentPreview(ctx context.Context, snapshot *studioSnapshot, component string) ([]byte, string, error) {
+	parsed := paperlang.Parse(snapshot.file, snapshot.source)
+	if !parsed.OK() {
+		return nil, "", errors.New("paper-studio: source cannot provide a component preview")
+	}
+	metadata := buildStudioAuthoringResponse(snapshot, parsed.AST)
+	componentFound, body := false, ""
+	for _, candidate := range metadata.Components {
+		componentFound = componentFound || candidate == component
+	}
+	for _, target := range metadata.TemplateTargets {
+		if target.Kind == string(paperlang.NodeBody) && body == "" {
+			body = target.ID
+		}
+	}
+	if !componentFound || body == "" {
+		return nil, "", errors.New("paper-studio: component preview requires one exact component and body")
+	}
+	previewID := "@studio-gallery-preview"
+	for suffix := 2; studioSourceTargetExists(parsed.AST.Root, previewID); suffix++ {
+		previewID = "@studio-gallery-preview-" + strconv.Itoa(suffix)
+	}
+	value := paperedit.StringValue(component)
+	fingerprint, instance, err := studioTargetPrecondition(snapshot.file, snapshot.source, body)
+	if err != nil {
+		return nil, "", err
+	}
+	edit, err := paperedit.Apply(paperedit.Transaction{File: snapshot.file, Source: snapshot.source,
+		ExpectedRevision: paperedit.SourceRevision(snapshot.source), RequireExactTargets: true,
+		TargetPreconditions: []paperedit.TargetPrecondition{{Target: body, ExpectedFingerprint: fingerprint, ExpectedInstance: instance}},
+		Operations: []paperedit.Operation{paperedit.InsertNode{Parent: body, Node: paperedit.NodeSpec{Kind: paperlang.NodeUse, ID: previewID,
+			Properties: []paperedit.PropertySpec{{Name: "component", Value: value}}}}}})
+	if err != nil || !edit.Applied {
+		return nil, "", fmt.Errorf("paper-studio: create ephemeral component preview: %w (%+v)", err, edit.Diagnostics)
+	}
+	s.mu.Lock()
+	catalog := s.assetCatalog
+	s.mu.Unlock()
+	resolver := studioFileImportResolver()
+	var plan document.PaperPlan
+	var planned document.PaperPlanResult
+	if snapshot.scenario == "" {
+		plan, planned, err = document.PlanPaperWithAssetsAndImportsContext(ctx, snapshot.file, edit.Source, catalog, resolver)
+	} else {
+		plan, planned, err = document.PlanPaperScenarioWithAssetsAndImportsContext(ctx, snapshot.file, edit.Source, snapshot.scenario, catalog, resolver)
+	}
+	if err != nil || !planned.OK() {
+		return nil, "", fmt.Errorf("paper-studio: plan component preview: %w", err)
+	}
+	page, crop, err := componentPreviewBounds(plan, previewID)
+	if err != nil {
+		return nil, "", err
+	}
+	capture, err := plan.CaptureDisplayPageSVG(ctx, page, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	return cropComponentPreviewSVG(capture.SVG, crop), plan.Hash(), nil
+}
+
+func studioSourceTargetExists(root *paperlang.Node, target string) bool {
+	node, _ := studioSourceTarget(root, target)
+	return node != nil
+}
+
+type studioComponentPreviewBounds struct{ X, Y, Width, Height int64 }
+
+func componentPreviewBounds(plan document.PaperPlan, previewID string) (uint32, studioComponentPreviewBounds, error) {
+	var selectedPage uint32
+	var bounds, lineBounds studioComponentPreviewBounds
+	for page := uint32(1); page <= uint32(plan.PageCount()); page++ { // #nosec G115 -- page count is bounded by the planner
+		query, err := plan.Query(document.PaperPlanSelector{Page: page, MaxResults: 256})
+		if err != nil {
+			return 0, studioComponentPreviewBounds{}, err
+		}
+		var decoded struct {
+			Summary struct {
+				Fragments struct{ Truncated bool }
+				Lines     struct{ Truncated bool }
+			}
+			Fragments []struct {
+				Fragment studioComponentPreviewFragment
+			}
+			Lines []struct {
+				Instance string
+				Line     struct {
+					Bounds studioComponentPreviewBounds `json:"bounds"`
+				}
+			}
+		}
+		if err := json.Unmarshal(query.JSON(), &decoded); err != nil {
+			return 0, studioComponentPreviewBounds{}, err
+		}
+		if decoded.Summary.Fragments.Truncated || decoded.Summary.Lines.Truncated {
+			return 0, studioComponentPreviewBounds{}, errors.New("paper-studio: component preview exceeds the structural query bound")
+		}
+		for _, record := range decoded.Fragments {
+			fragment := record.Fragment
+			if fragment.Instance != previewID && !strings.HasPrefix(fragment.Instance, previewID+"/") || fragment.Margin.Width <= 0 || fragment.Margin.Height <= 0 {
+				continue
+			}
+			if selectedPage == 0 {
+				selectedPage = page
+			}
+			if page != selectedPage {
+				continue
+			}
+			bounds = unionStudioComponentBounds(bounds, studioComponentPreviewBounds(fragment.Margin))
+		}
+		if page == selectedPage {
+			for _, line := range decoded.Lines {
+				if line.Instance == previewID || strings.HasPrefix(line.Instance, previewID+"/") {
+					lineBounds = unionStudioComponentBounds(lineBounds, line.Line.Bounds)
+				}
+			}
+		}
+	}
+	if selectedPage == 0 || bounds.Width <= 0 || bounds.Height <= 0 {
+		return 0, studioComponentPreviewBounds{}, errors.New("paper-studio: component produced no previewable finalized geometry")
+	}
+	if lineBounds.Width > 0 && lineBounds.Height > 0 {
+		bounds = lineBounds
+	}
+	const padding = int64(4 * 1024)
+	bounds.X -= padding
+	bounds.Y -= padding
+	bounds.Width += 2 * padding
+	bounds.Height += 2 * padding
+	if bounds.X < 0 {
+		bounds.Width += bounds.X
+		bounds.X = 0
+	}
+	if bounds.Y < 0 {
+		bounds.Height += bounds.Y
+		bounds.Y = 0
+	}
+	// The inspector rail is narrow. Keep a left-anchored exact crop rather than
+	// shrinking a full-width paragraph fragment until its themed text is
+	// illegible; this changes only the visible crop, never planner geometry.
+	if maxPreviewWidth := bounds.Height * 4; bounds.Width > maxPreviewWidth {
+		bounds.Width = maxPreviewWidth
+	}
+	return selectedPage, bounds, nil
+}
+
+func unionStudioComponentBounds(left, right studioComponentPreviewBounds) studioComponentPreviewBounds {
+	if left.Width <= 0 || left.Height <= 0 {
+		return right
+	}
+	x2, y2 := max(left.X+left.Width, right.X+right.Width), max(left.Y+left.Height, right.Y+right.Height)
+	left.X, left.Y = min(left.X, right.X), min(left.Y, right.Y)
+	left.Width, left.Height = x2-left.X, y2-left.Y
+	return left
+}
+
+func cropComponentPreviewSVG(source []byte, crop studioComponentPreviewBounds) []byte {
+	prefix := `viewBox="`
+	start := strings.Index(string(source), prefix)
+	if start < 0 {
+		return append([]byte(nil), source...)
+	}
+	start += len(prefix)
+	end := strings.IndexByte(string(source[start:]), '"')
+	if end < 0 {
+		return append([]byte(nil), source...)
+	}
+	viewBox := fmt.Sprintf("%d %d %d %d", crop.X, crop.Y, crop.Width, crop.Height)
+	result := make([]byte, 0, len(source)+len(viewBox))
+	result = append(result, source[:start]...)
+	result = append(result, viewBox...)
+	result = append(result, source[start+end:]...)
+	return result
 }
 
 func buildStudioAuthoringResponse(snapshot *studioSnapshot, ast paperlang.AST) studioAuthoringResponse {

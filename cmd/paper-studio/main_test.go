@@ -142,11 +142,13 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		bytes.Contains(javascript.Body, []byte("loadSVG(page, 'display')")) ||
 		bytes.Contains(javascript.Body, []byte("loadReviewOverlay")) ||
 		!bytes.Contains(javascript.Body, []byte("await showPage(fragment.page)")) ||
-		!bytes.Contains(javascript.Body, []byte("markOutlineKey(fragment.Key)")) {
+		!bytes.Contains(javascript.Body, []byte("markOutlineKey(fragment.Key)")) ||
+		!bytes.Contains(javascript.Body, []byte("/api/component-preview.svg")) ||
+		!bytes.Contains(javascript.Body, []byte("exact current-theme preview")) {
 		t.Fatalf("studio synchronization script = %d / %s", javascript.StatusCode, javascript.Body)
 	}
 	stylesheetVerification := studioRequest(t, handler, http.MethodGet, "/studio.css", nil, "")
-	if stylesheetVerification.StatusCode != http.StatusOK || !bytes.Contains(stylesheetVerification.Body, []byte("verification-state.is-verified")) || !bytes.Contains(stylesheetVerification.Body, []byte("verification-state.is-stale")) || !bytes.Contains(stylesheetVerification.Body, []byte("delivery-export")) {
+	if stylesheetVerification.StatusCode != http.StatusOK || !bytes.Contains(stylesheetVerification.Body, []byte("verification-state.is-verified")) || !bytes.Contains(stylesheetVerification.Body, []byte("verification-state.is-stale")) || !bytes.Contains(stylesheetVerification.Body, []byte("delivery-export")) || !bytes.Contains(stylesheetVerification.Body, []byte("component-gallery-preview")) {
 		t.Fatalf("verification status styles = %d / %s", stylesheetVerification.StatusCode, stylesheetVerification.Body)
 	}
 	editModel := studioRequest(t, handler, http.MethodGet, "/edit-model.js", nil, "")
@@ -211,7 +213,7 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		t.Fatalf("wasm module = %d / %d bytes", wasmModule.StatusCode, len(wasmModule.Body))
 	}
 	stylesheet := studioRequest(t, handler, http.MethodGet, "/studio.css", nil, "")
-	if stylesheet.StatusCode != http.StatusOK || !bytes.Contains(stylesheet.Body, []byte("STALE PREVIEW")) ||
+	if stylesheet.StatusCode != http.StatusOK || !bytes.Contains(stylesheet.Body, []byte("preview-loading-progress")) ||
 		!bytes.Contains(stylesheet.Body, []byte(".inspection-mark.is-reading")) ||
 		!bytes.Contains(stylesheet.Body, []byte(".inspection-mark.is-instance-repeated")) ||
 		!bytes.Contains(stylesheet.Body, []byte(".inspection-mark.is-baseline")) ||

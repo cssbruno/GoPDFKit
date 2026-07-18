@@ -25,6 +25,7 @@
         <button class="mode" data-mode="accessibility" aria-pressed="false">Accessibility</button>
       </nav>
       <div class="top-actions">
+        <a id="save-paperdoc" class="icon-button paperdoc-action" href="/api/export.paperdoc" download>Save .paperdoc</a>
         <button id="toggle-overlay" class="icon-button" aria-pressed="false" title="Toggle geometry overlay">Geometry</button>
         <button id="refresh" class="primary-action">Refresh plan</button>
       </div>
@@ -61,11 +62,21 @@
       </aside>
 
       <section id="canvas-region" class="canvas-region" aria-label="Document canvas">
-        <div id="stale-banner" class="stale-banner" role="status">Preview revision changed. Rebuilding exact pages…</div>
         <div id="canvas-scroll" class="canvas-scroll">
           <div id="page-stage" class="page-stage" tabindex="0" aria-label="Rendered page">
             <canvas id="page-image" role="img" aria-label="Exact display-list page preview rendered by WebAssembly"></canvas>
             <img id="geometry-image" class="geometry-image" alt="Layout geometry and break overlay">
+            <div id="preview-loading" class="preview-loading" role="status" aria-live="polite">
+              <div class="preview-loading-heading"><span class="preview-loading-signal" aria-hidden="true"></span><span>Rendering exact page</span></div>
+              <div class="preview-loading-rule" aria-hidden="true"></div>
+              <div class="preview-loading-title" aria-hidden="true"></div>
+              <div class="preview-loading-meta" aria-hidden="true"><i></i><i></i><i></i></div>
+              <div class="preview-loading-body" aria-hidden="true">
+                <span></span><span></span><span></span><span></span><span></span><span></span>
+              </div>
+              <div class="preview-loading-progress" aria-hidden="true"><i></i></div>
+              <small>Composing layout, type and assets</small>
+            </div>
             <div id="inspection-layer" class="inspection-layer" aria-hidden="true"></div>
             <div id="selection-layer" class="selection-layer" aria-hidden="true"></div>
             <div id="selection-pulse" class="selection-pulse" aria-hidden="true"></div>

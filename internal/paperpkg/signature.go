@@ -230,6 +230,7 @@ type canonicalSignaturePayload struct {
 	LockfileSchemaVersion uint16          `json:"lockfile_schema_version"`
 	ProjectDigest         Digest          `json:"project_digest"`
 	ImportPath            string          `json:"import_path"`
+	Version               string          `json:"version"`
 	ContentDigest         Digest          `json:"content_digest"`
 	Assets                []Asset         `json:"assets,omitempty"`
 	SignaturePolicy       SignaturePolicy `json:"signature_policy"`
@@ -251,7 +252,7 @@ func signaturePayload(lockfile Lockfile, importPath, keyID string, expiresUnix i
 		return nil, err
 	}
 	payload := canonicalSignaturePayload{Domain: signaturePayloadDomain, LockfileSchemaVersion: lockfile.SchemaVersion,
-		ProjectDigest: projectDigest, ImportPath: entry.ImportPath, ContentDigest: entry.ContentDigest,
+		ProjectDigest: projectDigest, ImportPath: entry.ImportPath, Version: entry.Version, ContentDigest: entry.ContentDigest,
 		Assets: append([]Asset(nil), entry.Assets...), SignaturePolicy: entry.SignaturePolicy,
 		OfflinePolicy: entry.OfflinePolicy, KeyID: keyID, ExpiresUnix: expiresUnix}
 	return json.Marshal(payload)

@@ -175,6 +175,12 @@ type tableRowGroup struct {
 	policy string
 }
 
+type tableUnitGeometry struct {
+	rowOffsets    []Fixed
+	columnOffsets []Fixed
+	height        Fixed
+}
+
 // PlanTable builds a canonical geometry-only LayoutPlan. Cells are emitted in
 // row/column order, independent of input slice order. Rowspans derive the
 // smallest indivisible body row groups. A group that cannot fit below repeated
@@ -817,16 +823,19 @@ type tablePaginator struct {
 	rows    []Fixed
 	groups  []tableRowGroup
 
-	output             LayoutPlanInput
-	page               uint32
-	pageFragmentStart  int
-	cursor             Fixed
-	lastBodyFragment   FragmentID
-	lastBodyOverflow   bool
-	headerHeight       Fixed
-	headerTooTallAdded bool
-	body               Rect
-	gridGroup          uint32
+	output              LayoutPlanInput
+	page                uint32
+	pageFragmentStart   int
+	cursor              Fixed
+	lastBodyFragment    FragmentID
+	lastBodyOverflow    bool
+	headerHeight        Fixed
+	headerGeometry      tableUnitGeometry
+	headerGeometryReady bool
+	headerGeometryPlans uint32
+	headerTooTallAdded  bool
+	body                Rect
+	gridGroup           uint32
 }
 
 func (p *tablePaginator) plan() (LayoutPlan, error) {
@@ -979,6 +988,13 @@ func (p *tablePaginator) remaining() (Fixed, error) {
 // range because header-boundary validation and rowspan-derived groups ensure
 // every repeated or paginated unit is closed under rowspans.
 func (p *tablePaginator) placeRows(start, end uint32, header bool) (FragmentID, FragmentID, error) {
+	if header {
+		geometry, err := p.repeatedHeaderGeometry(start, end)
+		if err != nil {
+			return 0, 0, err
+		}
+		return p.placeRowsWithGeometry(start, end, true, geometry.rowOffsets, geometry.columnOffsets, geometry.height)
+	}
 	rowOffsets := make([]Fixed, end-start+1)
 	for row := start; row < end; row++ {
 		next, err := rowOffsets[row-start].Add(p.rows[row])
@@ -995,7 +1011,10 @@ func (p *tablePaginator) placeRows(start, end uint32, header bool) (FragmentID, 
 		}
 		columnOffsets[column+1] = next
 	}
-	unitHeight := rowOffsets[len(rowOffsets)-1]
+	return p.placeRowsWithGeometry(start, end, false, rowOffsets, columnOffsets, rowOffsets[len(rowOffsets)-1])
+}
+
+func (p *tablePaginator) placeRowsWithGeometry(start, end uint32, header bool, rowOffsets, columnOffsets []Fixed, unitHeight Fixed) (FragmentID, FragmentID, error) {
 	p.gridGroup++
 	for column, width := range p.columns {
 		x, err := p.body.X.Add(columnOffsets[column])
@@ -1074,6 +1093,32 @@ func (p *tablePaginator) placeRows(start, end uint32, header bool) (FragmentID, 
 		p.lastBodyOverflow = p.cursor > bodyBottom
 	}
 	return first, last, nil
+}
+
+func (p *tablePaginator) repeatedHeaderGeometry(start, end uint32) (tableUnitGeometry, error) {
+	if p.headerGeometryReady {
+		return p.headerGeometry, nil
+	}
+	geometry := tableUnitGeometry{rowOffsets: make([]Fixed, end-start+1), columnOffsets: make([]Fixed, len(p.columns)+1)}
+	for row := start; row < end; row++ {
+		next, err := geometry.rowOffsets[row-start].Add(p.rows[row])
+		if err != nil {
+			return tableUnitGeometry{}, err
+		}
+		geometry.rowOffsets[row-start+1] = next
+	}
+	for column, width := range p.columns {
+		next, err := geometry.columnOffsets[column].Add(width)
+		if err != nil {
+			return tableUnitGeometry{}, err
+		}
+		geometry.columnOffsets[column+1] = next
+	}
+	geometry.height = geometry.rowOffsets[len(geometry.rowOffsets)-1]
+	p.headerGeometry = geometry
+	p.headerGeometryReady = true
+	p.headerGeometryPlans++
+	return geometry, nil
 }
 
 func (p *tablePaginator) noteOversize(group tableRowGroup, first FragmentID) error {

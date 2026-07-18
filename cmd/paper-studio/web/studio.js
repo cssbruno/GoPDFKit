@@ -7,6 +7,8 @@ const state = {
   page: 1,
   zoom: 1,
   zoomRender: 0,
+  thumbnailRender: 0,
+  detailRender: 0,
   activePageMeta: null,
   pageMeta: new Map(),
   inspections: new Map(),
@@ -465,12 +467,19 @@ function renderAuthoringControls() {
   if (draft.operation === 'template') {
     const targets=metadata.templateTargets.map(item=>item.id); draft.target=targets.includes(draft.target)?draft.target:targets[0];
     const targetKind=metadata.templateTargets.find(item=>item.id===draft.target)?.kind;
-    const choices=targetKind==='document'?['page']:targetKind==='body'?['paragraph','heading','list','row','column','page-break',...(metadata.components.length?'component':[]),'section']:['paragraph','heading',...(metadata.components.length?'component':[])];
+    const choices=targetKind==='document'?['page']:targetKind==='body'?['paragraph','heading','list','row','column','page-break',...(metadata.components.length?['component']:[]),'section']:['paragraph','heading',...(metadata.components.length?['component']:[])];
     draft.template=choices.includes(draft.template)?draft.template:choices[0]; draft.id=draft.id|| (draft.template==='page'?'@sheet':'@new-content');
     form.append(authoringSelect('Inside',targets,draft.target,value=>{draft.target=value;renderAuthoringControls();}),authoringSelect('Palette',choices,draft.template,value=>{draft.template=value;renderAuthoringControls();}),authoringInput('Readable ID',draft.id,value=>draft.id=value));
     if (draft.template === 'component') {
       draft.component=metadata.components.includes(draft.component)?draft.component:metadata.components[0];
-      form.append(authoringSelect('Component',metadata.components,draft.component,value=>{draft.component=value;}));
+      form.append(authoringSelect('Component',metadata.components,draft.component,value=>{draft.component=value;renderAuthoringControls();}));
+      const gallery=document.createElement('figure');gallery.className='component-gallery';
+      const preview=document.createElement('div');preview.className='component-gallery-preview';
+      const image=document.createElement('img');image.loading='lazy';image.alt=`${draft.component} exact current-theme preview`;
+      const query=new URLSearchParams({preview_format:'2',revision:metadata.revision,source_revision:metadata.sourceRevision,component:draft.component});
+      if(state.scenario)query.set('scenario',state.scenario);image.src=`/api/component-preview.svg?${query}`;preview.append(image);
+      const caption=document.createElement('figcaption');caption.textContent=`${draft.component} · exact planner geometry · current theme`;
+      gallery.append(preview,caption);form.append(gallery);
     }
   } else if (draft.operation === 'schema') {
     draft.target = metadata.documentTarget; draft.id = draft.id || '@new-schema';
@@ -906,7 +915,6 @@ function renderThumbnails(count, summaries) {
     }
     item.append(badges);
     target.append(item);
-    loadWASMPage(page, 72).then((rendered) => paintWASMCanvas(button.querySelector('canvas'), rendered)).catch(() => {});
   }
 }
 
@@ -979,6 +987,59 @@ function paintWASMCanvas(canvas, rendered) {
   context.drawImage(rendered.bitmap, 0, 0);
 }
 
+function paintWASMThumbnail(page, rendered) {
+  const canvas = document.querySelector(`.thumbnail-page[data-page="${CSS.escape(String(page))}"] canvas`);
+  if (!canvas) return;
+  const width = Math.max(1, Math.min(96, rendered.pixelWidth));
+  const height = Math.max(1, Math.round(width * rendered.pixelHeight / rendered.pixelWidth));
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d', {alpha: false});
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+  context.clearRect(0, 0, width, height);
+  context.drawImage(rendered.bitmap, 0, 0, width, height);
+}
+
+function queueWASMThumbnails(activePage) {
+  const serial = ++state.thumbnailRender;
+  const revision = state.revision;
+  const pages = Array.from(document.querySelectorAll('.thumbnail-page'), (button) => Number(button.dataset.page))
+    .filter((page) => page !== activePage);
+  const idle = () => new Promise((resolve) => {
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(resolve, {timeout: 250});
+    else setTimeout(resolve, 0);
+  });
+  (async () => {
+    for (const page of pages) {
+      await idle();
+      if (serial !== state.thumbnailRender || revision !== state.revision) return;
+      const rendered = await loadWASMPage(page, 36);
+      if (serial !== state.thumbnailRender || revision !== state.revision) return;
+      paintWASMThumbnail(page, rendered);
+    }
+  })().catch((error) => { if (error.status === 409) refresh({quiet: true}); });
+}
+
+function queueWASMPageDetail(page) {
+  const serial = ++state.detailRender;
+  const revision = state.revision;
+  const dpi = renderDPIForZoom();
+  if (dpi === previewDPIForZoom()) return;
+  const idle = (callback) => {
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(callback, {timeout: 400});
+    else setTimeout(callback, 0);
+  };
+  idle(() => {
+    loadWASMPage(page, dpi).then((rendered) => {
+      if (serial !== state.detailRender || revision !== state.revision || page !== state.page) return;
+      paintWASMPage(rendered);
+      renderInspectionOverlays();
+      renderSelectionRects();
+    }).catch((error) => { if (error.status === 409) refresh({quiet: true}); });
+  });
+}
+
 function paintWASMPage(rendered) {
   paintWASMCanvas(pageImage, rendered);
   state.activePageMeta = rendered;
@@ -1012,10 +1073,13 @@ async function showPage(page) {
   }
   setPreviewStale(true);
   try {
-    const [display, geometry] = await Promise.all([loadWASMPage(page, renderDPIForZoom()), loadSVG(page, 'geometry'), loadInspection(page)]);
+    const [display, geometry] = await Promise.all([loadWASMPage(page, previewDPIForZoom()), loadSVG(page, 'geometry'), loadInspection(page)]);
     if (revision !== state.revision) return;
     state.page = page;
     paintWASMPage(display);
+    paintWASMThumbnail(page, display);
+    queueWASMPageDetail(page);
+    queueWASMThumbnails(page);
     geometryImage.src = geometry.url;
     $('#page-label').textContent = `Page ${page} of ${state.workspace.pages}`;
     document.querySelectorAll('.thumbnail-page').forEach((button) => {
@@ -1628,6 +1692,10 @@ function setMode(mode) {
 
 function renderDPIForZoom() {
   return Math.max(72, Math.min(600, Math.round(144 * Math.max(1, state.zoom))));
+}
+
+function previewDPIForZoom() {
+  return Math.max(72, Math.min(600, Math.round(96 * Math.max(1, state.zoom))));
 }
 
 function applyPageStageWidth(rendered = state.activePageMeta) {

@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	LockfileSchemaVersion uint16 = 1
+	LockfileSchemaVersion uint16 = 2
 
 	HardMaxLockfileBytes uint64 = 16 << 20
 	HardMaxStateBytes    uint64 = 32 << 20
@@ -86,6 +86,7 @@ type Asset struct {
 // produced the entry; this package does not execute either policy.
 type Entry struct {
 	ImportPath      string          `json:"import_path"`
+	Version         string          `json:"version"`
 	ContentDigest   Digest          `json:"content_digest"`
 	Assets          []Asset         `json:"assets,omitempty"`
 	SignaturePolicy SignaturePolicy `json:"signature_policy"`
@@ -155,6 +156,9 @@ func (lockfile Lockfile) ValidateWithLimits(limits Limits) error {
 			return invalidAt(entryPath+".import_path", errors.New("entries are not strictly sorted and unique"))
 		}
 		previousImport = entry.ImportPath
+		if err := validatePackageVersion(entry.Version); err != nil {
+			return invalidAt(entryPath+".version", err)
+		}
 		if err := validateDigest(entry.ContentDigest); err != nil {
 			return invalidAt(entryPath+".content_digest", err)
 		}
@@ -168,7 +172,7 @@ func (lockfile Lockfile) ValidateWithLimits(limits Limits) error {
 		if assetCount > uint64(limits.MaxAssets) {
 			return fmt.Errorf("%w: too many assets", ErrLockfileLimit)
 		}
-		stateBytes += uint64(len(entry.ImportPath) + len(entry.ContentDigest) + len(entry.SignaturePolicy) + len(entry.OfflinePolicy) + 96)
+		stateBytes += uint64(len(entry.ImportPath) + len(entry.Version) + len(entry.ContentDigest) + len(entry.SignaturePolicy) + len(entry.OfflinePolicy) + 96)
 		previousAsset := ""
 		for assetIndex, asset := range entry.Assets {
 			assetPath := fmt.Sprintf("%s.assets[%d]", entryPath, assetIndex)
@@ -189,6 +193,19 @@ func (lockfile Lockfile) ValidateWithLimits(limits Limits) error {
 		}
 		if stateBytes > limits.MaxStateBytes {
 			return fmt.Errorf("%w: decoded state exceeds its byte budget", ErrLockfileLimit)
+		}
+	}
+	return nil
+}
+
+func validatePackageVersion(version string) error {
+	if version == "" || len(version) > 128 || !utf8.ValidString(version) || !norm.NFC.IsNormalString(version) {
+		return errors.New("version must be non-empty, NFC, valid UTF-8, and at most 128 bytes")
+	}
+	for index, character := range version {
+		if character > unicode.MaxASCII || !(unicode.IsLetter(character) || unicode.IsDigit(character) ||
+			(index > 0 && strings.ContainsRune("._+-", character))) {
+			return errors.New("version must use canonical ASCII letters, digits, dots, underscores, pluses, or hyphens")
 		}
 	}
 	return nil

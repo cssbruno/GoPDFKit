@@ -1,0 +1,26 @@
+document @gallery-demo:
+  theme: "@studio"
+
+  theme @studio:
+    token @accent:
+      type: "color"
+      value: "#315ee8"
+    token @space:
+      type: "length"
+      value: 8pt
+
+  component @callout:
+    heading @callout-title:
+      level: 2
+      color: "#315ee8"
+      text: "Current theme"
+    paragraph @callout-copy:
+      text: "Exact component preview"
+
+  page @sheet:
+    width: 320pt
+    height: 220pt
+    margin: 20pt
+    body @body:
+      paragraph @intro:
+        text: "Component gallery fixture"

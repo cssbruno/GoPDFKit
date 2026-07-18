@@ -48,7 +48,7 @@ func TestCaptureDisplayPlanPNGDeterministicLosslessPageAndManifest(t *testing.T)
 	if manifest.PNGSHA256 != hex.EncodeToString(digest[:]) || manifest.PNGByteLength != uint64(len(first.PNG())) {
 		t.Fatalf("PNG evidence = %+v", manifest)
 	}
-	if manifest.PNGSHA256 != "9515ef97ae551017a2ec606bf385ca24a5d269e0970e6ca13725d13aa2de2549" {
+	if manifest.PNGSHA256 != "45a8cc5f49a9e0f336dacc3c17377262a966f1eb16ae5914383d08a13bdd305c" {
 		t.Fatalf("fixture raster hash = %s", manifest.PNGSHA256)
 	}
 	decoded, err := png.Decode(bytes.NewReader(first.PNG()))

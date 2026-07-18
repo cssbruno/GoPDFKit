@@ -91,6 +91,64 @@ func TestBreakShapedTextPreservesRTLVisualGlyphOrderPerLine(t *testing.T) {
 	}
 }
 
+func TestBreakShapedTextInternationalAdversarialMatrix(t *testing.T) {
+	t.Run("CJK clusters", func(t *testing.T) {
+		shaped := shapedLineFixture("日本語", DirectionLTR, []ShapedGlyph{
+			shapedLineGlyph(1, 6, 0, 3),
+			shapedLineGlyph(2, 6, 3, 6),
+			shapedLineGlyph(3, 6, 6, 9),
+		})
+		shaped.Language = "ja"
+		layout, err := BreakShapedText(context.Background(), shaped, 12, ShapedLineLimits{})
+		if err != nil {
+			t.Fatalf("BreakShapedText() = %v", err)
+		}
+		if len(layout.Lines) != 2 || layout.Lines[0].TextEnd != 6 || layout.Lines[1].TextStart != 6 ||
+			layout.Lines[0].Width != 12 || layout.Lines[1].Width != 6 {
+			t.Fatalf("CJK lines = %+v", layout.Lines)
+		}
+	})
+
+	t.Run("mixed bidi visual order", func(t *testing.T) {
+		shaped := shapedLineFixture("A אב", DirectionLTR, []ShapedGlyph{
+			shapedLineGlyph('A', 4, 0, 1),
+			shapedLineGlyph(' ', 2, 1, 2),
+			shapedLineGlyph(2, 4, 4, 6),
+			shapedLineGlyph(1, 4, 2, 4),
+		})
+		shaped.Language = "he"
+		layout, err := BreakShapedText(context.Background(), shaped, 8, ShapedLineLimits{})
+		if err != nil {
+			t.Fatalf("BreakShapedText() = %v", err)
+		}
+		if len(layout.Lines) != 2 || layout.Lines[0].TextEnd != 2 || layout.Lines[1].TextStart != 2 {
+			t.Fatalf("mixed-bidi ranges = %+v", layout.Lines)
+		}
+		if got := []uint32{layout.Lines[1].Glyphs[0].ID, layout.Lines[1].Glyphs[1].ID}; !reflect.DeepEqual(got, []uint32{2, 1}) {
+			t.Fatalf("mixed-bidi visual glyph order = %v", got)
+		}
+	})
+
+	t.Run("emoji ZWJ cluster", func(t *testing.T) {
+		const emoji = "👩‍⚕️"
+		text := emoji + " X"
+		emojiEnd := uint32(len(emoji))
+		shaped := shapedLineFixture(text, DirectionLTR, []ShapedGlyph{
+			shapedLineGlyph(10, 8, 0, emojiEnd),
+			shapedLineGlyph(' ', 2, emojiEnd, emojiEnd+1),
+			shapedLineGlyph('X', 4, emojiEnd+1, emojiEnd+2),
+		})
+		layout, err := BreakShapedText(context.Background(), shaped, 10, ShapedLineLimits{})
+		if err != nil {
+			t.Fatalf("BreakShapedText() = %v", err)
+		}
+		if len(layout.Lines) != 2 || layout.Lines[0].TextEnd != emojiEnd+1 ||
+			layout.Lines[0].Glyphs[0].Cluster != (UTF8Cluster{Start: 0, End: emojiEnd}) || layout.Lines[1].TextStart != emojiEnd+1 {
+			t.Fatalf("emoji lines = %+v", layout.Lines)
+		}
+	})
+}
+
 type shapedLineRecordingSink struct {
 	lines  []ShapedLine
 	glyphs [][]ShapedGlyph

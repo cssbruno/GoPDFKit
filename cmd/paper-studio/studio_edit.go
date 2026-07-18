@@ -594,6 +594,9 @@ func studioEditIdempotencyKey(request studioEditRequest) string {
 }
 
 func writeStudioSourceCAS(file string, expected [32]byte, source string) error {
+	if isStudioPaperDocument(file) {
+		return writeStudioPaperDocumentSourceCAS(file, expected, source)
+	}
 	_, actual, err := readStudioSource(file)
 	if err != nil {
 		return err

@@ -82,7 +82,11 @@ func (c *compiler) formatBindingValue(node *paperlang.Node, value paperscenario.
 		c.add("PAPER_BIND_FORMAT", "format must be a quoted string", "use string, bool, integer, decimal, or currency", format.Value.Span)
 		return "", true, false
 	}
-	spec := paperformat.FormatSpec{Kind: paperformat.ValueFormatKind(strings.TrimSpace(*format.Value.StringValue)), Output: paperformat.ValueOutputBare}
+	spec := paperformat.FormatSpec{
+		Kind:   paperformat.ValueFormatKind(strings.TrimSpace(*format.Value.StringValue)),
+		Locale: c.fixture.Locale,
+		Output: paperformat.ValueOutputBare,
+	}
 	if property := properties["format-locale"]; property != nil {
 		if property.Value.Kind != paperlang.ScalarString || property.Value.StringValue == nil {
 			c.add("PAPER_BIND_FORMAT", "format-locale must be a quoted locale", "use an explicitly supported locale such as en-US or pt-BR", property.Value.Span)

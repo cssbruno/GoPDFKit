@@ -147,7 +147,7 @@ func TestOfflineResolverRejectAllPolicyRejectsSymlinkProjectRoot(t *testing.T) {
 }
 
 func resolverEntry() Entry {
-	return Entry{ImportPath: "packages/chart.paper", ContentDigest: shaDigest([]byte("chart package")),
+	return Entry{ImportPath: "packages/chart.paper", Version: "v1.0.0", ContentDigest: shaDigest([]byte("chart package")),
 		Assets:          []Asset{{Path: "assets/chart.png", Digest: shaDigest([]byte("png bytes"))}},
 		SignaturePolicy: SignatureRequired, OfflinePolicy: OfflineOnly}
 }

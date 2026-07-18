@@ -54,6 +54,7 @@ func TestSignatureBindsProjectEntryAssetsAndPolicies(t *testing.T) {
 		name   string
 		mutate func(*Lockfile)
 	}{
+		{"version", func(lockfile *Lockfile) { lockfile.Entries[0].Version = "v1.4.1" }},
 		{"content", func(lockfile *Lockfile) { lockfile.Entries[0].ContentDigest = digest('e') }},
 		{"asset", func(lockfile *Lockfile) { lockfile.Entries[0].Assets[0].Digest = digest('e') }},
 		{"offline policy", func(lockfile *Lockfile) { lockfile.Entries[0].OfflinePolicy = NetworkAllowed }},

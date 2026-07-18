@@ -192,7 +192,7 @@ func TestHTMLUnifiedFlexJustificationHasExactPlanCursorRasterAndSemantics(t *tes
 				if err != nil || status != "captured" || raster == nil || len(raster.Pages) != 1 || raster.Pages[0].PNGSHA256 == "" {
 					t.Fatalf("space-evenly raster=%+v status=%q err=%v", raster, status, err)
 				}
-				if got := raster.Pages[0].PNGSHA256; got != "4bb6cdd3f6604569d45e7ccf9b09c48d08b3dd49c30c01ca557ef94556383241" {
+				if got := raster.Pages[0].PNGSHA256; got != "a79fedeba470444d2aa4821ef2ff8072f2107c649a1349c1ad2a8ef6d9b36103" {
 					t.Fatalf("space-evenly raster drift: %s", got)
 				}
 				pdf := newHTMLFrameTestDocument(t, 160)

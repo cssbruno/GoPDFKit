@@ -8,6 +8,7 @@ const payload = {format_version:1, revision:'plan-1', plan_hash:'plan-1', source
   scenarios:['@review'], scenario_values:[{scenario:'@review',path:'total',kind:'number',value:'10'},{scenario:'@review',path:'customer.name',kind:'string',value:'Ada'}],
   stress_presets:['empty','typical','stress'], components:['@card']};
 const metadata = model.normalize(payload, workspace);
+assert.deepEqual(['paragraph','heading',...(metadata.components.length?['component']:[])], ['paragraph','heading','component']);
 assert.deepEqual(model.buildPayload(workspace, metadata, {operation:'template',target:'@body',template:'section',id:'@summary'}),
   {source_revision:'source-1',plan_revision:'plan-1',scenario:'',operation:'template',property:'',target:'@body',template:'section',id:'@summary'});
 const bootstrapMetadata = model.normalize({...payload, template_targets:[{id:'@doc',kind:'document'}]}, workspace);

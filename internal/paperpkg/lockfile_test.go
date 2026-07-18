@@ -17,7 +17,7 @@ func TestLockfileCanonicalRoundTripLookupAndProjectDigest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantJSON := `{"schema_version":1,"entries":[{"import_path":"acme/charts","content_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","assets":[{"path":"fonts/body.ttf","digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},{"path":"images/chart.png","digest":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],"signature_policy":"required","offline_policy":"offline_only"},{"import_path":"acme/forms","content_digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","signature_policy":"allow_unsigned","offline_policy":"network_allowed"}]}`
+	wantJSON := `{"schema_version":2,"entries":[{"import_path":"acme/charts","version":"v1.4.0","content_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","assets":[{"path":"fonts/body.ttf","digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},{"path":"images/chart.png","digest":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],"signature_policy":"required","offline_policy":"offline_only"},{"import_path":"acme/forms","version":"2026.07+approved","content_digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","signature_policy":"allow_unsigned","offline_policy":"network_allowed"}]}`
 	if string(encoded) != wantJSON {
 		t.Fatalf("Encode() = %s\nwant %s", encoded, wantJSON)
 	}
@@ -44,7 +44,7 @@ func TestLockfileCanonicalRoundTripLookupAndProjectDigest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := string(project), "f736eab1776dbdcb5a2531454e48dd400dfee59c3157a6e471ca1b7d6f387092"; got != want {
+	if got, want := string(project), "1d997996d5298572a7e283964052f4dd32a481276cd176ae4a7ed751bb4e3c47"; got != want {
 		t.Fatalf("ProjectDigest() = %s, want %s", got, want)
 	}
 }
@@ -65,7 +65,7 @@ func TestDecodeRejectsUnknownTrailingAndNoncanonicalJSON(t *testing.T) {
 		{"trailing garbage", append(append([]byte(nil), canonical...), '!'), ErrInvalidLockfile},
 		{"leading whitespace", append([]byte{' '}, canonical...), ErrNonCanonicalJSON},
 		{"trailing whitespace", append(append([]byte(nil), canonical...), '\n'), ErrNonCanonicalJSON},
-		{"field order", []byte(`{"entries":[],"schema_version":1}`), ErrNonCanonicalJSON},
+		{"field order", []byte(`{"entries":[],"schema_version":2}`), ErrNonCanonicalJSON},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -107,6 +107,8 @@ func TestLockfileRejectsInvalidPathsOrderingDigestsAndPolicies(t *testing.T) {
 			lockfile.Entries[0].Assets[0], lockfile.Entries[0].Assets[1] = lockfile.Entries[0].Assets[1], lockfile.Entries[0].Assets[0]
 		}},
 		{"duplicate asset", func(lockfile *Lockfile) { lockfile.Entries[0].Assets[1].Path = lockfile.Entries[0].Assets[0].Path }},
+		{"empty version", func(lockfile *Lockfile) { lockfile.Entries[0].Version = "" }},
+		{"noncanonical version", func(lockfile *Lockfile) { lockfile.Entries[0].Version = "v1/next" }},
 		{"short digest", func(lockfile *Lockfile) { lockfile.Entries[0].ContentDigest = "abc" }},
 		{"uppercase digest", func(lockfile *Lockfile) { lockfile.Entries[0].ContentDigest = Digest(strings.Repeat("A", 64)) }},
 		{"nonhex digest", func(lockfile *Lockfile) { lockfile.Entries[0].Assets[0].Digest = Digest(strings.Repeat("g", 64)) }},
@@ -166,6 +168,7 @@ func TestProjectDigestChangesForEveryTransitiveIdentity(t *testing.T) {
 	base := validLockfile()
 	want, _ := base.ProjectDigest()
 	mutations := []func(*Lockfile){
+		func(lockfile *Lockfile) { lockfile.Entries[0].Version = "v1.4.1" },
 		func(lockfile *Lockfile) { lockfile.Entries[0].ContentDigest = digest('e') },
 		func(lockfile *Lockfile) { lockfile.Entries[0].Assets[0].Digest = digest('e') },
 		func(lockfile *Lockfile) { lockfile.Entries[0].SignaturePolicy = SignatureAllowUnsigned },
@@ -192,11 +195,11 @@ func TestParseDigest(t *testing.T) {
 
 func validLockfile() Lockfile {
 	return Lockfile{SchemaVersion: LockfileSchemaVersion, Entries: []Entry{
-		{ImportPath: "acme/charts", ContentDigest: digest('a'), Assets: []Asset{
+		{ImportPath: "acme/charts", Version: "v1.4.0", ContentDigest: digest('a'), Assets: []Asset{
 			{Path: "fonts/body.ttf", Digest: digest('b')},
 			{Path: "images/chart.png", Digest: digest('c')},
 		}, SignaturePolicy: SignatureRequired, OfflinePolicy: OfflineOnly},
-		{ImportPath: "acme/forms", ContentDigest: digest('d'), SignaturePolicy: SignatureAllowUnsigned, OfflinePolicy: NetworkAllowed},
+		{ImportPath: "acme/forms", Version: "2026.07+approved", ContentDigest: digest('d'), SignaturePolicy: SignatureAllowUnsigned, OfflinePolicy: NetworkAllowed},
 	}}
 }
 

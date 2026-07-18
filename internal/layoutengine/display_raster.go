@@ -30,7 +30,7 @@ import (
 
 const (
 	DisplayRasterManifestVersion uint16 = 1
-	DisplayRasterRendererVersion        = "layoutengine/go-display-raster@3"
+	DisplayRasterRendererVersion        = "layoutengine/go-display-raster@4"
 
 	DisplayRasterHardMaxPixels      uint64 = 64 << 20
 	DisplayRasterHardMaxSourceBytes uint64 = 64 << 20
@@ -305,7 +305,10 @@ func CaptureDisplayPlanPNGContext(ctx context.Context, plan LayoutPlan, sources 
 	}
 	var encoded bytes.Buffer
 	limited := &rasterLimitWriter{writer: &encoded, remaining: request.Limits.MaxPNGBytes}
-	if err := (&png.Encoder{CompressionLevel: png.BestCompression}).Encode(limited, canvas); err != nil {
+	// Preview latency matters more than a modest transfer-size reduction. Best
+	// speed remains deterministic and avoids spending most Go/WASM paint time
+	// in DEFLATE after the page pixels are already final.
+	if err := (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(limited, canvas); err != nil {
 		return DisplayRasterArtifact{}, fmt.Errorf("%w: PNG: %w", ErrDisplayRasterLimit, err)
 	}
 	pngBytes := encoded.Bytes()
@@ -538,21 +541,55 @@ func drawRasterCoreFontRun(dst *image.RGBA, face xfont.Face, run CoreGlyphRun, t
 }
 
 func rasterFillPath(dst *image.RGBA, path PlannedPath, fill PlannedFill, transform Transform, crop Rect, clip image.Rectangle) error {
-	r := vector.NewRasterizer(dst.Bounds().Dx(), dst.Bounds().Dy())
+	type rasterSegment struct {
+		kind                 PathSegmentKind
+		x, y, x1, y1, x2, y2 float32
+	}
+	segments := make([]rasterSegment, 0, len(path.Segments))
+	minX, minY := math.Inf(1), math.Inf(1)
+	maxX, maxY := math.Inf(-1), math.Inf(-1)
+	include := func(x, y float32) {
+		minX, minY = math.Min(minX, float64(x)), math.Min(minY, float64(y))
+		maxX, maxY = math.Max(maxX, float64(x)), math.Max(maxY, float64(y))
+	}
 	for _, segment := range path.Segments {
 		point, _ := transform.Apply(segment.Point)
 		c1, _ := transform.Apply(segment.Control1)
 		c2, _ := transform.Apply(segment.Control2)
 		x, y := pageToRasterFloat(point.X, point.Y, crop, dst.Bounds())
+		item := rasterSegment{kind: segment.Kind, x: x, y: y}
 		switch segment.Kind {
 		case PathMoveTo:
-			r.MoveTo(x, y)
+			include(x, y)
 		case PathLineTo:
-			r.LineTo(x, y)
+			include(x, y)
 		case PathCubicTo:
-			x1, y1 := pageToRasterFloat(c1.X, c1.Y, crop, dst.Bounds())
-			x2, y2 := pageToRasterFloat(c2.X, c2.Y, crop, dst.Bounds())
-			r.CubeTo(x1, y1, x2, y2, x, y)
+			item.x1, item.y1 = pageToRasterFloat(c1.X, c1.Y, crop, dst.Bounds())
+			item.x2, item.y2 = pageToRasterFloat(c2.X, c2.Y, crop, dst.Bounds())
+			include(item.x1, item.y1)
+			include(item.x2, item.y2)
+			include(x, y)
+		}
+		segments = append(segments, item)
+	}
+	if math.IsInf(minX, 1) {
+		return nil
+	}
+	bounds := rasterLocalBounds(minX, minY, maxX, maxY, clip)
+	if bounds.Empty() {
+		return nil
+	}
+	target := rasterLocalRGBA(dst, bounds)
+	ox, oy := float32(bounds.Min.X), float32(bounds.Min.Y)
+	r := newLocalRasterizer(bounds, dst.Bounds())
+	for _, segment := range segments {
+		switch segment.kind {
+		case PathMoveTo:
+			r.MoveTo(segment.x-ox, segment.y-oy)
+		case PathLineTo:
+			r.LineTo(segment.x-ox, segment.y-oy)
+		case PathCubicTo:
+			r.CubeTo(segment.x1-ox, segment.y1-oy, segment.x2-ox, segment.y2-oy, segment.x-ox, segment.y-oy)
 		case PathClose:
 			r.ClosePath()
 		}
@@ -562,7 +599,7 @@ func rasterFillPath(dst *image.RGBA, path PlannedPath, fill PlannedFill, transfo
 		alpha = uint8((int64(fill.Opacity)*255 + FixedScale/2) / FixedScale) // #nosec G115 -- low-width representation is explicitly normalized before packing
 	}
 	c := color.NRGBA{R: fill.Color.R, G: fill.Color.G, B: fill.Color.B, A: alpha}
-	r.Draw(dst, clip, image.NewUniform(c), image.Point{})
+	r.Draw(target, target.Bounds(), image.NewUniform(c), image.Point{})
 	return nil
 }
 
@@ -577,14 +614,20 @@ func rasterStrokePath(dst *image.RGBA, path PlannedPath, stroke PlannedStroke, t
 	width := float64(stroke.Width) * float64(dst.Bounds().Dx()) / float64(crop.Width)
 	drawDisc := func(x, y, radius float64) {
 		const k = 0.5522847498307936
-		r := vector.NewRasterizer(dst.Bounds().Dx(), dst.Bounds().Dy())
-		r.MoveTo(float32(x+radius), float32(y))
-		r.CubeTo(float32(x+radius), float32(y+k*radius), float32(x+k*radius), float32(y+radius), float32(x), float32(y+radius))
-		r.CubeTo(float32(x-k*radius), float32(y+radius), float32(x-radius), float32(y+k*radius), float32(x-radius), float32(y))
-		r.CubeTo(float32(x-radius), float32(y-k*radius), float32(x-k*radius), float32(y-radius), float32(x), float32(y-radius))
-		r.CubeTo(float32(x+k*radius), float32(y-radius), float32(x+radius), float32(y-k*radius), float32(x+radius), float32(y))
+		bounds := rasterLocalBounds(x-radius, y-radius, x+radius, y+radius, clip)
+		if bounds.Empty() {
+			return
+		}
+		target := rasterLocalRGBA(dst, bounds)
+		ox, oy := float64(bounds.Min.X), float64(bounds.Min.Y)
+		r := newLocalRasterizer(bounds, dst.Bounds())
+		r.MoveTo(float32(x+radius-ox), float32(y-oy))
+		r.CubeTo(float32(x+radius-ox), float32(y+k*radius-oy), float32(x+k*radius-ox), float32(y+radius-oy), float32(x-ox), float32(y+radius-oy))
+		r.CubeTo(float32(x-k*radius-ox), float32(y+radius-oy), float32(x-radius-ox), float32(y+k*radius-oy), float32(x-radius-ox), float32(y-oy))
+		r.CubeTo(float32(x-radius-ox), float32(y-k*radius-oy), float32(x-k*radius-ox), float32(y-radius-oy), float32(x-ox), float32(y-radius-oy))
+		r.CubeTo(float32(x+k*radius-ox), float32(y-radius-oy), float32(x+radius-ox), float32(y-k*radius-oy), float32(x+radius-ox), float32(y-oy))
 		r.ClosePath()
-		r.Draw(dst, clip, image.NewUniform(colorValue), image.Point{})
+		r.Draw(target, target.Bounds(), image.NewUniform(colorValue), image.Point{})
 	}
 	drawSegment := func(from, to Point, caps bool) {
 		from, _ = transform.Apply(from)
@@ -604,13 +647,23 @@ func rasterStrokePath(dst *image.RGBA, path PlannedPath, stroke PlannedStroke, t
 			length = math.Hypot(dx, dy)
 		}
 		nx, ny := -dy/length*half, dx/length*half
-		r := vector.NewRasterizer(dst.Bounds().Dx(), dst.Bounds().Dy())
-		r.MoveTo(float32(float64(x0)+nx), float32(float64(y0)+ny))
-		r.LineTo(float32(float64(x1)+nx), float32(float64(y1)+ny))
-		r.LineTo(float32(float64(x1)-nx), float32(float64(y1)-ny))
-		r.LineTo(float32(float64(x0)-nx), float32(float64(y0)-ny))
+		ax, ay := float64(x0)+nx, float64(y0)+ny
+		bx, by := float64(x1)+nx, float64(y1)+ny
+		cx, cy := float64(x1)-nx, float64(y1)-ny
+		dpx, dpy := float64(x0)-nx, float64(y0)-ny
+		bounds := rasterLocalBounds(math.Min(math.Min(ax, bx), math.Min(cx, dpx)), math.Min(math.Min(ay, by), math.Min(cy, dpy)), math.Max(math.Max(ax, bx), math.Max(cx, dpx)), math.Max(math.Max(ay, by), math.Max(cy, dpy)), clip)
+		if bounds.Empty() {
+			return
+		}
+		target := rasterLocalRGBA(dst, bounds)
+		ox, oy := float64(bounds.Min.X), float64(bounds.Min.Y)
+		r := newLocalRasterizer(bounds, dst.Bounds())
+		r.MoveTo(float32(ax-ox), float32(ay-oy))
+		r.LineTo(float32(bx-ox), float32(by-oy))
+		r.LineTo(float32(cx-ox), float32(cy-oy))
+		r.LineTo(float32(dpx-ox), float32(dpy-oy))
 		r.ClosePath()
-		r.Draw(dst, clip, image.NewUniform(colorValue), image.Point{})
+		r.Draw(target, target.Bounds(), image.NewUniform(colorValue), image.Point{})
 		if caps && stroke.LineCap == StrokeCapRound {
 			drawDisc(float64(x0), float64(y0), half)
 			drawDisc(float64(x1), float64(y1), half)
@@ -684,6 +737,29 @@ func rasterStrokePath(dst *image.RGBA, path PlannedPath, stroke PlannedStroke, t
 		}
 	}
 	return nil
+}
+
+func rasterLocalBounds(minX, minY, maxX, maxY float64, clip image.Rectangle) image.Rectangle {
+	// One guard pixel retains the vector rasterizer's edge coverage when a
+	// fractional path boundary lies immediately outside the geometric bounds.
+	return image.Rect(int(math.Floor(minX))-1, int(math.Floor(minY))-1, int(math.Ceil(maxX))+1, int(math.Ceil(maxY))+1).Intersect(clip)
+}
+
+func rasterLocalRGBA(destination *image.RGBA, bounds image.Rectangle) *image.RGBA {
+	local := destination.SubImage(bounds).(*image.RGBA)
+	local.Rect = image.Rect(0, 0, bounds.Dx(), bounds.Dy())
+	return local
+}
+
+func newLocalRasterizer(bounds, original image.Rectangle) *vector.Rasterizer {
+	width, height := bounds.Dx(), bounds.Dy()
+	// x/image/vector switches from fixed to floating accumulation when either
+	// dimension exceeds 512. Preserve the original page rasterizer's numerical
+	// path while bounding the other dimension to the local shape.
+	if (original.Dx() > 512 || original.Dy() > 512) && width <= 512 && height <= 512 {
+		width = 513
+	}
+	return vector.NewRasterizer(width, height)
 }
 
 func rasterImage(dst *image.RGBA, source image.Image, placement PlannedImage, transform Transform, crop Rect, clip image.Rectangle) error {

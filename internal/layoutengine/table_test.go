@@ -222,6 +222,36 @@ func TestPlanTableSelectsAndValidatesPerPageBodyRegions(t *testing.T) {
 	}
 }
 
+func TestRepeatedTableHeaderGeometryIsPlannedOncePerResolvedWidth(t *testing.T) {
+	input := tableTestInput(5, 2, 40, 25)
+	input.HeaderRows = 1
+	input.Cells = make([]TableCell, 0, 10)
+	for row := uint32(0); row < 5; row++ {
+		for column := uint32(0); column < 2; column++ {
+			input.Cells = append(input.Cells, tableTestCell(NodeID(len(input.Cells)+1), row, column, 1, 1, 1, 5, 5, 10))
+		}
+	}
+	input.BodyForPage = func(page uint32) (Rect, error) {
+		return Rect{X: input.Body.X, Y: Fixed(page), Width: input.Body.Width, Height: input.Body.Height}, nil
+	}
+	limits := DefaultTablePlanLimits()
+	budget := tableBudget{ctx: context.Background(), limit: limits.MaxWork}
+	resolved, err := resolveTable(input, limits, &budget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planner := tablePaginator{input: input, limits: limits, budget: &budget, cells: resolved.cells,
+		columns: resolved.columnWidths, rows: resolved.rowHeights, groups: resolved.bodyGroups}
+	plan, err := planner.plan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pages := len(plan.Projection().Pages)
+	if pages < 2 || planner.headerGeometryPlans != 1 || !planner.headerGeometryReady {
+		t.Fatalf("pages/header geometry plans = %d/%d (%+v)", pages, planner.headerGeometryPlans, planner.headerGeometry)
+	}
+}
+
 func TestPlanTableEmitsOversizeRowspanGroupOnceAndAdvancesAfterOverflow(t *testing.T) {
 	input := tableTestInput(4, 2, 40, 20)
 	input.HeaderRows = 1

@@ -39,6 +39,8 @@ const (
 	SemanticRoleCell      SemanticRole = "cell"
 	SemanticRoleFigure    SemanticRole = "figure"
 	SemanticRoleLink      SemanticRole = "link"
+	SemanticRoleForm      SemanticRole = "form"
+	SemanticRoleFormField SemanticRole = "form_field"
 	SemanticRoleArtifact  SemanticRole = "artifact"
 )
 
@@ -46,7 +48,7 @@ func (role SemanticRole) valid() bool {
 	switch role {
 	case SemanticRoleDocument, SemanticRoleSection, SemanticRoleHeading, SemanticRoleParagraph,
 		SemanticRoleList, SemanticRoleListItem, SemanticRoleTable, SemanticRoleRow, SemanticRoleCell,
-		SemanticRoleFigure, SemanticRoleLink, SemanticRoleArtifact:
+		SemanticRoleFigure, SemanticRoleLink, SemanticRoleForm, SemanticRoleFormField, SemanticRoleArtifact:
 		return true
 	default:
 		return false
@@ -75,6 +77,8 @@ type SemanticAttributes struct {
 	TableScope      string        `json:"table_scope,omitempty"`
 	TableRowSpan    uint32        `json:"table_row_span,omitempty"`
 	TableColumnSpan uint32        `json:"table_column_span,omitempty"`
+	FormLabel       string        `json:"form_label,omitempty"`
+	KeyboardOrder   uint32        `json:"keyboard_order,omitempty"`
 }
 
 type ReadingOccurrence struct {
@@ -145,7 +149,8 @@ func validateSemantics(nodes []SemanticNode, associations []SemanticFragmentAsso
 	stateBytes := uint64(len(associations))*32 + uint64(len(occurrences))*32
 	for _, node := range nodes {
 		cost := uint64(128 + len(node.Key) + len(node.Instance) + len(node.Source.File) +
-			len(node.Attributes.Language) + len(node.Attributes.AlternateText) + len(node.Attributes.ActualText))
+			len(node.Attributes.Language) + len(node.Attributes.AlternateText) + len(node.Attributes.ActualText) +
+			len(node.Attributes.FormLabel))
 		if stateBytes > SemanticMaxStateBytes || cost > SemanticMaxStateBytes-stateBytes {
 			return planError("semantic_nodes", "semantic state exceeds its byte limit")
 		}
@@ -224,6 +229,9 @@ func validateSemantics(nodes []SemanticNode, associations []SemanticFragmentAsso
 		if err := visit(node.ID, 1); err != nil {
 			return err
 		}
+	}
+	if err := validateFormSemantics(nodes); err != nil {
+		return err
 	}
 	owned := make(map[FragmentID]SemanticNodeID, len(associations))
 	for index, association := range associations {
@@ -378,6 +386,49 @@ func validateSemanticAttributes(node SemanticNode, destinationCount int) error {
 	if attributes.TableRowSpan != 0 || attributes.TableColumnSpan != 0 {
 		if node.Role != SemanticRoleCell {
 			return errors.New("table spans are only valid on cell nodes")
+		}
+	}
+	if attributes.FormLabel != "" {
+		if node.Role != SemanticRoleFormField {
+			return errors.New("form label is only valid on a form field node")
+		}
+		if err := validateSemanticText("form label", attributes.FormLabel); err != nil {
+			return err
+		}
+	}
+	if attributes.KeyboardOrder != 0 && node.Role != SemanticRoleFormField {
+		return errors.New("keyboard order is only valid on a form field node")
+	}
+	if node.Role == SemanticRoleFormField && (attributes.FormLabel == "" || attributes.KeyboardOrder == 0) {
+		return errors.New("form field nodes require a label and non-zero keyboard order")
+	}
+	return nil
+}
+
+func validateFormSemantics(nodes []SemanticNode) error {
+	orders := make(map[SemanticNodeID]map[uint32]struct{})
+	for _, node := range nodes {
+		if node.Role != SemanticRoleFormField {
+			continue
+		}
+		if !node.Parent.Valid() || nodes[node.Parent-1].Role != SemanticRoleForm {
+			return planError(fmt.Sprintf("semantic_nodes[%d].parent", node.ID-1), "form field parent must be a form")
+		}
+		formOrders := orders[node.Parent]
+		if formOrders == nil {
+			formOrders = make(map[uint32]struct{})
+			orders[node.Parent] = formOrders
+		}
+		if _, duplicate := formOrders[node.Attributes.KeyboardOrder]; duplicate {
+			return planError(fmt.Sprintf("semantic_nodes[%d].attributes.keyboard_order", node.ID-1), "duplicates keyboard order within its form")
+		}
+		formOrders[node.Attributes.KeyboardOrder] = struct{}{}
+	}
+	for form, formOrders := range orders {
+		for order := uint32(1); order <= uint32(len(formOrders)); order++ { // #nosec G115 -- map length is bounded by SemanticMaxNodes
+			if _, exists := formOrders[order]; !exists {
+				return planError(fmt.Sprintf("semantic_nodes[%d]", form-1), "form keyboard order must be consecutive from one")
+			}
 		}
 	}
 	return nil

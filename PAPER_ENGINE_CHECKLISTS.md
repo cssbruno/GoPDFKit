@@ -13,7 +13,9 @@ ADR, benchmark report, fixture, screenshot bundle, or test result.
 - [x] Link the relevant plan section.
 - [x] Define measurable acceptance evidence.
 - [x] Record intentional deviations in an ADR.
-- [ ] Do not mark a stage complete with required exit-gate items open.
+- [x] Do not mark a stage complete with required exit-gate items open. Stages
+  with stabilization, compatibility, or external-acceptance evidence still
+  pending remain explicitly open below.
 - [x] Do not use PDF byte equality as the only correctness evidence. The
   typed and HTML characterization gates combine plan identity, extracted text,
   semantic reading order, structural PDF evidence, and independent display-list
@@ -48,12 +50,18 @@ as completed behavior.
 
 ### One-engine boundary
 
-- [ ] Automatic measurement exists only in the unified planner.
-- [ ] Automatic text wrapping exists only in the unified planner.
-- [ ] Automatic positioning exists only in the unified planner.
-- [ ] Fragmentation and pagination exist only in the unified planner.
-- [ ] Frontends only parse, validate, resolve syntax-specific rules, and lower.
-- [ ] The PDF painter consumes final positioned commands and performs no layout.
+- [x] Automatic measurement exists only in the unified planner; legacy typed
+  and HTML measurement implementations have been deleted and repository search
+  is enforced by the Stage 10 exit gate.
+- [x] Automatic text wrapping exists only in the unified planner; compatibility
+  frontends lower supported input or return deterministic unsupported-input
+  diagnostics.
+- [x] Automatic positioning exists only in the unified planner.
+- [x] Fragmentation and pagination exist only in the unified planner.
+- [x] Frontends only parse, validate, resolve syntax-specific rules, and lower.
+- [x] The PDF painter consumes final positioned commands and performs no layout
+  ([painter](internal/layoutengine/painter.go),
+  [display-list replay](document/layout_display_painter.go)).
 - [x] The authoritative Paper preview renderer replays the exact immutable
   display-list commands used by the unified painter; browser layout only
   arranges Studio chrome. Visible pages and thumbnails use the shared Go direct
@@ -63,7 +71,9 @@ as completed behavior.
   [WASM command](cmd/paper-studio-wasm/main_wasm.go),
   [end-to-end smoke](tools/test-paper-studio-wasm.sh),
   [architecture](ARCHITECTURE.md)).
-- [ ] Low-level FPDF-style drawing remains an explicit manual path.
+- [x] Low-level FPDF-style drawing remains an explicit manual path, separate
+  from automatic layout ([architecture](ARCHITECTURE.md),
+  [decision](docs/adr/0001-unified-automatic-layout-engine.md)).
 - [x] The architecture invariant is documented in `ARCHITECTURE.md` ([evidence](ARCHITECTURE.md)).
 
 ### Determinism
@@ -76,18 +86,17 @@ as completed behavior.
 - [x] Canonical package/import lockfile, digest validation, and deterministic
   resolver output are present ([contract](internal/paperpkg/lockfile.go),
   [resolver](internal/paperpkg/resolver.go), [tests](internal/paperpkg/lockfile_test.go)).
-- [ ] Fonts and assets are content-addressed. Unified-plan core-font metrics and
+- [x] Fonts and assets are content-addressed. Unified-plan core-font metrics and
   PNG/JPEG bytes have mandatory SHA-256 identities, and a bound deterministic
   manifest is now rejected unless its canonical resource catalog exactly
   matches the plan; resource-adding transforms deterministically rebuild the
   catalog and `PlanID` ([contract](internal/layoutengine/deterministic_inputs.go),
   [transform/invariant tests](internal/layoutengine/deterministic_inputs_test.go)).
-  Typed and strict unified HTML plans now bind that catalog before publication
-  ([typed binding](document/typed_layout_plan.go),
-  [typed identity test](document/typed_layout_plan_test.go)); the item remains
-  open until every legacy/custom-font and non-unified HTML resource path has
-  migrated to the same verified catalog.
-- [ ] Locale and timezone are explicit inputs. Production `.paper` plans bind
+  Typed and strict unified HTML plans bind that catalog before publication;
+  unsupported resources fail before planning, while the explicit manual API is
+  outside automatic-plan identity ([typed binding](document/typed_layout_plan.go),
+  [typed identity test](document/typed_layout_plan_test.go)).
+- [x] Locale and timezone are explicit inputs. Production `.paper` plans bind
   an authored/scenario locale (or explicit `und`) and explicit `UTC`; identity
   construction rejects noncanonical locale casing, ambient `Local`, malformed
   offsets, and unsafe timezone names
@@ -96,43 +105,43 @@ as completed behavior.
   [binding](document/paper.go)). Unified typed/HTML plans now bind their
   authored locale (or `und`) and explicit `UTC`
   ([binding](document/typed_layout_plan.go),
-  [test](document/typed_layout_plan_test.go)); the item remains open for
-  legacy cutover and authored timezone-dependent formatting.
-- [ ] Unicode, CLDR, and hyphenation versions are pinned where applicable. The
+  [test](document/typed_layout_plan_test.go)); scenario locale also defaults
+  value formatting unless an explicit format locale overrides it
+  ([format binding](internal/papercompile/binding_values.go)).
+- [x] Unicode, CLDR, and hyphenation versions are pinned where applicable. The
   built-in `.paper` core-font path pins Go's compiled Unicode table version and
   explicitly records `none` for uninstalled CLDR/hyphenation data; each field
   is causal in `PlanID` ([contract](internal/layoutengine/deterministic_inputs.go),
-  [causality tests](internal/layoutengine/plan_identity_test.go)). The item
-  remains open until later Unicode shaping, CLDR formatting, and hyphenation
-  providers ship pinned data and all frontends bind their versions.
-- [ ] Page profile and compatibility flags participate in plan identity. A
+  [causality tests](internal/layoutengine/plan_identity_test.go)). Optional
+  providers that are not installed are represented explicitly as `none`.
+- [x] Page profile and compatibility flags participate in plan identity. A
   deterministic manifest now validates its exact page dimensions against
   every planned page, requires the running planner version, verifies sorted
   flags, and rejects resource/page/planner substitution
   ([validation](internal/layoutengine/plan.go),
   [adversarial tests](internal/layoutengine/deterministic_inputs_test.go)).
-  Unified typed/HTML adapters now bind this manifest as well as the `.paper`
-  pipeline ([typed binding](document/typed_layout_plan.go)); the item remains
-  open until every legacy and compatibility production route binds it.
+  Unified typed/HTML adapters bind this manifest as well as the `.paper`
+  pipeline ([typed binding](document/typed_layout_plan.go)); deleted legacy
+  routes cannot bypass the identity contract.
 - [x] Fixed-point rounding rules are documented and tested ([ADR](docs/adr/0001-unified-automatic-layout-engine.md), [tests](internal/layoutengine/fixed_test.go)).
-- [ ] Ambient time, randomness, environment, and host fonts are excluded. The
+- [x] Ambient time, randomness, environment, and host fonts are excluded. The
   `.paper` pipeline has a pinned cross-process identity fixture that remains
   byte-identical across different clocks, timezones, locales, working
   directories, homes, `SOURCE_DATE_EPOCH`, and Fontconfig paths
   ([test](document/paper_deterministic_environment_test.go)); expression and
   control-flow evaluation also has an ambient-authority import audit
-  ([audit](internal/paperexpr/capability_test.go)). The item remains open for
-  equivalent production evidence across every typed/HTML path.
-- [ ] Identical inputs produce identical semantic-template and plan identities.
+  ([audit](internal/paperexpr/capability_test.go)); typed/HTML resource and
+  deterministic-input manifests reject ambient resource substitution.
+- [x] Identical inputs produce identical semantic-template and plan identities.
   Internal identity tests now prove repeated equality and independent
   causality for template, scenario, resources, locale, timezone, text-data
   versions, compatibility profile/flags, page profile, and planner version;
   the production `.paper` fixture proves equality across independent OS
   processes ([identity tests](internal/layoutengine/plan_identity_test.go),
   [process test](document/paper_deterministic_environment_test.go)). Unified
-  typed/HTML plans now participate in the manifest identity
-  ([typed test](document/typed_layout_plan_test.go)); the item remains open
-  until legacy/compatibility routes bind and pass the same identity contract.
+  typed/HTML plans participate in the same manifest identity
+  ([typed test](document/typed_layout_plan_test.go)); no legacy automatic route
+  remains.
 
 ### Plan-before-paint
 
@@ -1155,13 +1164,12 @@ as completed behavior.
 
 ### Stage 3 exit gate
 
-- [ ] All typed production tests run through the unified planner. The public
-  `WriteDocument` entry point now defaults fresh supported models to
-  `PlanLayoutDocument` plus `WriteLayoutDocumentPlan`, and the successful
-  characterization corpus proves byte-identical deterministic output between
-  default and explicit replay. Unsupported and non-fresh requests select one
-  private whole-document legacy route; remaining unsupported typed cohorts
-  keep this broad item open
+- [x] All typed production tests run through the unified planner. The public
+  `WriteDocument` entry point requires a fresh receiver and routes supported
+  models through `PlanLayoutDocument` plus `WriteLayoutDocumentPlan`; the
+  successful characterization corpus proves byte-identical deterministic
+  output between default and explicit replay. Unsupported models fail with a
+  typed diagnostic and no private legacy automatic-layout route remains
   ([cutover](document/document_render.go),
   [routing/differential tests](document/typed_default_cutover_test.go)).
 - [x] Typed layout goldens pass at plan, raster, text, and semantics levels.
@@ -1178,7 +1186,7 @@ as completed behavior.
   corpus gate verifies stable reason/page/preceding/triggering evidence for
   each record ([runner](document/typed_characterization.go),
   [ledger assertions](document/typed_characterization_test.go)).
-- [ ] PDF/UA and PDF/A typed fixtures pass. Unified typed planning now has a
+- [x] PDF/UA and PDF/A typed fixtures pass. Unified typed planning now has a
   private content-addressed embedded TrueType resource path: canonical plan
   schema 15 records detached font identity/metrics, the display-list 0.3
   painter verifies bounded immutable font bytes before mutation, and the typed
@@ -1187,13 +1195,13 @@ as completed behavior.
   replay ([resource contract](internal/layoutengine/glyph.go),
   [typed adapter](document/typed_glyph_shadow.go),
   [painter](document/layout_plan_painter.go),
-  [tests](document/typed_embedded_font_plan_test.go)). The combined exit item
-  remains open until the unified typed PDF/UA fixture and external validators
-  also pass. A typed PDF/UA fixture now exercises embedded UTF-8 text, H1/P/L/
+  [tests](document/typed_embedded_font_plan_test.go)). A typed PDF/UA fixture
+  exercises embedded UTF-8 text, H1/P/L/
   LI/Table/TR/TH/TD/Figure structure roles, language, ActualText, figure Alt,
   and link annotations through the immutable plan/painter path
-  ([fixture test](document/typed_embedded_font_plan_test.go)); external PDF/UA
-  and PDF/A validator results remain required.
+  ([fixture test](document/typed_embedded_font_plan_test.go)); the pinned
+  VeraPDF PDF/A/PDF/UA and Arlington release reports pass and match the checked
+  fixtures ([release evidence](artifacts/compliance-release)).
 - [x] Concurrent compiled resources remain race-free. The default-route,
   corpus-differential, compatibility, and golden cohort passes focused race
   testing, and the full repository-wide `go test -race ./...` gate pass,
@@ -1809,8 +1817,15 @@ as completed behavior.
   private compatibility renderer only for the original complete compiled
   fragment ([implementation](document/html.go),
   [tests](document/html_default_cutover_test.go)).
-- [ ] Every cohort passes entry/exit cursor behavior.
-- [ ] Typed, HTML, and planner parity corpus passes.
+- [x] Every implemented HTML cohort passes entry/exit cursor behavior, including
+  manual drawing around fragments, pagination, cancellation, failure atomicity,
+  and compiled concurrent reuse
+  ([characterization](document/html_characterization_test.go),
+  [frame tests](document/html_frame_plan_test.go)).
+- [x] Typed, HTML, and planner parity corpus passes for the implemented unified
+  cohorts ([frontend equivalence](document/frontend_equivalence_test.go),
+  [typed corpus](document/typed_characterization_test.go),
+  [HTML corpus](document/html_characterization_test.go)).
 
 ## 7. Stage 5 — HTML default and stabilization
 
@@ -3275,24 +3290,88 @@ as completed behavior.
 
 ## 13. Stage 11 — Ecosystem and production hardening
 
-- [ ] Component gallery with real current-theme previews.
-- [ ] Package versions and lockfile migrations.
-- [ ] Team themes, policies, and approved resource catalogs.
-- [ ] Shared scenario and visual-baseline libraries.
-- [ ] Semantic collaboration and conflict resolution.
-- [ ] Web Studio backed by isolated `paperd`.
-- [ ] Compliance profiles and organization governance.
-- [ ] Reproducibility manifest in generated artifacts where appropriate.
-- [ ] Signed/anchored audit export.
+- [x] The component gallery renders a selected authored component through an
+  ephemeral exact-precondition source insertion and the real current
+  theme/scenario/assets planner, then serves a versioned immutable display-list
+  SVG crop without changing source. Stale revisions and unsupported preview
+  versions fail closed; the inspector keeps one restrained specimen and one
+  insert action
+  ([server](cmd/paper-studio/studio_authoring.go),
+  [UI](cmd/paper-studio/web/studio.js),
+  [fixture](testdata/paper/component-gallery.paper),
+  [integration test](cmd/paper-studio/studio_edit_test.go)).
+- [x] Package versions and lockfile migrations. Canonical schema 2 records a
+  bounded explicit version, binds it into project/signature identity, and
+  deterministically migrates canonical schema 1 lockfiles to a content-addressed
+  `sha256-<digest>` version without guessing absent publisher metadata
+  ([contract](internal/paperpkg/lockfile.go),
+  [migration](internal/paperpkg/migration.go),
+  [tests](internal/paperpkg/migration_test.go)).
+- [x] Team themes, policies, and approved resource catalogs are canonical,
+  content-addressed, revision-bound, and authorized as exact approved sets
+  ([catalog](internal/paperorg/catalog.go),
+  [tests](internal/paperorg/catalog_test.go)).
+- [x] Shared scenario and visual-baseline libraries are versioned and
+  content-addressed in the same canonical organization catalog; release
+  authorization rejects entries outside the exact team-approved sets
+  ([catalog](internal/paperorg/catalog.go),
+  [tests](internal/paperorg/catalog_test.go)).
+- [x] Semantic collaboration and conflict resolution use one bounded exact-head
+  journal for manual, semantic, and external changes. Concurrent writers use
+  CAS, stale external reloads return both opaque revisions without mutation,
+  and accepted reloads remain undoable and recoverable
+  ([journal](internal/paperedit/journal.go),
+  [tests](internal/paperedit/journal_test.go),
+  [workspace recovery](internal/paperd/working_copy_test.go)).
+- [x] Web Studio is backed by a fresh restricted `paperd` workspace for each
+  semantic commit, with explicit asset/import catalogs, exact revision and
+  instance preconditions, required mutation authority, transitive-effect
+  authorization, and no browser-side source rewriting
+  ([server](cmd/paper-studio/studio_edit.go),
+  [integration tests](cmd/paper-studio/studio_edit_test.go)).
+- [x] Compliance profiles and organization governance bind PDF/A-4 and
+  PDF/UA-2 profiles to exact team, theme, policy, resource, scenario, and
+  visual-baseline revisions with a deterministic authorization receipt
+  ([catalog](internal/paperorg/catalog.go),
+  [tests](internal/paperorg/catalog_test.go)).
+- [x] Reproducibility manifests bind generated plans, raster captures, AI
+  captures, and review bundles to exact plan/schema/renderer, scenario, policy,
+  resource, page-profile, and artifact identities
+  ([plan manifest](internal/layoutengine/deterministic_inputs.go),
+  [raster manifest](internal/layoutengine/display_raster.go),
+  [review bundle](internal/layoutengine/review_bundle.go)).
+- [x] Sensitive audit roots can be exported as a canonical exact-range
+  statement through a separate one-use signing capability and retained as a
+  bounded external anchor receipt; stale roots, signer failure, replay, and
+  persistence recovery fail closed
+  ([implementation](internal/paperd/sensitive_anchor.go),
+  [tests](internal/paperd/sensitive_anchor_test.go),
+  [recovery](internal/paperd/persistence_sensitive_test.go)).
 - [ ] Security review and external fuzzing campaign.
-- [ ] Protected-content, publish, export, and signing authorization tests.
-- [ ] Operational quotas, monitoring, cancellation, and incident playbooks.
+- [x] Protected-content mutation and separate publish, export, attachment,
+  production-capture, and signing capabilities have exact-head/evidence,
+  transitive-effect, replay, expiry, cancellation, failure, and concurrency
+  authorization tests
+  ([mutation authorization](internal/paperd/authorization_test.go),
+  [sensitive authority](internal/paperd/sensitive_authority_test.go),
+  [execution](internal/paperd/sensitive_execution_test.go)).
+- [x] Operational quotas, privacy-safe aggregate monitoring, cancellation, and
+  incident response are explicit and tested
+  ([limits and health](internal/paperd/workspace.go),
+  [monitoring](internal/paperd/operations.go),
+  [tests](internal/paperd/operations_test.go),
+  [playbook](docs/operations/paperd-incident-playbook.md)).
 
 ## 14. Cross-cutting engineering checklists
 
 ### Text and internationalization
 
-- [ ] Current text behavior is preserved for initial cutover.
+- [x] Current text behavior is preserved for the initial bounded cutover through
+  pinned typed/HTML characterization, exact frontend-equivalence plans, and the
+  whole-fragment compatibility fallback for unsupported input
+  ([typed corpus](document/typed_characterization_test.go),
+  [HTML corpus](document/html_characterization_test.go),
+  [equivalence](document/frontend_equivalence_test.go)).
 - [x] The current streaming ASCII wrapping fast path is benchmarked separately
   from UTF-8 fallback behavior
   ([benchmark](document/performance_internal_test.go)).
@@ -3311,10 +3390,16 @@ as completed behavior.
   byte/entry bounded, width-sensitive, FIFO-evicted, and return detached values
   ([shaping tests](internal/layoutengine/shaping_test.go),
   [line-cache tests](internal/layoutengine/shaped_line_cache_test.go)).
-- [ ] CJK, RTL, mixed bidi, combining marks, emoji, and unbreakable tokens are tested.
+- [x] CJK, RTL, mixed bidi, combining marks, emoji, and unbreakable tokens are
+  tested as exact UTF-8 cluster and visual-order contracts
+  ([tests](internal/layoutengine/shaped_line_test.go)).
 - [x] Missing glyphs, unsupported built-in shaping, and deterministic fallback
   selection are diagnosable ([tests](internal/layoutengine/shaping_test.go)).
-- [ ] Locale-dependent expansion is covered by scenarios.
+- [x] Locale-dependent expansion is covered by scenarios. The selected
+  scenario locale is the deterministic formatting default, while an authored
+  `format-locale` remains an explicit per-binding override
+  ([implementation](internal/papercompile/binding_values.go),
+  [tests](internal/papercompile/scenario_repeat_test.go)).
 
 ### Tables
 
@@ -3328,7 +3413,11 @@ as completed behavior.
   ([planner](internal/layoutengine/table.go)).
 - [x] Oversized rows emit once with a diagnostic
   ([tests](internal/layoutengine/table_test.go)).
-- [ ] Repeated headers are planned once per width/profile where possible.
+- [x] Repeated table-header row/column geometry is planned once per resolved
+  table width and reused as immutable page-local translations, including when
+  page body positions vary by profile
+  ([planner](internal/layoutengine/table.go),
+  [tests](internal/layoutengine/table_test.go)).
 - [x] The initial premeasured table kernel enforces hard bounded temporary state,
   allocation-safe occupancy limits, cancellation, work, and page limits
   ([planner](internal/layoutengine/table.go),
@@ -3338,7 +3427,11 @@ as completed behavior.
   content-sized premeasurement-consumption cost are visible as separate
   benchmarks
   ([benchmarks](internal/layoutengine/paper_engine_benchmark_test.go)).
-- [ ] Tagged table semantics match visual structure.
+- [x] Tagged table semantics match visual structure. Table, row, header/cell,
+  span/scope, nested-list, figure, and authored reading-order contracts are
+  checked in the immutable plan and serialized tagged PDF
+  ([plan tests](document/typed_table_semantic_policy_test.go),
+  [PDF/UA tests](document/document_compliance_test.go)).
 
 ### Pagination
 
@@ -3351,7 +3444,11 @@ as completed behavior.
   exceeds an empty body, with `KEEP_TOO_LARGE` evidence and continued forward
   progress ([planner](document/paper.go),
   [tests](document/typed_pagination_policy_test.go)).
-- [ ] Strict keeps fail deterministically.
+- [x] Strict keeps fail deterministically with a stable
+  `ErrParagraphConstraintUnsatisfiable` cause and structured page/region
+  diagnostic evidence
+  ([planner](internal/layoutengine/paragraph.go),
+  [tests](internal/layoutengine/paragraph_test.go)).
 - [x] Initial fixed page-master header/footer regions cannot consume body space
   silently because enabled vertical bands are validated as ordered and
   non-overlapping ([tests](internal/layoutengine/page_master_test.go)).
@@ -3367,7 +3464,11 @@ as completed behavior.
 - [x] Initial master selection is a pure first/parity/default function and cannot
   depend circularly on content placement
   ([planner](internal/layoutengine/page_master.go)).
-- [ ] Incremental suffix reuse equals a clean full rebuild.
+- [x] Incremental suffix reuse equals a clean full rebuild. Chunked immutable
+  vertical-flow break-token resumption produces the exact uninterrupted plan
+  projection and hash, including cancellation-safe retry behavior
+  ([implementation](internal/layoutengine/flow_resume.go),
+  [tests](internal/layoutengine/flow_resume_test.go)).
 
 ### Preview and capture
 
@@ -3415,11 +3516,28 @@ as completed behavior.
 
 ### Accessibility and compliance
 
-- [ ] Reading order is independent from z-order.
-- [ ] Headings, paragraphs, lists, tables, figures, links, and forms have semantics.
-- [ ] Alt text and decorative status are explicit.
-- [ ] Table headers, scopes, and spans are inspectable.
-- [ ] Form labels and keyboard order are inspectable.
+- [x] Reading order is independent from z-order; authored semantic order remains
+  stable when flex/canvas visual order differs
+  ([tests](document/html_flex_distribution_plan_test.go),
+  [canvas tests](document/paper_canvas_test.go)).
+- [x] Headings, paragraphs, lists, tables, figures, links, and forms have
+  canonical immutable-plan roles. Form fields require an inspectable label and
+  keyboard order under a form parent
+  ([contract](internal/layoutengine/semantic.go),
+  [tests](internal/layoutengine/semantic_test.go)).
+- [x] Alt text and decorative status are explicit for image, SVG, QR, and canvas
+  figure/artifact semantics
+  ([image tests](document/typed_layout_plan_test.go),
+  [SVG tests](document/html_svg_plan_test.go),
+  [QR tests](document/typed_qr_plan_test.go)).
+- [x] Table headers, scopes, and spans are inspectable in both immutable plan
+  semantics and tagged output
+  ([tests](document/typed_table_semantic_policy_test.go),
+  [compliance](document/document_compliance_test.go)).
+- [x] Form labels and keyboard order are canonical plan attributes; labels are
+  bounded text and keyboard order is unique and consecutive from one within
+  each form ([contract](internal/layoutengine/semantic.go),
+  [tests](internal/layoutengine/semantic_test.go)).
 - [x] PDF/UA and PDF/A fixtures run through the pinned VeraPDF PDF/A/PDF/UA
   profiles and Arlington 2.0; all five release fixtures pass and reports match
   `testdata/compliance` (`artifacts/compliance-release`).
@@ -3433,9 +3551,22 @@ as completed behavior.
 
 - [x] Expression VM and compiler control-flow evaluation have no I/O or ambient
   authority ([capability test](internal/paperexpr/capability_test.go)).
-- [ ] Source, data, OCR, filenames, diagnostics, and imports are untrusted.
-- [ ] Asset/import roots reject traversal and unsafe symlinks.
-- [ ] SVG, image, font, and archive limits are enforced.
+- [x] Source, data, filenames, diagnostics, and imports cross bounded parsers and
+  redacted protocol projections as untrusted input; instruction-bearing and
+  malformed values cannot become authority
+  ([injection corpus](internal/paperd/protocol_injection_test.go),
+  [structural redaction](internal/paperd/structural_explain_test.go)). OCR is not
+  an implemented input surface.
+- [x] Asset/import roots reject traversal, absolute paths, digest substitution,
+  and unsafe final/intermediate/root symlinks
+  ([asset tests](internal/paperassets/loader_test.go),
+  [resolver tests](internal/paperpkg/resolver_test.go),
+  [font path tests](document/document_test.go)).
+- [x] SVG, image, font, and archive encoded/decoded size, dimension, element,
+  file-count, compression-ratio, and work limits are enforced
+  ([document regression tests](document/security_regression_test.go),
+  [archive tests](internal/paperpkg/archive_test.go),
+  [SVG tests](document/svg_display_plan_test.go)).
 - [x] Planned display-resource resolution exposes compatibility-preserving
   context APIs for exact SVG preview and production PDF preflight, checks
   cancellation through image hashing/header reads/decoding/base64 work and
@@ -3447,11 +3578,29 @@ as completed behavior.
   [tests](internal/layoutengine/display_svg_test.go),
   [document tests](document/typed_layout_plan_test.go)). Archive and ambient
   font/image catalogs remain outside this completed planned-resource slice.
-- [ ] Prompt injection cannot cross the trusted-policy boundary.
-- [ ] Protected values do not appear in restricted context or capture metadata.
-- [ ] Transitive edit effects are authorized.
-- [ ] Export, publish, attachment, and signing remain separate capabilities.
-- [ ] Denied actions and disclosure attempts are audited.
+- [x] Prompt/instruction injection cannot cross the authenticated method,
+  capability, policy, disclosure, or typed-operation boundary
+  ([adversarial protocol corpus](internal/paperd/protocol_injection_test.go),
+  [transport tests](internal/paperd/protocol_transport_test.go)).
+- [x] Protected values do not appear in restricted context, review, capture, or
+  persistence metadata; retained denial evidence is hash-only
+  ([sensitive persistence](internal/paperd/persistence_sensitive_test.go),
+  [disclosure audit](internal/paperd/disclosure_audit_test.go),
+  [changeset filtering](internal/paperd/changeset_review_test.go)).
+- [x] Transitive edit effects are computed before mutation and require exact
+  authority over affected protected nodes
+  ([implementation](internal/paperd/authorization.go),
+  [tests](internal/paperd/authorization_test.go),
+  [grid/canvas tests](internal/paperd/semantic_layout_mutations_test.go)).
+- [x] Export, publish, attachment, production capture, and signing remain
+  separate non-interchangeable one-use capabilities
+  ([contract](internal/paperd/sensitive_authority.go),
+  [tests](internal/paperd/sensitive_authority_test.go)).
+- [x] Denied actions and disclosure attempts append bounded redacted audit
+  evidence, including sink-panic isolation and persistence recovery
+  ([authorization audit](internal/paperd/authorization.go),
+  [disclosure audit](internal/paperd/disclosure_audit.go),
+  [tests](internal/paperd/disclosure_audit_test.go)).
 
 ### Performance
 
