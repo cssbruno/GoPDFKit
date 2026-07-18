@@ -1117,7 +1117,7 @@ func typedNestedRowColumnIntrinsicWidth(container layout.RowColumnBlock, base fl
 func typedNestedDecoratedBlockIntrinsicWidth(box layout.BoxStyle, base float64) (float64, float64, error) {
 	insets := box.Margin.Left + box.Margin.Right + box.Border.Left.Width + box.Border.Right.Width + box.Padding.Left + box.Padding.Right
 	minimum := base + insets + 12
-	preferred := minimum
+	var preferred float64
 	if box.Width > 0 {
 		minimum, preferred = base+box.Width, base+box.Width
 	} else {
@@ -2017,7 +2017,7 @@ func typedTableCollapsedBorders(ctx context.Context, projection layoutengine.Lay
 	})
 	result := make(map[layoutengine.FragmentID][]typedCollapsedBorder)
 	for _, winner := range ordered {
-		start, end := layoutengine.Point{}, layoutengine.Point{}
+		var start, end layoutengine.Point
 		line := winner.segment.line
 		if line.vertical {
 			start = layoutengine.Point{X: line.coordinate, Y: winner.segment.start}
@@ -2058,7 +2058,7 @@ func typedTableBorderPath(box layoutengine.Rect, side int) (layoutengine.Planned
 	if err != nil {
 		return layoutengine.PlannedPath{}, err
 	}
-	start, end := layoutengine.Point{}, layoutengine.Point{}
+	var start, end layoutengine.Point
 	switch side {
 	case 0:
 		start = layoutengine.Point{X: box.X, Y: box.Y}

@@ -309,7 +309,7 @@ func publishProjectManifest(manifestPath string, resources []ProjectResource) er
 		return err
 	}
 	temporaryName := temporary.Name()
-	defer os.Remove(temporaryName)
+	defer func() { _ = os.Remove(temporaryName) }()
 	if err := temporary.Chmod(info.Mode().Perm()); err != nil {
 		_ = temporary.Close()
 		return err
@@ -537,7 +537,7 @@ func readRegularBounded(path string, limit int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	opened, err := file.Stat()
 	if err != nil || !os.SameFile(info, opened) || !opened.Mode().IsRegular() {
 		return nil, errors.New("file identity changed while opening")

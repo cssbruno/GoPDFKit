@@ -57,7 +57,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	command, ok := commands[args[0]]
 	if !ok {
-		fmt.Fprintf(stderr, "paper: unknown command %q\n", args[0])
+		_, _ = fmt.Fprintf(stderr, "paper: unknown command %q\n", args[0])
 		printUsage(stderr)
 		return exitUsage
 	}
@@ -65,7 +65,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "usage: paper <fmt|check|render|capture|explain|scenario|workflow> [options] FILE")
+	_, _ = fmt.Fprintln(w, "usage: paper <fmt|check|render|capture|explain|scenario|workflow> [options] FILE")
 }
 
 func flags(name string, stderr io.Writer) *flag.FlagSet {
@@ -82,7 +82,7 @@ func parseOneFile(set *flag.FlagSet, args []string) (string, int) {
 		return "", exitUsage
 	}
 	if set.NArg() != 1 {
-		fmt.Fprintf(set.Output(), "paper %s: expected exactly one FILE (use - for stdin)\n", set.Name()[len("paper "):])
+		_, _ = fmt.Fprintf(set.Output(), "paper %s: expected exactly one FILE (use - for stdin)\n", set.Name()[len("paper "):])
 		return "", exitUsage
 	}
 	return set.Arg(0), -1
@@ -166,7 +166,7 @@ func runFmt(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	if !*write {
 		if _, err := stdout.Write(formatted); err != nil {
-			fmt.Fprintf(stderr, "paper fmt: %v\n", err)
+			_, _ = fmt.Fprintf(stderr, "paper fmt: %v\n", err)
 			return exitFailure
 		}
 	}
@@ -207,7 +207,7 @@ func runCheck(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if planErr != nil {
 		return exitFailure
 	}
-	fmt.Fprintf(stdout, "ok pages=%d hash=%s\n", result.Pages, result.Hash)
+	_, _ = fmt.Fprintf(stdout, "ok pages=%d hash=%s\n", result.Pages, result.Hash)
 	return exitOK
 }
 
@@ -254,7 +254,7 @@ func runRender(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return commandError(*jsonMode, stdout, stderr, "render", err)
 		}
 	} else if _, err := stdout.Write(encoded.Bytes()); err != nil {
-		fmt.Fprintf(stderr, "paper render: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "paper render: %v\n", err)
 		return exitFailure
 	}
 	if *jsonMode {
@@ -308,7 +308,7 @@ func runExplain(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return commandError(*jsonMode, stdout, stderr, "explain", err)
 	}
 	if _, err := stdout.Write(append(explanation.JSON(), '\n')); err != nil {
-		fmt.Fprintf(stderr, "paper explain: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "paper explain: %v\n", err)
 		return exitFailure
 	}
 	return exitOK
@@ -407,7 +407,7 @@ func runCapture(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return commandError(*jsonMode, stdout, stderr, "capture", err)
 		}
 	} else if _, err := stdout.Write(payload); err != nil {
-		fmt.Fprintf(stderr, "paper capture: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "paper capture: %v\n", err)
 		return exitFailure
 	}
 	return exitOK
@@ -439,7 +439,7 @@ func runScenario(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				if *jsonMode {
 					return writeJSON(stdout, stderr, fixture)
 				}
-				fmt.Fprintf(stdout, "%s\t%s\t%s\n", fixture.Name, fixture.Digest, fixture.Locale)
+				_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\n", fixture.Name, fixture.Digest, fixture.Locale)
 				return exitOK
 			}
 		}
@@ -449,7 +449,7 @@ func runScenario(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return writeJSON(stdout, stderr, fixtures)
 	}
 	for _, fixture := range fixtures {
-		fmt.Fprintf(stdout, "%s\t%s\t%s\n", fixture.Name, fixture.Digest, fixture.Locale)
+		_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\n", fixture.Name, fixture.Digest, fixture.Locale)
 	}
 	return exitOK
 }
@@ -488,7 +488,7 @@ func displayFile(file string) string {
 }
 
 func readSource(file string, stdin io.Reader) ([]byte, error) {
-	var reader io.Reader = stdin
+	reader := stdin
 	var opened *os.File
 	if file != "-" {
 		var err error
@@ -496,7 +496,7 @@ func readSource(file string, stdin io.Reader) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer opened.Close()
+		defer func() { _ = opened.Close() }()
 		reader = opened
 	}
 	data, err := io.ReadAll(io.LimitReader(reader, maxSourceBytes+1))
@@ -553,7 +553,7 @@ func writeJSON(stdout, stderr io.Writer, value any) int {
 	encoder := json.NewEncoder(stdout)
 	encoder.SetEscapeHTML(false)
 	if err := encoder.Encode(value); err != nil {
-		fmt.Fprintf(stderr, "paper: encode JSON: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "paper: encode JSON: %v\n", err)
 		return exitFailure
 	}
 	return exitOK
@@ -566,7 +566,7 @@ func commandError(jsonMode bool, stdout, stderr io.Writer, command string, err e
 			Error string `json:"error"`
 		}{false, err.Error()})
 	} else {
-		fmt.Fprintf(stderr, "paper %s: %v\n", command, err)
+		_, _ = fmt.Fprintf(stderr, "paper %s: %v\n", command, err)
 	}
 	return exitFailure
 }
@@ -579,7 +579,7 @@ func languageDiagnostics(jsonMode bool, stdout, stderr io.Writer, command string
 		}{false, diagnostics})
 	} else {
 		for _, diagnostic := range diagnostics {
-			fmt.Fprintf(stderr, "%s:%d:%d: %s %s: %s\n", diagnostic.Span.File, diagnostic.Span.Start.Line, diagnostic.Span.Start.Column, diagnostic.Severity, diagnostic.Code, diagnostic.Message)
+			_, _ = fmt.Fprintf(stderr, "%s:%d:%d: %s %s: %s\n", diagnostic.Span.File, diagnostic.Span.Start.Line, diagnostic.Span.Start.Column, diagnostic.Severity, diagnostic.Code, diagnostic.Message)
 		}
 	}
 	return exitFailure
@@ -594,7 +594,7 @@ func paperDiagnostics(jsonMode bool, stdout, stderr io.Writer, command string, d
 	} else {
 		writePaperDiagnostics(stderr, diagnostics)
 		if len(diagnostics) == 0 {
-			fmt.Fprintf(stderr, "paper %s: operation failed\n", command)
+			_, _ = fmt.Fprintf(stderr, "paper %s: operation failed\n", command)
 		}
 	}
 	return exitFailure
@@ -602,6 +602,6 @@ func paperDiagnostics(jsonMode bool, stdout, stderr io.Writer, command string, d
 
 func writePaperDiagnostics(w io.Writer, diagnostics []document.PaperDiagnostic) {
 	for _, diagnostic := range diagnostics {
-		fmt.Fprintf(w, "%s:%d:%d: %s %s/%s: %s\n", diagnostic.File, diagnostic.StartLine, diagnostic.StartColumn, diagnostic.Severity, diagnostic.Stage, diagnostic.Code, diagnostic.Message)
+		_, _ = fmt.Fprintf(w, "%s:%d:%d: %s %s/%s: %s\n", diagnostic.File, diagnostic.StartLine, diagnostic.StartColumn, diagnostic.Severity, diagnostic.Stage, diagnostic.Code, diagnostic.Message)
 	}
 }

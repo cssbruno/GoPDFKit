@@ -259,7 +259,8 @@ func (server *ProtocolServer) Dispatch(encoded []byte) ProtocolResponse {
 
 	value, handlerErr := invokeProtocolHandler(registered.handler, append(json.RawMessage(nil), envelope.Payload...))
 	if handlerErr != nil {
-		if typed, ok := handlerErr.(*Error); ok {
+		var typed *Error
+		if errors.As(handlerErr, &typed) {
 			copyError := *typed
 			copyError.cause = nil
 			return ProtocolResponse{Version: selected, Error: &copyError}

@@ -304,7 +304,7 @@ func CaptureDisplayPlanPNGContext(ctx context.Context, plan LayoutPlan, sources 
 	var encoded bytes.Buffer
 	limited := &rasterLimitWriter{writer: &encoded, remaining: request.Limits.MaxPNGBytes}
 	if err := (&png.Encoder{CompressionLevel: png.BestCompression}).Encode(limited, canvas); err != nil {
-		return DisplayRasterArtifact{}, fmt.Errorf("%w: PNG: %v", ErrDisplayRasterLimit, err)
+		return DisplayRasterArtifact{}, fmt.Errorf("%w: PNG: %w", ErrDisplayRasterLimit, err)
 	}
 	pngBytes := encoded.Bytes()
 	pngHash := sha256.Sum256(pngBytes)
@@ -387,7 +387,7 @@ func preflightDisplayRaster(ctx context.Context, plan LayoutPlan, sources Displa
 		total += uint64(len(data))
 		parsed, err := opentype.Parse(data)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("%w: parse font %s: %v", ErrDisplayRasterResource, resource.MetricsDigest, err)
+			return nil, nil, nil, fmt.Errorf("%w: parse font %s: %w", ErrDisplayRasterResource, resource.MetricsDigest, err)
 		}
 		fontFaces[resource.ID] = &rasterSizedFace{font: parsed}
 		digest := sha256.Sum256(data)
@@ -442,7 +442,7 @@ func (face *rasterSizedFace) draw(dst *image.RGBA, resource CoreFontResource, ru
 	if err != nil {
 		return err
 	}
-	defer actual.Close()
+	defer func() { _ = actual.Close() }()
 	origin, _ := transform.Apply(run.Origin)
 	alpha := rasterOpacityAlpha(255, run.Opacity)
 	colorValue := color.NRGBA{A: alpha}

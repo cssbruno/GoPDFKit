@@ -186,7 +186,10 @@ func (w *Workspace) SaveSnapshot(ctx context.Context) error {
 	manifest := persistenceManifest{Version: persistenceVersion, Generation: currentManifest.Generation + 1, Project: w.projectID, PolicyRevision: w.policyRevision,
 		DisclosureDomain: w.disclosureDomain, Snapshot: name, SHA256: digest, Bytes: len(encoded)}
 	manifest.Authentication = persistenceManifestAuthentication(manifest, w.persistenceAuthenticationKey)
-	manifestBytes, _ := json.Marshal(manifest)
+	manifestBytes, err := json.Marshal(manifest)
+	if err != nil {
+		return workspaceError("PERSISTENCE_WRITE", "manifest cannot be encoded", ErrPersistence)
+	}
 	if err := ctx.Err(); err != nil {
 		return workspaceError("PERSISTENCE_CANCELLED", "snapshot was cancelled before commit", err)
 	}
@@ -337,7 +340,10 @@ func persistenceManifestAuthentication(manifest persistenceManifest, key []byte)
 		return ""
 	}
 	manifest.Authentication = ""
-	encoded, _ := json.Marshal(manifest)
+	encoded, err := json.Marshal(manifest)
+	if err != nil {
+		return ""
+	}
 	mac := hmac.New(sha256.New, key)
 	_, _ = mac.Write(append([]byte("paperd/persistence-manifest/v1\x00"), encoded...))
 	return hex.EncodeToString(mac.Sum(nil))
@@ -634,8 +640,14 @@ func (w *Workspace) validatePersistedFixtures(fixtures []paperscenario.Fixture) 
 	if err != nil {
 		return nil, err
 	}
-	want, _ := json.Marshal(fixtures)
-	got, _ := json.Marshal(resolved)
+	want, err := json.Marshal(fixtures)
+	if err != nil {
+		return nil, ErrPersistenceCorrupt
+	}
+	got, err := json.Marshal(resolved)
+	if err != nil {
+		return nil, ErrPersistenceCorrupt
+	}
 	if !bytes.Equal(want, got) {
 		return nil, ErrPersistenceCorrupt
 	}
@@ -765,9 +777,9 @@ func atomicWrite(root, name string, encoded []byte, noReplace bool) error {
 		return workspaceError("PERSISTENCE_WRITE", "temporary snapshot cannot be created", ErrPersistence)
 	}
 	temporaryName := temporary.Name()
-	defer os.Remove(temporaryName)
+	defer func() { _ = os.Remove(temporaryName) }()
 	if err := temporary.Chmod(0o600); err != nil {
-		temporary.Close()
+		_ = temporary.Close()
 		return workspaceError("PERSISTENCE_PERMISSIONS", "snapshot permissions cannot be restricted", ErrPersistence)
 	}
 	if _, err := temporary.Write(encoded); err != nil {

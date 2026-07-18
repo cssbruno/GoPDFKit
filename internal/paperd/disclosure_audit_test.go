@@ -33,7 +33,10 @@ func TestDisclosureDenialsAreHashOnlyAuditedPersistedAndEmitted(t *testing.T) {
 	if err != nil || len(audit) != 1 || len(emitted) != 1 || audit[0] != emitted[0] || audit[0].Reason != "domain_mismatch" || !validSHA256(audit[0].RequestedHash) || !validSHA256(audit[0].ExpectedHash) {
 		t.Fatalf("audit/emitted = %#v / %#v / %v", audit, emitted, err)
 	}
-	encoded, _ := json.Marshal(audit)
+	encoded, err := json.Marshal(audit)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if bytes.Contains(encoded, []byte("customer-secret-domain")) || bytes.Contains(encoded, []byte(DisclosureRestricted)) {
 		t.Fatalf("disclosure audit leaked raw domains: %s", encoded)
 	}

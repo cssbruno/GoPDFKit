@@ -287,9 +287,10 @@ func (a *scenarioSourceAnalysis) validateParents() {
 		state[index] = 1
 		parentName := a.result.Scenarios[index].Parent
 		if parent, exists := a.byName[parentName]; exists && parentName != "" {
-			if state[parent] == 1 {
+			switch state[parent] {
+			case 1:
 				a.add("PAPER_SCENARIO_PARENT_CYCLE", fmt.Sprintf("scenario inheritance cycle reaches @%s", parentName), "remove one parent edge from the cycle", a.metadata[index].parentSpan)
-			} else if state[parent] == 0 {
+			case 0:
 				visit(parent)
 			}
 		}
@@ -319,7 +320,7 @@ func validSourceName(name string) bool {
 		return false
 	}
 	for index, character := range name {
-		if !(character == '_' || character == '-' || character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || index > 0 && character >= '0' && character <= '9') {
+		if character != '_' && character != '-' && (character < 'a' || character > 'z') && (character < 'A' || character > 'Z') && (index == 0 || character < '0' || character > '9') {
 			return false
 		}
 	}

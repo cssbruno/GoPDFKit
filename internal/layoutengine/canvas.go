@@ -201,7 +201,6 @@ func validateCanvasInput(input CanvasPlanInput, limits CanvasPlanLimits, budget 
 	if stringBytes > limits.MaxBytes || bytes > limits.MaxBytes-stringBytes {
 		return nil, 0, canvasResourceError("canvas retained state exceeds its byte limit", len(input.Nodes), edges, bytes+stringBytes)
 	}
-	bytes += stringBytes
 	if err := budget.charge(edges); err != nil {
 		return nil, 0, err
 	}

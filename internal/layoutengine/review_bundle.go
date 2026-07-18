@@ -299,7 +299,7 @@ func BuildReviewBundle(ctx context.Context, before, after LayoutPlan, beforeSour
 		return ReviewBundle{}, fmt.Errorf("%w: review requires explicit scenario and policy revisions", ErrReviewBundleRequest)
 	}
 	if err := validateDigestString(request.PageProfile); err != nil {
-		return ReviewBundle{}, fmt.Errorf("%w: page profile: %v", ErrReviewBundleRequest, err)
+		return ReviewBundle{}, fmt.Errorf("%w: page profile: %w", ErrReviewBundleRequest, err)
 	}
 	if request.IncludeContactSheet && request.ContactSheetColumns == 0 {
 		return ReviewBundle{}, fmt.Errorf("%w: contact-sheet columns must be positive", ErrReviewBundleRequest)
@@ -624,7 +624,10 @@ func reviewSemanticEvidence(plan LayoutPlan) (ReviewSemanticSnapshot, ReviewAcce
 	readingHash := sha256.Sum256(readingPayload)
 	semantic := ReviewSemanticSnapshot{NodeCount: uint64(len(p.SemanticNodes)), AssociationCount: uint64(len(p.SemanticFragments)), ReadingCount: uint64(len(p.ReadingOrder)), Roles: roles, ReadingSHA256: hex.EncodeToString(readingHash[:]), SHA256: hex.EncodeToString(semanticHash[:])}
 	access.LanguageCount = uint64(len(languages))
-	accessPayload, _ := json.Marshal(access)
+	accessPayload, err := json.Marshal(access)
+	if err != nil {
+		return ReviewSemanticSnapshot{}, ReviewAccessibilitySnapshot{}, err
+	}
 	accessHash := sha256.Sum256(accessPayload)
 	access.SHA256 = hex.EncodeToString(accessHash[:])
 	return semantic, access, nil

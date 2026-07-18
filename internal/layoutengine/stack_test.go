@@ -65,7 +65,7 @@ func TestPlanStackAllowsIntentionalOverlapAndRetainsStableProvenance(t *testing.
 	first := stackTestChild(1, "@first", Size{Width: 80, Height: 80})
 	second := stackTestChild(2, "@second", Size{Width: 80, Height: 80})
 	second.Horizontal, second.Vertical = StackAlignEnd, StackAlignEnd
-	plan, err := PlanStack(nil, StackPlanInput{PageSize: Size{Width: 100, Height: 100}, Container: container,
+	plan, err := PlanStack(context.Background(), StackPlanInput{PageSize: Size{Width: 100, Height: 100}, Container: container,
 		Children: []StackChild{first, second}}, StackPlanLimits{})
 	if err != nil {
 		t.Fatal(err)
@@ -119,13 +119,13 @@ func TestPlanStackCancellationWorkStateAndHardLimits(t *testing.T) {
 
 func TestPlanStackRejectsInvalidSurfaceAndChild(t *testing.T) {
 	container, _ := NewRect(0, 0, 101, 100)
-	if _, err := PlanStack(nil, StackPlanInput{PageSize: Size{Width: 100, Height: 100}, Container: container}, StackPlanLimits{}); !errors.Is(err, ErrStackSurfaceInvalid) {
+	if _, err := PlanStack(context.Background(), StackPlanInput{PageSize: Size{Width: 100, Height: 100}, Container: container}, StackPlanLimits{}); !errors.Is(err, ErrStackSurfaceInvalid) {
 		t.Fatalf("surface error = %v", err)
 	}
 	container, _ = NewRect(0, 0, 100, 100)
 	child := stackTestChild(1, "@bad", Size{Width: 10, Height: 10})
 	child.Horizontal = "automatic"
-	if _, err := PlanStack(nil, StackPlanInput{PageSize: Size{Width: 100, Height: 100}, Container: container,
+	if _, err := PlanStack(context.Background(), StackPlanInput{PageSize: Size{Width: 100, Height: 100}, Container: container,
 		Children: []StackChild{child}}, StackPlanLimits{}); !errors.Is(err, ErrStackChildInvalid) {
 		t.Fatalf("child error = %v", err)
 	}

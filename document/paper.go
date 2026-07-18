@@ -1050,7 +1050,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			dx, dxErr := line.Bounds.X.Sub(decoration.sourceLine.Bounds.X)
 			dy, dyErr := line.Bounds.Y.Sub(decoration.sourceLine.Bounds.Y)
 			if dxErr != nil || dyErr != nil {
-				return fmt.Errorf("decoration translation offset: %v %v", dxErr, dyErr)
+				return fmt.Errorf("decoration translation offset: %w %w", dxErr, dyErr)
 			}
 			path, pathErr := translatePaperNestedPath(decoration.path, dx, dy)
 			if pathErr != nil {

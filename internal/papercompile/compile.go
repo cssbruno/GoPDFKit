@@ -643,7 +643,7 @@ func parseCanvasOffset(source string) (float64, bool) {
 		case "in":
 			value *= 72
 		case "px":
-			value *= 72 / 96
+			value *= 72.0 / 96.0
 		case "pc":
 			value *= 12
 		}
@@ -937,7 +937,7 @@ func (c *compiler) compileImage(node *paperlang.Node) {
 }
 
 func decodePaperImageSource(source string) ([]byte, string, string) {
-	format, encoded := "", ""
+	var format, encoded string
 	switch {
 	case strings.HasPrefix(source, "data:image/png;base64,"):
 		format, encoded = "png", strings.TrimPrefix(source, "data:image/png;base64,")

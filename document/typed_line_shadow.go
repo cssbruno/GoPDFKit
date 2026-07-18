@@ -37,7 +37,7 @@ func (f *Document) planTypedParagraphLineShadowContext(ctx context.Context, doc 
 		return typedLineShadowResult{}, err
 	}
 	if f == nil || f.err != nil ||
-		!((f.page == 0 && f.state == documentStateUnopened) || (f.page > 0 && f.state == documentStatePageOpen)) ||
+		(f.page != 0 || f.state != documentStateUnopened) && (f.page == 0 || f.state != documentStatePageOpen) ||
 		f.clipNest != 0 || f.transformNest != 0 {
 		return typedLineShadowResult{}, newTypedShadowUnsupported(typedShadowDocumentState, "requires an error-free unopened document or active page")
 	}

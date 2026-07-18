@@ -214,7 +214,7 @@ func (html *HTML) planCompiledHTMLFragmentContext(ctx context.Context, lineHeigh
 	}
 	if err != nil {
 		if errors.Is(err, ErrLayoutDocumentPlanUnsupported) || errors.Is(err, errTypedShadowUnsupported) {
-			return htmlFragmentPlan{}, fmt.Errorf("%w: frame planning: %v", ErrHTMLPlanUnsupported, err)
+			return htmlFragmentPlan{}, fmt.Errorf("%w: frame planning: %w", ErrHTMLPlanUnsupported, err)
 		}
 		return htmlFragmentPlan{}, err
 	}
@@ -255,7 +255,6 @@ func (html *HTML) planCompiledHTMLFragmentContext(ctx context.Context, lineHeigh
 			if err != nil {
 				return htmlFragmentPlan{}, err
 			}
-			projection = planned.Projection()
 		}
 	}
 	if len(svgMetas) != 0 {
@@ -263,7 +262,6 @@ func (html *HTML) planCompiledHTMLFragmentContext(ctx context.Context, lineHeigh
 		if err != nil {
 			return htmlFragmentPlan{}, err
 		}
-		projection = planned.Projection()
 	}
 	planned, err = bindTypedDeterministicInputs(planned, tree, model)
 	if err != nil {

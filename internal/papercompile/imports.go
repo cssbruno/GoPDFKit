@@ -192,10 +192,7 @@ func safeImportPath(value string) bool {
 		return false
 	}
 	clean := path.Clean(strings.ReplaceAll(value, "\\", "/"))
-	if clean == "." {
-		return false
-	}
-	return true
+	return clean != "."
 }
 
 func importDiagnostic(code, message, hint string, span paperlang.Span) paperlang.Diagnostic {

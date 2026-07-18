@@ -402,8 +402,8 @@ func validIdentifier(value string) bool {
 		return false
 	}
 	for index, character := range value {
-		if !(character == '_' || character == '-' || character >= 'a' && character <= 'z' ||
-			character >= 'A' && character <= 'Z' || index > 0 && character >= '0' && character <= '9') {
+		if character != '_' && character != '-' && (character < 'a' || character > 'z') &&
+			(character < 'A' || character > 'Z') && (index == 0 || character < '0' || character > '9') {
 			return false
 		}
 	}

@@ -842,7 +842,7 @@ func svgDisplayImage(source SVGImage, placement SVGDisplayPlanPlacement, fragmen
 	if err != nil || config.Width <= 0 || config.Height <= 0 || uint64(config.Width)*uint64(config.Height) > 64<<20 {
 		return layoutengine.ImageResource{}, layoutengine.PlannedImage{}, fmt.Errorf("%w: image decode limits", ErrSVGDisplayPlanLimit)
 	}
-	if decodedFormat != string(format) && !(format == layoutengine.ImageJPEG && decodedFormat == "jpeg") {
+	if decodedFormat != string(format) && (format != layoutengine.ImageJPEG || decodedFormat != "jpeg") {
 		return layoutengine.ImageResource{}, layoutengine.PlannedImage{}, fmt.Errorf("%w: image bytes do not match declared format", ErrSVGDisplayPlanUnsupported)
 	}
 	if _, verifiedFormat, decodeErr := image.Decode(bytes.NewReader(source.Data)); decodeErr != nil || verifiedFormat != decodedFormat {

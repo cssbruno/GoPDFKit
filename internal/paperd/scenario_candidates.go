@@ -330,7 +330,7 @@ func validScenarioName(value string) bool {
 		return false
 	}
 	for i, r := range value {
-		if !(r == '_' || r == '-' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || i > 0 && r >= '0' && r <= '9') {
+		if r != '_' && r != '-' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (i == 0 || r < '0' || r > '9') {
 			return false
 		}
 	}
@@ -522,7 +522,7 @@ func scenarioCachedResult(cached scenarioIdempotencyRecord, fingerprint string) 
 }
 
 func scenarioRequestFingerprint(request ScenarioApplyRequest, operations []ScenarioOperation) string {
-	encoded, _ := json.Marshal(struct {
+	encoded, err := json.Marshal(struct {
 		CandidateScope uint64              `json:"candidate_scope"`
 		Candidate      uint64              `json:"candidate"`
 		HeadScope      uint64              `json:"head_scope"`
@@ -537,6 +537,9 @@ func scenarioRequestFingerprint(request ScenarioApplyRequest, operations []Scena
 		Digest:         request.ExpectedDigest,
 		Operations:     operations,
 	})
+	if err != nil {
+		return ""
+	}
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
 }

@@ -102,7 +102,7 @@ func ValidateArchiveReaderAt(ctx context.Context, source io.ReaderAt, size int64
 	}
 	reader, err := zip.NewReader(source, size)
 	if err != nil {
-		return ArchivePlan{}, fmt.Errorf("%w: %v", ErrArchiveInvalid, err)
+		return ArchivePlan{}, fmt.Errorf("%w: %w", ErrArchiveInvalid, err)
 	}
 	if uint64(len(reader.File)) > uint64(limits.MaxFiles) {
 		return ArchivePlan{}, fmt.Errorf("%w: too many files", ErrArchiveLimit)
@@ -127,7 +127,7 @@ func ValidateArchiveReaderAt(ctx context.Context, source io.ReaderAt, size int64
 			return ArchivePlan{}, fmt.Errorf("%w: method %d for %q", ErrArchiveCompression, file.Method, file.Name)
 		}
 		if err := validateRelativePath(file.Name, limits.MaxPathBytes); err != nil {
-			return ArchivePlan{}, fmt.Errorf("%w: %q: %v", ErrArchivePath, file.Name, err)
+			return ArchivePlan{}, fmt.Errorf("%w: %q: %w", ErrArchivePath, file.Name, err)
 		}
 		if depth := len(strings.Split(file.Name, "/")); depth > int(limits.MaxPathDepth) {
 			return ArchivePlan{}, fmt.Errorf("%w: %q exceeds path depth", ErrArchiveLimit, file.Name)
@@ -182,7 +182,7 @@ func parseZIPMetadata(ctx context.Context, source io.ReaderAt, size int64, files
 	}
 	tail := make([]byte, tailSize)
 	if err := readArchiveAt(source, tail, size-tailSize); err != nil {
-		return nil, fmt.Errorf("%w: read end record: %v", ErrArchiveInvalid, err)
+		return nil, fmt.Errorf("%w: read end record: %w", ErrArchiveInvalid, err)
 	}
 	signature := []byte{'P', 'K', 5, 6}
 	relativeEOCD := bytes.LastIndex(tail, signature)
@@ -207,7 +207,7 @@ func parseZIPMetadata(ctx context.Context, source io.ReaderAt, size int64, files
 	}
 	central := make([]byte, centralSize)
 	if err := readArchiveAt(source, central, int64(centralOffset)); err != nil {
-		return nil, fmt.Errorf("%w: read central directory: %v", ErrArchiveInvalid, err)
+		return nil, fmt.Errorf("%w: read central directory: %w", ErrArchiveInvalid, err)
 	}
 	intervals := make([]zipInterval, 0, len(files))
 	cursor := 0
@@ -288,9 +288,9 @@ func readArchiveAt(source io.ReaderAt, destination []byte, offset int64) error {
 func readArchiveEntry(ctx context.Context, file *zip.File, maxBytes uint64) ([]byte, Digest, error) {
 	reader, err := file.Open()
 	if err != nil {
-		return nil, "", fmt.Errorf("%w: open %q: %v", ErrArchiveIntegrity, file.Name, err)
+		return nil, "", fmt.Errorf("%w: open %q: %w", ErrArchiveIntegrity, file.Name, err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	hasher := sha256.New()
 	var output bytes.Buffer
 	if file.UncompressedSize64 > 0 {
@@ -315,10 +315,10 @@ func readArchiveEntry(ctx context.Context, file *zip.File, maxBytes uint64) ([]b
 			break
 		}
 		if readErr != nil {
-			return nil, "", fmt.Errorf("%w: read %q: %v", ErrArchiveIntegrity, file.Name, readErr)
+			return nil, "", fmt.Errorf("%w: read %q: %w", ErrArchiveIntegrity, file.Name, readErr)
 		}
 		if read == 0 {
-			return nil, "", fmt.Errorf("%w: read %q: %v", ErrArchiveIntegrity, file.Name, io.ErrNoProgress)
+			return nil, "", fmt.Errorf("%w: read %q: %w", ErrArchiveIntegrity, file.Name, io.ErrNoProgress)
 		}
 	}
 	if total != file.UncompressedSize64 {

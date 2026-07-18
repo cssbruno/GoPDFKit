@@ -343,7 +343,7 @@ func findBoundary(ctx context.Context, request BoundaryRequest, build boundaryBu
 		observation, err := request.Evaluate(ctx, fixture)
 		return fixture, observation, err
 	}
-	before, baseline, err := evaluate(request.Minimum)
+	_, baseline, err := evaluate(request.Minimum)
 	if err != nil {
 		return BoundaryResult{}, err
 	}

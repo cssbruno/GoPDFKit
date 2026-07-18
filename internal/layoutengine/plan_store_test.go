@@ -338,7 +338,10 @@ func TestFilePlanStoreLimitAndSchemaValidationSurviveRestart(t *testing.T) {
 
 	wrong := plan.Projection()
 	wrong.SchemaVersion--
-	wrongJSON, _ := json.Marshal(wrong)
+	wrongJSON, err := json.Marshal(wrong)
+	if err != nil {
+		t.Fatal(err)
+	}
 	wrongHash := PlanHash(sha256.Sum256(wrongJSON))
 	wrongDirectory := t.TempDir()
 	if err := os.WriteFile(filepath.Join(wrongDirectory, wrongHash.String()+".json"), wrongJSON, 0o600); err != nil {

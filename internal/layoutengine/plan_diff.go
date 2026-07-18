@@ -244,7 +244,7 @@ func fragmentDiffKeyLess(left, right FragmentDiffKey) bool {
 }
 
 func jsonEqual(left, right any) bool {
-	leftJSON, _ := json.Marshal(left)
-	rightJSON, _ := json.Marshal(right)
-	return string(leftJSON) == string(rightJSON)
+	leftJSON, leftErr := json.Marshal(left)
+	rightJSON, rightErr := json.Marshal(right)
+	return leftErr == nil && rightErr == nil && string(leftJSON) == string(rightJSON)
 }

@@ -134,9 +134,10 @@ indentationDone:
 			}
 			lexeme := line.text[start:cursor]
 			kind := TokenIdentifier
-			if lexeme == "true" || lexeme == "false" {
+			switch lexeme {
+			case "true", "false":
 				kind = TokenBool
-			} else if lexeme == "null" {
+			case "null":
 				kind = TokenNull
 			}
 			l.emitOffsets(kind, lexeme, line.startOffset+start, line.startOffset+cursor)

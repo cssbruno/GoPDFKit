@@ -128,7 +128,10 @@ func normalizeCandidateAcceptancePolicy(policy CandidateAcceptancePolicy, limit 
 	if hasDuplicateStrings(result.RequiredScenarios) || hasDuplicateStrings(result.RequiredReviewArtifacts) || hasDuplicateJSON(result.RequiredValidators) {
 		return CandidateAcceptancePolicy{}, "", workspaceError("INVALID_ACCEPTANCE_POLICY", "acceptance policy contains duplicate requirements", ErrInvalidLimits)
 	}
-	payload, _ := json.Marshal(result)
+	payload, err := json.Marshal(result)
+	if err != nil {
+		return CandidateAcceptancePolicy{}, "", workspaceError("INVALID_ACCEPTANCE_POLICY", "acceptance policy cannot be encoded", ErrInvalidLimits)
+	}
 	return result, acceptanceHash("paperd/candidate-acceptance-policy/v1", payload), nil
 }
 
@@ -279,10 +282,13 @@ func (w *Workspace) canonicalCandidateAcceptanceRequest(request CandidateAccepta
 	}
 	payload := acceptanceInputProjection{CandidateRevision: string(request.ExpectedRevision), PolicyRevision: w.policyRevision, PolicyHash: w.acceptancePolicyHash,
 		Scenarios: result.Scenarios, Validators: result.Validators, ReviewArtifacts: result.ReviewArtifacts}
-	encoded, _ := json.Marshal(payload)
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return CandidateAcceptanceRequest{}, "", "", workspaceError("INVALID_ACCEPTANCE_EVIDENCE", "acceptance evidence cannot be encoded", ErrInvalidQuery)
+	}
 	inputHash := acceptanceHash("paperd/candidate-acceptance-input/v1", encoded)
 	_, authorizationEvidenceHash, _ := canonicalSensitiveEvidence(request.Authorization.Evidence, w.limits.MaxQueryBytes)
-	fingerprintBytes, _ := json.Marshal(struct {
+	fingerprintBytes, err := json.Marshal(struct {
 		Input           string `json:"input"`
 		HeadSerial      uint64 `json:"head_serial"`
 		HeadNonce       uint64 `json:"head_nonce"`
@@ -290,6 +296,9 @@ func (w *Workspace) canonicalCandidateAcceptanceRequest(request CandidateAccepta
 		ApprovalSerial  uint64 `json:"approval_serial"`
 		EvidenceHash    string `json:"evidence_hash"`
 	}{inputHash, request.ExpectedHead.value.serial, request.ExpectedHead.value.nonce, request.Authorization.Authority.value.serial, request.Authorization.Approval.value.serial, authorizationEvidenceHash})
+	if err != nil {
+		return CandidateAcceptanceRequest{}, "", "", workspaceError("INVALID_ACCEPTANCE_EVIDENCE", "acceptance fingerprint cannot be encoded", ErrInvalidQuery)
+	}
 	return result, acceptanceHash("paperd/candidate-acceptance-request/v1", fingerprintBytes), inputHash, nil
 }
 
@@ -413,7 +422,10 @@ func duplicateReviewAcceptance(values []ReviewAcceptanceEvidence) bool {
 func candidateAcceptanceReceiptHash(receipt CandidateAcceptanceReceipt) string {
 	copy := cloneCandidateAcceptanceReceipt(receipt)
 	copy.AcceptanceHash = ""
-	encoded, _ := json.Marshal(copy)
+	encoded, err := json.Marshal(copy)
+	if err != nil {
+		return ""
+	}
 	return acceptanceHash("paperd/candidate-acceptance-receipt/v1", encoded)
 }
 

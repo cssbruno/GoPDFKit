@@ -96,7 +96,7 @@ func (f *Document) PlanCompiledHTMLContext(ctx context.Context, lineHeight float
 	plan, err := f.PlanLayoutDocumentContext(withHTMLAuthoredWhitespace(ctx), model)
 	if err != nil {
 		if errors.Is(err, ErrLayoutDocumentPlanUnsupported) {
-			return LayoutDocumentPlan{}, fmt.Errorf("%w: typed lowering: %v", ErrHTMLPlanUnsupported, err)
+			return LayoutDocumentPlan{}, fmt.Errorf("%w: typed lowering: %w", ErrHTMLPlanUnsupported, err)
 		}
 		return LayoutDocumentPlan{}, err
 	}
@@ -1066,7 +1066,7 @@ func htmlPlanTableColumnCount(rows []layout.TableRow) (int, error) {
 		return 0, errors.New("table column count is outside limits")
 	}
 	if _, err := typedTablePlacements(rows, max, 0, "html.table"); err != nil {
-		return 0, fmt.Errorf("table grid is not rectangular: %v", err)
+		return 0, fmt.Errorf("table grid is not rectangular: %w", err)
 	}
 	return max, nil
 }

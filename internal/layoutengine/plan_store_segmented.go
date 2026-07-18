@@ -959,7 +959,7 @@ func readSegmentedFile(path string, limit uint64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	reader := io.LimitReader(file, int64(limit)+1)
 	encoded, err := io.ReadAll(reader)
 	if err != nil {

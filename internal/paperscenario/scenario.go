@@ -339,7 +339,7 @@ func validName(value string) bool {
 		return false
 	}
 	for i, r := range value {
-		if !(r == '_' || r == '-' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || i > 0 && r >= '0' && r <= '9') {
+		if r != '_' && r != '-' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (i == 0 || r < '0' || r > '9') {
 			return false
 		}
 	}
@@ -376,7 +376,7 @@ func canonicalNumber(value string) bool {
 	if len(parts) == 2 && parts[1][len(parts[1])-1] == '0' {
 		return false
 	}
-	return !(negative && parts[0] == "0" && len(parts) == 1)
+	return !negative || parts[0] != "0" || len(parts) != 1
 }
 
 func cloneFields(input []Field) []Field {

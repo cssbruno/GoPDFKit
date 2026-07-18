@@ -223,7 +223,7 @@ func (f *Document) preflightPlanFontContext(ctx context.Context, resource layout
 		}
 		font, err := utf8FontDefinition(resource.EmbeddedUTF8.Name, "", data)
 		if err != nil {
-			return preparedCorePlanFont{}, fmt.Errorf("%w: parse embedded UTF-8 font: %v", errCoreLayoutPlanPaintUnsupported, err)
+			return preparedCorePlanFont{}, fmt.Errorf("%w: parse embedded UTF-8 font: %w", errCoreLayoutPlanPaintUnsupported, err)
 		}
 		canonical, _, err := typedEmbeddedUTF8FontResource(font)
 		if err != nil || canonical.MetricsDigest != resource.MetricsDigest || canonical.EmbeddedUTF8.Digest != resource.EmbeddedUTF8.Digest {

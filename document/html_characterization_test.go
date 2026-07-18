@@ -11,7 +11,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io/fs"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -43,14 +43,25 @@ func TestHTMLCharacterizationBaselineProjection(t *testing.T) {
 func TestHTMLCharacterizationPublicEntryPointsMatchAST(t *testing.T) {
 	want := HTMLCharacterization().EntryPoints
 	set := token.NewFileSet()
-	packages, err := parser.ParseDir(set, ".", func(info fs.FileInfo) bool {
-		return strings.HasPrefix(info.Name(), "html") && strings.HasSuffix(info.Name(), ".go") && !strings.HasSuffix(info.Name(), "_test.go")
-	}, 0)
+	entries, err := os.ReadDir(".")
 	if err != nil {
 		t.Fatal(err)
 	}
+	files := make([]*ast.File, 0)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "html") || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(set, entry.Name(), nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if file.Name.Name == "document" {
+			files = append(files, file)
+		}
+	}
 	got := make([]string, 0)
-	for _, file := range packages["document"].Files {
+	for _, file := range files {
 		for _, decl := range file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
 			if !ok || !fn.Name.IsExported() {

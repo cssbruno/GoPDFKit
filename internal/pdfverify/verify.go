@@ -199,7 +199,7 @@ func Verify(ctx context.Context, request Request, rasterizer Rasterizer) (Report
 	maxText := min(limits.MaxPDFBytes, characterizeDefaults.MaxTextBytes)
 	characterization, err := characterize.Build(ctx, []characterize.Artifact{{Name: "final.pdf", PDF: request.PDF}}, "pdfverify final serialized bytes", characterize.Fingerprint{GOOS: "detached", GOARCH: "detached", GoVersion: "detached", CPUs: 1}, characterize.Limits{MaxFixtures: 1, MaxPDFBytes: limits.MaxPDFBytes, MaxTotalBytes: limits.MaxPDFBytes, MaxTextBytes: maxText, MaxNameBytes: 4096, MaxJSONBytes: limits.MaxJSONBytes})
 	if err != nil || len(characterization.Fixtures) != 1 {
-		return Report{}, fmt.Errorf("%w: structural inspection: %v", ErrVerificationFailed, err)
+		return Report{}, fmt.Errorf("%w: structural inspection: %w", ErrVerificationFailed, err)
 	}
 	fixture := characterization.Fixtures[0]
 	report.PDFVersion, report.PageCount, report.Structure = fixture.PDFVersion, fixture.Pages, fixture.Structure
@@ -232,7 +232,7 @@ func Verify(ctx context.Context, request Request, rasterizer Rasterizer) (Report
 	}
 	raster, err := rasterizer.Rasterize(ctx, append([]byte(nil), request.PDF...), request.DPI, dimensions, limits)
 	if err != nil {
-		return Report{}, fmt.Errorf("%w: %v", ErrRaster, err)
+		return Report{}, fmt.Errorf("%w: %w", ErrRaster, err)
 	}
 	if !validLabel(raster.Renderer) || !validLabel(raster.Version) || len(raster.Pages) != len(request.ExpectedPages) {
 		return Report{}, fmt.Errorf("%w: invalid renderer result", ErrRaster)

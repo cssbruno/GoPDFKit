@@ -121,24 +121,24 @@ func NewPackageCache(cacheRoot string, limits CacheLimits) (*PackageCache, error
 		return nil, err
 	}
 	if err := os.MkdirAll(cacheRoot, 0o700); err != nil {
-		return nil, fmt.Errorf("%w: create cache root: %v", ErrCacheInvalid, err)
+		return nil, fmt.Errorf("%w: create cache root: %w", ErrCacheInvalid, err)
 	}
 	if err := os.Chmod(cacheRoot, 0o700); err != nil {
-		return nil, fmt.Errorf("%w: restrict cache root: %v", ErrCacheInvalid, err)
+		return nil, fmt.Errorf("%w: restrict cache root: %w", ErrCacheInvalid, err)
 	}
 	root, err := os.OpenRoot(cacheRoot)
 	if err != nil {
-		return nil, fmt.Errorf("%w: open cache root: %v", ErrCacheInvalid, err)
+		return nil, fmt.Errorf("%w: open cache root: %w", ErrCacheInvalid, err)
 	}
 	rootPath, err := filepath.EvalSymlinks(cacheRoot)
 	if err != nil {
 		_ = root.Close()
-		return nil, fmt.Errorf("%w: resolve cache root: %v", ErrCacheInvalid, err)
+		return nil, fmt.Errorf("%w: resolve cache root: %w", ErrCacheInvalid, err)
 	}
 	rootPath, err = filepath.Abs(rootPath)
 	if err != nil {
 		_ = root.Close()
-		return nil, fmt.Errorf("%w: resolve cache root: %v", ErrCacheInvalid, err)
+		return nil, fmt.Errorf("%w: resolve cache root: %w", ErrCacheInvalid, err)
 	}
 	return &PackageCache{root: root, rootPath: filepath.Clean(rootPath), limits: limits}, nil
 }
@@ -167,7 +167,10 @@ func archiveContentDigestFromFiles(files []CacheFile) Digest {
 		Domain string      `json:"domain"`
 		Files  []CacheFile `json:"files"`
 	}{Domain: "gopdfkit.paperpkg.archive-content.v1", Files: files}
-	encoded, _ := json.Marshal(projection)
+	encoded, err := json.Marshal(projection)
+	if err != nil {
+		return ""
+	}
 	sum := sha256.Sum256(encoded)
 	return Digest(hex.EncodeToString(sum[:]))
 }
@@ -180,10 +183,10 @@ func (cache *PackageCache) Install(ctx context.Context, projectDigest, contentDi
 		return err
 	}
 	if err := validateDigest(projectDigest); err != nil {
-		return fmt.Errorf("%w: project digest: %v", ErrCacheInvalid, err)
+		return fmt.Errorf("%w: project digest: %w", ErrCacheInvalid, err)
 	}
 	if err := validateDigest(contentDigest); err != nil {
-		return fmt.Errorf("%w: content digest: %v", ErrCacheInvalid, err)
+		return fmt.Errorf("%w: content digest: %w", ErrCacheInvalid, err)
 	}
 	files, _, err := validateArchivePlan(plan, cache.limits)
 	if err != nil {
@@ -332,12 +335,12 @@ func (cache *PackageCache) lookup(ctx context.Context, projectDigest, contentDig
 		if _, statErr := cache.root.Lstat(base); errors.Is(statErr, fs.ErrNotExist) {
 			return CachePackage{}, false, nil
 		} else if statErr != nil {
-			return CachePackage{}, false, fmt.Errorf("%w: inspect content directory: %v", ErrCacheCorrupt, statErr)
+			return CachePackage{}, false, fmt.Errorf("%w: inspect content directory: %w", ErrCacheCorrupt, statErr)
 		}
 		return CachePackage{}, false, fmt.Errorf("%w: content directory has no manifest", ErrCacheCorrupt)
 	}
 	if err != nil {
-		return CachePackage{}, false, fmt.Errorf("%w: manifest: %v", ErrCacheCorrupt, err)
+		return CachePackage{}, false, fmt.Errorf("%w: manifest: %w", ErrCacheCorrupt, err)
 	}
 	manifest, err := decodeCacheManifest(manifestBytes, cache.limits)
 	if err != nil {
@@ -377,7 +380,7 @@ func (cache *PackageCache) lookup(ctx context.Context, projectDigest, contentDig
 		return nil
 	})
 	if err != nil {
-		return CachePackage{}, false, fmt.Errorf("%w: %v", ErrCacheCorrupt, err)
+		return CachePackage{}, false, fmt.Errorf("%w: %w", ErrCacheCorrupt, err)
 	}
 	files := append([]CacheFile(nil), manifest.Files...)
 	return CachePackage{ProjectDigest: projectDigest, ContentDigest: contentDigest, Files: files}, true, nil
@@ -425,7 +428,7 @@ func decodeCacheManifest(encoded []byte, limits CacheLimits) (cacheManifest, err
 	decoder.DisallowUnknownFields()
 	var manifest cacheManifest
 	if err := decoder.Decode(&manifest); err != nil {
-		return manifest, fmt.Errorf("%w: decode manifest: %v", ErrCacheCorrupt, err)
+		return manifest, fmt.Errorf("%w: decode manifest: %w", ErrCacheCorrupt, err)
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
@@ -447,7 +450,10 @@ func decodeCacheManifest(encoded []byte, limits CacheLimits) (cacheManifest, err
 			return manifest, ErrCacheLimit
 		}
 	}
-	canonical, _ := json.Marshal(manifest)
+	canonical, err := json.Marshal(manifest)
+	if err != nil {
+		return manifest, fmt.Errorf("%w: manifest cannot be encoded", ErrCacheCorrupt)
+	}
 	if !bytes.Equal(encoded, canonical) {
 		return manifest, fmt.Errorf("%w: manifest is not canonical", ErrCacheCorrupt)
 	}
@@ -475,7 +481,7 @@ func (cache *PackageCache) writeFile(ctx context.Context, name string, content [
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	for offset := 0; offset < len(content); {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -499,7 +505,7 @@ func (cache *PackageCache) writeFile(ctx context.Context, name string, content [
 func (cache *PackageCache) readAndVerify(ctx context.Context, name string, metadata CacheFile) ([]byte, error) {
 	content, err := cache.readBounded(ctx, name, metadata.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s: %v", ErrCacheCorrupt, metadata.Path, err)
+		return nil, fmt.Errorf("%w: %s: %w", ErrCacheCorrupt, metadata.Path, err)
 	}
 	if uint64(len(content)) != metadata.Bytes {
 		return nil, fmt.Errorf("%w: %s size mismatch", ErrCacheCorrupt, metadata.Path)
@@ -516,7 +522,7 @@ func (cache *PackageCache) readBounded(ctx context.Context, name string, maxByte
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Size() < 0 || uint64(info.Size()) > maxBytes ||
 		(runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0) {
@@ -547,7 +553,7 @@ func syncRootDirectory(root *os.Root, name string) error {
 	if err != nil {
 		return err
 	}
-	defer directory.Close()
+	defer func() { _ = directory.Close() }()
 	if err := directory.Sync(); err != nil && !errors.Is(err, syscall.EINVAL) && !errors.Is(err, syscall.ENOTSUP) && !errors.Is(err, syscall.ENOSYS) {
 		return fmt.Errorf("paperpkg: fsync cache directory: %w", err)
 	}

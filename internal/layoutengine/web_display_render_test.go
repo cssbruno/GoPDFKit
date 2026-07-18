@@ -48,7 +48,10 @@ func TestWebDisplayRenderPayloadRejectsTamperingAndUnknownFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	decoded.PlanHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	tampered, _ := json.Marshal(decoded)
+	tampered, err := json.Marshal(decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := RenderWebDisplayPayload(t.Context(), tampered); !errors.Is(err, ErrWebDisplayRenderPayload) {
 		t.Fatalf("tampered plan hash error = %v", err)
 	}
@@ -58,7 +61,10 @@ func TestWebDisplayRenderPayloadRejectsTamperingAndUnknownFields(t *testing.T) {
 	}
 	decoded.PlanHash = planHashString(t, plan)
 	decoded.Blobs[0].Bytes[0] ^= 0xff
-	tampered, _ = json.Marshal(decoded)
+	tampered, err = json.Marshal(decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := RenderWebDisplayPayload(t.Context(), tampered); !errors.Is(err, ErrWebDisplayRenderPayload) {
 		t.Fatalf("tampered resource error = %v", err)
 	}

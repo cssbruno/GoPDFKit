@@ -536,7 +536,7 @@ func TestPaperStudioReloadsAtomicallyAndRejectsMalformedOrConcurrentRequests(t *
 			defer wait.Done()
 			workspace, fetchErr := fetchStudioWorkspaceResult(handler)
 			if fetchErr != nil || workspace.Revision != first.Revision || workspace.Pages != first.Pages {
-				errorsFound <- fmt.Errorf("workspace=%+v error=%v", workspace, fetchErr)
+				errorsFound <- fmt.Errorf("workspace=%+v error=%w", workspace, fetchErr)
 			}
 		}()
 	}

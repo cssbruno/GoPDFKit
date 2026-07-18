@@ -215,7 +215,6 @@ func TestCompileScenarioDiagnosesRequiredMissingNullAndTypeMismatch(t *testing.T
 		{name: "mismatch", value: "    value @name: 42", code: "PAPER_BIND_VALUE_TYPE"},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			parsed := paperlang.Parse(test.name+"-binding.paper", fmt.Sprintf(base, test.value))
@@ -301,7 +300,6 @@ func TestCompileScenarioRejectsInvalidSelectionSchemaPredicateAndBounds(t *testi
 		{name: "multiple templates", source: strings.Replace(repeatSourceFixture, "          text: \"Line\"\n", "          text: \"Line\"\n        text: \"extra\"\n", 1), scenario: "sample", code: "PAPER_REPEAT_TEMPLATE"},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			parsed := paperlang.Parse(test.name+".paper", test.source)

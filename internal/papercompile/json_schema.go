@@ -207,9 +207,10 @@ func (b *jsonSchemaBuilder) describe(node *jsonSchemaValue, pointer, paperPath s
 			return FieldDescriptor{}, err
 		}
 		kind := SchemaString
-		if typeName == "number" || typeName == "integer" {
+		switch typeName {
+		case "number", "integer":
 			kind = SchemaNumber
-		} else if typeName == "boolean" {
+		case "boolean":
 			kind = SchemaBool
 		}
 		return FieldDescriptor{Kind: kind, Required: required}, nil

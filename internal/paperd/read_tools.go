@@ -353,10 +353,16 @@ func contextEncodedBytes(result *PaperContextResult) int {
 	previous := -1
 	for result.EncodedBytes != previous {
 		previous = result.EncodedBytes
-		encoded, _ := json.Marshal(result)
+		encoded, err := json.Marshal(result)
+		if err != nil {
+			return int(^uint(0) >> 1)
+		}
 		result.EncodedBytes = len(encoded)
 	}
-	encoded, _ := json.Marshal(result)
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return int(^uint(0) >> 1)
+	}
 	return len(encoded)
 }
 

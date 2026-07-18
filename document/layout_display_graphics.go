@@ -65,15 +65,17 @@ func (f *Document) paintPlannedStroke(pageHeight layoutengine.Fixed, path layout
 	buf = appendPDFNumberSpace(buf, stroke.Width.Points(), 10)
 	buf = append(buf, 'w', ' ')
 	capStyle := 0
-	if stroke.LineCap == layoutengine.StrokeCapRound {
+	switch stroke.LineCap {
+	case layoutengine.StrokeCapRound:
 		capStyle = 1
-	} else if stroke.LineCap == layoutengine.StrokeCapSquare {
+	case layoutengine.StrokeCapSquare:
 		capStyle = 2
 	}
 	joinStyle := 0
-	if stroke.LineJoin == layoutengine.StrokeJoinRound {
+	switch stroke.LineJoin {
+	case layoutengine.StrokeJoinRound:
 		joinStyle = 1
-	} else if stroke.LineJoin == layoutengine.StrokeJoinBevel {
+	case layoutengine.StrokeJoinBevel:
 		joinStyle = 2
 	}
 	buf = append(buf, byte('0'+capStyle), ' ', 'J', ' ', byte('0'+joinStyle), ' ', 'j', ' ', '[')

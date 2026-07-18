@@ -117,7 +117,6 @@ func TestSchemaDescriptorFromJSONSchemaRejectsInvalidSubset(t *testing.T) {
 		{name: "malformed", source: `{"type":`, problem: "invalid JSON", pointer: "/type"},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			_, err := SchemaDescriptorFromJSONSchema("@test", []byte(test.source), JSONSchemaPolicy{})

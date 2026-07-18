@@ -56,7 +56,6 @@ func TestFormatNumberGolden(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			got, err := test.call()
@@ -82,7 +81,6 @@ func TestFormatCurrencyGoldenAndBidiIsolation(t *testing.T) {
 		{locale: "en-US", currency: "SAR", want: "\u2066\u2067ر.س\u2069\u00a01,234.50\u2069"},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.locale+"/"+test.currency, func(t *testing.T) {
 			t.Parallel()
 			got, err := FormatCurrency("1234.5", test.currency, test.locale, Limits{})
@@ -138,7 +136,6 @@ func TestFormatDateAndTimeGoldenWithExplicitZones(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			got, err := test.call()
@@ -186,7 +183,6 @@ func TestRejectsInvalidCanonicalNumbers(t *testing.T) {
 		{name: "multiple points", input: "1.2.3", problem: "characters"},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			_, err := FormatDecimal(test.input, "en-US", Precision{MaxFractionDigits: 2}, Limits{})
@@ -262,7 +258,6 @@ func TestFormattingLimitsAndPrecision(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			_, err := test.call(test.limits())

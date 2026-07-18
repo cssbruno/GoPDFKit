@@ -151,17 +151,17 @@ func (p LayoutPlan) QueryStructure(query StructuralQuery) (StructuralQueryResult
 	}
 	if query.Key != "" {
 		if err := validateTextIdentity("structural query node key", string(query.Key)); err != nil {
-			return StructuralQueryResult{}, fmt.Errorf("%w: %v", ErrStructuralQueryInvalidSelector, err)
+			return StructuralQueryResult{}, fmt.Errorf("%w: %w", ErrStructuralQueryInvalidSelector, err)
 		}
 	}
 	if query.DiagnosticCode != "" {
 		if err := query.DiagnosticCode.validate(); err != nil {
-			return StructuralQueryResult{}, fmt.Errorf("%w: %v", ErrStructuralQueryInvalidSelector, err)
+			return StructuralQueryResult{}, fmt.Errorf("%w: %w", ErrStructuralQueryInvalidSelector, err)
 		}
 	}
 	if query.Instance != "" {
 		if err := validateTextIdentity("structural query instance ID", string(query.Instance)); err != nil {
-			return StructuralQueryResult{}, fmt.Errorf("%w: %v", ErrStructuralQueryInvalidSelector, err)
+			return StructuralQueryResult{}, fmt.Errorf("%w: %w", ErrStructuralQueryInvalidSelector, err)
 		}
 	}
 	if query.Role != "" && !query.Role.valid() {
@@ -169,7 +169,7 @@ func (p LayoutPlan) QueryStructure(query StructuralQuery) (StructuralQueryResult
 	}
 	if query.Language != "" {
 		if err := validateSemanticLanguage(query.Language); err != nil {
-			return StructuralQueryResult{}, fmt.Errorf("%w: %v", ErrStructuralQueryInvalidSelector, err)
+			return StructuralQueryResult{}, fmt.Errorf("%w: %w", ErrStructuralQueryInvalidSelector, err)
 		}
 	}
 	if query.HeadingLevel > 6 {

@@ -186,7 +186,10 @@ func paperThemeValueText(value papertheme.Value) string {
 		}
 		return "false"
 	default:
-		encoded, _ := json.Marshal(value)
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return ""
+		}
 		return string(encoded)
 	}
 }

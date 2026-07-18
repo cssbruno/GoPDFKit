@@ -483,9 +483,7 @@ func reindentCSTBlock(source, oldIndent, newIndent string) string {
 			continue
 		}
 		text := line.text
-		if strings.HasPrefix(text, oldIndent) {
-			text = strings.TrimPrefix(text, oldIndent)
-		}
+		text = strings.TrimPrefix(text, oldIndent)
 		builder.WriteString(newIndent)
 		builder.WriteString(text)
 		builder.WriteString(source[line.startOffset+len(line.text) : rawEnd])

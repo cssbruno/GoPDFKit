@@ -313,9 +313,10 @@ func cstCommentOffset(content string) int {
 			}
 			continue
 		}
-		if character == '"' {
+		switch character {
+		case '"':
 			inString = true
-		} else if character == '#' {
+		case '#':
 			return index
 		}
 	}

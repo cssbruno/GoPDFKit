@@ -118,7 +118,7 @@ func validateDomainApply(idempotencyKey, expectedDigest string, maxKey int) erro
 
 func domainRequestFingerprint(domain string, candidate, head scopedHandle, digest, content string) string {
 	contentSum := sha256.Sum256([]byte(content))
-	encoded, _ := json.Marshal(struct {
+	encoded, err := json.Marshal(struct {
 		Domain         string `json:"domain"`
 		CandidateScope uint64 `json:"candidate_scope"`
 		Candidate      uint64 `json:"candidate"`
@@ -129,6 +129,9 @@ func domainRequestFingerprint(domain string, candidate, head scopedHandle, diges
 		Digest         string `json:"digest"`
 		ContentSHA256  string `json:"content_sha256"`
 	}{domain, candidate.scope, candidate.serial, candidate.nonce, head.scope, head.serial, head.nonce, digest, hex.EncodeToString(contentSum[:])})
+	if err != nil {
+		return ""
+	}
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
 }

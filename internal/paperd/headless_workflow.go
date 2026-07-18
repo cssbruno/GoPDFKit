@@ -552,7 +552,10 @@ func (w *Workspace) validateHeadlessCandidate(candidate HeadlessCandidate) error
 }
 
 func hashCanonical(domain string, value any) string {
-	payload, _ := json.Marshal(value)
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
 	digest := sha256.Sum256(append(append([]byte(domain), 0), payload...))
 	return hex.EncodeToString(digest[:])
 }
@@ -655,7 +658,7 @@ func (review HeadlessReview) CanonicalJSON(maxBytes int) ([]byte, error) {
 	}{1, review.Candidate, review.ExplainSHA256, review.ExplainBytes, review.ReviewManifestHash, review.ReviewManifestBytes,
 		append([]HeadlessArtifactEvidence(nil), review.Artifacts...)})
 	if err != nil {
-		return nil, fmt.Errorf("%w: encode headless review: %v", ErrHeadlessWorkflow, err)
+		return nil, fmt.Errorf("%w: encode headless review: %w", ErrHeadlessWorkflow, err)
 	}
 	if len(payload) > maxBytes {
 		return nil, workspaceError("HEADLESS_RESPONSE_LIMIT", "headless review summary exceeds the caller bound", ErrLimit)

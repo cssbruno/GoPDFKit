@@ -400,16 +400,25 @@ func styleCauses(mapping papercompile.CompileMapping, keys map[string]struct{}, 
 func finalizeLayoutIssueResult(result *LayoutIssueExplainResult, maxBytes int) error {
 	result.CanonicalHash = ""
 	result.EncodedBytes = 0
-	encoded, _ := json.Marshal(result)
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
 	digest := sha256.Sum256(encoded)
 	result.CanonicalHash = hex.EncodeToString(digest[:])
 	previous := -1
 	for previous != result.EncodedBytes {
 		previous = result.EncodedBytes
-		encoded, _ = json.Marshal(result)
+		encoded, err = json.Marshal(result)
+		if err != nil {
+			return err
+		}
 		result.EncodedBytes = len(encoded)
 	}
-	encoded, _ = json.Marshal(result)
+	encoded, err = json.Marshal(result)
+	if err != nil {
+		return err
+	}
 	if len(encoded) > maxBytes {
 		return workspaceError("LAYOUT_EXPLAIN_LIMIT", "layout explanation exceeds its response byte budget", ErrLimit)
 	}

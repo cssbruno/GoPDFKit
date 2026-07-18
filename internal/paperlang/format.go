@@ -129,7 +129,7 @@ func (f *astFormatter) writeNode(node *Node, path string, depth int) error {
 		}
 		if member.Property != nil {
 			property := member.Property
-			if !validPropertyName(property.Name) && !(node.Kind == NodeUse && property.Name == string(NodeComponent)) && !(node.Kind == NodeFill && property.Name == string(NodeScenario)) {
+			if !validPropertyName(property.Name) && (node.Kind != NodeUse || property.Name != string(NodeComponent)) && (node.Kind != NodeFill || property.Name != string(NodeScenario)) {
 				return f.invalid(memberPath+".property.name", fmt.Sprintf("%q is not a canonical property name", property.Name))
 			}
 			if firstIndex, duplicate := propertyNames[property.Name]; duplicate {

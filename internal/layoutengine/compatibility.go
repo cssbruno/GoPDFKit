@@ -46,11 +46,11 @@ func DecideCompatibility(mode CompatibilityMode, capability UnsupportedCapabilit
 		return CompatibilityDecision{}, fmt.Errorf("%w: capability identity", ErrCompatibilityContract)
 	}
 	if err := capability.Location.validate(); err != nil {
-		return CompatibilityDecision{}, fmt.Errorf("%w: location: %v", ErrCompatibilityContract, err)
+		return CompatibilityDecision{}, fmt.Errorf("%w: location: %w", ErrCompatibilityContract, err)
 	}
 	if capability.FallbackAvailable {
 		if err := validateTextIdentity("compatibility fallback name", capability.FallbackName); err != nil {
-			return CompatibilityDecision{}, fmt.Errorf("%w: %v", ErrCompatibilityContract, err)
+			return CompatibilityDecision{}, fmt.Errorf("%w: %w", ErrCompatibilityContract, err)
 		}
 	} else if capability.FallbackName != "" {
 		return CompatibilityDecision{}, fmt.Errorf("%w: unavailable fallback has a name", ErrCompatibilityContract)
@@ -67,7 +67,7 @@ func DecideCompatibility(mode CompatibilityMode, capability UnsupportedCapabilit
 			DiagnosticEvidence{Key: "whole_fragment_fallback", Value: capability.FallbackName})
 	}
 	if err := decision.Diagnostic.Validate(); err != nil {
-		return CompatibilityDecision{}, fmt.Errorf("%w: diagnostic: %v", ErrCompatibilityContract, err)
+		return CompatibilityDecision{}, fmt.Errorf("%w: diagnostic: %w", ErrCompatibilityContract, err)
 	}
 	return decision, nil
 }

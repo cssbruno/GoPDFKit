@@ -432,7 +432,7 @@ func canonicalColor(value string) bool {
 		return false
 	}
 	for _, character := range value[1:] {
-		if !(character >= '0' && character <= '9' || character >= 'a' && character <= 'f' || character >= 'A' && character <= 'F') {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') && (character < 'A' || character > 'F') {
 			return false
 		}
 	}
@@ -469,7 +469,7 @@ func canonicalNumber(value string) bool {
 	if len(parts) == 2 && parts[1][len(parts[1])-1] == '0' {
 		return false
 	}
-	return !(negative && parts[0] == "0" && len(parts) == 1)
+	return !negative || parts[0] != "0" || len(parts) != 1
 }
 
 func validUnit(unit string) bool {
@@ -486,7 +486,7 @@ func validName(value string) bool {
 		return false
 	}
 	for index, character := range value {
-		if !(character == '_' || character == '-' || character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || index > 0 && character >= '0' && character <= '9') {
+		if character != '_' && character != '-' && (character < 'a' || character > 'z') && (character < 'A' || character > 'Z') && (index == 0 || character < '0' || character > '9') {
 			return false
 		}
 	}

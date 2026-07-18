@@ -268,13 +268,13 @@ func validateAndSortGridItems(items []GridItem, rows, columns uint32, cells uint
 			return fmt.Errorf("%w: item %d", ErrGridPlacement, index)
 		}
 		if err := validateTextIdentity("grid item key", string(item.Key)); err != nil {
-			return fmt.Errorf("%w: item %d: %v", ErrGridPlacement, index, err)
+			return fmt.Errorf("%w: item %d: %w", ErrGridPlacement, index, err)
 		}
 		if err := validateTextIdentity("grid item instance", string(item.Instance)); err != nil {
-			return fmt.Errorf("%w: item %d: %v", ErrGridPlacement, index, err)
+			return fmt.Errorf("%w: item %d: %w", ErrGridPlacement, index, err)
 		}
 		if err := item.Source.Validate(); err != nil {
-			return fmt.Errorf("%w: item %d source: %v", ErrGridPlacement, index, err)
+			return fmt.Errorf("%w: item %d source: %w", ErrGridPlacement, index, err)
 		}
 		rowEnd := uint64(item.Row) + uint64(item.RowSpan)
 		columnEnd := uint64(item.Column) + uint64(item.ColumnSpan)

@@ -59,7 +59,7 @@ type WebDisplayRenderPayload struct {
 // ordered. The renderer still performs full validation before painting.
 func EncodeWebDisplayRenderPayload(plan LayoutPlan, sources DisplayRasterSources, request DisplayRasterRequest) ([]byte, error) {
 	if err := plan.Validate(); err != nil {
-		return nil, fmt.Errorf("%w: plan: %v", ErrWebDisplayRenderPayload, err)
+		return nil, fmt.Errorf("%w: plan: %w", ErrWebDisplayRenderPayload, err)
 	}
 	if request.Page == 0 || uint64(request.Page) > uint64(len(plan.pages)) || request.Crop != nil {
 		return nil, fmt.Errorf("%w: page is invalid or crop is unsupported", ErrWebDisplayRenderPayload)
@@ -78,7 +78,7 @@ func EncodeWebDisplayRenderPayload(plan LayoutPlan, sources DisplayRasterSources
 	}
 	canonical, err := plan.CanonicalJSON()
 	if err != nil {
-		return nil, fmt.Errorf("%w: canonical plan: %v", ErrWebDisplayRenderPayload, err)
+		return nil, fmt.Errorf("%w: canonical plan: %w", ErrWebDisplayRenderPayload, err)
 	}
 	planHash := sha256.Sum256(canonical)
 	bindings := make([]WebDisplayResourceBinding, 0, len(sources.FontPrograms)+len(sources.Images))
@@ -128,7 +128,7 @@ func EncodeWebDisplayRenderPayload(plan LayoutPlan, sources DisplayRasterSources
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("%w: encode: %v", ErrWebDisplayRenderPayload, err)
+		return nil, fmt.Errorf("%w: encode: %w", ErrWebDisplayRenderPayload, err)
 	}
 	if len(encoded) > WebDisplayRenderMaxPayloadBytes {
 		return nil, fmt.Errorf("%w: payload exceeds %d bytes", ErrWebDisplayRenderPayload, WebDisplayRenderMaxPayloadBytes)
@@ -149,10 +149,10 @@ func RenderWebDisplayPayload(ctx context.Context, encoded []byte) (DisplayRaster
 	decoder.DisallowUnknownFields()
 	var payload WebDisplayRenderPayload
 	if err := decoder.Decode(&payload); err != nil {
-		return DisplayRasterArtifact{}, fmt.Errorf("%w: decode: %v", ErrWebDisplayRenderPayload, err)
+		return DisplayRasterArtifact{}, fmt.Errorf("%w: decode: %w", ErrWebDisplayRenderPayload, err)
 	}
 	if err := ensureJSONEOF(decoder); err != nil {
-		return DisplayRasterArtifact{}, fmt.Errorf("%w: %v", ErrWebDisplayRenderPayload, err)
+		return DisplayRasterArtifact{}, fmt.Errorf("%w: %w", ErrWebDisplayRenderPayload, err)
 	}
 	canonicalPayload, err := json.Marshal(payload)
 	if err != nil || !bytes.Equal(canonicalPayload, encoded) {
@@ -185,7 +185,7 @@ func RenderWebDisplayPayload(ctx context.Context, encoded []byte) (DisplayRaster
 	}
 	plan, err := decodeStoredPlan(payload.Plan, PlanHash(actualPlanHash))
 	if err != nil {
-		return DisplayRasterArtifact{}, fmt.Errorf("%w: plan: %v", ErrWebDisplayRenderPayload, err)
+		return DisplayRasterArtifact{}, fmt.Errorf("%w: plan: %w", ErrWebDisplayRenderPayload, err)
 	}
 	blobs := make(map[string][]byte, len(payload.Blobs))
 	var sourceBytes uint64

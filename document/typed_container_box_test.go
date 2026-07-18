@@ -6,6 +6,7 @@ package document
 import (
 	"bytes"
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -97,7 +98,7 @@ func TestTypedDecoratedContainerInvalidCancellationConcurrencyAndAtomicity(t *te
 	cancel()
 	if _, err := planner.PlanLayoutDocumentContext(canceled, &layout.LayoutDocument{Body: []layout.Block{
 		layout.NoteBoxBlock{Box: typedContainerTestBox(), Body: []layout.Block{paginationParagraph("body", layout.BoxStyle{})}},
-	}}); err != context.Canceled {
+	}}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled error = %v", err)
 	}
 

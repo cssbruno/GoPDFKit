@@ -74,7 +74,10 @@ func TestProtocolAuthenticatedNegotiationDispatchReplayAndAudit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	downgradeBytes, _ := json.Marshal(downgraded)
+	downgradeBytes, err := json.Marshal(downgraded)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if response := server.Dispatch(downgradeBytes); response.Error == nil || !errors.Is(response.Error, ErrProtocolVersion) || response.Error.Code != "PROTOCOL_DOWNGRADE" {
 		t.Fatalf("authenticated downgrade = %#v", response)
 	}
@@ -83,7 +86,10 @@ func TestProtocolAuthenticatedNegotiationDispatchReplayAndAudit(t *testing.T) {
 	tampered.Versions = []uint16{1}
 	tampered.SelectedVersion = 1
 	tampered.RequestID = "request-00000003"
-	tamperedBytes, _ := json.Marshal(tampered)
+	tamperedBytes, err := json.Marshal(tampered)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if response := server.Dispatch(tamperedBytes); response.Error == nil || !errors.Is(response.Error, ErrProtocolAuthentication) {
 		t.Fatalf("unauthenticated downgrade = %#v", response)
 	}
@@ -91,7 +97,10 @@ func TestProtocolAuthenticatedNegotiationDispatchReplayAndAudit(t *testing.T) {
 	denied := envelope
 	denied.Method, denied.RequestID = "paper.apply", "request-00000004"
 	denied, _ = SignProtocolEnvelope(denied, protocolFixtureKey, 64<<10)
-	deniedBytes, _ := json.Marshal(denied)
+	deniedBytes, err := json.Marshal(denied)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if response := server.Dispatch(deniedBytes); response.Error == nil || !errors.Is(response.Error, ErrProtocolCapability) {
 		t.Fatalf("capability filtering = %#v", response)
 	}
@@ -100,7 +109,10 @@ func TestProtocolAuthenticatedNegotiationDispatchReplayAndAudit(t *testing.T) {
 	if err != nil || len(audit) != 5 || !audit[0].Allowed || audit[1].Reason != "replay_denied" || audit[2].Reason != "downgrade_denied" || audit[4].Reason != "capability_denied" {
 		t.Fatalf("audit = %#v, %v", audit, err)
 	}
-	auditJSON, _ := json.Marshal(audit)
+	auditJSON, err := json.Marshal(audit)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, forbidden := range [][]byte{protocolFixtureKey, []byte(envelope.Authentication), envelope.Payload, []byte("agent-fixture"), []byte("export")} {
 		if bytes.Contains(auditJSON, forbidden) {
 			t.Fatalf("audit leaked transport secret/capability/payload %q: %s", forbidden, auditJSON)
@@ -125,7 +137,10 @@ func TestProtocolRejectsCrossWorkspaceAndDisclosureAndAuditsBoth(t *testing.T) {
 		value.RequestID = "partition-0000000" + string(rune('2'+index))
 		item.mutate(&value)
 		value, _ = SignProtocolEnvelope(value, protocolFixtureKey, 64<<10)
-		encoded, _ := json.Marshal(value)
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
 		response := server.Dispatch(encoded)
 		if response.Error == nil || response.Error.Code != item.code || !errors.Is(response.Error, item.cause) {
 			t.Fatalf("%s response = %#v", item.name, response)
@@ -167,7 +182,10 @@ func TestProtocolAdversarialCorpusFailsClosedBeforeDispatch(t *testing.T) {
 		if item.sign {
 			value, _ = SignProtocolEnvelope(value, protocolFixtureKey, 64<<10)
 		}
-		encoded, _ := json.Marshal(value)
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
 		response := server.Dispatch(encoded)
 		if response.Error == nil || response.Error.Code != item.code {
 			t.Fatalf("%s = %#v", item.name, response)
@@ -187,7 +205,10 @@ func TestProtocolHandlerPanicIsContainedAndRedacted(t *testing.T) {
 	_, envelope := signedProtocolFixture(t, "panic-request")
 	envelope.Method = "paper.panic"
 	envelope, _ = SignProtocolEnvelope(envelope, protocolFixtureKey, 64<<10)
-	encoded, _ := json.Marshal(envelope)
+	encoded, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
 	response := server.Dispatch(encoded)
 	canonical, err := CanonicalProtocolResponse(response, 4<<10)
 	if response.Error == nil || response.Error.Code != "PROTOCOL_HANDLER_PANIC" || err != nil || bytes.Contains(canonical, []byte("private handler data")) {

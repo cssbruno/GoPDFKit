@@ -197,7 +197,7 @@ func rowColumnWrapBasis(child RowColumnChild, index int, available Fixed) (Fixed
 	case RowColumnTrackFlex:
 		basis, err := resolveRowColumnFlexBasis(child.Track, available, child.ContentMain)
 		if err != nil {
-			return 0, fmt.Errorf("%w: child %d: %v", ErrRowColumnTrack, index, err)
+			return 0, fmt.Errorf("%w: child %d: %w", ErrRowColumnTrack, index, err)
 		}
 		maximum, maxErr := resolveRowColumnMaximum(child.Track, available)
 		if maxErr != nil {
@@ -221,7 +221,6 @@ func placeRowColumnLines(lines []rowColumnLogicalLine, gap, available, origin Fi
 		for index := range lines {
 			lines[index].crossSize += growth[index]
 		}
-		free = 0
 	} else {
 		mainAlignment, err := contentMainAlignment(alignment)
 		if err != nil {

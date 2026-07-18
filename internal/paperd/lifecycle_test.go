@@ -239,8 +239,11 @@ func TestDisclosureAndCapabilityTagsDenyCrossDomainAndForgery(t *testing.T) {
 	missing := created.Revision.Handle
 	missing.value.serial++
 	_, missingErr := restricted.OpenRevision(missing)
-	wrongTyped := wrongErr.(*Error)
-	missingTyped := missingErr.(*Error)
+	var wrongTyped *Error
+	var missingTyped *Error
+	if !errors.As(wrongErr, &wrongTyped) || !errors.As(missingErr, &missingTyped) {
+		t.Fatalf("handle failures did not retain typed errors: %v / %v", wrongErr, missingErr)
+	}
 	if wrongTyped.Message != missingTyped.Message || strings.Contains(wrongErr.Error(), "restricted") || strings.Contains(missingErr.Error(), "nonce") {
 		t.Fatalf("handle failure leaked shape/domain: %v / %v", wrongErr, missingErr)
 	}

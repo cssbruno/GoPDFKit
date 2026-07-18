@@ -144,7 +144,6 @@ func TestCompileLiteralsAndDeduplicatesInputs(t *testing.T) {
 		{source: `true || false`, kind: Bool, value: Value{Kind: Bool, Bool: true}},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.source, func(t *testing.T) {
 			t.Parallel()
 			program, kind, err := Compile(test.source, nil, LanguageLimits{})
@@ -206,7 +205,6 @@ func TestCompileRejectsStaticTypeAndEnvironmentErrors(t *testing.T) {
 		{name: "invalid environment kind", source: `name`, environment: []PathKind{{Path: "name", Kind: 255}}, cause: ErrType, offset: 0, problem: "invalid kind"},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			_, _, err := Compile(test.source, test.environment, LanguageLimits{})
@@ -240,7 +238,6 @@ func TestParseRejectsInvalidSyntaxWithOffsets(t *testing.T) {
 		{name: "trailing", source: `true false`, offset: 5, problem: "after expression"},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			_, err := Parse(test.source, LanguageLimits{})
@@ -277,7 +274,6 @@ func TestCompileEnforcesLanguageAndProgramLimits(t *testing.T) {
 		}, problem: "MaxStringBytes"},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			environment := []PathKind{{Path: "a", Kind: Integer}, {Path: "b", Kind: Integer}}

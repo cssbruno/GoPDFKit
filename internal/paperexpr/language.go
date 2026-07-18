@@ -716,9 +716,10 @@ func (c *expressionCompiler) indexInputs(root *expressionNode) {
 		if node == nil {
 			return
 		}
-		if node.kind == nodeLiteral {
+		switch node.kind {
+		case nodeLiteral:
 			constantSet[node.value] = true
-		} else if node.kind == nodePath {
+		case nodePath:
 			pathSet[node.path] = true
 		}
 		walk(node.left)

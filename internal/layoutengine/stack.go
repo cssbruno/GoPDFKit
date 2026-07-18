@@ -222,16 +222,16 @@ func validateStackChildren(children []StackChild, maxState uint64, budget *stack
 			return 0, fmt.Errorf("%w: child %d identity or alignment", ErrStackChildInvalid, index)
 		}
 		if err := validateTextIdentity("stack child node key", string(child.Key)); err != nil {
-			return 0, fmt.Errorf("%w: child %d: %v", ErrStackChildInvalid, index, err)
+			return 0, fmt.Errorf("%w: child %d: %w", ErrStackChildInvalid, index, err)
 		}
 		if err := validateTextIdentity("stack child instance ID", string(child.Instance)); err != nil {
-			return 0, fmt.Errorf("%w: child %d: %v", ErrStackChildInvalid, index, err)
+			return 0, fmt.Errorf("%w: child %d: %w", ErrStackChildInvalid, index, err)
 		}
 		if err := child.Source.Validate(); err != nil {
-			return 0, fmt.Errorf("%w: child %d source: %v", ErrStackChildInvalid, index, err)
+			return 0, fmt.Errorf("%w: child %d source: %w", ErrStackChildInvalid, index, err)
 		}
 		if err := child.Size.Validate(); err != nil {
-			return 0, fmt.Errorf("%w: child %d size: %v", ErrStackChildInvalid, index, err)
+			return 0, fmt.Errorf("%w: child %d size: %w", ErrStackChildInvalid, index, err)
 		}
 		cost := stackChildStateBase + uint64(len(child.Key)) + uint64(len(child.Instance)) + uint64(len(child.Source.File))
 		if cost > maxState-state {

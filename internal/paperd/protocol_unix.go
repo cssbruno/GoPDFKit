@@ -151,7 +151,7 @@ func RoundTripUnixProtocolContext(ctx context.Context, path string, request []by
 		_ = connection.Close()
 		return ProtocolResponse{}, workspaceError("PROTOCOL_SOCKET_CONNECT", "protocol socket returned an invalid connection", ErrProtocolSocket)
 	}
-	defer unixConnection.Close()
+	defer func() { _ = unixConnection.Close() }()
 	allowed := make(map[uint32]struct{}, len(options.AllowedServerUIDs)+1)
 	if len(options.AllowedServerUIDs) == 0 {
 		allowed[uint32(os.Geteuid())] = struct{}{}
@@ -247,7 +247,7 @@ func (listener *UnixProtocolListener) Serve(ctx context.Context) error {
 }
 
 func (listener *UnixProtocolListener) serveConnection(ctx context.Context, connection *net.UnixConn) error {
-	defer connection.Close()
+	defer func() { _ = connection.Close() }()
 	closed := make(chan struct{})
 	go func() {
 		select {

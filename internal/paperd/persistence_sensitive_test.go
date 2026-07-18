@@ -127,7 +127,10 @@ func TestPersistenceAuthenticationRejectsMissingWrongAndTamperedKeys(t *testing.
 	var manifest persistenceManifest
 	_ = json.Unmarshal(encoded, &manifest)
 	manifest.Bytes++
-	tampered, _ := json.Marshal(manifest)
+	tampered, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(manifestPath, tampered, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +225,10 @@ func TestPersistenceRejectsAuthenticatedCorruptSensitiveGeneration(t *testing.T)
 		t.Fatal(err)
 	}
 	snapshot.SensitiveAudit[0].Reason = "tampered but reauthenticated"
-	corruptBytes, _ := json.Marshal(snapshot)
+	corruptBytes, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
 	digest := acceptanceHashWithoutDomain(corruptBytes)
 	corruptName := "snapshot-" + digest + ".json"
 	if err := os.WriteFile(filepath.Join(root, corruptName), corruptBytes, 0o600); err != nil {
@@ -230,7 +236,10 @@ func TestPersistenceRejectsAuthenticatedCorruptSensitiveGeneration(t *testing.T)
 	}
 	manifest.Snapshot, manifest.SHA256, manifest.Bytes = corruptName, digest, len(corruptBytes)
 	manifest.Authentication = persistenceManifestAuthentication(manifest, options.PersistenceAuthenticationKey)
-	manifestBytes, _ = json.Marshal(manifest)
+	manifestBytes, err = json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(manifestPath, manifestBytes, 0o600); err != nil {
 		t.Fatal(err)
 	}

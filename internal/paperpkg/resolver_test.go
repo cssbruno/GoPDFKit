@@ -20,7 +20,7 @@ func TestOfflineResolverResolvesVerifiedImportAndLockedAsset(t *testing.T) {
 	writeResolverFile(t, root, "assets/chart.png", []byte("png bytes"))
 	entry := resolverEntry()
 	resolver := newTestResolver(t, root, AllowInternalSymlinks)
-	defer resolver.Close()
+	defer func() { _ = resolver.Close() }()
 
 	content, err := resolver.ResolveImport(context.Background(), entry, uint64(len("chart package")))
 	if err != nil || string(content) != "chart package" {
@@ -42,7 +42,7 @@ func TestOfflineResolverResolvesVerifiedImportAndLockedAsset(t *testing.T) {
 
 func TestOfflineResolverRejectsInvalidPathsAndDigestsBeforeOpen(t *testing.T) {
 	resolver := newTestResolver(t, t.TempDir(), AllowInternalSymlinks)
-	defer resolver.Close()
+	defer func() { _ = resolver.Close() }()
 	for _, relative := range []string{"../outside", "/absolute", `dir\file`, "https://example.test/file", "dir/../file"} {
 		if _, err := resolver.Resolve(context.Background(), relative, shaDigest([]byte("x")), 1); !errors.Is(err, ErrResolverInvalid) {
 			t.Fatalf("Resolve(%q) = %v", relative, err)
@@ -63,14 +63,14 @@ func TestOfflineResolverAllowsInternalSymlinksOrRejectsThemByPolicy(t *testing.T
 		t.Skipf("symlink unavailable: %v", err)
 	}
 	allow := newTestResolver(t, root, AllowInternalSymlinks)
-	defer allow.Close()
+	defer func() { _ = allow.Close() }()
 	content, err := allow.Resolve(context.Background(), "alias/package.paper", shaDigest([]byte("internal")), 64)
 	if err != nil || string(content) != "internal" {
 		t.Fatalf("internal symlink Resolve() = %q, %v", content, err)
 	}
 
 	reject := newTestResolver(t, root, RejectAllSymlinks)
-	defer reject.Close()
+	defer func() { _ = reject.Close() }()
 	if _, err := reject.Resolve(context.Background(), "alias/package.paper", shaDigest([]byte("internal")), 64); !errors.Is(err, ErrResolverSymlink) {
 		t.Fatalf("reject-all Resolve() = %v", err)
 	}
@@ -87,7 +87,7 @@ func TestOfflineResolverRejectsFinalAndIntermediateSymlinkEscape(t *testing.T) {
 		t.Skipf("symlink unavailable: %v", err)
 	}
 	resolver := newTestResolver(t, root, AllowInternalSymlinks)
-	defer resolver.Close()
+	defer func() { _ = resolver.Close() }()
 	for _, relative := range []string{"final.paper", "outside-dir/secret.paper"} {
 		if _, err := resolver.Resolve(context.Background(), relative, shaDigest([]byte("secret")), 64); !errors.Is(err, ErrResolverEscape) {
 			t.Fatalf("escape Resolve(%q) = %v", relative, err)
@@ -100,7 +100,7 @@ func TestOfflineResolverRequiresDigestAndExactByteCeiling(t *testing.T) {
 	content := []byte("four")
 	writeResolverFile(t, root, "file.paper", content)
 	resolver := newTestResolver(t, root, AllowInternalSymlinks)
-	defer resolver.Close()
+	defer func() { _ = resolver.Close() }()
 	if bytes, err := resolver.Resolve(context.Background(), "file.paper", shaDigest(content), 4); err != nil || string(bytes) != "four" {
 		t.Fatalf("exact-limit Resolve() = %q, %v", bytes, err)
 	}
@@ -119,7 +119,7 @@ func TestOfflineResolverRejectsNonRegularFilesAndCanceledContext(t *testing.T) {
 	}
 	writeResolverFile(t, root, "file.paper", []byte("content"))
 	resolver := newTestResolver(t, root, AllowInternalSymlinks)
-	defer resolver.Close()
+	defer func() { _ = resolver.Close() }()
 	if _, err := resolver.Resolve(context.Background(), "directory", shaDigest(nil), 64); !errors.Is(err, ErrResolverNotRegular) {
 		t.Fatalf("directory Resolve() = %v", err)
 	}
@@ -143,7 +143,7 @@ func TestOfflineResolverRejectAllPolicyRejectsSymlinkProjectRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("allow symlink root = %v", err)
 	}
-	resolver.Close()
+	_ = resolver.Close()
 }
 
 func resolverEntry() Entry {
@@ -179,7 +179,7 @@ func shaDigest(content []byte) Digest {
 
 func TestOfflineResolverEntryValidation(t *testing.T) {
 	resolver := newTestResolver(t, t.TempDir(), AllowInternalSymlinks)
-	defer resolver.Close()
+	defer func() { _ = resolver.Close() }()
 	entry := resolverEntry()
 	entry.Assets = append(entry.Assets, Asset{Path: "a-first", Digest: shaDigest(nil)})
 	if _, err := resolver.ResolveImport(context.Background(), entry, 64); !errors.Is(err, ErrResolverInvalid) {

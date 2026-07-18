@@ -66,7 +66,7 @@ func FingerprintNode(file, source, target string) (NodeFingerprint, error) {
 	index := indexSource(parsed.AST.Root, nil)
 	node, err := targetNode(index, target)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrInvalidOperation, err)
+		return "", fmt.Errorf("%w: %w", ErrInvalidOperation, err)
 	}
 	return fingerprintNodeSource(source, node)
 }
@@ -84,7 +84,7 @@ func SourceInstance(file, source, target string) (string, error) {
 	}
 	index := indexSource(parsed.AST.Root, nil)
 	if _, err := targetNode(index, target); err != nil {
-		return "", fmt.Errorf("%w: %v", ErrInvalidOperation, err)
+		return "", fmt.Errorf("%w: %w", ErrInvalidOperation, err)
 	}
 	return index.instances[target], nil
 }
@@ -416,7 +416,7 @@ func Apply(transaction Transaction) (Result, error) {
 				diagnostic.Target = target
 			}
 			unchanged.Diagnostics = []Diagnostic{diagnostic}
-			return unchanged, fmt.Errorf("%w: operation %d: %v", ErrInvalidOperation, operationIndex+1, err)
+			return unchanged, fmt.Errorf("%w: operation %d: %w", ErrInvalidOperation, operationIndex+1, err)
 		}
 		var replacementBytes int
 		for _, patch := range resolved {

@@ -200,10 +200,10 @@ func htmlUnifiedResolveFlexCohort(ctx context.Context, compiled *CompiledHTML) e
 			if htmlUnifiedBlockBoxTag(tag) && (name == "width" || name == "height" || name == "min-width" || name == "min-height" || name == "max-width" || name == "max-height") && resolved.flexContainer == nil && resolved.flexItem == nil {
 				continue
 			}
-			if htmlUnifiedFlexContainerProperties[name] && resolved.flexContainer == nil && !(htmlUnifiedFlexItemProperties[name] && resolved.flexItem != nil) {
+			if htmlUnifiedFlexContainerProperties[name] && resolved.flexContainer == nil && (!htmlUnifiedFlexItemProperties[name] || resolved.flexItem == nil) {
 				return htmlPlanUnsupported(compiled.tokens[token].Str, token, fmt.Sprintf("resolved flex container property %q requires display:flex", name))
 			}
-			if htmlUnifiedFlexItemProperties[name] && resolved.flexItem == nil && !(htmlUnifiedFlexContainerProperties[name] && resolved.flexContainer != nil) {
+			if htmlUnifiedFlexItemProperties[name] && resolved.flexItem == nil && (!htmlUnifiedFlexContainerProperties[name] || resolved.flexContainer == nil) {
 				return htmlPlanUnsupported(compiled.tokens[token].Str, token, fmt.Sprintf("resolved flex item property %q requires a direct supported flex child", name))
 			}
 			if htmlUnifiedFlexProperties[name] && !htmlUnifiedFlexContainerProperties[name] && !htmlUnifiedFlexItemProperties[name] {
@@ -554,8 +554,9 @@ func htmlUnifiedFlexDimensions(direction layout.RowColumnDirection, decl map[str
 		}
 	}
 	if value := strings.TrimSpace(decl[maxMainName]); value != "" && !strings.EqualFold(value, "none") && !strings.EqualFold(value, "auto") {
-		maximum, percent, isPercent := 0.0, uint32(0), false
-		if percent, isPercent = htmlUnifiedFlexPercent(value); !isPercent {
+		percent, isPercent := htmlUnifiedFlexPercent(value)
+		var maximum float64
+		if !isPercent {
 			var ok bool
 			maximum, ok = htmlUnifiedFixedCSSLength(value, false)
 			if !ok {
@@ -565,20 +566,21 @@ func htmlUnifiedFlexDimensions(direction layout.RowColumnDirection, decl map[str
 		if track.Kind == layout.RowColumnTrackFraction {
 			track = layout.RowColumnTrack{Kind: layout.RowColumnTrackFlex, BasisKind: layout.RowColumnFlexBasisFixed, Grow: track.Weight, Shrink: 1, Min: track.Min, MinPercent: track.MinPercent}
 		}
-		if track.Kind == layout.RowColumnTrackFixed {
+		switch track.Kind {
+		case layout.RowColumnTrackFixed:
 			if isPercent {
 				return layout.RowColumnTrack{}, 0, 0, 0, 0, 0, fmt.Errorf("resolved %s percentage requires a flexible main-axis basis", maxMainName)
 			}
 			if track.Size > maximum {
 				track.Size = maximum
 			}
-		} else if track.Kind == layout.RowColumnTrackFlex {
+		case layout.RowColumnTrackFlex:
 			if isPercent {
 				track.MaxPercent = percent
 			} else {
 				track.Max = maximum
 			}
-		} else {
+		default:
 			return layout.RowColumnTrack{}, 0, 0, 0, 0, 0, fmt.Errorf("resolved %s requires a definite or flexible main-axis basis", maxMainName)
 		}
 	}

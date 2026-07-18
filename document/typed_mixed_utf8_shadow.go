@@ -187,7 +187,7 @@ func (f *Document) planTypedParagraphMixedTextShadowContext(ctx context.Context,
 		if metricErr != nil {
 			return typedLineShadowResult{}, metricErr
 		}
-		for _, character := range []rune(segment.Text) {
+		for _, character := range segment.Text {
 			if authored < len(rawRunes) {
 				authored++
 			}

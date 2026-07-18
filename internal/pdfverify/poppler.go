@@ -36,7 +36,7 @@ func (r PopplerRasterizer) Rasterize(ctx context.Context, pdf []byte, dpi uint32
 	if err != nil {
 		return RasterOutput{}, err
 	}
-	defer os.RemoveAll(root)
+	defer func() { _ = os.RemoveAll(root) }()
 	input := filepath.Join(root, "final.pdf")
 	if err := os.WriteFile(input, pdf, 0o600); err != nil {
 		return RasterOutput{}, err

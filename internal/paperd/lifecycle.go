@@ -160,55 +160,42 @@ func (w *Workspace) pruneExpiredHandlesLocked(now time.Time) int {
 		removed++
 	}
 	for serial, record := range w.revisions {
-		serial, record := serial, record
 		prune(record.handle.value, record.expires, func() { delete(w.revisions, serial) })
 	}
 	for serial, record := range w.candidates {
-		serial, record := serial, record
 		prune(record.handle.value, record.expires, func() { delete(w.candidates, serial) })
 	}
 	for serial, record := range w.scenarioRevisions {
-		serial, record := serial, record
 		prune(record.handle.value, record.expires, func() { delete(w.scenarioRevisions, serial) })
 	}
 	for serial, record := range w.scenarioCandidates {
-		serial, record := serial, record
 		prune(record.handle.value, record.expires, func() { delete(w.scenarioCandidates, serial) })
 	}
 	for serial, record := range w.semanticTemplateRevisions {
-		serial, record := serial, record
 		prune(record.handle.value, record.expires, func() { delete(w.semanticTemplateRevisions, serial) })
 	}
 	for serial, record := range w.semanticTemplateCandidates {
-		serial, record := serial, record
 		prune(record.handle.value, record.expires, func() { delete(w.semanticTemplateCandidates, serial) })
 	}
 	for serial, record := range w.policyRevisions {
-		serial, record := serial, record
 		prune(record.handle.value, record.expires, func() { delete(w.policyRevisions, serial) })
 	}
 	for serial, record := range w.policyCandidates {
-		serial, record := serial, record
 		prune(record.handle.value, record.expires, func() { delete(w.policyCandidates, serial) })
 	}
 	for serial, record := range w.mutationAuthorities {
-		serial, record := serial, record
 		prune(record.handle.value, record.expires, func() { delete(w.mutationAuthorities, serial) })
 	}
 	for serial, record := range w.sensitiveAuthorities {
-		serial, record := serial, record
 		prune(record.handle.value, record.expires, func() { delete(w.sensitiveAuthorities, serial) })
 	}
 	for serial, record := range w.sensitiveApprovals {
-		serial, record := serial, record
 		prune(record.handle.value, record.expires, func() { delete(w.sensitiveApprovals, serial) })
 	}
 	for serial, record := range w.plans {
-		serial, record := serial, record
 		prune(record.handle.value, record.expires, func() { delete(w.plans, serial) })
 	}
 	for serial, record := range w.opens {
-		serial, record := serial, record
 		prune(record.handle.value, record.expires, func() { delete(w.opens, serial) })
 	}
 	return removed

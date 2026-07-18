@@ -422,7 +422,7 @@ func findSchemaField(fields []FieldDescriptor, name string) *FieldDescriptor {
 }
 
 func validBindingName(name string) bool {
-	if name == "" || !((name[0] >= 'A' && name[0] <= 'Z') || (name[0] >= 'a' && name[0] <= 'z')) {
+	if name == "" || (name[0] < 'A' || name[0] > 'Z') && (name[0] < 'a' || name[0] > 'z') {
 		return false
 	}
 	for index := 1; index < len(name); index++ {

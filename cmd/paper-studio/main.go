@@ -138,7 +138,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 	server, err := newStudioServer(flag.Arg(0), *scenario)
 	if err != nil {
 		log.Fatal(err)
@@ -307,7 +307,7 @@ func studioFileImportResolver() document.PaperImportResolver {
 		if err != nil {
 			return "", "", err
 		}
-		defer input.Close()
+		defer func() { _ = input.Close() }()
 		encoded, err := io.ReadAll(io.LimitReader(input, studioSourceLimit+1))
 		if err != nil {
 			return "", "", err
@@ -324,7 +324,7 @@ func readStudioSource(file string) (string, [32]byte, error) {
 	if err != nil {
 		return "", [32]byte{}, err
 	}
-	defer input.Close()
+	defer func() { _ = input.Close() }()
 	limited := io.LimitReader(input, studioSourceLimit+1)
 	encoded, err := io.ReadAll(limited)
 	if err != nil {
@@ -686,7 +686,7 @@ func (s *studioServer) handleExplain(w http.ResponseWriter, r *http.Request) {
 }
 
 func decodeStudioJSON(r *http.Request, target any) error {
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 	decoder := json.NewDecoder(io.LimitReader(r.Body, studioJSONLimit+1))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {

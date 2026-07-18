@@ -109,7 +109,7 @@ func (result ShapedText) Validate() error {
 		return ErrShapingInvalid
 	}
 	if err := result.Source.Validate(); err != nil {
-		return fmt.Errorf("%w: source: %v", ErrShapingInvalid, err)
+		return fmt.Errorf("%w: source: %w", ErrShapingInvalid, err)
 	}
 	if len(result.Glyphs) == 0 || len(result.FontRuns) == 0 {
 		return fmt.Errorf("%w: empty glyph or font run output", ErrShapingInvalid)
@@ -153,7 +153,7 @@ func (result ShapedText) Validate() error {
 	}
 	for _, diagnostic := range result.Diagnostics {
 		if err := diagnostic.Validate(); err != nil {
-			return fmt.Errorf("%w: diagnostic: %v", ErrShapingInvalid, err)
+			return fmt.Errorf("%w: diagnostic: %w", ErrShapingInvalid, err)
 		}
 	}
 	return nil

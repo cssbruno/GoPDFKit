@@ -251,7 +251,7 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 	}
 	fingerprint, instance, err := studioTargetPrecondition(snapshot.file, snapshot.source, request.Target)
 	if err != nil {
-		return studioEditResponse{}, fmt.Errorf("%w: target precondition: %v", errStudioInvalidEdit, err)
+		return studioEditResponse{}, fmt.Errorf("%w: target precondition: %w", errStudioInvalidEdit, err)
 	}
 	guard := paperd.PaperMutationGuard{
 		Open: opened.Handle, Authority: authority.Handle, Candidate: created.Candidate.Handle,
@@ -274,7 +274,7 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 	if additionalTarget != "" {
 		parentFingerprint, parentInstance, preconditionErr := studioTargetPrecondition(snapshot.file, snapshot.source, additionalTarget)
 		if preconditionErr != nil {
-			return studioEditResponse{}, fmt.Errorf("%w: parent precondition: %v", errStudioInvalidEdit, preconditionErr)
+			return studioEditResponse{}, fmt.Errorf("%w: parent precondition: %w", errStudioInvalidEdit, preconditionErr)
 		}
 		guard.TargetPreconditions = []paperedit.TargetPrecondition{{
 			Target: additionalTarget, ExpectedFingerprint: parentFingerprint, ExpectedInstance: parentInstance,
@@ -293,9 +293,10 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 	}
 	afterScenario := request.Scenario
 	if request.Operation == "scenario" && normalizeStudioScenario(request.Scenario) == normalizeStudioScenario(request.Target) {
-		if request.Property == "rename" {
+		switch request.Property {
+		case "rename":
 			afterScenario = request.ID
-		} else if request.Property == "delete" {
+		case "delete":
 			afterScenario = ""
 		}
 	}
@@ -575,7 +576,10 @@ func studioTargetPrecondition(file, source, target string) (paperedit.NodeFinger
 }
 
 func studioEditIdempotencyKey(request studioEditRequest) string {
-	encoded, _ := json.Marshal(request)
+	encoded, err := json.Marshal(request)
+	if err != nil {
+		encoded = []byte(fmt.Sprintf("%#v", request))
+	}
 	digest := sha256.Sum256(encoded)
 	return "studio-edit-" + hex.EncodeToString(digest[:16])
 }
@@ -598,17 +602,17 @@ func writeStudioSourceCAS(file string, expected [32]byte, source string) error {
 		return err
 	}
 	temporaryName := temporary.Name()
-	defer os.Remove(temporaryName)
+	defer func() { _ = os.Remove(temporaryName) }()
 	if err := temporary.Chmod(info.Mode().Perm()); err != nil {
-		temporary.Close()
+		_ = temporary.Close()
 		return err
 	}
 	if _, err := temporary.WriteString(source); err != nil {
-		temporary.Close()
+		_ = temporary.Close()
 		return err
 	}
 	if err := temporary.Sync(); err != nil {
-		temporary.Close()
+		_ = temporary.Close()
 		return err
 	}
 	if err := temporary.Close(); err != nil {

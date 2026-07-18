@@ -475,7 +475,7 @@ func explainSelectionSummary(summary StructuralQuerySummary) ExplainSelectionSum
 }
 
 func explainCount(count StructuralQueryCount) ExplainLayoutCount {
-	return ExplainLayoutCount{Matches: count.Matches, Returned: count.Returned, Truncated: count.Truncated}
+	return ExplainLayoutCount(count)
 }
 
 func exactExplainCount(count int) ExplainLayoutCount {

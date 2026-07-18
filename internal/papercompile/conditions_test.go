@@ -182,7 +182,6 @@ func TestCompileScenarioDiagnosesWhenPathTypeRuntimeBindingAndLimits(t *testing.
 	}{name: "expression-limit", fixture: "    value @active: true", expression: `"active"`, code: "PAPER_WHEN_LIMIT", limits: &ScenarioCompileLimits{Expressions: bounded}})
 
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			parsed := paperlang.Parse(test.name+".paper", fmt.Sprintf(base, test.fixture, test.expression))

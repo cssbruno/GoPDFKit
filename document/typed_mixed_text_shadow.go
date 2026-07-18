@@ -149,13 +149,13 @@ func (f *Document) planTypedParagraphMixedCoreShadowContext(ctx context.Context,
 		if segment.Link != "" && strings.TrimSpace(segment.Link) != segment.Link {
 			return typedLineShadowResult{}, newTypedShadowUnsupported(typedShadowParagraphContract, "mixed link targets must be canonical")
 		}
-		metricIndex, exists := metricsByStyle[style]
+		_, exists := metricsByStyle[style]
 		if !exists {
 			metric, metricErr := f.mixedCoreFontMetrics(style)
 			if metricErr != nil {
 				return typedLineShadowResult{}, metricErr
 			}
-			metricIndex = len(metrics)
+			metricIndex := len(metrics)
 			metricsByStyle[style] = metricIndex
 			metrics = append(metrics, metric)
 		}

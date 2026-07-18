@@ -52,7 +52,9 @@ func TestAnchorSensitiveAuditRejectsStaleRootBeforeSignerAndConsumesOnSignerFail
 	seedAuthority := grantSensitiveForTest(t, workspace, opened, SensitiveExport)
 	seedEvidence := completeSensitiveEvidence(string(created.Revision.Revision))
 	seedApproval := grantApprovalForTest(t, workspace, created, seedAuthority, seedEvidence, "audit-stale-seed", time.Minute)
-	workspace.AuthorizeSensitiveOperation(SensitiveOperationRequest{Authority: seedAuthority.Handle, Approval: seedApproval.Handle, Operation: SensitiveExport, ExpectedHead: created.Revision.Handle, PolicyRevision: "policy-v7", Evidence: seedEvidence})
+	if _, err := workspace.AuthorizeSensitiveOperation(SensitiveOperationRequest{Authority: seedAuthority.Handle, Approval: seedApproval.Handle, Operation: SensitiveExport, ExpectedHead: created.Revision.Handle, PolicyRevision: "policy-v7", Evidence: seedEvidence}); err != nil {
+		t.Fatal(err)
+	}
 	inputHash, _ := workspace.SensitiveAuditAnchorInputHash(8)
 	authority := grantSensitiveForTest(t, workspace, opened, SensitiveSign)
 	evidence := completeSensitiveEvidence(string(created.Revision.Revision))

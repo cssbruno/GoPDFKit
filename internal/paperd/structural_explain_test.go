@@ -139,7 +139,11 @@ func TestExplainLayoutIssueConcurrentReadersAndSelectorOutcomes(t *testing.T) {
 			got, callErr := workspace.ExplainLayoutIssue(context.Background(), base)
 			errs[index] = callErr
 			if callErr == nil {
-				encoded, _ := json.Marshal(got)
+				encoded, err := json.Marshal(got)
+				if err != nil {
+					t.Error(err)
+					return
+				}
 				results[index] = string(encoded)
 			}
 		}(i)
@@ -174,7 +178,10 @@ func TestExplainLayoutIssueReturnsExactCandidatesInsteadOfGuessingRepeatedInstan
 		result.Candidates[0].Instance != "@first/@first--copy" || result.Candidates[1].Instance != "@second/@second--copy" {
 		t.Fatalf("ambiguous candidates = %#v", result)
 	}
-	encoded, _ := json.Marshal(result)
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if strings.Contains(string(encoded), "private repeated value") {
 		t.Fatalf("candidate response leaked data: %s", encoded)
 	}

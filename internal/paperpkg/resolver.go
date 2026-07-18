@@ -64,18 +64,18 @@ func NewOfflineResolver(projectRoot string, options ResolverOptions) (*OfflineRe
 	}
 	absolute, err := filepath.Abs(projectRoot)
 	if err != nil {
-		return nil, fmt.Errorf("%w: absolute project root: %v", ErrResolverInvalid, err)
+		return nil, fmt.Errorf("%w: absolute project root: %w", ErrResolverInvalid, err)
 	}
 	rootInfo, err := os.Lstat(absolute)
 	if err != nil {
-		return nil, fmt.Errorf("%w: inspect project root: %v", ErrResolverInvalid, err)
+		return nil, fmt.Errorf("%w: inspect project root: %w", ErrResolverInvalid, err)
 	}
 	if options.SymlinkPolicy == RejectAllSymlinks && rootInfo.Mode()&os.ModeSymlink != 0 {
 		return nil, fmt.Errorf("%w: project root is a symlink", ErrResolverSymlink)
 	}
 	canonical, err := filepath.EvalSymlinks(absolute)
 	if err != nil {
-		return nil, fmt.Errorf("%w: resolve project root: %v", ErrResolverInvalid, err)
+		return nil, fmt.Errorf("%w: resolve project root: %w", ErrResolverInvalid, err)
 	}
 	info, err := os.Stat(canonical)
 	if err != nil || !info.IsDir() {
@@ -83,7 +83,7 @@ func NewOfflineResolver(projectRoot string, options ResolverOptions) (*OfflineRe
 	}
 	root, err := os.OpenRoot(absolute)
 	if err != nil {
-		return nil, fmt.Errorf("%w: open project root: %v", ErrResolverInvalid, err)
+		return nil, fmt.Errorf("%w: open project root: %w", ErrResolverInvalid, err)
 	}
 	return &OfflineResolver{root: root, rootPath: absolute, canonicalRoot: canonical, policy: options.SymlinkPolicy}, nil
 }
@@ -129,10 +129,10 @@ func (resolver *OfflineResolver) Resolve(ctx context.Context, relativePath strin
 		return nil, fmt.Errorf("%w: max bytes must be between 1 and %d", ErrResolverInvalid, HardMaxResolvedFileBytes)
 	}
 	if err := validateRelativePath(relativePath, HardMaxPathBytes); err != nil {
-		return nil, fmt.Errorf("%w: path: %v", ErrResolverInvalid, err)
+		return nil, fmt.Errorf("%w: path: %w", ErrResolverInvalid, err)
 	}
 	if err := validateDigest(expected); err != nil {
-		return nil, fmt.Errorf("%w: digest: %v", ErrResolverInvalid, err)
+		return nil, fmt.Errorf("%w: digest: %w", ErrResolverInvalid, err)
 	}
 	if err := resolver.preflightPath(ctx, relativePath); err != nil {
 		return nil, err
@@ -141,7 +141,7 @@ func (resolver *OfflineResolver) Resolve(ctx context.Context, relativePath strin
 	if err != nil {
 		return nil, fmt.Errorf("paperpkg: open offline path %q: %w", relativePath, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -241,7 +241,7 @@ func validateResolverEntry(entry Entry) error {
 	limits := Limits{MaxLockfileBytes: HardMaxLockfileBytes, MaxStateBytes: HardMaxStateBytes,
 		MaxEntries: HardMaxEntries, MaxAssets: HardMaxAssets, MaxPathBytes: HardMaxPathBytes}
 	if err := lockfile.ValidateWithLimits(limits); err != nil {
-		return fmt.Errorf("%w: entry: %v", ErrResolverInvalid, err)
+		return fmt.Errorf("%w: entry: %w", ErrResolverInvalid, err)
 	}
 	return nil
 }

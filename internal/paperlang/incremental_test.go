@@ -248,7 +248,6 @@ func TestIncrementalCSTPatchLimitsRangesAndNoOp(t *testing.T) {
 		{name: "partial-limits", patches: []CSTPatch{{Span: span(title, title+5)}}, limits: CSTPatchLimits{MaxPatches: 1}, cause: ErrCSTPatchLimit},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			if _, err := ApplyCSTPatches(cst, test.patches, test.limits); !errors.Is(err, test.cause) {
