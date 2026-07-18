@@ -1,4 +1,4 @@
-# v0.15.0 unified-layout stabilization-window record
+# v0.15.0-rc.1 unified-layout stabilization-window record
 
 Status: **pending**. This record starts the release-bound stabilization
 window; it does not close the Stage 10 acceptance gate. The template in
@@ -7,14 +7,14 @@ evidence and approvals.
 
 ## Release identity
 
-- Release: `v0.15.0`
-- Candidate commit: `8bad212eba38e1c2440895ecfb8cf19ffab0ba02`
-- Window start (UTC): `2026-07-18T10:33:53Z` (candidate release workflow start)
+- Release: `v0.15.0-rc.1`
+- Candidate commit: pending — record the annotated tag target after publication
+- Window start (UTC): pending — record the successful prerelease workflow start
 - Window end (UTC): pending — the stabilization window is active
 - Owner: pending — release owner confirmation is required
 - Decision: `pending`
-- Release workflow: <https://github.com/cssbruno/GoPDFKit/actions/runs/29641052762>
-- Published release: <https://github.com/cssbruno/GoPDFKit/releases/tag/v0.15.0>
+- Release workflow: pending
+- Published prerelease: <https://github.com/cssbruno/GoPDFKit/releases/tag/v0.15.0-rc.1>
 
 ## Candidate corpus and routes
 
@@ -99,4 +99,3 @@ Until these are closed, the Stage 10 checklist must remain open.
 - Security reviewer: pending name, date, and approval artifact
 - Release owner: pending name, date, and approval artifact
 - Final decision artifact/hash: pending
-

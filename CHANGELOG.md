@@ -1,9 +1,9 @@
 # Changelog
 
-## v0.15.0 - 2026-07-17
+## v0.15.0-rc.1 - 2026-07-18
 
-Breaking pre-1.0 release for the unified automatic-layout engine and Paper
-Studio authoring foundation.
+Release candidate for the breaking pre-1.0 unified automatic-layout engine and
+Paper Studio authoring foundation.
 
 ### Changed
 
@@ -22,9 +22,9 @@ Studio authoring foundation.
 - Full Go tests, vet, the full race suite, Paper Studio JavaScript tests,
   generation budgets, and the calibrated Paper Engine benchmark gate pass on
   the release candidate branch.
-- The stabilization-window record and formal rollback closure remain release
-  prerequisites; the `v0.15.0` release tag starts the stabilization window and
-  does not itself close Stage 10.
+- The stabilization-window record and formal rollback closure remain final
+  release prerequisites; the `v0.15.0-rc.1` prerelease tag starts the
+  stabilization window and does not itself close Stage 10.
 
 ## v0.14.0 - 2026-07-16
 

@@ -101,7 +101,7 @@ quality : check coverage-check lint nilaway gosec govulncheck
 
 release-version :
 	@test -n "$(VERSION)" || (echo "VERSION is required, for example VERSION=v0.1.0" && exit 1)
-	@printf '%s\n' "$(VERSION)" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$$' || (echo "VERSION must look like vMAJOR.MINOR.PATCH, got $(VERSION)" && exit 1)
+	@printf '%s\n' "$(VERSION)" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?$$' || (echo "VERSION must look like vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-PRERELEASE, got $(VERSION)" && exit 1)
 	@test "$$(sed -n '1p' VERSION)" = "$(VERSION)" || (echo "VERSION file does not match requested release $(VERSION)" && exit 1)
 	@grep -q "^## $(VERSION)" CHANGELOG.md || (echo "CHANGELOG.md is missing section $(VERSION)" && exit 1)
 
