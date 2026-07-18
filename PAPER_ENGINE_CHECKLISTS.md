@@ -3261,14 +3261,17 @@ as completed behavior.
   boundaries.
 - [x] All current public compatibility entry points still work
   (`go test ./...`, including typed/HTML adapter and template tests).
-- [ ] Fixture, benchmark, security, and compliance gates pass. Local
+- [x] Fixture, benchmark, security, and compliance gates pass. Local
   `go test ./...`, `go vet ./...`, repository-wide race tests, generation
   benchmark budgets, the Paper Engine calibration gate, Paper Studio
   JavaScript tests, and the pinned external PDF/A, PDF/UA, and Arlington
   validators pass; reports are in `artifacts/compliance-release` and match
   `testdata/compliance`. Strict `gosec` passes with line-level `G115`
   justifications for the bounded fixed-width conversions, and the
-  stabilization-window acceptance record remains open.
+  evidence is tied to the clean pushed candidate.
+- [ ] Stabilization-window acceptance record is accepted. The release-window
+  evidence, approved thresholds, rollback closure, named reviewer approvals,
+  and final decision artifact remain release-governance requirements.
 
 ## 13. Stage 11 — Ecosystem and production hardening
 
