@@ -1194,13 +1194,11 @@ as completed behavior.
   and link annotations through the immutable plan/painter path
   ([fixture test](document/typed_embedded_font_plan_test.go)); external PDF/UA
   and PDF/A validator results remain required.
-- [ ] Concurrent compiled resources remain race-free. The default-route,
+- [x] Concurrent compiled resources remain race-free. The default-route,
   corpus-differential, compatibility, and golden cohort passes focused race
-  testing, and `./document` plus `cmd/paper-studio` pass their current race
-  gates ([cutover tests](document/typed_default_cutover_test.go),
+  testing, and the full repository-wide `go test -race ./...` gate pass,
+  including `internal/paperd` ([cutover tests](document/typed_default_cutover_test.go),
   [characterization race gate](document/characterization_raster_test.go)).
-  The full-repository race command has not completed in this workspace because
-  its build stopped on disk capacity; the repository-wide gate remains open.
 - [x] Calibrated performance and allocation gates pass. The current eleven-cohort
   Apple M2 gate passes all ten-sample median/max budgets, including the exact
   128x4 table workload; the checked report peaks at 40,332,535 B/op and 140,195
