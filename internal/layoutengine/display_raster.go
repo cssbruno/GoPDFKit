@@ -20,6 +20,7 @@ import (
 	_ "image/jpeg"
 	"io"
 	"math"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -326,7 +327,6 @@ func CaptureDisplayPlanPNGContext(ctx context.Context, plan LayoutPlan, sources 
 	draw.Draw(canvas, canvas.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
 	state := rasterPaintState{transform: IdentityTransform(), clip: canvas.Bounds()}
 	stack := []rasterPaintState{state}
-	rasterizer := &vector.Rasterizer{}
 	end, _ := page.Commands.end(len(plan.commands))
 	for commandIndex := int(page.Commands.Start); commandIndex < end; commandIndex++ {
 		if commandIndex&255 == 0 {
@@ -355,12 +355,12 @@ func CaptureDisplayPlanPNGContext(ctx context.Context, plan LayoutPlan, sources 
 			state.clip = state.clip.Intersect(image.Rect(int(math.Floor(float64(x0))), int(math.Floor(float64(y0))), int(math.Ceil(float64(x1))), int(math.Ceil(float64(y1)))))
 		case CommandFillPath:
 			fill := plan.fills[command.Payload]
-			if err := rasterFillPath(canvas, rasterizer, plan.paths[fill.Path], fill, state.transform, capture, state.clip); err != nil {
+			if err := rasterFillPath(canvas, plan.paths[fill.Path], fill, state.transform, capture, state.clip); err != nil {
 				return DisplayRasterArtifact{}, err
 			}
 		case CommandStrokePath:
 			stroke := plan.strokes[command.Payload]
-			if err := rasterStrokePath(canvas, rasterizer, plan.paths[stroke.Path], stroke, state.transform, capture, state.clip); err != nil {
+			if err := rasterStrokePath(canvas, plan.paths[stroke.Path], stroke, state.transform, capture, state.clip); err != nil {
 				return DisplayRasterArtifact{}, err
 			}
 		case CommandGlyphRun:
@@ -422,12 +422,21 @@ func encodeRasterPNG(output io.Writer, canvas *image.RGBA) error {
 		return err
 	}
 	var compressed bytes.Buffer
-	deflater := rasterPNGDeflaterPool.Get().(*zlib.Writer)
-	deflater.Reset(&compressed)
-	defer func() {
-		deflater.Reset(io.Discard)
-		rasterPNGDeflaterPool.Put(deflater)
-	}()
+	var deflater *zlib.Writer
+	if runtime.GOOS == "js" {
+		var err error
+		deflater, err = zlib.NewWriterLevel(&compressed, zlib.BestSpeed)
+		if err != nil {
+			return err
+		}
+	} else {
+		deflater = rasterPNGDeflaterPool.Get().(*zlib.Writer)
+		deflater.Reset(&compressed)
+		defer func() {
+			deflater.Reset(io.Discard)
+			rasterPNGDeflaterPool.Put(deflater)
+		}()
+	}
 	row := make([]byte, 1+canvas.Bounds().Dx()*4)
 	for y := canvas.Bounds().Min.Y; y < canvas.Bounds().Max.Y; y++ {
 		row[0] = 0 // PNG filter None.
@@ -595,8 +604,7 @@ func rasterGlyphRun(dst *image.RGBA, face *rasterSizedFace, resource CoreFontRes
 }
 
 type rasterSizedFace struct {
-	font    *opentype.Font
-	scratch *image.RGBA
+	font *opentype.Font
 }
 
 func (face *rasterSizedFace) draw(dst *image.RGBA, resource CoreFontResource, run CoreGlyphRun, transform Transform, crop Rect, dpi uint32, clip image.Rectangle) error {
@@ -612,7 +620,7 @@ func (face *rasterSizedFace) draw(dst *image.RGBA, resource CoreFontResource, ru
 		colorValue.R, colorValue.G, colorValue.B = run.Color.R, run.Color.G, run.Color.B
 	}
 	if !resource.IsEmbeddedUTF8() {
-		return drawRasterCoreFontRun(dst, actual, &face.scratch, run, transform, crop, colorValue, clip)
+		return drawRasterCoreFontRun(dst, actual, run, transform, crop, colorValue, clip)
 	}
 	x := origin.X
 	var target draw.Image = dst
@@ -641,7 +649,7 @@ func (face *rasterSizedFace) draw(dst *image.RGBA, resource CoreFontResource, ru
 // unrelated side bearings collide. Shape the substitute naturally as one run,
 // then fit only its horizontal extent to the already-planned run width. The
 // authoritative baseline, width, pagination, and hit geometry stay unchanged.
-func drawRasterCoreFontRun(dst *image.RGBA, face xfont.Face, scratch **image.RGBA, run CoreGlyphRun, transform Transform, crop Rect, colorValue color.NRGBA, clip image.Rectangle) error {
+func drawRasterCoreFontRun(dst *image.RGBA, face xfont.Face, run CoreGlyphRun, transform Transform, crop Rect, colorValue color.NRGBA, clip image.Rectangle) error {
 	var text strings.Builder
 	text.Grow(len(run.Codes))
 	for index := 0; index < len(run.Codes); index++ {
@@ -670,7 +678,7 @@ func drawRasterCoreFontRun(dst *image.RGBA, face xfont.Face, scratch **image.RGB
 	if sourceWidth <= 0 || sourceHeight <= 0 {
 		return nil
 	}
-	source := resetRasterGlyphScratch(scratch, sourceWidth, sourceHeight)
+	source := image.NewRGBA(image.Rect(0, 0, sourceWidth, sourceHeight))
 	drawer := xfont.Drawer{
 		Dst: source, Src: image.NewUniform(colorValue), Face: face,
 		Dot: fixed.Point26_6{Y: fixed.I(metrics.Ascent.Ceil())},
@@ -697,24 +705,7 @@ func drawRasterCoreFontRun(dst *image.RGBA, face xfont.Face, scratch **image.RGB
 	return nil
 }
 
-func resetRasterGlyphScratch(scratch **image.RGBA, width, height int) *image.RGBA {
-	if *scratch == nil || (*scratch).Bounds().Dx() < width || (*scratch).Bounds().Dy() < height {
-		canvasWidth, canvasHeight := width, height
-		if *scratch != nil {
-			canvasWidth = max(canvasWidth, (*scratch).Bounds().Dx())
-			canvasHeight = max(canvasHeight, (*scratch).Bounds().Dy())
-		}
-		*scratch = image.NewRGBA(image.Rect(0, 0, canvasWidth, canvasHeight))
-	}
-	source := (*scratch).SubImage(image.Rect(0, 0, width, height)).(*image.RGBA)
-	for y := 0; y < height; y++ {
-		offset := source.PixOffset(0, y)
-		clear(source.Pix[offset : offset+width*4])
-	}
-	return source
-}
-
-func rasterFillPath(dst *image.RGBA, rasterizer *vector.Rasterizer, path PlannedPath, fill PlannedFill, transform Transform, crop Rect, clip image.Rectangle) error {
+func rasterFillPath(dst *image.RGBA, path PlannedPath, fill PlannedFill, transform Transform, crop Rect, clip image.Rectangle) error {
 	type rasterSegment struct {
 		kind                 PathSegmentKind
 		x, y, x1, y1, x2, y2 float32
@@ -755,7 +746,7 @@ func rasterFillPath(dst *image.RGBA, rasterizer *vector.Rasterizer, path Planned
 	}
 	target := rasterLocalRGBA(dst, bounds)
 	ox, oy := float32(bounds.Min.X), float32(bounds.Min.Y)
-	r := resetLocalRasterizer(rasterizer, bounds)
+	r := newLocalRasterizer(bounds)
 	for _, segment := range segments {
 		switch segment.kind {
 		case PathMoveTo:
@@ -777,7 +768,7 @@ func rasterFillPath(dst *image.RGBA, rasterizer *vector.Rasterizer, path Planned
 	return nil
 }
 
-func rasterStrokePath(dst *image.RGBA, rasterizer *vector.Rasterizer, path PlannedPath, stroke PlannedStroke, transform Transform, crop Rect, clip image.Rectangle) error {
+func rasterStrokePath(dst *image.RGBA, path PlannedPath, stroke PlannedStroke, transform Transform, crop Rect, clip image.Rectangle) error {
 	var current, start Point
 	haveCurrent := false
 	alpha := uint8(255)
@@ -794,7 +785,7 @@ func rasterStrokePath(dst *image.RGBA, rasterizer *vector.Rasterizer, path Plann
 		}
 		target := rasterLocalRGBA(dst, bounds)
 		ox, oy := float64(bounds.Min.X), float64(bounds.Min.Y)
-		r := resetLocalRasterizer(rasterizer, bounds)
+		r := newLocalRasterizer(bounds)
 		r.MoveTo(float32(x+radius-ox), float32(y-oy))
 		r.CubeTo(float32(x+radius-ox), float32(y+k*radius-oy), float32(x+k*radius-ox), float32(y+radius-oy), float32(x-ox), float32(y+radius-oy))
 		r.CubeTo(float32(x-k*radius-ox), float32(y+radius-oy), float32(x-radius-ox), float32(y+k*radius-oy), float32(x-radius-ox), float32(y-oy))
@@ -831,7 +822,7 @@ func rasterStrokePath(dst *image.RGBA, rasterizer *vector.Rasterizer, path Plann
 		}
 		target := rasterLocalRGBA(dst, bounds)
 		ox, oy := float64(bounds.Min.X), float64(bounds.Min.Y)
-		r := resetLocalRasterizer(rasterizer, bounds)
+		r := newLocalRasterizer(bounds)
 		r.MoveTo(float32(ax-ox), float32(ay-oy))
 		r.LineTo(float32(bx-ox), float32(by-oy))
 		r.LineTo(float32(cx-ox), float32(cy-oy))
@@ -925,9 +916,8 @@ func rasterLocalRGBA(destination *image.RGBA, bounds image.Rectangle) *image.RGB
 	return local
 }
 
-func resetLocalRasterizer(rasterizer *vector.Rasterizer, bounds image.Rectangle) *vector.Rasterizer {
-	rasterizer.Reset(bounds.Dx(), bounds.Dy())
-	return rasterizer
+func newLocalRasterizer(bounds image.Rectangle) *vector.Rasterizer {
+	return vector.NewRasterizer(bounds.Dx(), bounds.Dy())
 }
 
 func rasterImage(dst *image.RGBA, source image.Image, placement PlannedImage, transform Transform, crop Rect, clip image.Rectangle) error {
