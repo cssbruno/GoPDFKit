@@ -251,7 +251,7 @@ func TestTypedCharacterizationCorpusIsCompleteBoundedAndDeterministic(t *testing
 		t.Fatalf("runner is nondeterministic:\n%s\n%s", a, b)
 	}
 	digest := sha256.Sum256(a)
-	if got := hex.EncodeToString(digest[:]); got != "956b87c53bb83644d865253c8f462d63fa41dc106d65cac2ffee5d58240423a3" {
+	if got := hex.EncodeToString(digest[:]); got != "6324d0eba09beb5d99a80dbc458d4bdb6932092617337687fde537639dabc2e5" {
 		t.Fatalf("typed characterization golden drift: got %s", got)
 	}
 	if len(first.Fixtures) != len(inventory.Fixtures) {
@@ -285,7 +285,7 @@ func TestTypedCharacterizationCorpusIsCompleteBoundedAndDeterministic(t *testing
 			t.Fatalf("unsuccessful fixture published PDF evidence: %+v", fixture)
 		}
 	}
-	for _, want := range []string{"planned", "unsupported", "accepted-malformed", "canceled", "resource-limit"} {
+	for _, want := range []string{"planned", "rejected", "accepted-malformed", "canceled", "resource-limit"} {
 		if !outcomes[want] {
 			t.Fatalf("missing runner outcome %q: %+v", want, first.Fixtures)
 		}

@@ -43,12 +43,12 @@ func TestCharacterizationRasterPagesArePinnedBoundedAndFailureAtomic(t *testing.
 			}
 		}
 	}
-	if typedRasterPages != 41 || typedRasterPages > characterizationRasterMaxPages || typedRasterBytes == 0 || typedRasterBytes > characterizationRasterMaxPNGBytes {
+	if typedRasterPages != 44 || typedRasterPages > characterizationRasterMaxPages || typedRasterBytes == 0 || typedRasterBytes > characterizationRasterMaxPNGBytes {
 		t.Fatalf("typed raster totals pages=%d bytes=%d", typedRasterPages, typedRasterBytes)
 	}
 	// Includes the documented local-canvas characterization fixture so the
 	// public typed inventory and its visual evidence stay in lockstep.
-	if got := characterizationRasterPinsHash(t, typedPins); got != "f5b28c8f75a678bd55d250d10a8b943b3d082328a363a572a47cf3bfe0fc737e" {
+	if got := characterizationRasterPinsHash(t, typedPins); got != "e8dd1776790bddb7429ef72124a026e8ca2a70e834959f61e2319f8e5165659b" {
 		t.Fatalf("typed raster baseline drift: got %s", got)
 	}
 

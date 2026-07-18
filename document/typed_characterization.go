@@ -140,8 +140,8 @@ func TypedLayoutInventory() TypedCharacterizationInventory {
 		{Scope: "HTML.Forms", Name: "HTML form controls are rejected by strict unified planning", Status: TypedBehaviorUnsupported},
 		{Scope: "QRVerificationBlock", Name: "bounded content-addressed QR image plus verification text and link", Status: TypedBehaviorDocumented},
 		{Scope: "HeadingBlock.Level", Name: "out-of-range levels are currently accepted by exact planning", Status: TypedBehaviorAccidental},
-		{Scope: "ParagraphBlock", Name: "an indivisible line one fixed unit over an empty body is unsupported by the typed adapter", Status: TypedBehaviorUnsupported},
-		{Scope: "TableBlock", Name: "irregular wide/rowspan cohorts outside the represented contract are rejected", Status: TypedBehaviorUnsupported},
+		{Scope: "ParagraphBlock", Name: "an indivisible line over an empty body is emitted once with oversized-line evidence", Status: TypedBehaviorDocumented},
+		{Scope: "TableBlock", Name: "sparse rows materialize deterministic empty cells while bounded colspan and rowspan occupancy remains exact", Status: TypedBehaviorDocumented},
 		{Scope: "WriteDocument", Name: "supported fresh documents use immutable unified planning; unsupported receiver or model contracts store an error without a legacy renderer", Status: TypedBehaviorDocumented},
 	}
 	return TypedCharacterizationInventory{SchemaVersion: TypedCharacterizationSchemaVersion,

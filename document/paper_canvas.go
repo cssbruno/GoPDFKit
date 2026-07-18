@@ -154,7 +154,10 @@ func (f *Document) planPaperCanvas(ctx context.Context, doc *layout.LayoutDocume
 		rootSource = paperLayoutSourceSpan(mapped.Span)
 		break
 	}
-	canvasIdentity := paperBlockIdentity(mapping, 0, -1, -1, 0)
+	// The container and its first child used the same fallback identity when a
+	// typed CanvasBlock had no source mapping. Keep the container outside the
+	// child fallback range so every semantic key/instance pair stays unique.
+	canvasIdentity := paperBlockIdentity(mapping, 0, -1, -1, len(block.Items))
 	semanticNodes := []layoutengine.SemanticNode{
 		{ID: 1, Role: layoutengine.SemanticRoleDocument, Key: rootKey, Instance: rootInstance, Source: rootSource,
 			Attributes: layoutengine.SemanticAttributes{Language: strings.TrimSpace(doc.Language)}},

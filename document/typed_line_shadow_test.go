@@ -230,6 +230,24 @@ func TestTypedParagraphLineShadowRejectsUnsupportedContentWithoutMutation(t *tes
 	}
 }
 
+func TestTypedParagraphLineShadowEmitsOneUnitOversizedLineOnce(t *testing.T) {
+	planner := MustNew(WithUnit(UnitPoint), WithCustomPageSize(Size{Wd: 200, Ht: 200}), WithNoCompression())
+	doc := &layout.LayoutDocument{
+		PageTemplate: layout.PageTemplate{Margins: layout.Spacing{Top: 10, Right: 10, Bottom: 10, Left: 10}},
+		Body: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "over"}}, Style: layout.TextStyle{
+			FontFamily: "Helvetica", FontSize: 10, LineHeight: 180 + 1.0/1024.0,
+		}}},
+	}
+	shadow, err := planner.planTypedParagraphLineShadow(doc)
+	if err != nil {
+		t.Fatalf("one-unit oversized line: %v", err)
+	}
+	projection := shadow.Plan.Projection()
+	if len(projection.Pages) != 1 || len(projection.Lines) != 1 || len(projection.Diagnostics) != 1 || projection.Diagnostics[0].Code != layoutengine.DiagnosticUnbreakableTooTall {
+		t.Fatalf("one-unit oversized evidence = pages %d lines %d diagnostics %+v", len(projection.Pages), len(projection.Lines), projection.Diagnostics)
+	}
+}
+
 func TestTypedParagraphLineShadowRejectsFixedRoundingPageDrift(t *testing.T) {
 	pdf := MustNew(WithUnit(UnitPoint), WithCustomPageSize(Size{Wd: 100, Ht: 60}))
 	pdf.SetMargins(10, 10, 10)

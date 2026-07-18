@@ -109,9 +109,9 @@ func TestWriteDocumentInvalidUnifiedInputFailsAtomicallyWithoutFallback(t *testi
 	}}))
 	pdf.WriteDocument(&layout.LayoutDocument{Body: []layout.Block{
 		layout.TableBlock{
-			Columns: []layout.TableColumn{{Width: 400}, {Width: 400}},
+			Columns: []layout.TableColumn{{Width: 200}, {Width: 200}},
 			Body: []layout.TableRow{{Cells: []layout.TableCell{
-				{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "left"}}}}},
+				{ColSpan: 2, Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "left"}}}}},
 				{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "right"}}}}},
 			}}},
 		},

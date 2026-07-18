@@ -188,8 +188,9 @@ func (f *Document) planTypedParagraphLineShadowContext(ctx context.Context, doc 
 		return fixedFromDocumentUnits(f, userUnits)
 	}
 	lineHeight, err := toFixed(lineHeightUser)
-	if err != nil || lineHeight <= 0 || lineHeight > body.Height {
-		return typedLineShadowResult{}, newTypedShadowUnsupported(typedShadowGeometry, "line height is invalid or exceeds the page body")
+	physicalCapacity, capacityErr := pageSize.Height.Sub(body.Y)
+	if err != nil || capacityErr != nil || lineHeight <= 0 || lineHeight > physicalCapacity {
+		return typedLineShadowResult{}, newTypedShadowUnsupported(typedShadowGeometry, "line height is invalid or exceeds the physical page")
 	}
 	baseline, err := toFixed(baselineUser)
 	if err != nil || baseline < 0 || baseline > lineHeight {
@@ -324,7 +325,10 @@ func typedLineShadowLegacyPageLineCounts(lineCount int, top, trigger, lineHeight
 	counts := []uint32{0}
 	y := top
 	for range lineCount {
-		if y+lineHeight > trigger {
+		// An indivisible line taller than an empty body must make progress on
+		// that page. The shared paragraph planner emits it once with explicit
+		// oversized evidence; matching that behavior avoids a leading blank page.
+		if y+lineHeight > trigger && counts[len(counts)-1] != 0 {
 			counts = append(counts, 0)
 			y = top
 		}

@@ -105,6 +105,32 @@ func TestLayoutDocumentPlanTableSpansHeadersPaginationCaptureAndPDF(t *testing.T
 	}
 }
 
+func TestTypedTableMaterializesSparseTrailingCells(t *testing.T) {
+	planner := typedTableTestPlanner()
+	paragraph := layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "value"}}, Style: layout.TextStyle{FontFamily: "Helvetica", FontSize: 10, LineHeight: 12}}
+	table := layout.TableBlock{
+		Columns: []layout.TableColumn{{Width: 60}, {Width: 60}, {Width: 60}},
+		Body: []layout.TableRow{
+			{Cells: []layout.TableCell{{RowSpan: 2, Blocks: []layout.Block{paragraph}}, {Blocks: []layout.Block{paragraph}}}},
+			{Cells: []layout.TableCell{{Blocks: []layout.Block{paragraph}}}},
+		},
+	}
+	plan, err := planner.PlanLayoutDocument(&layout.LayoutDocument{Body: []layout.Block{table}})
+	if err != nil || plan.PageCount() != 1 {
+		t.Fatalf("sparse table plan = pages %d, %v", plan.PageCount(), err)
+	}
+	projection := plan.plan.Projection()
+	var cells int
+	for _, node := range projection.SemanticNodes {
+		if node.Role == layoutengine.SemanticRoleCell {
+			cells++
+		}
+	}
+	if cells != 5 {
+		t.Fatalf("sparse table semantic cells = %d, want 5 including two deterministic empty cells", cells)
+	}
+}
+
 func TestTypedTableComposesVariablePageTemplateCountersCaptureAndPDF(t *testing.T) {
 	pixel, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
 	if err != nil {
