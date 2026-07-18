@@ -2599,7 +2599,7 @@ as completed behavior.
   [CLI](cmd/paper/workflow.go),
   [workflow/replay/concurrency/recovery tests](internal/paperd/headless_workflow_test.go),
   [executable CLI integration test](cmd/paper/main_test.go)).
-- [ ] Protocol, privacy, replay, concurrency, and recovery evaluations pass.
+- [x] Protocol, privacy, replay, concurrency, and recovery evaluations pass.
   Implemented evidence now includes an authenticated canonical transport
   envelope with signed descending version offers, highest-mutual-version
   enforcement and downgrade rejection; peer/workspace/policy/disclosure
@@ -2616,10 +2616,12 @@ as completed behavior.
   authenticated envelope is read or dispatched. Focused macOS tests exercise
   the real kernel credential boundary, framing, restricted parent/path policy,
   peer denial, replacement-socket-safe cleanup, and exact dispatch; the Linux
-  peer-credential implementation and kernel-backed integration test
-  cross-compile successfully but still require execution on Linux CI
+  peer-credential implementation and kernel-backed integration test execute
+  successfully on a real Linux kernel in the local Alpine container, while
+  the full host package and race suites pass
   ([socket adapter](internal/paperd/protocol_unix.go),
   [Linux peer credentials](internal/paperd/protocol_peercred_linux.go),
+  [evaluation record](docs/security/paperd-protocol-evaluation.md),
   [macOS peer credentials](internal/paperd/protocol_peercred_darwin.go),
   [transport tests](internal/paperd/protocol_unix_test.go)). The symmetric
   client validates the restricted socket path and kernel-reported server UID
@@ -3652,8 +3654,13 @@ as completed behavior.
   ten-sample pinned-host baseline
   ([benchmark](document/paper_engine_benchmark_test.go),
   [baseline](docs/performance/baselines/paper-engine-stage0-apple-m2.txt)).
-- [ ] `benchstat` evidence is attached for hot-path PRs.
-- [ ] Allocation changes are explained with profiles.
+- [x] `benchstat` evidence is attached for hot-path changes, including the
+  deterministic PNG encoder's ten-sample paired comparison
+  ([raster v5 evidence](docs/performance/evidence/display-raster-v5-apple-m2.md)).
+- [x] Allocation changes are explained with profiles. The raster v5 evidence
+  records both allocation profiles, artifact hashes, the streaming-chunk
+  allocation source, and the net bytes/op reduction
+  ([evidence](docs/performance/evidence/display-raster-v5-apple-m2.md)).
 - [x] No portable or single-sample timing multiplier is used as an acceptance
   gate; the automatic report gate requires at least ten samples and exact
   named host/toolchain matching before applying calibrated upper-median timing
