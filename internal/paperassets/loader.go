@@ -20,6 +20,14 @@ import (
 
 const MaxManifestBytes = 1 << 20
 
+var allowedFontLicenses = map[string]struct{}{
+	"Apache-2.0":  {},
+	"CC0-1.0":     {},
+	"MIT":         {},
+	"OFL-1.1":     {},
+	"Proprietary": {},
+}
+
 type manifest struct {
 	Assets []entry `json:"assets"`
 }
@@ -41,8 +49,19 @@ type entry struct {
 // ProjectResource retains private verified bytes with human-readable lifecycle
 // metadata. Consumers must project metadata explicitly and never serialize Data.
 type ProjectResource struct {
-	Name, MediaType, Digest          string
+	Name, MediaType, Digest, Path    string
 	Data                             []byte
+	Family, Style, License, Replaces string
+	Weight                           uint16
+	Fallback                         []string
+	FocusX, FocusY                   *float64
+}
+
+// ResourceSpec describes a resource file that should be added to an explicit
+// project manifest. The digest is derived from the verified file bytes rather
+// than accepted from the caller.
+type ResourceSpec struct {
+	Name, MediaType, Path            string
 	Family, Style, License, Replaces string
 	Weight                           uint16
 	Fallback                         []string
@@ -121,13 +140,189 @@ func LoadProjectManifest(manifestPath, assetRoot string) ([]ProjectResource, err
 		if total > papercompile.MaxAssetCatalogBytes {
 			return nil, errors.New("paperassets: cumulative bytes exceed limit")
 		}
-		resources = append(resources, ProjectResource{Name: item.Name, MediaType: item.MediaType, Digest: item.Digest, Data: data,
+		resources = append(resources, ProjectResource{Name: item.Name, MediaType: item.MediaType, Digest: item.Digest, Path: filepath.ToSlash(relative), Data: data,
 			Family: item.Family, Weight: item.Weight, Style: item.Style, License: item.License, Fallback: append([]string(nil), item.Fallback...), Replaces: item.Replaces, FocusX: item.FocusX, FocusY: item.FocusY})
 	}
 	if err := validateProjectResources(resources); err != nil {
 		return nil, err
 	}
 	return resources, nil
+}
+
+// AddProjectResource reads one project-root-relative file, validates the
+// resulting catalog, and atomically publishes the updated manifest. Existing
+// manifest entries are retained with their original relative paths.
+func AddProjectResource(manifestPath, assetRoot string, spec ResourceSpec) ([]ProjectResource, error) {
+	resources, err := LoadProjectManifest(manifestPath, assetRoot)
+	if err != nil {
+		return nil, err
+	}
+	root, err := projectAssetRoot(manifestPath, assetRoot)
+	if err != nil {
+		return nil, err
+	}
+	relative, err := safeRelative(spec.Path)
+	if err != nil {
+		return nil, fmt.Errorf("paperassets: resource path: %w", err)
+	}
+	data, err := readProjectAsset(root, relative)
+	if err != nil {
+		return nil, fmt.Errorf("paperassets: resource file: %w", err)
+	}
+	digest := sha256Sum(data)
+	resources = append(resources, ProjectResource{
+		Name: spec.Name, MediaType: spec.MediaType, Digest: fmt.Sprintf("%x", digest), Path: filepath.ToSlash(relative), Data: data,
+		Family: spec.Family, Weight: spec.Weight, Style: spec.Style, License: spec.License,
+		Fallback: append([]string(nil), spec.Fallback...), Replaces: spec.Replaces, FocusX: cloneFloat(spec.FocusX), FocusY: cloneFloat(spec.FocusY),
+	})
+	if err := publishProjectManifest(manifestPath, resources); err != nil {
+		return nil, err
+	}
+	return LoadProjectManifest(manifestPath, assetRoot)
+}
+
+// RemoveProjectResource validates and atomically publishes a manifest with
+// one named resource removed. Lifecycle references and authored references
+// are checked by the caller before this function is invoked.
+func RemoveProjectResource(manifestPath, assetRoot, name string) ([]ProjectResource, error) {
+	if !portableName(name) {
+		return nil, errors.New("paperassets: resource name is not a portable identifier")
+	}
+	resources, err := LoadProjectManifest(manifestPath, assetRoot)
+	if err != nil {
+		return nil, err
+	}
+	filtered := resources[:0]
+	found := false
+	for _, resource := range resources {
+		if resource.Name == name {
+			found = true
+			continue
+		}
+		filtered = append(filtered, resource)
+	}
+	if !found {
+		return nil, fmt.Errorf("paperassets: resource %q is not in the manifest", name)
+	}
+	if err := publishProjectManifest(manifestPath, filtered); err != nil {
+		return nil, err
+	}
+	return LoadProjectManifest(manifestPath, assetRoot)
+}
+
+func projectAssetRoot(manifestPath, assetRoot string) (string, error) {
+	manifestPath, err := filepath.Abs(manifestPath)
+	if err != nil {
+		return "", err
+	}
+	if assetRoot == "" {
+		assetRoot = filepath.Dir(manifestPath)
+	}
+	assetRoot, err = filepath.Abs(assetRoot)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(assetRoot)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New("paperassets: asset root must be a real directory")
+	}
+	return assetRoot, nil
+}
+
+func readProjectAsset(root, relative string) ([]byte, error) {
+	full := filepath.Join(root, relative)
+	if err := rejectSymlinkPath(root, relative); err != nil {
+		return nil, err
+	}
+	return readRegularBounded(full, papercompile.MaxAssetResourceBytes)
+}
+
+func publishProjectManifest(manifestPath string, resources []ProjectResource) error {
+	manifestPath, err := filepath.Abs(manifestPath)
+	if err != nil {
+		return err
+	}
+	info, err := os.Lstat(manifestPath)
+	if err != nil {
+		return fmt.Errorf("paperassets: manifest: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("paperassets: manifest must be a regular non-symlink file")
+	}
+	if len(resources) > papercompile.MaxAssetCatalogResources {
+		return errors.New("paperassets: asset count exceeds limit")
+	}
+	totalBytes := 0
+	for index, resource := range resources {
+		if len(resource.Data) > papercompile.MaxAssetResourceBytes {
+			return fmt.Errorf("paperassets: resources[%d] exceeds resource byte limit", index)
+		}
+		if totalBytes > papercompile.MaxAssetCatalogBytes-len(resource.Data) {
+			return errors.New("paperassets: cumulative bytes exceed limit")
+		}
+		totalBytes += len(resource.Data)
+	}
+	if err := validateProjectResources(resources); err != nil {
+		return err
+	}
+	entries := make([]entry, len(resources))
+	for index, resource := range resources {
+		relative, err := safeRelative(resource.Path)
+		if err != nil {
+			return fmt.Errorf("paperassets: resources[%d].path: %w", index, err)
+		}
+		entries[index] = entry{Name: resource.Name, MediaType: resource.MediaType, Digest: resource.Digest, Path: filepath.ToSlash(relative), Family: resource.Family, Weight: resource.Weight, Style: resource.Style, License: resource.License, Fallback: append([]string(nil), resource.Fallback...), Replaces: resource.Replaces, FocusX: cloneFloat(resource.FocusX), FocusY: cloneFloat(resource.FocusY)}
+	}
+	encoded, err := json.MarshalIndent(manifest{Assets: entries}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("paperassets: encode manifest: %w", err)
+	}
+	encoded = append(encoded, '\n')
+	if len(encoded) > MaxManifestBytes {
+		return errors.New("paperassets: encoded manifest exceeds limit")
+	}
+	directory := filepath.Dir(manifestPath)
+	directoryInfo, err := os.Lstat(directory)
+	if err != nil || !directoryInfo.IsDir() || directoryInfo.Mode()&os.ModeSymlink != 0 {
+		return errors.New("paperassets: manifest directory must be a real directory")
+	}
+	temporary, err := os.CreateTemp(directory, ".paperassets-manifest-*")
+	if err != nil {
+		return err
+	}
+	temporaryName := temporary.Name()
+	defer os.Remove(temporaryName)
+	if err := temporary.Chmod(info.Mode().Perm()); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(encoded); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(temporaryName, manifestPath); err != nil {
+		return err
+	}
+	if directoryHandle, err := os.Open(directory); err == nil {
+		_ = directoryHandle.Sync()
+		_ = directoryHandle.Close()
+	}
+	return nil
+}
+
+func cloneFloat(value *float64) *float64 {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
 }
 
 func validateProjectResources(resources []ProjectResource) error {
@@ -157,6 +352,9 @@ func validateProjectResources(resources []ProjectResource) error {
 		case "font/ttf", "font/otf", "font/woff2":
 			if item.Family == "" || len(item.Family) > 128 || item.License == "" || len(item.License) > 256 || item.FocusX != nil || item.FocusY != nil {
 				return fmt.Errorf("paperassets: font %q requires bounded family/license and no image focus", item.Name)
+			}
+			if _, allowed := allowedFontLicenses[item.License]; !allowed {
+				return fmt.Errorf("paperassets: font %q license %q is outside the enforced policy", item.Name, item.License)
 			}
 			if item.Weight == 0 {
 				item.Weight = 400

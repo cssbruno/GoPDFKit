@@ -40,6 +40,7 @@ const (
 	MutationMoveNode         MutationOperation = "move_node"
 	MutationInsertTemplate   MutationOperation = "insert_template"
 	MutationCreateScenario   MutationOperation = "create_scenario"
+	MutationManageScenario   MutationOperation = "manage_scenario"
 )
 
 func (operation MutationOperation) valid() bool {
@@ -47,7 +48,7 @@ func (operation MutationOperation) valid() bool {
 	case MutationSetLiteral, MutationSetRichText, MutationSetBinding, MutationFillSlot, MutationApplyFix,
 		MutationSetBoxProperty, MutationSetTextProperty, MutationSetGridTrack, MutationSetImageProperty, MutationSetTableProperty, MutationSetPageMargin, MutationSetPageSize, MutationSetCanvasAnchor, MutationSetPageRegion:
 		return true
-	case MutationMoveNode, MutationInsertTemplate, MutationCreateScenario:
+	case MutationMoveNode, MutationInsertTemplate, MutationCreateScenario, MutationManageScenario:
 		return true
 	default:
 		return false

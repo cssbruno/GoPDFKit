@@ -284,14 +284,23 @@ func TestPaperStudioAuthoringMetadataAndJournaledCreateToConnectFlow(t *testing.
 	if !strings.Contains(afterTemplate.Source, "# preserve author note") || !strings.Contains(afterTemplate.Source, "paragraph @summary:") {
 		t.Fatalf("template source:\n%s", afterTemplate.Source)
 	}
+	schema := map[string]any{"source_revision": afterTemplate.SourceRevision, "plan_revision": afterTemplate.Revision, "operation": "schema", "target": "@report", "property": "", "id": "@receipt"}
+	createdSchema := postStudioJSON(t, handler, "/api/edit", schema)
+	if createdSchema.StatusCode != http.StatusOK {
+		t.Fatalf("schema = %d %s", createdSchema.StatusCode, createdSchema.Body)
+	}
+	afterSchema := fetchStudioWorkspace(t, handler)
+	if !strings.Contains(afterSchema.Source, "schema @receipt:") || !strings.Contains(afterSchema.Source, "field @receipt-value:") {
+		t.Fatalf("schema source:\n%s", afterSchema.Source)
+	}
 
-	binding := map[string]any{"source_revision": afterTemplate.SourceRevision, "plan_revision": afterTemplate.Revision, "operation": "binding", "target": "@copy", "property": "", "path": "@invoice.total"}
+	binding := map[string]any{"source_revision": afterSchema.SourceRevision, "plan_revision": afterSchema.Revision, "operation": "binding", "target": "@copy", "property": "", "path": "@invoice.total", "required": true, "format": "decimal", "format_locale": "pt-BR", "format_min_fraction": 2, "format_max_fraction": 2}
 	bound := postStudioJSON(t, handler, "/api/edit", binding)
 	if bound.StatusCode != http.StatusOK {
 		t.Fatalf("binding = %d %s", bound.StatusCode, bound.Body)
 	}
 	afterBinding := fetchStudioWorkspace(t, handler)
-	if !strings.Contains(afterBinding.Source, "bind: \"@invoice.total\"") {
+	if !strings.Contains(afterBinding.Source, "bind: \"@invoice.total\"") || !strings.Contains(afterBinding.Source, "format: \"decimal\"") || !strings.Contains(afterBinding.Source, "format-locale: \"pt-BR\"") {
 		t.Fatalf("binding source:\n%s", afterBinding.Source)
 	}
 
@@ -304,11 +313,41 @@ func TestPaperStudioAuthoringMetadataAndJournaledCreateToConnectFlow(t *testing.
 	if !strings.Contains(afterScenario.Source, "scenario @stress:") || !strings.Contains(afterScenario.Source, "value @total: 999999.99") {
 		t.Fatalf("scenario source:\n%s", afterScenario.Source)
 	}
-	delivery := studioRequest(t, handler, http.MethodGet, "/api/delivery?revision="+afterScenario.Revision, nil, "")
+	fetchScenario := func(name string) studioWorkspaceResponse {
+		response := studioRequest(t, handler, http.MethodGet, "/api/workspace?scenario="+name, nil, "")
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("scenario workspace %s = %d %s", name, response.StatusCode, response.Body)
+		}
+		var workspace studioWorkspaceResponse
+		if err := json.Unmarshal(response.Body, &workspace); err != nil {
+			t.Fatal(err)
+		}
+		return workspace
+	}
+	selectedScenario := fetchScenario("%40stress")
+	renameScenario := map[string]any{"source_revision": selectedScenario.SourceRevision, "plan_revision": selectedScenario.Revision, "scenario": "@stress", "operation": "scenario", "target": "@stress", "property": "rename", "id": "@reviewed"}
+	renamedResponse := postStudioJSON(t, handler, "/api/edit", renameScenario)
+	if renamedResponse.StatusCode != http.StatusOK || !strings.Contains(string(renamedResponse.Body), `"scenario":"@reviewed"`) {
+		t.Fatalf("scenario rename = %d %s", renamedResponse.StatusCode, renamedResponse.Body)
+	}
+	afterRename := fetchScenario("%40reviewed")
+	if !strings.Contains(afterRename.Source, "scenario @reviewed:") || strings.Contains(afterRename.Source, "scenario @stress:") {
+		t.Fatalf("renamed scenario source:\n%s", afterRename.Source)
+	}
+	deleteScenario := map[string]any{"source_revision": afterRename.SourceRevision, "plan_revision": afterRename.Revision, "scenario": "@reviewed", "operation": "scenario", "target": "@reviewed", "property": "delete"}
+	deletedResponse := postStudioJSON(t, handler, "/api/edit", deleteScenario)
+	if deletedResponse.StatusCode != http.StatusOK || !strings.Contains(string(deletedResponse.Body), `"scenario":""`) {
+		t.Fatalf("scenario delete = %d %s", deletedResponse.StatusCode, deletedResponse.Body)
+	}
+	afterLifecycle := fetchStudioWorkspace(t, handler)
+	if strings.Contains(afterLifecycle.Source, "scenario @reviewed:") {
+		t.Fatalf("deleted scenario source:\n%s", afterLifecycle.Source)
+	}
+	delivery := studioRequest(t, handler, http.MethodGet, "/api/delivery?revision="+afterLifecycle.Revision, nil, "")
 	if delivery.StatusCode != http.StatusOK || !strings.Contains(string(delivery.Body), `"status":"verified"`) || !strings.Contains(string(delivery.Body), `"publish":{"status":"separate_authorized_capability"`) {
 		t.Fatalf("create-to-deliver status = %d %s", delivery.StatusCode, delivery.Body)
 	}
-	export := studioRequest(t, handler, http.MethodGet, "/api/export.pdf?revision="+afterScenario.Revision, nil, "")
+	export := studioRequest(t, handler, http.MethodGet, "/api/export.pdf?revision="+afterLifecycle.Revision, nil, "")
 	if export.StatusCode != http.StatusOK || export.Header.Get("Content-Type") != "application/pdf" || len(export.Body) < 64 || !bytes.HasPrefix(export.Body, []byte("%PDF")) {
 		t.Fatalf("create-to-deliver export = %d %q %d", export.StatusCode, export.Header, len(export.Body))
 	}
@@ -352,6 +391,47 @@ func TestPaperStudioTypedPaletteInsertsPrimitiveAndComponentInstances(t *testing
 	after := fetchStudioWorkspace(t, handler)
 	if !strings.Contains(after.Source, "use @card-instance:") || !strings.Contains(after.Source, "component: \"@card\"") {
 		t.Fatalf("component palette source =\n%s", after.Source)
+	}
+}
+
+func TestPaperStudioImportTemplateFlowsThroughPreviewAndExport(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "import.paper")
+	if err := os.MkdirAll(filepath.Join(dir, "styles"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "styles", "design.paper"), []byte("document:\n  style @base:\n    font: \"Helvetica\"\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	source := "document @report:\n" +
+		"  page @sheet:\n" +
+		"    body @body:\n" +
+		"      paragraph @copy:\n" +
+		"        style: \"@base\"\n" +
+		"        text: \"Imported\"\n"
+	if err := os.WriteFile(file, []byte(source), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	studio, err := newStudioServer(file, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := studio.routes()
+	before := fetchStudioWorkspace(t, handler)
+	response := postStudioJSON(t, handler, "/api/edit", map[string]any{
+		"source_revision": before.SourceRevision, "plan_revision": before.Revision,
+		"operation": "import", "target": "@report", "property": "", "import_path": "styles/design.paper",
+	})
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("import edit = %d %s", response.StatusCode, response.Body)
+	}
+	after := fetchStudioWorkspace(t, handler)
+	if after.Pages != 1 || !strings.Contains(after.Source, `import: "styles/design.paper"`) || len(after.Diagnostics) != 0 {
+		t.Fatalf("import workspace = %+v\nsource=%s", after, after.Source)
+	}
+	export := studioRequest(t, handler, http.MethodGet, "/api/export.pdf?revision="+after.Revision, nil, "")
+	if export.StatusCode != http.StatusOK || !bytes.HasPrefix(export.Body, []byte("%PDF")) {
+		t.Fatalf("import export = %d bytes=%d", export.StatusCode, len(export.Body))
 	}
 }
 

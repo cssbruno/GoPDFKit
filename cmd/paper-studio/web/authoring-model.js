@@ -36,10 +36,30 @@
       if (!target || !validTemplate || !readableID(draft.id)) throw new Error('Choose a compatible template target, shape, and readable @id');
       return {...base, target: draft.target, template: draft.template, id: draft.id, ...(draft.template === 'component' ? {component: draft.component} : {})};
     }
+    if (draft.operation === 'schema') {
+      if (draft.target !== metadata.documentTarget || !readableID(draft.id)) throw new Error('Choose the document and a readable schema @id');
+      return {...base, target: draft.target, id: draft.id};
+    }
+    if (draft.operation === 'import') {
+      if (draft.target !== metadata.documentTarget || !String(draft.importPath || '').trim() || /^(?:[A-Za-z]:|[\\/]|~)|:\/\//.test(String(draft.importPath))) throw new Error('Choose the document and a safe project-relative .paper import path');
+      return {...base, target: draft.target, import_path: String(draft.importPath).trim()};
+    }
     if (draft.operation === 'binding') {
       const schema = metadata.schemas.find(item => item.fields.some(field => field.path === draft.path));
       if (!metadata.bindingTargets.some(item => item.id === draft.target) || !schema) throw new Error('Choose an exact node and compiler-provided binding path');
-      return {...base, target: draft.target, path: draft.path};
+      const payload = {...base, target: draft.target, path: draft.path};
+      if (draft.required !== undefined && draft.required !== '') payload.required = draft.required === true || draft.required === 'true';
+      if (draft.format) payload.format = draft.format;
+      if (draft.formatLocale) payload.format_locale = draft.formatLocale;
+      if (draft.formatCurrency) payload.format_currency = draft.formatCurrency;
+      for (const [key, value] of [['format_min_fraction', draft.minFraction], ['format_max_fraction', draft.maxFraction]]) {
+        if (value !== undefined && value !== '') {
+          const number = Number(value);
+          if (!Number.isInteger(number) || number < 0 || number > 18) throw new Error('Binding fraction digits must be an integer from 0 through 18');
+          payload[key] = number;
+        }
+      }
+      return payload;
     }
     if (draft.operation === 'scenario-create') {
       if (!metadata.documentTarget || draft.target !== metadata.documentTarget || !metadata.schemas.some(item => item.name === draft.schema) || !metadata.presets.includes(draft.preset) || !readableID(draft.id)) throw new Error('Choose a schema, stress preset, and readable scenario @id');
@@ -49,5 +69,14 @@
     throw new Error('Unsupported authoring operation');
   }
 
-  return Object.freeze({normalize, buildPayload});
+  function buildScenarioLifecyclePayload(workspace, metadata, draft) {
+    if (!workspace || !metadata || metadata.revision !== workspace.revision || metadata.sourceRevision !== workspace.source_revision) throw new Error('Exact revisions are unavailable');
+    if (!metadata.scenarios.includes(draft.target)) throw new Error('Choose an exact authored scenario');
+    const base = {source_revision: workspace.source_revision, plan_revision: workspace.revision, scenario: workspace.scenario || '', operation: 'scenario', target: draft.target, property: draft.action};
+    if (draft.action === 'delete') return base;
+    if (draft.action === 'rename' && readableID(draft.id) && !metadata.scenarios.includes(draft.id) && draft.id !== draft.target) return {...base, id: draft.id};
+    throw new Error('Choose a distinct readable scenario @id');
+  }
+
+  return Object.freeze({normalize, buildPayload, buildScenarioLifecyclePayload});
 });

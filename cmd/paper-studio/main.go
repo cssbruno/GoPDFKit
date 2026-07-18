@@ -87,6 +87,8 @@ type studioServer struct {
 	assets           []document.PaperAssetResource
 	assetCatalog     document.PaperAssetCatalog
 	projectResources []paperassets.ProjectResource
+	resourceManifest string
+	resourceRoot     string
 }
 
 type studioPageRailSummary struct {
@@ -149,7 +151,7 @@ func main() {
 		if loadErr != nil {
 			log.Fatal(loadErr)
 		}
-		if loadErr = server.setProjectResources(project); loadErr != nil {
+		if loadErr = server.setProjectManifest(*assetsManifest, *assetRoot, project); loadErr != nil {
 			log.Fatal(loadErr)
 		}
 	}

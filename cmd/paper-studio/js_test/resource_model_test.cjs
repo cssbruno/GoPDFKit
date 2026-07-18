@@ -9,3 +9,6 @@ assert.throws(() => model.normalize(payload, 'revision-r1', 'old-source', 'plan-
 assert.throws(() => model.normalize(payload, 'revision-r1', 'source-r1', 'wrong-plan'), /stale/);
 assert.equal(model.replacementPayload({source_revision:'s',revision:'p',scenario:'stress'},items,'@hero','new-hero').text,'asset:new-hero');
 assert.throws(()=>model.replacementPayload({source_revision:'s',revision:'p'},items,'@missing','new-hero'),/not declared/);
+const added = model.catalogAddPayload({source_revision:'s',revision:'p',scenario:'stress'}, {name:'new-font',path:'fonts/new.ttf',mediaType:'font/ttf',family:'New Sans',license:'OFL-1.1',weight:500,fallback:['system-sans']});
+assert.deepEqual(added, {source_revision:'s',plan_revision:'p',scenario:'stress',operation:'add',name:'new-font',path:'fonts/new.ttf',media_type:'font/ttf',family:'New Sans',license:'OFL-1.1',weight:500,fallback:['system-sans']});
+assert.deepEqual(model.catalogRemovePayload({source_revision:'s',revision:'p'}, 'hero'), {source_revision:'s',plan_revision:'p',scenario:'',operation:'remove',name:'hero'});

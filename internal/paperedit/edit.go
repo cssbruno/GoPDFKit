@@ -160,6 +160,26 @@ type SetProperty struct {
 
 func (SetProperty) paperEditOperation() {}
 
+// SetProperties applies a bounded group of properties to one node. Grouping
+// the insertions into one source patch keeps an authoring action atomic when
+// several new properties share the same insertion point.
+type SetProperties struct {
+	Target     string
+	Properties []PropertySpec
+}
+
+func (SetProperties) paperEditOperation() {}
+
+// AppendProperty emits one additional property declaration. It is reserved
+// for grammar properties that intentionally repeat, such as document imports.
+type AppendProperty struct {
+	Target string
+	Name   string
+	Value  Value
+}
+
+func (AppendProperty) paperEditOperation() {}
+
 type ReplaceText struct {
 	Target string
 	Text   string
@@ -497,6 +517,10 @@ func operationTargetIDs(operation Operation) []string {
 	switch edit := operation.(type) {
 	case SetProperty:
 		return []string{edit.Target}
+	case SetProperties:
+		return []string{edit.Target}
+	case AppendProperty:
+		return []string{edit.Target}
 	case ReplaceText:
 		return []string{edit.Target}
 	case InsertNode:
@@ -648,6 +672,85 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 			patch.start, patch.end = int(found.Value.Span.Start.Offset), int(found.Value.Span.End.Offset)
 			patch.replacement = value
 			return []sourcePatch{patch}, patch.target, nil
+		}
+		indent := childIndent(node)
+		point, prefix, newline := insertionPoint(source, int(node.Span.End.Offset))
+		patch.start, patch.end = point, point
+		patch.replacement = prefix + strings.Repeat(" ", indent) + edit.Name + ": " + value + newline
+		return []sourcePatch{patch}, patch.target, nil
+
+	case SetProperties:
+		patch.target = edit.Target
+		node, err := targetNode(index, edit.Target)
+		if err != nil {
+			return nil, patch.target, err
+		}
+		if len(edit.Properties) == 0 || len(edit.Properties) > MaxOperations {
+			return nil, patch.target, errors.New("property group must contain a bounded non-empty list")
+		}
+		seen := make(map[string]struct{}, len(edit.Properties))
+		missing := make([]PropertySpec, 0, len(edit.Properties))
+		patches := make([]sourcePatch, 0, len(edit.Properties))
+		for _, property := range edit.Properties {
+			if !validPropertyName(property.Name) {
+				return nil, patch.target, fmt.Errorf("property name %q is not a .paper identifier", property.Name)
+			}
+			if _, exists := seen[property.Name]; exists {
+				return nil, patch.target, fmt.Errorf("property %q is duplicated in the group", property.Name)
+			}
+			seen[property.Name] = struct{}{}
+			value, renderErr := renderValue(property.Value)
+			if renderErr != nil {
+				return nil, patch.target, renderErr
+			}
+			var found *paperlang.Property
+			for _, member := range node.Members {
+				if member.Property == nil || member.Property.Name != property.Name {
+					continue
+				}
+				if found != nil {
+					return nil, patch.target, fmt.Errorf("property %q is ambiguous on %s", property.Name, edit.Target)
+				}
+				found = member.Property
+			}
+			if found != nil {
+				patches = append(patches, sourcePatch{start: int(found.Value.Span.Start.Offset), end: int(found.Value.Span.End.Offset), replacement: value, operation: patch.operation, target: patch.target})
+				continue
+			}
+			missing = append(missing, PropertySpec{Name: property.Name, Value: property.Value})
+		}
+		if len(missing) != 0 {
+			indent := childIndent(node)
+			point, prefix, newline := insertionPoint(source, int(node.Span.End.Offset))
+			var builder strings.Builder
+			builder.WriteString(prefix)
+			for _, property := range missing {
+				value, renderErr := renderValue(property.Value)
+				if renderErr != nil {
+					return nil, patch.target, renderErr
+				}
+				builder.WriteString(strings.Repeat(" ", indent))
+				builder.WriteString(property.Name)
+				builder.WriteString(": ")
+				builder.WriteString(value)
+				builder.WriteString(newline)
+			}
+			patches = append(patches, sourcePatch{start: point, end: point, replacement: builder.String(), operation: patch.operation, target: patch.target})
+		}
+		return patches, patch.target, nil
+
+	case AppendProperty:
+		patch.target = edit.Target
+		node, err := targetNode(index, edit.Target)
+		if err != nil {
+			return nil, patch.target, err
+		}
+		if !validPropertyName(edit.Name) {
+			return nil, patch.target, fmt.Errorf("property name %q is not a .paper identifier", edit.Name)
+		}
+		value, err := renderValue(edit.Value)
+		if err != nil {
+			return nil, patch.target, err
 		}
 		indent := childIndent(node)
 		point, prefix, newline := insertionPoint(source, int(node.Span.End.Offset))
@@ -906,6 +1009,8 @@ func editorAllowedChild(parent, child paperlang.NodeKind) bool {
 		return editorComponentBodyKind(child) || child == paperlang.NodeRepeat
 	case paperlang.NodeScenario, paperlang.NodeObject, paperlang.NodeKeyedList:
 		return child == paperlang.NodeValue || child == paperlang.NodeObject || child == paperlang.NodeKeyedList
+	case paperlang.NodeSchema:
+		return child == paperlang.NodeField
 	default:
 		return false
 	}
@@ -1005,7 +1110,7 @@ func validNodeKind(kind paperlang.NodeKind) bool {
 		paperlang.NodeList, paperlang.NodeItem, paperlang.NodePageBreak,
 		paperlang.NodeRow, paperlang.NodeColumn, paperlang.NodeComponent,
 		paperlang.NodeSlot, paperlang.NodeUse, paperlang.NodeFill, paperlang.NodeRepeat,
-		paperlang.NodeScenario, paperlang.NodeValue, paperlang.NodeObject, paperlang.NodeKeyedList:
+		paperlang.NodeSchema, paperlang.NodeField, paperlang.NodeScenario, paperlang.NodeValue, paperlang.NodeObject, paperlang.NodeKeyedList:
 		return true
 	default:
 		return false
@@ -1296,6 +1401,10 @@ func invalidationScope(index sourceIndex, operations []Operation) *InvalidationS
 	for _, operation := range operations {
 		switch edit := operation.(type) {
 		case SetProperty:
+			addNodeAndAncestors(edit.Target)
+		case SetProperties:
+			addNodeAndAncestors(edit.Target)
+		case AppendProperty:
 			addNodeAndAncestors(edit.Target)
 		case ReplaceText:
 			addNodeAndAncestors(edit.Target)

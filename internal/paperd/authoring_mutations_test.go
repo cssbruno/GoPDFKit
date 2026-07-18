@@ -67,6 +67,13 @@ func TestPaperInsertTemplatePaletteCoversTypedPrimitivesAndComponents(t *testing
 	if err != nil || !result.Semantic.AfterCompileOK || !strings.Contains(result.Revision.Source, "use @card-instance:") || !strings.Contains(result.Revision.Source, "component: \"@card\"") {
 		t.Fatalf("component template = %v result=%#v\nsource=%s", err, result, result.Revision.Source)
 	}
+
+	schemaWorkspace := mustWorkspace(t, Limits{})
+	schemaGuard, _, _ := mutationGuard(t, schemaWorkspace, authoringMutationFixture, "@report", "palette-schema", CapabilityEdit)
+	schemaResult, err := schemaWorkspace.PaperInsertTemplate(PaperInsertTemplateRequest{Guard: schemaGuard, Template: "schema", ID: "@receipt"})
+	if err != nil || !schemaResult.Semantic.AfterCompileOK || !strings.Contains(schemaResult.Revision.Source, "schema @receipt:") || !strings.Contains(schemaResult.Revision.Source, "field @receipt-value:") {
+		t.Fatalf("schema template = %v result=%#v\nsource=%s", err, schemaResult, schemaResult.Revision.Source)
+	}
 }
 
 func TestPaperCreateScenarioUsesCompilerSchemaAndStressPreset(t *testing.T) {
@@ -92,6 +99,29 @@ func TestPaperCreateScenarioUsesCompilerSchemaAndStressPreset(t *testing.T) {
 	}
 }
 
+func TestPaperInsertImportTemplateAppendsOneResolvedDesignImport(t *testing.T) {
+	workspace, err := NewWorkspaceWithOptions(WorkspaceOptions{ImportResolver: func(importerFile, importPath string) (string, string, error) {
+		if importerFile != "mutation.paper" || importPath != "styles/design.paper" {
+			t.Fatalf("resolver request = %s %s", importerFile, importPath)
+		}
+		return "styles/design.paper", "document:\n  style @base:\n    font: \"Helvetica\"\n", nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := "document @report:\n" +
+		"  page @sheet:\n" +
+		"    body @body:\n" +
+		"      paragraph @copy:\n" +
+		"        style: \"@base\"\n" +
+		"        text: \"Imported\"\n"
+	guard, _, _ := mutationGuard(t, workspace, source, "@report", "insert-import", CapabilityEdit)
+	result, err := workspace.PaperInsertTemplate(PaperInsertTemplateRequest{Guard: guard, Template: "import", ImportPath: "styles/design.paper"})
+	if err != nil || !result.Semantic.AfterCompileOK || len(result.Edit.Diff.Patches) != 1 || !strings.Contains(result.Revision.Source, `import: "styles/design.paper"`) {
+		t.Fatalf("import result = %v %#v\nsource=%s", err, result, result.Revision.Source)
+	}
+}
+
 func TestPaperInsertPageTemplateBootstrapsDocumentWithoutPage(t *testing.T) {
 	workspace := mustWorkspace(t, Limits{})
 	source := "document @report:\n  title: \"Bootstrap\"\n"
@@ -105,5 +135,31 @@ func TestPaperInsertPageTemplateBootstrapsDocumentWithoutPage(t *testing.T) {
 	}
 	if _, err := workspace.PaperInsertTemplate(PaperInsertTemplateRequest{Guard: guard, Template: "page", ID: "@other"}); err == nil {
 		t.Fatal("replayed stale page bootstrap unexpectedly succeeded")
+	}
+}
+
+func TestPaperManageScenarioRenamesAndDeletesExactMatrixRows(t *testing.T) {
+	source := "document @report:\n" +
+		"  schema @invoice:\n" +
+		"    field @total:\n" +
+		"      type: \"number\"\n" +
+		"  page @sheet:\n" +
+		"    body @body:\n" +
+		"      paragraph @copy:\n" +
+		"        text: \"Invoice\"\n" +
+		"  scenario @review:\n" +
+		"    value @total: 10\n"
+	workspace := mustWorkspace(t, Limits{})
+	guard, _, _ := mutationGuard(t, workspace, source, "@review", "scenario-rename", CapabilityEdit)
+	rename, err := workspace.PaperManageScenario(PaperManageScenarioRequest{Guard: guard, Action: "rename", NewName: "@approved"})
+	if err != nil || !rename.Semantic.AfterCompileOK || !strings.Contains(rename.Revision.Source, "scenario @approved:") || strings.Contains(rename.Revision.Source, "scenario @review:") {
+		t.Fatalf("rename = %v result=%#v\nsource=%s", err, rename, rename.Revision.Source)
+	}
+
+	deleteWorkspace := mustWorkspace(t, Limits{})
+	deleteGuard, _, _ := mutationGuard(t, deleteWorkspace, source, "@review", "scenario-delete", CapabilityEdit)
+	deleted, err := deleteWorkspace.PaperManageScenario(PaperManageScenarioRequest{Guard: deleteGuard, Action: "delete"})
+	if err != nil || !deleted.Semantic.AfterCompileOK || strings.Contains(deleted.Revision.Source, "scenario @review:") {
+		t.Fatalf("delete = %v result=%#v\nsource=%s", err, deleted, deleted.Revision.Source)
 	}
 }

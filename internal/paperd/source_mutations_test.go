@@ -116,11 +116,15 @@ func TestPaperSetRichTextCanonicalizesRunsToSourceOrder(t *testing.T) {
 func TestPaperSetBindingCompilesBeforePublishing(t *testing.T) {
 	workspace := mustWorkspace(t, Limits{})
 	guard, created, _ := mutationGuard(t, workspace, bindingMutationFixture, "@amount", "binding-1", CapabilityEdit)
-	result, err := workspace.PaperSetBinding(PaperSetBindingRequest{Guard: guard, Path: "@invoice.total"})
+	minFraction, maxFraction, required := uint32(2), uint32(2), true
+	result, err := workspace.PaperSetBinding(PaperSetBindingRequest{
+		Guard: guard, Path: "@invoice.total", Required: &required,
+		Format: "decimal", FormatLocale: "pt-BR", MinFractionDigits: &minFraction, MaxFractionDigits: &maxFraction,
+	})
 	if err != nil {
 		t.Fatalf("PaperSetBinding() error = %v", err)
 	}
-	if !result.Revision.CompileOK || !strings.Contains(result.Revision.Source, `bind: "@invoice.total"`) || result.Edit.Diff == nil {
+	if !result.Revision.CompileOK || !strings.Contains(result.Revision.Source, `bind: "@invoice.total"`) || !strings.Contains(result.Revision.Source, `format: "decimal"`) || !strings.Contains(result.Revision.Source, `format-locale: "pt-BR"`) || !strings.Contains(result.Revision.Source, "format-min-fraction: 2") || result.Edit.Diff == nil {
 		t.Fatalf("PaperSetBinding() = %#v", result)
 	}
 	if result.Edit.Diff.Patches[0].Start != result.Edit.Diff.Patches[0].End {

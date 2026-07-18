@@ -98,10 +98,60 @@ func TestLoadProjectManifestRejectsLifecycleCycles(t *testing.T) {
 	digest := sha256.Sum256(font)
 	_ = os.WriteFile(filepath.Join(dir, "a.ttf"), font, 0600)
 	_ = os.WriteFile(filepath.Join(dir, "b.ttf"), font, 0600)
-	body := fmt.Sprintf(`{"assets":[{"name":"a","media_type":"font/ttf","sha256":"%s","path":"a.ttf","family":"A","license":"OFL","fallback":["b"]},{"name":"b","media_type":"font/ttf","sha256":"%s","path":"b.ttf","family":"B","license":"OFL","fallback":["a"]}]}`, hex.EncodeToString(digest[:]), hex.EncodeToString(digest[:]))
+	body := fmt.Sprintf(`{"assets":[{"name":"a","media_type":"font/ttf","sha256":"%s","path":"a.ttf","family":"A","license":"OFL-1.1","fallback":["b"]},{"name":"b","media_type":"font/ttf","sha256":"%s","path":"b.ttf","family":"B","license":"OFL-1.1","fallback":["a"]}]}`, hex.EncodeToString(digest[:]), hex.EncodeToString(digest[:]))
 	manifest := filepath.Join(dir, "cycle.json")
 	_ = os.WriteFile(manifest, []byte(body), 0600)
 	if _, err := LoadProjectManifest(manifest, dir); err == nil || !strings.Contains(err.Error(), "cycle") {
 		t.Fatalf("cycle error=%v", err)
 	}
 }
+
+func TestLoadProjectManifestEnforcesClosedFontLicensePolicy(t *testing.T) {
+	dir := t.TempDir()
+	font := []byte{0, 1, 0, 0, 0, 0, 0, 1}
+	digest := sha256.Sum256(font)
+	if err := os.WriteFile(filepath.Join(dir, "font.ttf"), font, 0600); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`{"assets":[{"name":"font","media_type":"font/ttf","sha256":"%s","path":"font.ttf","family":"Readable Sans","license":"Unknown-License"}]}`, hex.EncodeToString(digest[:]))
+	manifest := filepath.Join(dir, "license.json")
+	if err := os.WriteFile(manifest, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadProjectManifest(manifest, dir); err == nil || !strings.Contains(err.Error(), "outside the enforced policy") {
+		t.Fatalf("license policy error = %v", err)
+	}
+}
+
+func TestProjectManifestAddRemovePublishesValidatedCanonicalCatalog(t *testing.T) {
+	dir := t.TempDir()
+	image, _ := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+	if err := os.WriteFile(filepath.Join(dir, "hero.png"), image, 0600); err != nil {
+		t.Fatal(err)
+	}
+	manifest := filepath.Join(dir, "project.json")
+	if err := os.WriteFile(manifest, []byte(`{"assets":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	resources, err := AddProjectResource(manifest, dir, ResourceSpec{Name: "hero", MediaType: "image/png", Path: "hero.png", FocusX: floatPointer(0.5), FocusY: floatPointer(0.25)})
+	if err != nil || len(resources) != 1 || resources[0].Path != "hero.png" || resources[0].Digest == "" {
+		t.Fatalf("added resources=%#v err=%v", resources, err)
+	}
+	encoded, err := os.ReadFile(manifest)
+	if err != nil || !strings.Contains(string(encoded), `"name": "hero"`) || !strings.Contains(string(encoded), `"focus_x": 0.5`) {
+		t.Fatalf("published manifest=%s err=%v", encoded, err)
+	}
+	if _, err := AddProjectResource(manifest, dir, ResourceSpec{Name: "bad", MediaType: "image/png", Path: "../hero.png"}); err == nil {
+		t.Fatal("traversal add accepted")
+	}
+	resources, err = RemoveProjectResource(manifest, dir, "hero")
+	if err != nil || len(resources) != 0 {
+		t.Fatalf("removed resources=%#v err=%v", resources, err)
+	}
+	loaded, err := LoadProjectManifest(manifest, dir)
+	if err != nil || len(loaded) != 0 {
+		t.Fatalf("reloaded resources=%#v err=%v", loaded, err)
+	}
+}
+
+func floatPointer(value float64) *float64 { return &value }

@@ -5,6 +5,7 @@ package paperd
 
 import (
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/cssbruno/gopdfkit/internal/papercompile"
@@ -13,10 +14,11 @@ import (
 )
 
 type PaperInsertTemplateRequest struct {
-	Guard     PaperMutationGuard `json:"guard"`
-	Template  string             `json:"template"`
-	ID        string             `json:"id"`
-	Component string             `json:"component,omitempty"`
+	Guard      PaperMutationGuard `json:"guard"`
+	Template   string             `json:"template"`
+	ID         string             `json:"id"`
+	Component  string             `json:"component,omitempty"`
+	ImportPath string             `json:"import_path,omitempty"`
 }
 
 // PaperInsertTemplate inserts one closed, typed starter shape beneath an
@@ -30,11 +32,29 @@ func (w *Workspace) PaperInsertTemplate(request PaperInsertTemplateRequest) (Pap
 	if parent == nil || (parent.Kind != paperlang.NodeDocument && parent.Kind != paperlang.NodeBody && parent.Kind != paperlang.NodeRow && parent.Kind != paperlang.NodeColumn) {
 		return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_PARENT", "template parent must be a document, body, row, or column", paperedit.ErrInvalidOperation)
 	}
+	if request.Template == "import" {
+		if parent.Kind != paperlang.NodeDocument || !safeAuthoringImportPath(request.ImportPath) {
+			return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE", "import template requires a safe relative .paper path on the document", ErrInvalidQuery)
+		}
+		return w.applyPaperMutation("insert_template", request.Guard, opened, revision,
+			[]string{request.Guard.Target}, []paperedit.Operation{paperedit.AppendProperty{Target: request.Guard.Target, Name: "import", Value: paperedit.StringValue(request.ImportPath)}}, "INVALID_TEMPLATE_RESULT")
+	}
 	if !validAuthorityNodeID(request.ID) {
 		return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_ID", "template requires a bounded readable @id", ErrInvalidQuery)
 	}
 	var node paperedit.NodeSpec
 	switch request.Template {
+	case "schema":
+		if parent.Kind != paperlang.NodeDocument {
+			return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_PARENT", "schema template must target the document", paperedit.ErrInvalidOperation)
+		}
+		base := strings.TrimPrefix(request.ID, "@")
+		if len(base) > 110 {
+			return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_ID", "schema ID is too long for its starter field ID", ErrInvalidQuery)
+		}
+		node = paperedit.NodeSpec{Kind: paperlang.NodeSchema, ID: request.ID, Children: []paperedit.NodeSpec{
+			{Kind: paperlang.NodeField, ID: "@" + base + "-value", Properties: []paperedit.PropertySpec{{Name: "type", Value: paperedit.StringValue("string")}}},
+		}}
 	case "page":
 		if parent.Kind != paperlang.NodeDocument {
 			return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_PARENT", "page template must target the document", paperedit.ErrInvalidOperation)
@@ -97,10 +117,18 @@ func (w *Workspace) PaperInsertTemplate(request PaperInsertTemplateRequest) (Pap
 			{Kind: paperlang.NodeParagraph, ID: "@" + base + "-body", Properties: []paperedit.PropertySpec{{Name: "text", Value: paperedit.StringValue("New content")}}},
 		}}
 	default:
-		return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE", "template must be page, paragraph, heading, list, row, column, page-break, component, or section", ErrInvalidQuery)
+		return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE", "template must be schema, page, paragraph, heading, list, row, column, page-break, component, section, or import", ErrInvalidQuery)
 	}
 	return w.applyPaperMutation("insert_template", request.Guard, opened, revision,
 		[]string{request.Guard.Target}, []paperedit.Operation{paperedit.InsertNode{Parent: request.Guard.Target, Node: node}}, "INVALID_TEMPLATE_RESULT")
+}
+
+func safeAuthoringImportPath(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.ContainsRune(value, '\x00') || strings.Contains(value, "://") || strings.HasPrefix(value, "~") || strings.HasPrefix(value, "/") || strings.HasPrefix(value, "\\") || (len(value) > 1 && value[1] == ':') {
+		return false
+	}
+	return path.Clean(strings.ReplaceAll(value, "\\", "/")) != "."
 }
 
 type PaperCreateScenarioRequest struct {
@@ -108,6 +136,46 @@ type PaperCreateScenarioRequest struct {
 	Name   string             `json:"name"`
 	Schema string             `json:"schema"`
 	Preset string             `json:"preset"`
+}
+
+type PaperManageScenarioRequest struct {
+	Guard   PaperMutationGuard `json:"guard"`
+	Action  string             `json:"action"`
+	NewName string             `json:"new_name,omitempty"`
+}
+
+// PaperManageScenario provides the bounded lifecycle operations needed by a
+// scenario matrix after creation. Rename and delete remain source edits, so
+// they preserve comments and participate in the same exact-revision journal.
+func (w *Workspace) PaperManageScenario(request PaperManageScenarioRequest) (PaperMutationResult, error) {
+	opened, revision, err := w.mutationRevision(request.Guard)
+	if err != nil {
+		return PaperMutationResult{}, err
+	}
+	node, parent := sourceNodeAndParent(revision.parsed.AST.Root, request.Guard.Target)
+	if node == nil || parent == nil || node.Kind != paperlang.NodeScenario || parent.Kind != paperlang.NodeDocument {
+		return PaperMutationResult{}, workspaceError("INVALID_SCENARIO_TARGET", "scenario lifecycle target must be an authored scenario directly beneath the document", paperedit.ErrInvalidOperation)
+	}
+	var operation paperedit.Operation
+	switch request.Action {
+	case "rename":
+		if !validAuthorityNodeID(request.NewName) || request.NewName == request.Guard.Target {
+			return PaperMutationResult{}, workspaceError("INVALID_SCENARIO", "scenario rename requires a distinct readable @id", ErrInvalidQuery)
+		}
+		if findNodeByID(revision.parsed.AST.Root, request.NewName) != nil {
+			return PaperMutationResult{}, workspaceError("INVALID_SCENARIO", "scenario ID already exists in the exact source revision", paperedit.ErrInvalidOperation)
+		}
+		operation = paperedit.RenameID{Target: request.Guard.Target, NewID: request.NewName}
+	case "delete":
+		if request.NewName != "" {
+			return PaperMutationResult{}, workspaceError("INVALID_SCENARIO", "scenario delete does not accept a replacement ID", ErrInvalidQuery)
+		}
+		operation = paperedit.DeleteNode{Target: request.Guard.Target}
+	default:
+		return PaperMutationResult{}, workspaceError("INVALID_SCENARIO", "scenario action must be rename or delete", ErrInvalidQuery)
+	}
+	return w.applyPaperMutation("manage_scenario", request.Guard, opened, revision,
+		[]string{request.Guard.Target}, []paperedit.Operation{operation}, "INVALID_SCENARIO_RESULT")
 }
 
 // PaperCreateScenario creates one schema-shaped fixture from compiler-owned

@@ -15,5 +15,21 @@
     if(!next||!previous?.usages.some(usage=>usage.node===target))throw new Error('Replacement is not declared for this exact usage');
     return {source_revision:workspace.source_revision,plan_revision:workspace.revision,scenario:workspace.scenario||'',operation:'image',target,property:'source',text:`asset:${replacement}`};
   }
-  return Object.freeze({normalize, usageLabel, replacementPayload});
+  function catalogAddPayload(workspace, fields) {
+    if(!workspace?.source_revision||!workspace?.revision)throw new Error('Exact resource revisions are unavailable');
+    if(!fields?.name||!fields?.path||!fields?.mediaType)throw new Error('Name, project-relative path, and media type are required');
+    const payload={source_revision:workspace.source_revision,plan_revision:workspace.revision,scenario:workspace.scenario||'',operation:'add',name:String(fields.name),path:String(fields.path),media_type:String(fields.mediaType)};
+    for(const [key,value] of [['family',fields.family],['style',fields.style],['license',fields.license],['replaces',fields.replaces]])if(value)payload[key]=String(value);
+    if(fields.weight!==undefined&&fields.weight!=='')payload.weight=Number(fields.weight);
+    if(Array.isArray(fields.fallback)&&fields.fallback.length)payload.fallback=fields.fallback.map((value)=>String(value)).filter(Boolean);
+    if(fields.focusX!==undefined&&fields.focusX!=='')payload.focus_x=Number(fields.focusX);
+    if(fields.focusY!==undefined&&fields.focusY!=='')payload.focus_y=Number(fields.focusY);
+    return payload;
+  }
+  function catalogRemovePayload(workspace, name) {
+    if(!workspace?.source_revision||!workspace?.revision)throw new Error('Exact resource revisions are unavailable');
+    if(!name)throw new Error('Resource name is required');
+    return {source_revision:workspace.source_revision,plan_revision:workspace.revision,scenario:workspace.scenario||'',operation:'remove',name:String(name)};
+  }
+  return Object.freeze({normalize, usageLabel, replacementPayload, catalogAddPayload, catalogRemovePayload});
 });

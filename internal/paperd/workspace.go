@@ -918,6 +918,11 @@ func cloneOperations(operations []paperedit.Operation) []paperedit.Operation {
 		case paperedit.SetProperty, paperedit.ReplaceText, paperedit.DeleteNode,
 			paperedit.RenameID, paperedit.MoveNode:
 			cloned[index] = value
+		case paperedit.SetProperties:
+			value.Properties = append([]paperedit.PropertySpec(nil), value.Properties...)
+			cloned[index] = value
+		case paperedit.AppendProperty:
+			cloned[index] = value
 		case paperedit.InsertNode:
 			value.Node = cloneNodeSpec(value.Node)
 			cloned[index] = value

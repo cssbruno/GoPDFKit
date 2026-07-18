@@ -57,6 +57,11 @@ button { color: inherit; }
 .scenario { display: block; width: 100%; padding: 6px 7px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); text-align: left; cursor: pointer; }
 .scenario:hover { background: #ecebe6; color: var(--ink); }
 .scenario.is-active { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+.scenario-choice { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px; }
+.scenario-actions { display: flex; gap: 2px; }
+.scenario-action { padding: 3px 4px; border: 0; background: transparent; color: var(--muted); font-size: 8px; cursor: pointer; }
+.scenario-action:hover { color: var(--accent); }
+.scenario-action:last-child:hover { color: var(--danger); }
 
 .page-rail { background: #ebeae5; }
 .rail-title { display: flex; justify-content: space-between; height: 48px; padding: 7px 8px 5px; align-items: flex-start; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
@@ -235,6 +240,9 @@ button { color: inherit; }
 .font-replacement-status { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
 
 .resources-heading { border-top: 1px solid var(--hairline); }
+.resource-heading-actions { display: inline-flex; align-items: center; gap: 6px; }
+.resource-add { min-height: 22px; padding: 0 7px; border: 1px solid var(--hairline); border-radius: 4px; background: var(--paper); color: var(--accent); cursor: pointer; font-size: 9px; font-weight: 700; }
+.resource-add:disabled { cursor: not-allowed; opacity: .55; }
 .resources { max-height: 190px; overflow: auto; border-bottom: 1px solid var(--hairline); }
 .resource-item { padding: 8px 10px; border-bottom: 1px solid #e8e6df; }
 .delivery-panel { border-top: 1px solid var(--hairline); padding-bottom: 10px; }
@@ -250,6 +258,7 @@ button { color: inherit; }
 .resource-use:hover { color: var(--accent); }
 .resource-lifecycle { color: #565f70; }
 .resource-replace { color: var(--accent); font-weight: 650; }
+.resource-remove { color: var(--danger); }
 
 .tag-panel { display: none; min-height: 0; }
 .app[data-mode="accessibility"] .left-panel > :not(.tag-panel) { display: none; }

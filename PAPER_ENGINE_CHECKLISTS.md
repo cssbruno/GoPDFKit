@@ -2856,7 +2856,7 @@ as completed behavior.
   immediately follows that identity through outline/source focus and the
   bounded Explain command/fragment evidence ([hit-to-explain test](cmd/paper-studio/main_test.go),
   [controller](cmd/paper-studio/web/studio.js)).
-- [ ] Normal visible-page updates meet calibrated latency budgets. The backend
+- [x] Normal visible-page updates meet calibrated latency budgets. The backend
   now exercises the canonical WASM render-payload path with ten-sample stage
   timings, a calibrated backend/WASM budget checker, and a revision-safe source
   change stream; the Apple M2 report records cold planning, payload transfer/
@@ -2864,9 +2864,11 @@ as completed behavior.
   ([benchmark](tools/benchmark-paper-studio-wasm.mjs),
   [report](docs/performance/baselines/paper-studio-wasm-latency-apple-m2.txt),
   [budget checker](tools/check-paper-studio-latency-report.mjs),
-  [change stream](cmd/paper-studio/main.go)). Browser startup, browser image
-  decode/compositing, a real-browser interaction trace, and the approved final
-  interaction budget remain open ([real WASM smoke](tools/test-paper-studio-wasm.sh)).
+  [change stream](cmd/paper-studio/main.go)). A real-browser trace now records
+  cold reload settling, WASM payload decode/canvas compositing, three warm
+  Refresh plan interactions, and the approved <=10,000 ms cold / <=4,000 ms warm
+  visible-page budgets ([browser baseline](docs/performance/baselines/paper-studio-browser-latency-browser-plugin.txt),
+  [real WASM smoke](tools/test-paper-studio-wasm.sh)).
 - [x] The internal Plan Viewer contracts remain valid in the real workspace.
   The real Paper Studio workspace exercises revision-bound page, hit, explain,
   inspect, provenance, typed-experiment, SVG, and WASM display-payload routes
@@ -2884,30 +2886,36 @@ as completed behavior.
 
 ### Create-to-deliver
 
-- [ ] New template flow. Studio now inserts closed paragraph/section starter
-  shapes through an explicit `insert_template` capability and the existing
-  semantic journal, producing one readable CST patch while preserving source
-  trivia ([mutation](internal/paperd/authoring_mutations.go),
+- [x] New template flow. Studio now supports page-master bootstrap, the typed
+  primitive/component gallery, schema starter creation, explicit project-
+  relative design imports, and preview-to-export delivery through the same
+  authority-bound semantic journal. Each action remains a bounded readable CST
+  patch that preserves source trivia ([mutation](internal/paperd/authoring_mutations.go),
+  [source edit grouping](internal/paperedit/edit.go),
   [UI](cmd/paper-studio/web/authoring-model.js),
-  [tests](internal/paperd/authoring_mutations_test.go)). The broad item remains
-  open for new-file bootstrap, a full template gallery, import, and proven
-  preview-to-export delivery.
+  [tests](internal/paperd/authoring_mutations_test.go),
+  [Studio delivery test](cmd/paper-studio/studio_edit_test.go)).
 - [ ] Schema connection and binding picker. The compiler now exposes detached
   schema descriptors from its existing analysis; Studio projects exact
   primitive/list paths and bindable source targets, rejects stale source/plan
   metadata, and commits through `PaperSetBinding` rather than inventing a
-  browser schema parser ([metadata](internal/papercompile/schema.go),
+  browser schema parser. Binding transforms now include compiler-validated
+  format kind, locale/currency, requiredness, and bounded decimal precision;
+  the schema starter also creates a valid first field without raw CST input
+  ([metadata](internal/papercompile/schema.go),
   [server](cmd/paper-studio/studio_authoring.go),
   [browser model](cmd/paper-studio/web/authoring-model.js)). The item remains
-  open for richer object/list binding UX, transformations, and schema authoring.
+  open for richer object/list binding UX and editing nested schema fields.
 - [ ] Scenario creation and stress matrix. Studio offers bounded empty,
   typical, and stress presets generated from compiler-owned schema metadata;
   one selected case becomes one authority-bound journal insertion with stable
-  keyed-list items and exact stale rejection
+  keyed-list items and exact stale rejection. Authored scenarios can now also
+  be renamed or deleted through exact-revision lifecycle actions, and the UI
+  exposes those actions beside each matrix row
   ([mutation](internal/paperd/authoring_mutations.go),
+  [UI](cmd/paper-studio/web/studio.js),
   [end-to-end test](cmd/paper-studio/studio_edit_test.go)). The item remains
-  open for matrix-wide management, rename/delete/edit flows, combinatorial
-  cases, and delivery-status integration.
+  open for editing fixture values in place and combinatorial matrix cases.
 - [x] Initial page-master bootstrap creation. A parseable document with no page
   can now receive one exact `page`/`body`/starter-paragraph template through
   the journal, while existing-page documents reject the bootstrap shape;
@@ -2951,9 +2959,16 @@ as completed behavior.
   [read-first UI model](cmd/paper-studio/web/resource-model.js),
   [tests](cmd/paper-studio/studio_resources_test.go)). Resource responses now
   validate source revision, workspace revision, and plan hash independently.
-  The broad checkbox remains open for production font embedding/subsetting,
-  enforceable license policy, adding/removing catalog entries in Studio, and
-  complete publish lifecycle management.
+  With an explicit manifest, Studio now also supports exact-revision add/remove
+  catalog mutations by project-relative file and metadata; the loader derives
+  digests, revalidates byte/manifest budgets, the enforced font-license policy,
+  and lifecycle relationships, and
+  atomically publishes the manifest before reloading the immutable planning
+  catalog ([catalog editor](internal/paperassets/loader.go), [mutation route
+  and tests](cmd/paper-studio/studio_resource_catalog.go)). The browser still
+  receives no paths or bytes. The broad checkbox remains open for production
+  custom-font embedding/subsetting and richer resource lifecycle management;
+  license admission is now enforceable at manifest load and add.
 - [x] Preflight, explicit PDF verification, export, and publish status. Studio
   now exposes revision-bound preflight, independent final-PDF tag verification,
   a verified-PDF export endpoint, and an explicit separate-authorized publish

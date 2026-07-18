@@ -47,8 +47,14 @@ type studioEditRequest struct {
 	Split          string   `json:"split,omitempty"`
 	Path           string   `json:"path,omitempty"`
 	Required       *bool    `json:"required,omitempty"`
+	Format         string   `json:"format,omitempty"`
+	FormatLocale   string   `json:"format_locale,omitempty"`
+	FormatCurrency string   `json:"format_currency,omitempty"`
+	MinFraction    *uint32  `json:"format_min_fraction,omitempty"`
+	MaxFraction    *uint32  `json:"format_max_fraction,omitempty"`
 	Template       string   `json:"template,omitempty"`
 	Component      string   `json:"component,omitempty"`
+	ImportPath     string   `json:"import_path,omitempty"`
 	ID             string   `json:"id,omitempty"`
 	NewParent      string   `json:"new_parent,omitempty"`
 	Schema         string   `json:"schema,omitempty"`
@@ -73,6 +79,7 @@ type studioEditResponse struct {
 	PlanRevision         string                  `json:"plan_revision"`
 	Applied              bool                    `json:"applied"`
 	PatchCount           int                     `json:"patch_count"`
+	Scenario             string                  `json:"scenario"`
 	ReviewIntent         string                  `json:"review_intent,omitempty"`
 	Authorization        studioEditAuthorization `json:"authorization"`
 }
@@ -115,6 +122,10 @@ var (
 	errStudioStaleEdit   = errors.New("paper-studio: stale edit revision")
 )
 
+func normalizeStudioScenario(value string) string {
+	return strings.TrimPrefix(strings.TrimSpace(value), "@")
+}
+
 func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRequest) (studioEditResponse, error) {
 	if err := validateStudioEditRequest(request); err != nil {
 		return studioEditResponse{}, err
@@ -124,7 +135,7 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 		return studioEditResponse{}, err
 	}
 	fontRepair := request.Operation == "text" && request.Property == "font"
-	if request.SourceRevision != studioSourceRevision(snapshot.source) || request.PlanRevision != snapshot.revision || (snapshot.pages == 0 && request.Operation != "template" && !fontRepair) {
+	if request.SourceRevision != studioSourceRevision(snapshot.source) || request.PlanRevision != snapshot.revision || (snapshot.pages == 0 && request.Operation != "template" && request.Operation != "import" && request.Operation != "schema" && request.Operation != "scenario" && !fontRepair) {
 		return studioEditResponse{}, fmt.Errorf("%w: source or plan changed after selection", errStudioStaleEdit)
 	}
 
@@ -182,8 +193,14 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 		operation = paperd.MutationSetBinding
 	case "template":
 		operation = paperd.MutationInsertTemplate
+	case "import":
+		operation = paperd.MutationInsertTemplate
+	case "schema":
+		operation = paperd.MutationInsertTemplate
 	case "scenario-create":
 		operation = paperd.MutationCreateScenario
+	case "scenario":
+		operation = paperd.MutationManageScenario
 	}
 
 	s.mu.Lock()
@@ -256,13 +273,21 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 	if err != nil {
 		return studioEditResponse{}, err
 	}
-	if mutation.Edit.Diff == nil || len(mutation.Edit.Diff.Patches) == 0 || len(mutation.Edit.Diff.Patches) > 2 {
+	if mutation.Edit.Diff == nil || len(mutation.Edit.Diff.Patches) == 0 || len(mutation.Edit.Diff.Patches) > 7 {
 		return studioEditResponse{}, errors.New("paper-studio: semantic handle did not produce a bounded minimal source patch set")
 	}
 	if err := writeStudioSourceCAS(snapshot.file, snapshot.sourceHash, mutation.Edit.Source); err != nil {
 		return studioEditResponse{}, err
 	}
-	after, err := s.current(ctx, request.Scenario)
+	afterScenario := request.Scenario
+	if request.Operation == "scenario" && normalizeStudioScenario(request.Scenario) == normalizeStudioScenario(request.Target) {
+		if request.Property == "rename" {
+			afterScenario = request.ID
+		} else if request.Property == "delete" {
+			afterScenario = ""
+		}
+	}
+	after, err := s.current(ctx, afterScenario)
 	if err != nil {
 		return studioEditResponse{}, err
 	}
@@ -270,7 +295,8 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 		OK: true, Operation: request.Operation, Target: request.Target, Property: request.Property,
 		BeforeSourceRevision: request.SourceRevision, SourceRevision: studioSourceRevision(after.source),
 		BeforePlanRevision: request.PlanRevision, PlanRevision: after.revision,
-		Applied: mutation.Edit.Applied, PatchCount: len(mutation.Edit.Diff.Patches),
+		Scenario: afterScenario,
+		Applied:  mutation.Edit.Applied, PatchCount: len(mutation.Edit.Diff.Patches),
 		ReviewIntent: request.BreakPolicy,
 		Authorization: studioEditAuthorization{Actor: mutation.Authorization.Actor, Allowed: mutation.Authorization.Allowed,
 			Effects: append([]paperd.AuthorizationEffect(nil), mutation.Authorization.Effects...)},
@@ -278,7 +304,7 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 }
 
 func validateStudioEditRequest(request studioEditRequest) error {
-	fields := []string{request.SourceRevision, request.PlanRevision, request.Scenario, request.Operation, request.Target, request.Property, request.Color, request.Kind, request.Text, request.Split, request.Path, request.Template, request.Component, request.ID, request.NewParent, request.Schema, request.Preset, request.BreakPolicy}
+	fields := []string{request.SourceRevision, request.PlanRevision, request.Scenario, request.Operation, request.Target, request.Property, request.Color, request.Kind, request.Text, request.Split, request.Path, request.Format, request.FormatLocale, request.FormatCurrency, request.Template, request.Component, request.ImportPath, request.ID, request.NewParent, request.Schema, request.Preset, request.BreakPolicy}
 	for _, field := range fields {
 		if len(field) > studioEditFieldLimit || !utf8.ValidString(field) {
 			return fmt.Errorf("%w: edit field exceeds its bound", errStudioInvalidEdit)
@@ -293,11 +319,25 @@ func validateStudioEditRequest(request studioEditRequest) error {
 	if request.Number != nil && (math.IsNaN(*request.Number) || math.IsInf(*request.Number, 0)) {
 		return fmt.Errorf("%w: number must be finite", errStudioInvalidEdit)
 	}
+	if request.MinFraction != nil && *request.MinFraction > 18 || request.MaxFraction != nil && *request.MaxFraction > 18 {
+		return fmt.Errorf("%w: binding fraction digits must be between 0 and 18", errStudioInvalidEdit)
+	}
 	if request.Width != nil && (math.IsNaN(*request.Width) || math.IsInf(*request.Width, 0)) || request.Height != nil && (math.IsNaN(*request.Height) || math.IsInf(*request.Height, 0)) {
 		return fmt.Errorf("%w: page dimensions must be finite", errStudioInvalidEdit)
 	}
-	if request.Operation != "box" && request.Operation != "text" && request.Operation != "grid" && request.Operation != "image" && request.Operation != "table" && request.Operation != "page" && request.Operation != "page-size" && request.Operation != "canvas" && request.Operation != "region" && request.Operation != "binding" && request.Operation != "template" && request.Operation != "scenario-create" && request.Operation != "flow" {
+	if request.Operation != "box" && request.Operation != "text" && request.Operation != "grid" && request.Operation != "image" && request.Operation != "table" && request.Operation != "page" && request.Operation != "page-size" && request.Operation != "canvas" && request.Operation != "region" && request.Operation != "binding" && request.Operation != "template" && request.Operation != "import" && request.Operation != "schema" && request.Operation != "scenario-create" && request.Operation != "scenario" && request.Operation != "flow" {
 		return fmt.Errorf("%w: operation is outside the closed Studio authoring vocabulary", errStudioInvalidEdit)
+	}
+	if request.Operation == "scenario" {
+		if request.Property != "rename" && request.Property != "delete" {
+			return fmt.Errorf("%w: scenario action must be rename or delete", errStudioInvalidEdit)
+		}
+		if request.Property == "rename" && request.ID == "" {
+			return fmt.Errorf("%w: scenario rename requires a new readable @id", errStudioInvalidEdit)
+		}
+		if request.Property == "delete" && request.ID != "" {
+			return fmt.Errorf("%w: scenario delete cannot carry a replacement @id", errStudioInvalidEdit)
+		}
 	}
 	if request.Operation == "flow" && (request.NewParent == "" || request.NewParent[0] != '@') {
 		return fmt.Errorf("%w: flow operation requires a readable destination @id", errStudioInvalidEdit)
@@ -310,13 +350,26 @@ func validateStudioEditRequest(request studioEditRequest) error {
 
 func applyStudioSemanticMutation(workspace *paperd.Workspace, guard paperd.PaperMutationGuard, request studioEditRequest) (paperd.PaperMutationResult, error) {
 	if request.Operation == "binding" {
-		return workspace.PaperSetBinding(paperd.PaperSetBindingRequest{Guard: guard, Path: request.Path, Required: request.Required})
+		return workspace.PaperSetBinding(paperd.PaperSetBindingRequest{
+			Guard: guard, Path: request.Path, Required: request.Required,
+			Format: request.Format, FormatLocale: request.FormatLocale, FormatCurrency: request.FormatCurrency,
+			MinFractionDigits: request.MinFraction, MaxFractionDigits: request.MaxFraction,
+		})
 	}
 	if request.Operation == "template" {
 		return workspace.PaperInsertTemplate(paperd.PaperInsertTemplateRequest{Guard: guard, Template: request.Template, ID: request.ID, Component: request.Component})
 	}
+	if request.Operation == "import" {
+		return workspace.PaperInsertTemplate(paperd.PaperInsertTemplateRequest{Guard: guard, Template: "import", ImportPath: request.ImportPath})
+	}
+	if request.Operation == "schema" {
+		return workspace.PaperInsertTemplate(paperd.PaperInsertTemplateRequest{Guard: guard, Template: "schema", ID: request.ID})
+	}
 	if request.Operation == "scenario-create" {
 		return workspace.PaperCreateScenario(paperd.PaperCreateScenarioRequest{Guard: guard, Name: request.ID, Schema: request.Schema, Preset: request.Preset})
+	}
+	if request.Operation == "scenario" {
+		return workspace.PaperManageScenario(paperd.PaperManageScenarioRequest{Guard: guard, Action: request.Property, NewName: request.ID})
 	}
 	if request.Operation == "flow" {
 		return workspace.PaperMoveNode(paperd.PaperMoveNodeRequest{Guard: guard, NewParent: request.NewParent})

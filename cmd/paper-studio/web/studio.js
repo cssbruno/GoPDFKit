@@ -18,6 +18,7 @@ const state = {
   editFeedback: null,
   committing: false,
   resources: [],
+  resourceCatalogEditable: false,
   authoring: null,
   authoringDraft: {operation: 'template'},
   authoringFeedback: null,
@@ -188,14 +189,18 @@ async function loadResources(revision) {
     const payload = await api(`/api/resources?revision=${encodeURIComponent(revision)}&source_revision=${encodeURIComponent(state.workspace?.source_revision||'')}${scenario}`);
     if (revision !== state.revision) return;
     state.resources = PaperStudioResourceModel.normalize(payload, revision, state.workspace?.source_revision, state.workspace?.plan_hash);
+    state.resourceCatalogEditable = Boolean(payload.catalog_editable);
   } catch (error) {
     if (error.status === 409 || revision !== state.revision) return;
     state.resources = [];
+    state.resourceCatalogEditable = false;
   }
   renderResources();
 }
 
 function renderResources() {
+  const add = $('#resource-add');
+  if (add) { add.hidden = !state.resourceCatalogEditable; add.disabled = visualMutationsLocked(); }
   const target=$('#resources'); target.replaceChildren(); $('#resource-count').textContent=String(state.resources.length);
   if (!state.resources.length) { const empty=document.createElement('span');empty.className='quiet';empty.textContent='No catalog assets';target.append(empty);return; }
   for (const item of state.resources) {
@@ -207,8 +212,47 @@ function renderResources() {
     const lifecycle=[];if(item.kind==='font'){lifecycle.push(`license ${item.license}`);if(item.fallback.length)lifecycle.push(`fallback ${item.fallback.join(' → ')}`);}else{if(item.defaultFocusX!==null||item.defaultFocusY!==null)lifecycle.push(`default focus ${item.defaultFocusX??'auto'},${item.defaultFocusY??'auto'}`);if(item.replaces)lifecycle.push(`replaces ${item.replaces}`);}if(lifecycle.length){const line=document.createElement('div');line.className='resource-meta resource-lifecycle';line.textContent=lifecycle.join(' · ');row.append(line);}
     for (const usage of item.usages) { const button=document.createElement('button');button.className='resource-use';button.type='button';button.textContent=`${usage.node||'anonymous'} · ${usage.decorative?'decorative':usage.alt||'missing alt'} · focus ${usage.focus_x??'auto'},${usage.focus_y??'auto'}${usage.scenario?` · ${usage.scenario}`:''}`;button.addEventListener('click',()=>{const found=walkNodes(state.workspace?.ast?.root).find(({node})=>node.id===usage.node);if(found)selectSourceNode(found.node,document.querySelector(`.outline-row[data-key="${CSS.escape(usage.node)}"]`));});row.append(button); }
     if(item.kind==='image'&&item.replaces){const previous=state.resources.find(candidate=>candidate.name===item.replaces);for(const usage of previous?.usages||[]){const replace=document.createElement('button');replace.className='resource-use resource-replace';replace.type='button';replace.disabled=visualMutationsLocked();replace.textContent=`Replace ${usage.node} with ${item.name}`;replace.addEventListener('click',()=>commitResourceReplacement(usage.node,item.name));row.append(replace);}}
+    if (state.resourceCatalogEditable && item.usages.length === 0) { const remove=document.createElement('button'); remove.className='resource-use resource-remove'; remove.type='button'; remove.disabled=visualMutationsLocked(); remove.textContent=`Remove ${item.name}`; remove.addEventListener('click',()=>removeResource(item.name)); row.append(remove); }
     target.append(row);
   }
+}
+
+async function addResource() {
+  if (visualMutationsLocked() || !state.workspace || !state.resourceCatalogEditable) return;
+  const name = window.prompt('Catalog name (lowercase portable identifier):', 'new-resource');
+  if (!name) return;
+  const path = window.prompt('Project-relative asset path:', 'assets/new.png');
+  if (!path) return;
+  const mediaType = window.prompt('Media type (image/png, image/jpeg, font/ttf, font/otf, or font/woff2):', 'image/png');
+  if (!mediaType) return;
+  const fields = {name, path, mediaType};
+  if (mediaType.startsWith('font/')) {
+    fields.family = window.prompt('Font family:', 'Readable Sans') || '';
+    fields.license = window.prompt('License identifier:', 'OFL-1.1') || '';
+    fields.weight = window.prompt('Weight (optional, defaults to 400):', '') || '';
+    fields.style = window.prompt('Style (optional, defaults to normal):', '') || '';
+    fields.fallback = (window.prompt('Fallback names, comma separated (optional):', '') || '').split(',').map((value) => value.trim()).filter(Boolean);
+  } else {
+    fields.replaces = window.prompt('Declared image replacement target (optional):', '') || '';
+    fields.focusX = window.prompt('Default crop focus X, 0–1 (optional):', '') || '';
+    fields.focusY = window.prompt('Default crop focus Y, 0–1 (optional):', '') || '';
+  }
+  let payload;
+  try { payload = PaperStudioResourceModel.catalogAddPayload(state.workspace, fields); } catch (error) { showFailure(error); return; }
+  state.committing = true; renderResources();
+  try { await api('/api/resources', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(payload)}); await refresh(); }
+  catch (error) { if (error.status === 409) await refresh(); else showFailure(error); }
+  finally { state.committing = false; renderResources(); }
+}
+
+async function removeResource(name) {
+  if (visualMutationsLocked() || !state.workspace || !state.resourceCatalogEditable || !window.confirm(`Remove ${name} from the explicit catalog?`)) return;
+  let payload;
+  try { payload = PaperStudioResourceModel.catalogRemovePayload(state.workspace, name); } catch (error) { showFailure(error); return; }
+  state.committing = true; renderResources();
+  try { await api('/api/resources', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(payload)}); await refresh(); }
+  catch (error) { if (error.status === 409) await refresh(); else showFailure(error); }
+  finally { state.committing = false; renderResources(); }
 }
 
 async function commitResourceReplacement(target, resource) {
@@ -406,6 +450,8 @@ function renderAuthoringControls() {
   if (!metadata) { const quiet=document.createElement('span'); quiet.className='quiet'; quiet.textContent='Authoring metadata unavailable'; target.append(quiet); return; }
   const available = [];
   if (metadata.templateTargets.length) available.push('template');
+  if (metadata.documentTarget) available.push('import');
+  if (metadata.documentTarget) available.push('schema');
   if (metadata.bindingTargets.length && metadata.schemas.some(schema => schema.fields.length)) available.push('binding');
   if (metadata.documentTarget && metadata.schemas.length) available.push('scenario-create');
   if (!available.length) { const quiet=document.createElement('span'); quiet.className='quiet'; quiet.textContent='Add readable IDs and a schema to enable authoring'; target.append(quiet); return; }
@@ -423,10 +469,30 @@ function renderAuthoringControls() {
       draft.component=metadata.components.includes(draft.component)?draft.component:metadata.components[0];
       form.append(authoringSelect('Component',metadata.components,draft.component,value=>{draft.component=value;}));
     }
+  } else if (draft.operation === 'schema') {
+    draft.target = metadata.documentTarget; draft.id = draft.id || '@new-schema';
+    form.append(authoringInput('Schema ID', draft.id, value => draft.id=value));
+  } else if (draft.operation === 'import') {
+    draft.target = metadata.documentTarget; draft.importPath = draft.importPath || 'styles/design.paper';
+    form.append(authoringInput('Project-relative import', draft.importPath, value => draft.importPath=value));
   } else if (draft.operation === 'binding') {
     const targets=metadata.bindingTargets.map(item=>item.id); const paths=metadata.schemas.flatMap(schema=>schema.fields.map(field=>field.path));
     draft.target=targets.includes(draft.target)?draft.target:targets[0]; draft.path=paths.includes(draft.path)?draft.path:paths[0];
-    form.append(authoringSelect('Node',targets,draft.target,value=>draft.target=value),authoringSelect('Schema path',paths,draft.path,value=>draft.path=value));
+    const formats=['','string','bool','integer','decimal','currency'];
+    draft.format=formats.includes(draft.format)?draft.format:'';
+    form.append(authoringSelect('Node',targets,draft.target,value=>draft.target=value),authoringSelect('Schema path',paths,draft.path,value=>draft.path=value),authoringSelect('Required', ['','true','false'], draft.required === undefined ? '' : String(draft.required), value=>draft.required=value),authoringSelect('Format',formats,draft.format,value=>{draft.format=value;renderAuthoringControls();}));
+    if (draft.format === 'integer' || draft.format === 'decimal' || draft.format === 'currency') {
+      const locales=['en-US','pt-BR','ar']; draft.formatLocale=locales.includes(draft.formatLocale)?draft.formatLocale:'en-US';
+      form.append(authoringSelect('Locale',locales,draft.formatLocale,value=>draft.formatLocale=value));
+    }
+    if (draft.format === 'currency') {
+      const currencies=['USD','BRL','EUR','SAR']; draft.formatCurrency=currencies.includes(draft.formatCurrency)?draft.formatCurrency:'USD';
+      form.append(authoringSelect('Currency',currencies,draft.formatCurrency,value=>draft.formatCurrency=value));
+    }
+    if (draft.format === 'decimal') {
+      draft.minFraction=draft.minFraction ?? 0; draft.maxFraction=draft.maxFraction ?? 2;
+      form.append(authoringNumberInput('Min fraction',draft.minFraction,value=>draft.minFraction=value),authoringNumberInput('Max fraction',draft.maxFraction,value=>draft.maxFraction=value));
+    }
   } else {
     const schemas=metadata.schemas.map(item=>item.name); draft.target=metadata.documentTarget; draft.schema=schemas.includes(draft.schema)?draft.schema:schemas[0]; draft.preset=metadata.presets.includes(draft.preset)?draft.preset:'typical'; draft.id=draft.id||'@stress-case';
     form.append(authoringSelect('Schema',schemas,draft.schema,value=>draft.schema=value),authoringSelect('Matrix case',metadata.presets,draft.preset,value=>draft.preset=value),authoringInput('Scenario ID',draft.id,value=>draft.id=value));
@@ -444,6 +510,10 @@ function authoringSelect(labelText, values, selected, change) {
 
 function authoringInput(labelText, value, change) {
   const field=document.createElement('label');field.className='edit-field';const caption=document.createElement('span');caption.textContent=labelText;const input=document.createElement('input');input.type='text';input.value=value;input.maxLength=128;input.disabled=visualMutationsLocked();input.addEventListener('input',()=>change(input.value));field.append(caption,input);return field;
+}
+
+function authoringNumberInput(labelText, value, change) {
+  const field=document.createElement('label');field.className='edit-field';const caption=document.createElement('span');caption.textContent=labelText;const input=document.createElement('input');input.type='number';input.min='0';input.max='18';input.step='1';input.value=value;input.disabled=visualMutationsLocked();input.addEventListener('input',()=>change(input.value));field.append(caption,input);return field;
 }
 
 function renderSource(source, issues = []) {
@@ -519,6 +589,8 @@ function renderScenarios(root) {
     return;
   }
   for (const choice of [{label: 'Default', value: ''}, ...scenarios.map((scenario) => ({label: scenario, value: scenario}))]) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'scenario-choice';
     const item = document.createElement('button');
     item.className = 'scenario';
     item.textContent = choice.label;
@@ -529,7 +601,55 @@ function renderScenarios(root) {
       state.scenario = choice.value;
       await refresh();
     });
-    target.append(item);
+    wrapper.append(item);
+    if (choice.value) {
+      const actions = document.createElement('span');
+      actions.className = 'scenario-actions';
+      const rename = document.createElement('button');
+      rename.type = 'button'; rename.className = 'scenario-action'; rename.textContent = 'Rename';
+      rename.disabled = visualMutationsLocked();
+      rename.addEventListener('click', async () => {
+        const id = window.prompt('New scenario ID', `@${normalizeScenario(choice.value)}-copy`);
+        if (id === null) return;
+        await commitScenarioLifecycle({action: 'rename', target: choice.value, id});
+      });
+      const remove = document.createElement('button');
+      remove.type = 'button'; remove.className = 'scenario-action'; remove.textContent = 'Delete';
+      remove.disabled = visualMutationsLocked();
+      remove.addEventListener('click', async () => {
+        if (!window.confirm(`Delete scenario ${choice.label}?`)) return;
+        await commitScenarioLifecycle({action: 'delete', target: choice.value});
+      });
+      actions.append(rename, remove);
+      wrapper.append(actions);
+    }
+    target.append(wrapper);
+  }
+}
+
+async function commitScenarioLifecycle(draft) {
+  if (visualMutationsLocked()) return;
+  let payload;
+  try {
+    payload = PaperStudioAuthoringModel.buildScenarioLifecyclePayload(state.workspace, state.authoring, draft);
+  } catch (error) {
+    state.authoringFeedback = {tone: 'error', text: error.message};
+    renderScenarios(state.workspace?.ast?.root);
+    return;
+  }
+  state.committing = true;
+  try {
+    const result = await api('/api/edit', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(payload)});
+    state.scenario = result.scenario || '';
+    state.authoringFeedback = {tone:'success', text:`Scenario ${draft.action} committed`};
+    await refresh();
+  } catch (error) {
+    state.authoringFeedback = {tone:error.status===409?'stale':'error', text:error.status===409?'Stale scenario state · refreshed without applying':error.message};
+    if (error.status===409) await refresh();
+  } finally {
+    state.committing = false;
+    renderScenarios(state.workspace?.ast?.root);
+    renderAuthoringControls();
   }
 }
 
@@ -1579,6 +1699,7 @@ overlapPicker.addEventListener('keydown', (event) => {
   }
 });
 $('#refresh').addEventListener('click', () => refresh());
+$('#resource-add')?.addEventListener('click', addResource);
 $('#zoom-in').addEventListener('click', () => setZoom(state.zoom + .1));
 $('#zoom-out').addEventListener('click', () => setZoom(state.zoom - .1));
 $('#zoom-value').addEventListener('change', event => setZoom(Number(event.currentTarget.value) / 100));

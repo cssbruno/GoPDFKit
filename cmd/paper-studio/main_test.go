@@ -4,7 +4,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -348,14 +347,19 @@ func TestPaperStudioChangeStreamSignalsSourceRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stream := &studioStreamRecorder{header: make(http.Header), chunks: make(chan string, 16)}
+	stream := &studioStreamRecorder{header: make(http.Header), chunks: make(chan string, 16), ready: make(chan struct{})}
 	done := make(chan struct{})
 	go func() {
 		studio.routes().ServeHTTP(stream, request)
 		close(done)
 	}()
-	if stream.status != 0 && stream.status != http.StatusOK {
-		t.Fatalf("change stream = %d %q", stream.status, stream.header)
+	select {
+	case <-stream.ready:
+	case <-time.After(2 * time.Second):
+		t.Fatal("change stream did not become ready")
+	}
+	if status := stream.Status(); status != 0 && status != http.StatusOK {
+		t.Fatalf("change stream = %d %q", status, stream.header)
 	}
 	readStream := func(marker string) string {
 		var content strings.Builder
@@ -391,17 +395,33 @@ func TestPaperStudioChangeStreamSignalsSourceRevision(t *testing.T) {
 type studioStreamRecorder struct {
 	header http.Header
 	chunks chan string
+	ready  chan struct{}
+	mu     sync.Mutex
+	once   sync.Once
 	status int
 }
 
-func (w *studioStreamRecorder) Header() http.Header    { return w.header }
-func (w *studioStreamRecorder) WriteHeader(status int) { w.status = status }
+func (w *studioStreamRecorder) Header() http.Header { return w.header }
+func (w *studioStreamRecorder) WriteHeader(status int) {
+	w.mu.Lock()
+	w.status = status
+	w.mu.Unlock()
+	w.once.Do(func() { close(w.ready) })
+}
 func (w *studioStreamRecorder) Write(p []byte) (int, error) {
+	w.mu.Lock()
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
+	w.mu.Unlock()
+	w.once.Do(func() { close(w.ready) })
 	w.chunks <- string(p)
 	return len(p), nil
+}
+func (w *studioStreamRecorder) Status() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.status
 }
 func (w *studioStreamRecorder) Flush() {}
 

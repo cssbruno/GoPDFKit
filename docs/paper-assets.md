@@ -83,10 +83,22 @@ source or stdin for an implicit manifest. Browser inventory responses contain
 metadata and source usage only—never raw bytes or filesystem paths.
 
 Font entries support `font/ttf`, `font/otf`, and `font/woff2`, with validated
-file signatures, family, weight, style, license identifier, and an acyclic
-fallback list. `replaces` forms an acyclic same-kind lifecycle edge. Image
+file signatures, family, weight, style, and an SPDX-style license selected from
+the enforced `OFL-1.1`, `Apache-2.0`, `MIT`, `CC0-1.0`, or `Proprietary` policy.
+An acyclic fallback list is validated with the same policy. `replaces` forms an
+acyclic same-kind lifecycle edge. Image
 entries may provide default crop focus; an authored image focus remains the
 explicit usage-level override. Studio can apply a declared image replacement
 to one exact source node through its source/plan-bound semantic journal. Font
 metadata is inspectable but font bytes are not sent to the browser or silently
 installed into the production renderer.
+
+When Studio is started with `-assets`, its Resources panel also exposes a
+small catalog-management workflow. Add requests name a project-relative file
+and its metadata; the server derives the SHA-256 from the verified file,
+revalidates the complete catalog, and atomically replaces the explicit
+manifest. Remove requests require the exact source and plan revisions and
+reject resources still referenced by the authored source. Existing lifecycle
+relationships, file safety checks, byte budgets, and manifest-size limits are
+validated before publication. The browser receives the refreshed metadata
+inventory only, never the manifest path, asset root, or raw bytes.
