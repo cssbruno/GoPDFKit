@@ -119,7 +119,7 @@ func TestUnsignedComplianceFixturesHaveDeterministicCharacterization(t *testing.
 		"pdfa4-metadata.pdf":                       "59c329d6721f10a361b39444c9521feb6d706d51855bf58eeec4d55fd915d65a",
 		"pdfa4e-attachment-metadata.pdf":           "b22383412126d7770ea9733bab35d59600f3b9402a42febddcd55f898c0ca4b4",
 		"pdfa4f-attachment-metadata.pdf":           "4d565daaf4955fcdbccaef27ea70e8e0d8deadb54f409200691eb78d0b32b41f",
-		"pdfua2-arlington-metadata-foundation.pdf": "9c63f12d5f68e63128223bc5e435a88fa20a4edadcafbd7dd184ac17f3fc04eb",
+		"pdfua2-arlington-metadata-foundation.pdf": "df8f1f58677fa9f961d22c692e06774c84d39494a9887a3add8190ec26dca047",
 	}
 	for _, fixture := range report.Fixtures {
 		byName[fixture.Name] = fixture
@@ -183,7 +183,7 @@ func TestPDFUAComplianceStructuredTableCellRasterIsPinned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := fmt.Sprintf("%x", sha256.Sum256(pngBytes)); got != "275b83fe8e0dade67a3548194b7089e00769f03bf0c02944c11583282b62d4d0" {
+	if got := fmt.Sprintf("%x", sha256.Sum256(pngBytes)); got != "95cef4494114626bf65a0ed1ad869b0fc4e85d29ae7cdf7992e7f7f0e67093db" {
 		t.Fatalf("structured-cell raster drift = %s", got)
 	}
 	raster, err := png.Decode(bytes.NewReader(pngBytes))

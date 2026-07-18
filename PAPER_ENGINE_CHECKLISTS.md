@@ -3263,10 +3263,11 @@ as completed behavior.
   (`go test ./...`, including typed/HTML adapter and template tests).
 - [ ] Fixture, benchmark, security, and compliance gates pass. Local
   `go test ./...`, `go vet ./...`, repository-wide race tests, generation
-  benchmark budgets, the Paper Engine calibration gate, and Paper Studio
-  JavaScript tests pass; strict `gosec` still reports 650 `G115` findings, and
-  the external PDF/A, PDF/UA, and Arlington validators require the release
-  environment described in the stabilization record.
+  benchmark budgets, the Paper Engine calibration gate, Paper Studio
+  JavaScript tests, and the pinned external PDF/A, PDF/UA, and Arlington
+  validators pass; reports are in `artifacts/compliance-release` and match
+  `testdata/compliance`. Strict `gosec` still reports 650 `G115` findings, and
+  the stabilization-window acceptance record remains open.
 
 ## 13. Stage 11 — Ecosystem and production hardening
 
@@ -3415,7 +3416,9 @@ as completed behavior.
 - [ ] Alt text and decorative status are explicit.
 - [ ] Table headers, scopes, and spans are inspectable.
 - [ ] Form labels and keyboard order are inspectable.
-- [ ] PDF/UA and PDF/A fixtures run through external validators.
+- [x] PDF/UA and PDF/A fixtures run through the pinned VeraPDF PDF/A/PDF/UA
+  profiles and Arlington 2.0; all five release fixtures pass and reports match
+  `testdata/compliance` (`artifacts/compliance-release`).
 - [x] Raster verification is recorded separately from structural text, links,
   destinations, tags, accessibility markers, PDF/A/PDF/UA identifiers, and
   exact external validator evidence; pixels alone cannot satisfy a structural
@@ -3571,7 +3574,9 @@ as completed behavior.
 - [ ] Incremental-versus-full differential suite passes.
 - [ ] Visual regression suite passes with reviewed tolerances.
 - [ ] Extracted text, reading order, links, forms, tags, and attachments pass.
-- [ ] External PDF/A and PDF/UA validators pass.
+- [x] External PDF/A and PDF/UA validators pass for the release fixtures using
+  the pinned VeraPDF image; Arlington 2.0 also passes and all reports match
+  `testdata/compliance` (`artifacts/compliance-release`).
 
 ### Performance
 

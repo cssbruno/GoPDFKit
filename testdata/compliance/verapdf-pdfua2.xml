@@ -11,7 +11,7 @@
         <name>/work/artifacts/compliance/pdfua2-arlington-metadata-foundation.pdf</name>
       </item>
       <validationReport jobEndStatus="normal" profileName="PDF/UA-2 + Tagged PDF validation profile" statement="PDF file is compliant with Validation Profile requirements." isCompliant="true">
-        <details passedRules="1727" failedRules="0" passedChecks="3009" failedChecks="0"></details>
+        <details passedRules="1727" failedRules="0" passedChecks="3386" failedChecks="0"></details>
       </validationReport>
       <duration start="1781041871391" finish="1781041871767">00:00:00.376</duration>
     </job>

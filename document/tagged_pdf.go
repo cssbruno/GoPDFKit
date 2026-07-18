@@ -66,6 +66,15 @@ type taggedTableAttributes struct {
 	ColSpan uint32
 }
 
+// TableCellStructureOptions describes the PDF/UA table attributes attached to
+// a direct table-cell structure. Scope is meaningful only for TH and accepts
+// row, column, or both (case-insensitive through the normalizer).
+type TableCellStructureOptions struct {
+	Scope   string
+	RowSpan uint32
+	ColSpan uint32
+}
+
 type taggedMarkedContent struct {
 	Page int
 	MCID int
@@ -123,6 +132,13 @@ func (f *Document) BeginStructure(role string) {
 	}
 	f.tagged.elems = append(f.tagged.elems, elem)
 	f.tagged.stack = append(f.tagged.stack, elem)
+}
+
+// BeginTableCellStructure starts a tagged TH or TD structure and attaches its
+// validated PDF/UA scope and span attributes. Call EndStructure after writing
+// the cell's content.
+func (f *Document) BeginTableCellStructure(role string, options TableCellStructureOptions) {
+	f.beginTableCellStructure(role, taggedTableAttributes(options))
 }
 
 func (f *Document) beginTableCellStructure(role string, attrs taggedTableAttributes) {

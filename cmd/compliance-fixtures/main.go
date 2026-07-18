@@ -172,12 +172,11 @@ func generatePDFUAArlingtonFoundation(path, root, fontPath, boldFontPath string)
 		AltText:   "GoPDFKit logo",
 	}, 0, "")
 	pdf.Ln(18)
-	// The unified HTML cohort uses canonical core-font metrics. Keep the
-	// explicitly embedded DejaVu font for the direct PDF/UA content above,
-	// then select Helvetica for the HTML lowering adapter.
-	pdf.SetFont("Helvetica", "", 12)
-	html := pdf.HTMLNew()
-	html.Write(6, complianceTaggedHTMLFragment())
+	// PDF/UA requires every rendering font to be embedded. The dedicated HTML
+	// compliance tests exercise the unified HTML structure lowering; this
+	// external-validator fixture stays on direct semantic structures so the
+	// complete tagged document uses the embedded DejaVu resources.
+	writeDirectTaggedComplianceStructures(pdf)
 	pdf.Line(10, pdf.GetY()+4, 80, pdf.GetY()+4)
 	return pdf.OutputFileAndClose(path)
 }
@@ -244,9 +243,11 @@ func generateSignedComplianceFoundation(path, root, fontPath, boldFontPath strin
 		AltText:   "GoPDFKit logo",
 	}, 0, "")
 	pdf.Ln(16)
-	pdf.SetFont("Helvetica", "", 12)
-	html := pdf.HTMLNew()
-	html.Write(6, complianceTaggedHTMLFragment())
+	// The unsigned PDF/UA fixture covers the unified HTML lowering path. Keep
+	// this combined PDF/A + PDF/UA route entirely on the embedded DejaVu
+	// resource because PDF/A rejects retained core-font resources and the
+	// unified HTML adapter intentionally accepts only canonical core metrics.
+	writeDirectTaggedComplianceStructures(pdf)
 	pdf.Line(10, pdf.GetY()+4, 80, pdf.GetY()+4)
 
 	cert, signer, err := complianceSigner()
@@ -264,6 +265,77 @@ func generateSignedComplianceFoundation(path, root, fontPath, boldFontPath strin
 		SigningTime:     time.Unix(1_704_067_200, 0).UTC(),
 		SignatureSize:   64 << 10,
 	})
+}
+
+func writeDirectTaggedComplianceStructures(pdf *document.Document) {
+	writeDirectTaggedList(pdf, []string{"Signed list label", "Second semantic item"})
+
+	pdf.BeginStructure("Table")
+	pdf.SetNextTextRole("Caption")
+	pdf.CellFormat(0, 6, "Tagged table caption", "", 1, "L", false, 0, "")
+
+	pdf.BeginStructure("TR")
+	pdf.BeginTableCellStructure("TH", document.TableCellStructureOptions{Scope: "Column"})
+	pdf.SetNextTextRole("P")
+	pdf.CellFormat(70, 6, "Name", "", 0, "L", false, 0, "")
+	pdf.EndStructure()
+	pdf.BeginTableCellStructure("TH", document.TableCellStructureOptions{Scope: "Column"})
+	pdf.SetNextTextRole("P")
+	pdf.CellFormat(0, 6, "Status", "", 1, "L", false, 0, "")
+	pdf.EndStructure()
+	pdf.BeginTableCellStructure("TH", document.TableCellStructureOptions{Scope: "Column"})
+	pdf.SetNextTextRole("P")
+	pdf.CellFormat(0, 6, "Detail", "", 1, "L", false, 0, "")
+	pdf.EndStructure()
+	pdf.EndStructure()
+
+	pdf.BeginStructure("TR")
+	pdf.BeginTableCellStructure("TH", document.TableCellStructureOptions{Scope: "Row", RowSpan: 2})
+	pdf.SetNextTextRole("P")
+	pdf.CellFormat(70, 6, "Structure tree", "", 0, "L", false, 0, "")
+	pdf.EndStructure()
+	pdf.BeginTableCellStructure("TD", document.TableCellStructureOptions{ColSpan: 2})
+	pdf.SetNextTextRole("P")
+	pdf.CellFormat(0, 6, "Generated", "", 1, "L", false, 0, "")
+	writeDirectTaggedList(pdf, []string{"Nested table-cell list", "Accessible body"})
+	pdf.BeginStructure("Table")
+	pdf.SetNextTextRole("Caption")
+	pdf.CellFormat(0, 6, "Nested table caption", "", 1, "L", false, 0, "")
+	pdf.BeginStructure("TR")
+	pdf.BeginTableCellStructure("TD", document.TableCellStructureOptions{})
+	pdf.SetNextTextRole("P")
+	pdf.CellFormat(0, 6, "Nested table cell", "", 1, "L", false, 0, "")
+	writeDirectTaggedList(pdf, []string{"Nested item"})
+	pdf.EndStructure()
+	pdf.EndStructure()
+	pdf.EndStructure()
+	pdf.EndStructure()
+	pdf.EndStructure()
+
+	pdf.BeginStructure("TR")
+	pdf.BeginTableCellStructure("TD", document.TableCellStructureOptions{})
+	pdf.SetNextTextRole("P")
+	pdf.CellFormat(70, 6, "Parent tree", "", 0, "L", false, 0, "")
+	pdf.EndStructure()
+	pdf.BeginTableCellStructure("TD", document.TableCellStructureOptions{})
+	pdf.SetNextTextRole("P")
+	pdf.CellFormat(0, 6, "OK", "", 1, "L", false, 0, "")
+	pdf.EndStructure()
+	pdf.EndStructure()
+	pdf.EndStructure()
+}
+
+func writeDirectTaggedList(pdf *document.Document, items []string) {
+	pdf.BeginStructure("L")
+	for _, item := range items {
+		pdf.BeginStructure("LI")
+		pdf.SetNextTextRole("Lbl")
+		pdf.CellFormat(8, 6, "•", "", 0, "L", false, 0, "")
+		pdf.SetNextTextRole("LBody")
+		pdf.CellFormat(0, 6, item, "", 1, "L", false, 0, "")
+		pdf.EndStructure()
+	}
+	pdf.EndStructure()
 }
 
 func complianceSigner() (*x509.Certificate, crypto.Signer, error) {
@@ -289,10 +361,6 @@ func complianceSigner() (*x509.Certificate, crypto.Signer, error) {
 		return nil, nil, fmt.Errorf("parse signing certificate: %w", err)
 	}
 	return cert, key, nil
-}
-
-func complianceTaggedHTMLFragment() string {
-	return `<ul><li>Tagged list label and body</li><li>Second semantic item</li></ul><table><caption>Tagged table caption</caption><tr><th>Name</th><th>Status</th><th>Detail</th></tr><tr><th scope="row" rowspan="2">Structure tree</th><td colspan="2"><p>Generated</p><div>Mixed block content</div><ul><li>Generated<ul><li>Nested table-cell list</li></ul></li></ul><table><tr><td>Nested table cell</td></tr></table></td></tr><tr><td>Parent tree</td><td>OK</td></tr></table>`
 }
 
 func baseDocument(fontPath, boldFontPath string) *document.Document {

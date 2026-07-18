@@ -11,7 +11,7 @@
         <name>/fixtures/pdfa4f-pdfua2-arlington-signed.pdf</name>
       </item>
       <validationReport jobEndStatus="normal" profileName="PDF/UA-2 + Tagged PDF validation profile" statement="PDF file is compliant with Validation Profile requirements." isCompliant="true">
-        <details passedRules="1727" failedRules="0" passedChecks="3025" failedChecks="0"></details>
+        <details passedRules="1727" failedRules="0" passedChecks="3402" failedChecks="0"></details>
       </validationReport>
       <duration start="1781044679760" finish="1781044680105">00:00:00.345</duration>
     </job>
