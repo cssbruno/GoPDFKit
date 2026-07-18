@@ -87,7 +87,7 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		!bytes.Contains(response.Body, []byte(`id="delivery-panel"`)) ||
 		!bytes.Contains(response.Body, []byte(`id="page-label" class="page-label"`)) ||
 		!bytes.Contains(response.Body, []byte(`id="zoom-out" aria-label="Zoom out"`)) ||
-		!bytes.Contains(response.Body, []byte(`src="/wasm_exec.js"`)) ||
+		bytes.Contains(response.Body, []byte(`src="/wasm_exec.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/wasm-renderer.js"`)) ||
 		bytes.Contains(response.Body, []byte(`id="preview-status"`)) ||
 		bytes.Contains(response.Body, []byte(`class="canvas-toolbar"`)) ||
@@ -200,9 +200,14 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		t.Fatalf("issue model = %d / %s", issueModel.StatusCode, issueModel.Body)
 	}
 	wasmBootstrap := studioRequest(t, handler, http.MethodGet, "/wasm-renderer.js", nil, "")
-	if wasmBootstrap.StatusCode != http.StatusOK || !bytes.Contains(wasmBootstrap.Body, []byte("WebAssembly.instantiateStreaming")) ||
+	if wasmBootstrap.StatusCode != http.StatusOK || !bytes.Contains(wasmBootstrap.Body, []byte("new Worker('/wasm-renderer-worker.js')")) ||
 		!bytes.Contains(wasmBootstrap.Body, []byte("PaperStudioWASMRenderer")) || !bytes.Contains(wasmBootstrap.Body, []byte("renderResponse")) {
 		t.Fatalf("wasm bootstrap = %d / %s", wasmBootstrap.StatusCode, wasmBootstrap.Body)
+	}
+	wasmWorker := studioRequest(t, handler, http.MethodGet, "/wasm-renderer-worker.js", nil, "")
+	if wasmWorker.StatusCode != http.StatusOK || !bytes.Contains(wasmWorker.Body, []byte("WebAssembly.instantiateStreaming")) ||
+		!bytes.Contains(wasmWorker.Body, []byte("importScripts('/wasm_exec.js')")) || !bytes.Contains(wasmWorker.Body, []byte("createImageBitmap")) {
+		t.Fatalf("wasm worker = %d / %s", wasmWorker.StatusCode, wasmWorker.Body)
 	}
 	wasmRuntime := studioRequest(t, handler, http.MethodGet, "/wasm_exec.js", nil, "")
 	if wasmRuntime.StatusCode != http.StatusOK || !bytes.Contains(wasmRuntime.Body, []byte("globalThis.Go")) {
@@ -211,6 +216,20 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 	wasmModule := studioRequest(t, handler, http.MethodGet, "/paper-studio.wasm", nil, "")
 	if wasmModule.StatusCode != http.StatusOK || len(wasmModule.Body) < 8 || !bytes.Equal(wasmModule.Body[:4], []byte{'\x00', 'a', 's', 'm'}) {
 		t.Fatalf("wasm module = %d / %d bytes", wasmModule.StatusCode, len(wasmModule.Body))
+	}
+	gzipRequest, err := http.NewRequest(http.MethodGet, "http://paper-studio.local/paper-studio.wasm", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gzipRequest.Header.Set("Accept-Encoding", "gzip")
+	gzipRecorder := &memoryResponseWriter{header: make(http.Header)}
+	handler.ServeHTTP(gzipRecorder, gzipRequest)
+	if gzipRecorder.status != http.StatusOK || gzipRecorder.header.Get("Content-Encoding") != "gzip" ||
+		gzipRecorder.body.Len() >= len(wasmModule.Body) {
+		t.Fatalf("compressed wasm = %d / %q / %d bytes", gzipRecorder.status, gzipRecorder.header, gzipRecorder.body.Len())
+	}
+	if acceptsGzip("br, gzip;q=0") || !acceptsGzip("br, gzip") {
+		t.Fatal("WASM gzip negotiation ignored an explicit client preference")
 	}
 	stylesheet := studioRequest(t, handler, http.MethodGet, "/studio.css", nil, "")
 	if stylesheet.StatusCode != http.StatusOK || !bytes.Contains(stylesheet.Body, []byte("preview-loading-progress")) ||

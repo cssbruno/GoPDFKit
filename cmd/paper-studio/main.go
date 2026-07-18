@@ -7,6 +7,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"embed"
@@ -44,7 +46,11 @@ const (
 	studioPageIssueLimit     = 16
 )
 
-//go:embed web/*
+// Keep the raw WASM build artifact out of the native server binary. The
+// deterministic gzip representation is served directly to browsers and is
+// expanded only for clients that do not advertise gzip support.
+//
+//go:embed web/*.html web/*.css web/*.js web/*.gz
 var studioAssets embed.FS
 
 type studioSnapshot struct {
@@ -192,13 +198,76 @@ func newStudioServer(file, scenario string) (*studioServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	server := &studioServer{file: abs, scenario: strings.TrimSpace(scenario), snapshots: make(map[string]*studioSnapshot), static: http.FileServer(http.FS(web))}
+	static, err := newStudioStaticHandler(web)
+	if err != nil {
+		return nil, err
+	}
+	server := &studioServer{file: abs, scenario: strings.TrimSpace(scenario), snapshots: make(map[string]*studioSnapshot), static: static}
 	if isStudioPaperDocument(abs) {
 		if err := server.loadPaperDocument(); err != nil {
 			return nil, err
 		}
 	}
 	return server, nil
+}
+
+func newStudioStaticHandler(web fs.FS) (http.Handler, error) {
+	compressedWASM, err := fs.ReadFile(web, "paper-studio.wasm.gz")
+	if err != nil {
+		return nil, fmt.Errorf("paper-studio: read compressed WASM: %w", err)
+	}
+	files := http.FileServer(http.FS(web))
+	var decodeOnce sync.Once
+	var plainWASM []byte
+	var decodeErr error
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/paper-studio.wasm" || (r.Method != http.MethodGet && r.Method != http.MethodHead) {
+			files.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/wasm")
+		w.Header().Set("Vary", "Accept-Encoding")
+		body := compressedWASM
+		if acceptsGzip(r.Header.Get("Accept-Encoding")) {
+			w.Header().Set("Content-Encoding", "gzip")
+		} else {
+			decodeOnce.Do(func() {
+				reader, openErr := gzip.NewReader(bytes.NewReader(compressedWASM))
+				if openErr != nil {
+					decodeErr = openErr
+					return
+				}
+				defer reader.Close()
+				plainWASM, decodeErr = io.ReadAll(reader)
+			})
+			if decodeErr != nil {
+				http.Error(w, "paper-studio: compressed WASM is invalid", http.StatusInternalServerError)
+				return
+			}
+			body = plainWASM
+		}
+		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+		w.WriteHeader(http.StatusOK)
+		if r.Method == http.MethodGet {
+			_, _ = w.Write(body)
+		}
+	}), nil
+}
+
+func acceptsGzip(value string) bool {
+	for _, encoding := range strings.Split(value, ",") {
+		parts := strings.Split(encoding, ";")
+		if !strings.EqualFold(strings.TrimSpace(parts[0]), "gzip") {
+			continue
+		}
+		for _, parameter := range parts[1:] {
+			if strings.EqualFold(strings.TrimSpace(parameter), "q=0") {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 func (s *studioServer) routes() http.Handler {
@@ -337,7 +406,7 @@ func readStudioSource(file string) (string, [32]byte, error) {
 	if isStudioPaperDocument(file) {
 		return readStudioPaperDocumentSource(file)
 	}
-	input, err := os.Open(file) // #nosec G304 -- file is the explicit Studio source path selected by the caller.
+	input, err := os.Open(file) // #nosec G304,G703 -- file is the explicit Studio source path selected by the caller.
 	if err != nil {
 		return "", [32]byte{}, err
 	}

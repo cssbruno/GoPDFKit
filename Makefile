@@ -160,10 +160,12 @@ test-paper-studio-js :
 	node --test cmd/paper-studio/js_test/*.cjs
 
 PAPER_STUDIO_WASM := cmd/paper-studio/web/paper-studio.wasm
+PAPER_STUDIO_WASM_GZIP := cmd/paper-studio/web/paper-studio.wasm.gz
 PAPER_STUDIO_WASM_EXEC := cmd/paper-studio/web/wasm_exec.js
 
 paper-studio-wasm :
 	GOOS=js GOARCH=wasm go build -trimpath -ldflags='-s -w' -o "$(PAPER_STUDIO_WASM)" ./cmd/paper-studio-wasm
+	gzip -1 -n -c "$(PAPER_STUDIO_WASM)" > "$(PAPER_STUDIO_WASM_GZIP)"
 	chmod u+w "$(PAPER_STUDIO_WASM_EXEC)" 2>/dev/null || true
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" "$(PAPER_STUDIO_WASM_EXEC)"
 	chmod 0644 "$(PAPER_STUDIO_WASM_EXEC)"

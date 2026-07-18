@@ -7,10 +7,12 @@ const state = {
   page: 1,
   zoom: 1,
   zoomRender: 0,
+  zoomTimer: null,
   thumbnailRender: 0,
   detailRender: 0,
   activePageMeta: null,
   pageMeta: new Map(),
+  wasmCacheKeys: [],
   inspections: new Map(),
   objectURLs: new Set(),
   selectionFragments: [],
@@ -963,7 +965,11 @@ async function loadSVG(page, kind) {
 
 async function loadWASMPage(page, dpi = renderDPIForZoom()) {
   const key = `${state.revision}:wasm:${page}:${dpi}`;
-  if (state.pageMeta.has(key)) return state.pageMeta.get(key);
+  if (state.pageMeta.has(key)) {
+    state.wasmCacheKeys = state.wasmCacheKeys.filter((candidate) => candidate !== key);
+    state.wasmCacheKeys.push(key);
+    return state.pageMeta.get(key);
+  }
   const revision = state.revision;
   const scenario = state.scenario ? `&scenario=${encodeURIComponent(state.scenario)}` : '';
   const response = await api(`/api/page/${page}.render?revision=${encodeURIComponent(revision)}&dpi=${dpi}${scenario}`);
@@ -975,6 +981,13 @@ async function loadWASMPage(page, dpi = renderDPIForZoom()) {
     throw error;
   }
   state.pageMeta.set(key, result);
+  state.wasmCacheKeys.push(key);
+  while (state.wasmCacheKeys.length > 6) {
+    const expired = state.wasmCacheKeys.shift();
+    const cached = state.pageMeta.get(expired);
+    state.pageMeta.delete(expired);
+    cached?.bitmap?.close?.();
+  }
   return result;
 }
 
@@ -1713,15 +1726,20 @@ function setZoom(next) {
   $('#zoom-value').value = String(Math.round(state.zoom * 100));
   applyPageStageWidth();
   const serial = ++state.zoomRender;
+  ++state.detailRender;
   const page = state.page;
   const revision = state.revision;
   const dpi = renderDPIForZoom();
-  loadWASMPage(page, dpi).then(rendered => {
-    if (serial !== state.zoomRender || page !== state.page || revision !== state.revision) return;
-    paintWASMPage(rendered);
-    renderInspectionOverlays();
-    renderSelectionRects();
-  }).catch(error => { if (error.status === 409) refresh(); else showFailure(error); });
+  clearTimeout(state.zoomTimer);
+  state.zoomTimer = setTimeout(() => {
+    state.zoomTimer = null;
+    loadWASMPage(page, dpi).then(rendered => {
+      if (serial !== state.zoomRender || page !== state.page || revision !== state.revision) return;
+      paintWASMPage(rendered);
+      renderInspectionOverlays();
+      renderSelectionRects();
+    }).catch(error => { if (error.status === 409) refresh(); else showFailure(error); });
+  }, 140);
 }
 
 function renderStatus() {
@@ -1761,9 +1779,12 @@ function showFailure(error) {
 }
 
 function clearObjectURLs() {
+  clearTimeout(state.zoomTimer);
+  state.zoomTimer = null;
   for (const url of state.objectURLs) URL.revokeObjectURL(url);
   state.objectURLs.clear();
   for (const value of state.pageMeta.values()) value.bitmap?.close?.();
+  state.wasmCacheKeys = [];
 }
 
 document.querySelectorAll('.mode').forEach((button) => button.addEventListener('click', () => setMode(button.dataset.mode)));
