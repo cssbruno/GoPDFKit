@@ -34,4 +34,5 @@ pagination remain confined to the planner/painter implementation.
 Rollback criteria are a newly introduced supported-corpus failure, semantic or
 visual drift without approval, race failure, or a breached calibrated budget.
 Those criteria are release governance; they are not a caller-visible engine
-switch.
+switch. The required external evidence fields and approval record are defined
+in [`stabilization-window-record.md`](stabilization-window-record.md).

@@ -34,4 +34,7 @@ not part of the production surface.
 
 Release closure still requires the accepted stabilization-window record and
 the named platform performance/compliance evidence. Those are external release
-artifacts and must not be inferred from a local test run.
+artifacts and must not be inferred from a local test run. Use the
+[`stabilization-window-record.md`](stabilization-window-record.md) template to
+capture the accepted corpus, thresholds, platform evidence, rollback decision,
+and approvals.
