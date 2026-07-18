@@ -61,7 +61,7 @@ func TestQueryStructurePageIncludesPageLevelCommands(t *testing.T) {
 	}
 	if result.Summary.Pages != 1 || result.Summary.Fragments.Matches != 2 ||
 		result.Summary.Lines.Matches != 2 || result.Summary.Commands.Matches != 3 ||
-		result.Summary.Breaks.Matches != 1 || result.Summary.Diagnostics.Matches != 1 {
+		result.Summary.Breaks.Matches != 1 || result.Summary.Diagnostics.Matches != 2 {
 		t.Fatalf("page summary = %#v", result.Summary)
 	}
 	if got := []uint64{result.Commands[0].Index, result.Commands[1].Index, result.Commands[2].Index}; !reflect.DeepEqual(got, []uint64{2, 3, 4}) {
@@ -71,7 +71,7 @@ func TestQueryStructurePageIncludesPageLevelCommands(t *testing.T) {
 	if pageLevel.HasFragmentProvenance || pageLevel.Command.Fragment.Valid() || pageLevel.PageIndex != 2 {
 		t.Fatalf("page-level command = %#v", pageLevel)
 	}
-	if result.Diagnostics[0].Diagnostic.Location.Fragment != 3 {
+	if len(result.Diagnostics) != 2 || result.Diagnostics[0].Diagnostic.Location.Page != 2 || result.Diagnostics[1].Diagnostic.Location.Fragment != 3 {
 		t.Fatalf("page diagnostic = %#v", result.Diagnostics[0])
 	}
 }
@@ -120,7 +120,7 @@ func TestQueryStructureBoundsEveryCategoryAndReportsExactCounts(t *testing.T) {
 	if result.Summary.Fragments != (StructuralQueryCount{Matches: 2, Returned: 1, Truncated: true}) ||
 		result.Summary.Lines != (StructuralQueryCount{Matches: 2, Returned: 1, Truncated: true}) ||
 		result.Summary.Commands != (StructuralQueryCount{Matches: 3, Returned: 1, Truncated: true}) ||
-		result.Summary.Breaks.Truncated || result.Summary.Diagnostics.Truncated {
+		result.Summary.Breaks.Truncated || result.Summary.Diagnostics != (StructuralQueryCount{Matches: 2, Returned: 1, Truncated: true}) {
 		t.Fatalf("bounded summary = %#v", result.Summary)
 	}
 	if result.Fragments[0].Index != 1 || result.Lines[0].Index != 1 || result.Commands[0].Index != 2 {
@@ -212,7 +212,7 @@ func structuralQueryTestPlan(t *testing.T) LayoutPlan {
 		}},
 		Diagnostics: []Diagnostic{
 			structuralQueryDiagnostic(1, 1, "@alpha", "@alpha", 1),
-			structuralQueryDiagnostic(0, 1, "@alpha", "@alpha", 0),
+			structuralQueryDiagnostic(0, 1, "@alpha", "@alpha", 2),
 			structuralQueryDiagnostic(3, 2, "@beta", "@beta", 2),
 		},
 	}

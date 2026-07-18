@@ -965,6 +965,17 @@ func (p LayoutPlan) Validate() error {
 		if err := diagnostic.Validate(); err != nil {
 			return planError(fmt.Sprintf("diagnostics[%d]", i), err.Error())
 		}
+		// A retained layout diagnostic is positioned evidence, not a global log
+		// message. Authored inputs carry a source span; generated typed inputs
+		// carry their stable logical node key instead.
+		if diagnostic.Stage == StageLayout {
+			if diagnostic.Location.Page == 0 {
+				return planError(fmt.Sprintf("diagnostics[%d]", i), "layout diagnostic has no page evidence")
+			}
+			if diagnostic.Location.Source.IsZero() && diagnostic.Location.Key == "" && !diagnostic.Location.Node.Valid() {
+				return planError(fmt.Sprintf("diagnostics[%d]", i), "layout diagnostic has no source evidence")
+			}
+		}
 		if uint64(diagnostic.Location.Page) > uint64(len(p.pages)) {
 			return planError(fmt.Sprintf("diagnostics[%d]", i), "references an invalid page")
 		}

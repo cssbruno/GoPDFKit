@@ -34,18 +34,24 @@ type typedPageShellKey struct {
 }
 
 func paperMappingForRegion(mapping papercompile.CompileMapping, region layoutengine.RegionID) papercompile.CompileMapping {
-	filtered := papercompile.CompileMapping{ThemeProperties: append([]papercompile.ThemePropertyMapping(nil), mapping.ThemeProperties...)}
-	for _, node := range mapping.Nodes {
-		if region == layoutengine.RegionBody {
-			if node.Region != "" && node.Region != layoutengine.RegionBody {
+	filtered := papercompile.CompileMapping{SourceRevision: mapping.SourceRevision, ThemeProperties: append([]papercompile.ThemePropertyMapping(nil), mapping.ThemeProperties...)}
+	filterNodes := func(nodes []papercompile.NodeMapping) []papercompile.NodeMapping {
+		result := make([]papercompile.NodeMapping, 0, len(nodes))
+		for _, node := range nodes {
+			if region == layoutengine.RegionBody {
+				if node.Region != "" && node.Region != layoutengine.RegionBody {
+					continue
+				}
+			} else if node.Region != region {
 				continue
 			}
-		} else if node.Region != region {
-			continue
+			node.Region = ""
+			result = append(result, node)
 		}
-		node.Region = ""
-		filtered.Nodes = append(filtered.Nodes, node)
+		return result
 	}
+	filtered.Nodes = filterNodes(mapping.Nodes)
+	filtered.AnonymousNodes = filterNodes(mapping.AnonymousNodes)
 	return filtered
 }
 

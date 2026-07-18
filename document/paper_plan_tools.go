@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cssbruno/gopdfkit/internal/layoutengine"
 )
@@ -401,6 +402,87 @@ func (p PaperPlan) ExplainContext(ctx context.Context, selectors []PaperPlanSele
 		return PaperPlanJSON{}, err
 	}
 	return PaperPlanJSON{PlanHash: p.hash, payload: encoded}, nil
+}
+
+// TraceFragment returns a bounded, exact source-to-data-to-style-to-layout
+// trace for one retained fragment. Layout evidence remains the engine's
+// canonical Explain target; compiler provenance is narrowed to the selected
+// source node so callers do not have to guess a join across global arrays.
+func (p PaperPlan) TraceFragment(fragment uint32) (PaperPlanJSON, error) {
+	const maxBytes = layoutengine.ExplainLayoutDefaultCanonicalBytes
+	if p.hash == "" {
+		return PaperPlanJSON{}, errors.New("document: empty paper plan")
+	}
+	explanation, err := p.plan.ExplainLayout([]layoutengine.StructuralQuery{{
+		Fragment: layoutengine.FragmentID(fragment), MaxResults: layoutengine.StructuralQueryMaxResults,
+	}}, layoutengine.ExplainLayoutLimits{MaxSelectors: 1, MaxCanonicalBytes: maxBytes})
+	if err != nil {
+		return PaperPlanJSON{}, err
+	}
+	if len(explanation.Targets) != 1 || len(explanation.Targets[0].Fragments) != 1 {
+		return PaperPlanJSON{}, fmt.Errorf("document: fragment %d did not resolve uniquely", fragment)
+	}
+	target := explanation.Targets[0]
+	provenance, err := p.Provenance()
+	if err != nil {
+		return PaperPlanJSON{}, err
+	}
+	provenance = paperProvenanceForFragment(provenance, target.Fragments[0])
+	encoded, err := json.Marshal(struct {
+		SchemaVersion  uint16                           `json:"schema_version"`
+		PlanHash       string                           `json:"plan_hash"`
+		SourceRevision string                           `json:"source_revision"`
+		Fragment       layoutengine.ExplainLayoutTarget `json:"fragment"`
+		Provenance     PaperPlanProvenance              `json:"provenance"`
+	}{SchemaVersion: 1, PlanHash: p.hash, SourceRevision: p.mapping.SourceRevision, Fragment: target, Provenance: provenance})
+	if err != nil {
+		return PaperPlanJSON{}, fmt.Errorf("document: encode fragment trace: %w", err)
+	}
+	if uint64(len(encoded)) > uint64(maxBytes) {
+		return PaperPlanJSON{}, fmt.Errorf("document: fragment trace exceeds byte limit: encoded=%d limit=%d", len(encoded), maxBytes)
+	}
+	return PaperPlanJSON{PlanHash: p.hash, payload: encoded}, nil
+}
+
+func paperProvenanceForFragment(provenance PaperPlanProvenance, fragment layoutengine.ExplainFragment) PaperPlanProvenance {
+	key := string(fragment.Source.Key)
+	instance := string(fragment.Source.Instance)
+	span := fragment.Source.Source
+	result := PaperPlanProvenance{}
+	for _, entry := range provenance.Bindings {
+		if paperFragmentProvenanceMatch(entry.Node, "", entry.Source, key, instance, span) {
+			result.Bindings = append(result.Bindings, entry)
+		}
+	}
+	for _, entry := range provenance.StyleTokens {
+		if paperFragmentProvenanceMatch(entry.Node, "", entry.Consumer, key, instance, span) {
+			result.StyleTokens = append(result.StyleTokens, entry)
+		}
+	}
+	for _, entry := range provenance.ComputedStyles {
+		if paperFragmentProvenanceMatch(entry.Node, "", entry.Source, key, instance, span) {
+			result.ComputedStyles = append(result.ComputedStyles, entry)
+		}
+	}
+	for _, entry := range provenance.Expansions {
+		if paperFragmentProvenanceMatch(entry.Node, entry.Instance, entry.Definition, key, instance, span) ||
+			paperFragmentProvenanceMatch(entry.Node, entry.Instance, entry.Invocation, key, instance, span) {
+			result.Expansions = append(result.Expansions, entry)
+		}
+	}
+	return result
+}
+
+func paperFragmentProvenanceMatch(node, mappedInstance string, source PaperPlanSourceSpan, key, instance string, fragmentSource layoutengine.SourceSpan) bool {
+	if node != "" && (key == node || strings.HasPrefix(key, node+"#") || strings.HasSuffix(instance, "/"+node) || strings.Contains(instance, "/"+node+"#")) {
+		if mappedInstance == "" || instance == mappedInstance+"/"+key || strings.HasPrefix(instance, mappedInstance+"/") {
+			return true
+		}
+	}
+	if source.File != "" && fragmentSource.File != "" && source.File != fragmentSource.File {
+		return false
+	}
+	return source.EndOffset > source.StartOffset && source.StartOffset >= fragmentSource.Start.Offset && source.EndOffset <= fragmentSource.End.Offset
 }
 
 // explainJSON adds source-level binding and style-token provenance to the

@@ -256,16 +256,22 @@ func (f *Document) planTypedMixedBodiesMapped(ctx context.Context, doc *layout.L
 // Root/theme mappings are retained because they describe the same compiled
 // document rather than a particular body slot.
 func paperMappingForMixedBody(mapping papercompile.CompileMapping, bodyIndex int) papercompile.CompileMapping {
-	filtered := papercompile.CompileMapping{ThemeProperties: append([]papercompile.ThemePropertyMapping(nil), mapping.ThemeProperties...)}
-	for _, node := range mapping.Nodes {
-		if node.BodyIndex >= 0 && node.BodyIndex != bodyIndex {
-			continue
+	filtered := papercompile.CompileMapping{SourceRevision: mapping.SourceRevision, ThemeProperties: append([]papercompile.ThemePropertyMapping(nil), mapping.ThemeProperties...)}
+	filterNodes := func(nodes []papercompile.NodeMapping) []papercompile.NodeMapping {
+		result := make([]papercompile.NodeMapping, 0, len(nodes))
+		for _, node := range nodes {
+			if node.BodyIndex >= 0 && node.BodyIndex != bodyIndex {
+				continue
+			}
+			if node.BodyIndex == bodyIndex {
+				node.BodyIndex = 0
+			}
+			result = append(result, node)
 		}
-		if node.BodyIndex == bodyIndex {
-			node.BodyIndex = 0
-		}
-		filtered.Nodes = append(filtered.Nodes, node)
+		return result
 	}
+	filtered.Nodes = filterNodes(mapping.Nodes)
+	filtered.AnonymousNodes = filterNodes(mapping.AnonymousNodes)
 	return filtered
 }
 

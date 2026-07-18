@@ -357,6 +357,7 @@ func planPaperSource(ctx context.Context, file, source, scenario string, selectS
 	if !compiled.OK() {
 		return paperPlanFailure(result, PaperStageCompile, errors.New("semantic compilation failed"))
 	}
+	compiled.Mapping.SourceRevision = string(paperedit.SourceRevision(source))
 
 	planner, err := newPaperPlanner(compiled.Page)
 	if err != nil {
@@ -2596,7 +2597,28 @@ func paperBlockIdentity(mapping papercompile.CompileMapping, bodyIndex, segmentI
 		}
 	}
 	if selected == nil {
-		return identity
+		for index := range mapping.AnonymousNodes {
+			candidate := &mapping.AnonymousNodes[index]
+			if candidate.BodyIndex != bodyIndex {
+				continue
+			}
+			if candidate.SegmentIndex == segmentIndex && candidate.NestedBlockIndex == nestedIndex {
+				selected = candidate
+				break
+			}
+			if selected == nil && candidate.SegmentIndex == segmentIndex && candidate.NestedBlockIndex == -1 {
+				selected = candidate
+			}
+			if selected == nil && candidate.SegmentIndex == -1 && candidate.NestedBlockIndex == -1 {
+				selected = candidate
+			}
+		}
+	}
+	if selected == nil {
+		return paperRevisionScopedFallbackIdentity(mapping.SourceRevision, identity, bodyIndex, segmentIndex, nestedIndex, fallback, paperlang.NodeKind("block"), paperlang.Span{})
+	}
+	if selected.ID == "" {
+		return paperRevisionScopedFallbackIdentity(mapping.SourceRevision, identity, bodyIndex, segmentIndex, nestedIndex, fallback, selected.Kind, selected.Span)
 	}
 	readableID := selected.ID
 	if segmentIndex >= 0 && selected.SegmentIndex != segmentIndex {
@@ -2611,6 +2633,23 @@ func paperBlockIdentity(mapping papercompile.CompileMapping, bodyIndex, segmentI
 		identity.instance = layoutengine.InstanceID(selected.InstancePath + "/" + readableID)
 	}
 	identity.source = paperLayoutSourceSpan(selected.Span)
+	return identity
+}
+
+func paperRevisionScopedFallbackIdentity(revision string, fallback paperSourceIdentity, bodyIndex, segmentIndex, nestedIndex, ordinal int, kind paperlang.NodeKind, span paperlang.Span) paperSourceIdentity {
+	sourceRevision, err := layoutengine.ParseSourceRevisionID(revision)
+	if err != nil {
+		return fallback
+	}
+	fingerprintInput := fmt.Sprintf("%s\x00%d\x00%d\x00%d\x00%d\x00%d\x00%d", kind, bodyIndex, segmentIndex, nestedIndex, span.Start.Offset, span.End.Offset, ordinal)
+	fingerprint := sha256.Sum256([]byte(fingerprintInput))
+	key, err := layoutengine.DeriveAnonymousStructuralKey(layoutengine.AnonymousStructuralKeyInput{
+		Revision: sourceRevision, Kind: "paper-block", Ordinal: uint32(max(ordinal, 0)), Fingerprint: hex.EncodeToString(fingerprint[:]),
+	})
+	if err != nil {
+		return fallback
+	}
+	identity := paperSourceIdentity{key: key, instance: layoutengine.InstanceID(key), source: paperLayoutSourceSpan(span)}
 	return identity
 }
 

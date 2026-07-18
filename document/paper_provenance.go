@@ -70,6 +70,17 @@ type PaperPlanComputedStyleProvenance struct {
 	BoxStyle  *layout.BoxStyle    `json:"box_style,omitempty"`
 }
 
+// PaperPlanExpansionProvenance distinguishes authored definitions from their
+// concrete component/repeat invocation and instance path. It contains source
+// coordinates only; scenario values are never retained here.
+type PaperPlanExpansionProvenance struct {
+	Node       string              `json:"node,omitempty"`
+	Kind       string              `json:"kind"`
+	Definition PaperPlanSourceSpan `json:"definition"`
+	Invocation PaperPlanSourceSpan `json:"invocation"`
+	Instance   string              `json:"instance,omitempty"`
+}
+
 // PaperPlanProvenance is a bounded, deterministic source projection attached
 // to Explain responses. It contains paths and declarations, never scenario
 // values or raw resource bytes.
@@ -77,6 +88,7 @@ type PaperPlanProvenance struct {
 	Bindings       []PaperPlanBindingProvenance       `json:"bindings,omitempty"`
 	StyleTokens    []PaperPlanStyleTokenProvenance    `json:"style_tokens,omitempty"`
 	ComputedStyles []PaperPlanComputedStyleProvenance `json:"computed_styles,omitempty"`
+	Expansions     []PaperPlanExpansionProvenance     `json:"expansions,omitempty"`
 }
 
 // Provenance returns detached binding and style-token evidence for this exact
@@ -90,8 +102,18 @@ func (p PaperPlan) Provenance() (PaperPlanProvenance, error) {
 		Bindings:       make([]PaperPlanBindingProvenance, 0),
 		StyleTokens:    make([]PaperPlanStyleTokenProvenance, 0),
 		ComputedStyles: make([]PaperPlanComputedStyleProvenance, 0),
+		Expansions:     make([]PaperPlanExpansionProvenance, 0),
 	}
-	for _, node := range p.mapping.Nodes {
+	nodes := make([]papercompile.NodeMapping, 0, len(p.mapping.Nodes)+len(p.mapping.AnonymousNodes))
+	nodes = append(nodes, p.mapping.Nodes...)
+	nodes = append(nodes, p.mapping.AnonymousNodes...)
+	for _, node := range nodes {
+		if node.InstancePath != "" || node.DefinitionSpan.File != "" || node.InvocationSpan.File != "" {
+			result.Expansions = append(result.Expansions, PaperPlanExpansionProvenance{
+				Node: node.ID, Kind: string(node.Kind), Definition: paperPlanSourceSpan(node.DefinitionSpan),
+				Invocation: paperPlanSourceSpan(node.InvocationSpan), Instance: node.InstancePath,
+			})
+		}
 		if node.BindingPath == "" {
 			continue
 		}
@@ -129,7 +151,9 @@ func (p PaperPlan) Provenance() (PaperPlanProvenance, error) {
 
 func clonePaperCompileMapping(input papercompile.CompileMapping) papercompile.CompileMapping {
 	result := papercompile.CompileMapping{
+		SourceRevision:  input.SourceRevision,
 		Nodes:           append([]papercompile.NodeMapping(nil), input.Nodes...),
+		AnonymousNodes:  append([]papercompile.NodeMapping(nil), input.AnonymousNodes...),
 		ThemeProperties: make([]papercompile.ThemePropertyMapping, len(input.ThemeProperties)),
 		ComputedStyles:  make([]papercompile.ComputedStyleMapping, len(input.ComputedStyles)),
 	}

@@ -52,7 +52,7 @@ func TestHTMLUnifiedBoxModelExactPlanRasterPDFAndCursor(t *testing.T) {
 	if err != nil || status != "captured" || raster == nil || len(raster.Pages) != 1 {
 		t.Fatalf("raster=%+v status=%q err=%v", raster, status, err)
 	}
-	if got := raster.Pages[0].PNGSHA256; got != "78f720a142b9cfa7da63bf33bfc07fd3859c4a71efdae88c77f7f4175a152a5f" {
+	if got := raster.Pages[0].PNGSHA256; got != "0560f98d7683b9db2abdf31cae2c59a57b0cb69cf31754e4f1d89953ef66500c" {
 		t.Fatalf("box raster drift: %s", got)
 	}
 
@@ -331,7 +331,7 @@ func TestHTMLUnifiedBoxModelPercentSizingBoxSizingAndOverflow(t *testing.T) {
 	if err != nil || status != "captured" || raster == nil || len(raster.Pages) != 1 {
 		t.Fatalf("sized box raster=%+v status=%q err=%v", raster, status, err)
 	}
-	if raster.Pages[0].PNGSHA256 != "ab7cdea8f14745151b09093941e721bf2fce38421683e3536cb8b4c9af4e44ee" {
+	if raster.Pages[0].PNGSHA256 != "918ecef803963eb9e1152b8b89f185497fcfe97f85e665191ad136ff3aad0792" {
 		t.Fatalf("sized box raster drift: %s", raster.Pages[0].PNGSHA256)
 	}
 	target := htmlUnifiedFlexTestPlanner()

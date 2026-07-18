@@ -174,10 +174,23 @@ as completed behavior.
 
 ### Provenance and explainability
 
-- [ ] Every persistent source node has a stable or revision-scoped identity.
-- [ ] Expanded instances are distinguishable from source definitions.
-- [ ] Plan-local fragments are distinguishable from instances.
-- [ ] Every fragment maps to source, data, style, semantics, page, and region.
+- [x] Every persistent source node has a readable stable identity or a
+  deterministic anonymous identity scoped to the exact source revision
+  ([adapter](document/paper.go), [compiler mapping](internal/papercompile/compile.go),
+  [tests](document/paper_provenance_test.go)).
+- [x] Expanded component/repeat instances retain distinct instance paths plus
+  their definition and invocation spans, separately from source identity
+  ([provenance](document/paper_provenance.go),
+  [tests](document/paper_provenance_test.go)).
+- [x] Plan-local fragments have unique plan-local IDs independently from their
+  source key and expanded instance identity, including continuation evidence
+  ([contract](internal/layoutengine/explain.go),
+  [tests](document/paper_provenance_test.go)).
+- [x] `TraceFragment` joins one exact retained fragment to source identity,
+  binding path, computed style/token chain, expansion provenance, semantic
+  owner path, page, region, and fixed geometry through a bounded detached
+  projection ([adapter](document/paper_plan_tools.go),
+  [tests](document/paper_provenance_test.go)).
 - [x] Production plan projections include deterministic, map-free compact
   provenance tables with aligned interned fragment and line IDs
   ([contract](internal/layoutengine/provenance.go),
@@ -193,7 +206,12 @@ as completed behavior.
   ([contract](internal/layoutengine/plan.go),
   [planner](document/paper.go),
   [tests](document/typed_characterization_test.go)).
-- [ ] Every layout diagnostic has source and page evidence.
+- [x] Every retained layout diagnostic has exact page evidence and either an
+  authored source span or a stable generated-node identity; immutable-plan
+  validation rejects unpositioned/global layout diagnostics
+  ([invariant](internal/layoutengine/plan.go),
+  [tests](internal/layoutengine/plan_test.go),
+  [query evidence](internal/layoutengine/query_test.go)).
 
 ## 2. Stage 0 — Characterization and ADR
 

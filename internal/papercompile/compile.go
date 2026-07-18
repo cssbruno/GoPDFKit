@@ -58,7 +58,11 @@ type NodeMapping struct {
 }
 
 type CompileMapping struct {
+	// SourceRevision is populated by the document adapter before planning. The
+	// syntax compiler deliberately does not hash ambient source bytes itself.
+	SourceRevision  string                 `json:"source_revision,omitempty"`
 	Nodes           []NodeMapping          `json:"nodes,omitempty"`
+	AnonymousNodes  []NodeMapping          `json:"anonymous_nodes,omitempty"`
 	ThemeProperties []ThemePropertyMapping `json:"theme_properties,omitempty"`
 	ComputedStyles  []ComputedStyleMapping `json:"computed_styles,omitempty"`
 }
@@ -1813,7 +1817,25 @@ func computedBlockStyle(block layout.Block) (*layout.TextStyle, *layout.BoxStyle
 }
 
 func (c *compiler) mapNestedNode(node *paperlang.Node, bodyIndex, segmentIndex, nestedBlockIndex int) {
-	if node == nil || node.ID == "" {
+	if node == nil {
+		return
+	}
+	mapping := NodeMapping{
+		ID: node.ID, Kind: node.Kind, BodyIndex: bodyIndex, SegmentIndex: segmentIndex,
+		NestedBlockIndex: nestedBlockIndex, Span: node.Span,
+		DefinitionSpan: c.provenance[node].definition, InvocationSpan: c.provenance[node].invocation,
+		InstancePath: c.provenance[node].instancePath,
+		BindingPath:  c.bindings[node].path, BindingSpan: c.bindings[node].span,
+		BindingNullable: c.bindings[node].nullable, BindingCollection: c.bindings[node].collection,
+	}
+	if node.ID == "" {
+		for _, existing := range c.result.Mapping.AnonymousNodes {
+			if existing.Kind == mapping.Kind && existing.BodyIndex == bodyIndex && existing.SegmentIndex == segmentIndex &&
+				existing.NestedBlockIndex == nestedBlockIndex && existing.Span == mapping.Span {
+				return
+			}
+		}
+		c.result.Mapping.AnonymousNodes = append(c.result.Mapping.AnonymousNodes, mapping)
 		return
 	}
 	if _, duplicate := c.ids[node.ID]; duplicate {
@@ -1821,14 +1843,7 @@ func (c *compiler) mapNestedNode(node *paperlang.Node, bodyIndex, segmentIndex, 
 		return
 	}
 	c.ids[node.ID] = node.HeaderSpan
-	c.result.Mapping.Nodes = append(c.result.Mapping.Nodes, NodeMapping{
-		ID: node.ID, Kind: node.Kind, BodyIndex: bodyIndex, SegmentIndex: segmentIndex,
-		NestedBlockIndex: nestedBlockIndex, Span: node.Span,
-		DefinitionSpan: c.provenance[node].definition, InvocationSpan: c.provenance[node].invocation,
-		InstancePath: c.provenance[node].instancePath,
-		BindingPath:  c.bindings[node].path, BindingSpan: c.bindings[node].span,
-		BindingNullable: c.bindings[node].nullable, BindingCollection: c.bindings[node].collection,
-	})
+	c.result.Mapping.Nodes = append(c.result.Mapping.Nodes, mapping)
 }
 
 func (c *compiler) unsupportedNode(node *paperlang.Node, hint string) {

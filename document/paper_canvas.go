@@ -30,15 +30,21 @@ type paperMeasuredCanvas struct {
 }
 
 func paperCanvasMappingForBody(mapping papercompile.CompileMapping, bodyIndex int) papercompile.CompileMapping {
-	result := papercompile.CompileMapping{ThemeProperties: append([]papercompile.ThemePropertyMapping(nil), mapping.ThemeProperties...)}
-	for _, node := range mapping.Nodes {
-		if node.Kind == paperlang.NodeDocument || node.BodyIndex == bodyIndex {
-			if node.BodyIndex == bodyIndex {
-				node.BodyIndex = 0
+	result := papercompile.CompileMapping{SourceRevision: mapping.SourceRevision, ThemeProperties: append([]papercompile.ThemePropertyMapping(nil), mapping.ThemeProperties...)}
+	filterNodes := func(nodes []papercompile.NodeMapping) []papercompile.NodeMapping {
+		filtered := make([]papercompile.NodeMapping, 0, len(nodes))
+		for _, node := range nodes {
+			if node.Kind == paperlang.NodeDocument || node.BodyIndex == bodyIndex {
+				if node.BodyIndex == bodyIndex {
+					node.BodyIndex = 0
+				}
+				filtered = append(filtered, node)
 			}
-			result.Nodes = append(result.Nodes, node)
 		}
+		return filtered
 	}
+	result.Nodes = filterNodes(mapping.Nodes)
+	result.AnonymousNodes = filterNodes(mapping.AnonymousNodes)
 	return result
 }
 

@@ -5,17 +5,20 @@ package layoutengine
 
 import (
 	"bytes"
+	"compress/zlib"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"image"
 	"image/color"
 	"image/draw"
 	_ "image/jpeg"
-	"image/png"
+	"io"
 	"math"
 	"sort"
 	"strings"
@@ -30,7 +33,7 @@ import (
 
 const (
 	DisplayRasterManifestVersion uint16 = 1
-	DisplayRasterRendererVersion        = "layoutengine/go-display-raster@4"
+	DisplayRasterRendererVersion        = "layoutengine/go-display-raster@5"
 
 	DisplayRasterHardMaxPixels      uint64 = 64 << 20
 	DisplayRasterHardMaxSourceBytes uint64 = 64 << 20
@@ -65,7 +68,7 @@ func DefaultDisplayRasterProfile() DisplayRasterProfile {
 		DPI: 144, ColorSpace: "srgb_8bit", AlphaMode: "opaque", Background: "#ffffff",
 		Antialiasing: "coverage_8bit", CropRounding: "exact_bounds_nearest_pixel_count_half_away_from_zero",
 		CoordinateRound: "26.6_fixed_half_away_from_zero", ImageResampling: "nearest_neighbor",
-		PNGCompression: "go_png_best_compression", Renderer: DisplayRasterRendererVersion,
+		PNGCompression: "zlib_best_speed_filter_none", Renderer: DisplayRasterRendererVersion,
 	}
 }
 
@@ -305,10 +308,11 @@ func CaptureDisplayPlanPNGContext(ctx context.Context, plan LayoutPlan, sources 
 	}
 	var encoded bytes.Buffer
 	limited := &rasterLimitWriter{writer: &encoded, remaining: request.Limits.MaxPNGBytes}
-	// Preview latency matters more than a modest transfer-size reduction. Best
-	// speed remains deterministic and avoids spending most Go/WASM paint time
-	// in DEFLATE after the page pixels are already final.
-	if err := (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(limited, canvas); err != nil {
+	// The standard encoder evaluates five filters for every scanline. Profiles
+	// show that work dominating interactive Go/WASM preview latency even with
+	// BestSpeed compression. Opaque document pages compress well with direct
+	// scanlines, so pin filter None and preserve deterministic lossless pixels.
+	if err := encodeRasterPNG(limited, canvas); err != nil {
 		return DisplayRasterArtifact{}, fmt.Errorf("%w: PNG: %w", ErrDisplayRasterLimit, err)
 	}
 	pngBytes := encoded.Bytes()
@@ -330,6 +334,67 @@ func CaptureDisplayPlanPNGContext(ctx context.Context, plan LayoutPlan, sources 
 		return DisplayRasterArtifact{}, err
 	}
 	return DisplayRasterArtifact{manifest: manifest, png: append([]byte(nil), pngBytes...)}, nil
+}
+
+func encodeRasterPNG(output io.Writer, canvas *image.RGBA) error {
+	if canvas == nil || canvas.Bounds().Empty() {
+		return errors.New("empty canvas")
+	}
+	if _, err := output.Write([]byte("\x89PNG\r\n\x1a\n")); err != nil {
+		return err
+	}
+	var header [13]byte
+	binary.BigEndian.PutUint32(header[0:4], uint32(canvas.Bounds().Dx())) // #nosec G115 -- raster dimensions are bounded by the validated pixel limit.
+	binary.BigEndian.PutUint32(header[4:8], uint32(canvas.Bounds().Dy())) // #nosec G115 -- raster dimensions are bounded by the validated pixel limit.
+	header[8], header[9] = 8, 6                                           // 8-bit RGBA.
+	if err := writeRasterPNGChunk(output, "IHDR", header[:]); err != nil {
+		return err
+	}
+	var compressed bytes.Buffer
+	deflater, err := zlib.NewWriterLevel(&compressed, zlib.BestSpeed)
+	if err != nil {
+		return err
+	}
+	row := make([]byte, 1+canvas.Bounds().Dx()*4)
+	for y := canvas.Bounds().Min.Y; y < canvas.Bounds().Max.Y; y++ {
+		row[0] = 0 // PNG filter None.
+		offset := canvas.PixOffset(canvas.Bounds().Min.X, y)
+		copy(row[1:], canvas.Pix[offset:offset+canvas.Bounds().Dx()*4])
+		if _, err := deflater.Write(row); err != nil {
+			_ = deflater.Close()
+			return err
+		}
+	}
+	if err := deflater.Close(); err != nil {
+		return err
+	}
+	if err := writeRasterPNGChunk(output, "IDAT", compressed.Bytes()); err != nil {
+		return err
+	}
+	return writeRasterPNGChunk(output, "IEND", nil)
+}
+
+func writeRasterPNGChunk(output io.Writer, kind string, payload []byte) error {
+	if len(kind) != 4 || uint64(len(payload)) > math.MaxUint32 {
+		return errors.New("invalid PNG chunk")
+	}
+	var length [4]byte
+	binary.BigEndian.PutUint32(length[:], uint32(len(payload))) // #nosec G115 -- length is bounded above.
+	if _, err := output.Write(length[:]); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(output, kind); err != nil {
+		return err
+	}
+	if _, err := output.Write(payload); err != nil {
+		return err
+	}
+	checksum := crc32.NewIEEE()
+	_, _ = io.WriteString(checksum, kind)
+	_, _ = checksum.Write(payload)
+	binary.BigEndian.PutUint32(length[:], checksum.Sum32())
+	_, err := output.Write(length[:])
+	return err
 }
 
 type rasterPaintState struct {
@@ -581,7 +646,7 @@ func rasterFillPath(dst *image.RGBA, path PlannedPath, fill PlannedFill, transfo
 	}
 	target := rasterLocalRGBA(dst, bounds)
 	ox, oy := float32(bounds.Min.X), float32(bounds.Min.Y)
-	r := newLocalRasterizer(bounds, dst.Bounds())
+	r := newLocalRasterizer(bounds)
 	for _, segment := range segments {
 		switch segment.kind {
 		case PathMoveTo:
@@ -620,7 +685,7 @@ func rasterStrokePath(dst *image.RGBA, path PlannedPath, stroke PlannedStroke, t
 		}
 		target := rasterLocalRGBA(dst, bounds)
 		ox, oy := float64(bounds.Min.X), float64(bounds.Min.Y)
-		r := newLocalRasterizer(bounds, dst.Bounds())
+		r := newLocalRasterizer(bounds)
 		r.MoveTo(float32(x+radius-ox), float32(y-oy))
 		r.CubeTo(float32(x+radius-ox), float32(y+k*radius-oy), float32(x+k*radius-ox), float32(y+radius-oy), float32(x-ox), float32(y+radius-oy))
 		r.CubeTo(float32(x-k*radius-ox), float32(y+radius-oy), float32(x-radius-ox), float32(y+k*radius-oy), float32(x-radius-ox), float32(y-oy))
@@ -657,7 +722,7 @@ func rasterStrokePath(dst *image.RGBA, path PlannedPath, stroke PlannedStroke, t
 		}
 		target := rasterLocalRGBA(dst, bounds)
 		ox, oy := float64(bounds.Min.X), float64(bounds.Min.Y)
-		r := newLocalRasterizer(bounds, dst.Bounds())
+		r := newLocalRasterizer(bounds)
 		r.MoveTo(float32(ax-ox), float32(ay-oy))
 		r.LineTo(float32(bx-ox), float32(by-oy))
 		r.LineTo(float32(cx-ox), float32(cy-oy))
@@ -751,15 +816,8 @@ func rasterLocalRGBA(destination *image.RGBA, bounds image.Rectangle) *image.RGB
 	return local
 }
 
-func newLocalRasterizer(bounds, original image.Rectangle) *vector.Rasterizer {
-	width, height := bounds.Dx(), bounds.Dy()
-	// x/image/vector switches from fixed to floating accumulation when either
-	// dimension exceeds 512. Preserve the original page rasterizer's numerical
-	// path while bounding the other dimension to the local shape.
-	if (original.Dx() > 512 || original.Dy() > 512) && width <= 512 && height <= 512 {
-		width = 513
-	}
-	return vector.NewRasterizer(width, height)
+func newLocalRasterizer(bounds image.Rectangle) *vector.Rasterizer {
+	return vector.NewRasterizer(bounds.Dx(), bounds.Dy())
 }
 
 func rasterImage(dst *image.RGBA, source image.Image, placement PlannedImage, transform Transform, crop Rect, clip image.Rectangle) error {

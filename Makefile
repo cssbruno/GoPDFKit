@@ -31,7 +31,7 @@ PAPER_ENGINE_PROFILE_CPU_SECONDS ?= 2
 PAPER_ENGINE_PROFILE_ALLOC_ITERATIONS ?= 20
 PAPER_STUDIO_LATENCY_REPORT ?= artifacts/paper-studio-wasm-latency.json
 
-.PHONY: all documentation cov coverage-check test race vet fmt-check check modules tools tools-clean benchstat lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget bench-paper-engine bench-paper-engine-ci bench-paper-engine-budget bench-paper-studio bench-paper-studio-wasm-latency bench-paper-studio-wasm-latency-budget test-paper-studio-js test-paper-studio-wasm characterize-paper-engine paper-studio-wasm paper-studio profile-paper-engine profile-paper-engine-check profile profile-cpu profile-alloc profile-block profile-mutex profile-trace compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate pdf-reader-smoke clean
+.PHONY: all documentation cov coverage-check test race vet fmt-check check modules tools tools-clean benchstat lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget bench-paper-engine bench-paper-engine-ci bench-paper-engine-budget bench-paper-studio bench-paper-studio-wasm-latency bench-paper-studio-wasm-latency-budget test-paper-studio-js test-paper-studio-wasm characterize-paper-engine verify-clean-checkout paper-studio-wasm paper-studio profile-paper-engine profile-paper-engine-check profile profile-cpu profile-alloc profile-block profile-mutex profile-trace compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate pdf-reader-smoke clean
 
 cov : all
 	go test $(GO_PACKAGES) -coverprofile=coverage && go tool cover -html=coverage -o=coverage.html
@@ -175,6 +175,9 @@ characterize-paper-engine :
 	mkdir -p artifacts/characterization
 	go run ./cmd/paper-characterize -builtin typed > artifacts/characterization/typed.json
 	go run ./cmd/paper-characterize -builtin html > artifacts/characterization/html.json
+
+verify-clean-checkout :
+	sh tools/verify-clean-checkout.sh
 
 PAPER_STUDIO_FILE ?= testdata/paper/studio-demo.paper
 PAPER_STUDIO_ADDR ?= 127.0.0.1:7331
