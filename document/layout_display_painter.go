@@ -88,12 +88,14 @@ type preparedDisplayCommand struct {
 }
 
 type preparedDisplaySemantic struct {
-	id     layoutengine.SemanticNodeID
-	role   string
-	alt    string
-	actual string
-	lang   string
-	header bool
+	id               layoutengine.SemanticNodeID
+	role             string
+	alt              string
+	actual           string
+	lang             string
+	header           bool
+	scope            string
+	rowSpan, colSpan uint32
 }
 
 type preparedDisplayImageCrop struct {
@@ -168,6 +170,35 @@ func typedPDFSemanticRole(node layoutengine.SemanticNode) string {
 	}
 }
 
+// ensureTaggedListBody adds the PDF/UA list-item children that are implicit in
+// the renderer-neutral semantic tree. The planned text remains owned by the
+// existing list item content, but the tagged PDF gets the required Lbl/LBody
+// siblings without changing layout geometry or plan identity.
+func (f *Document) ensureTaggedListBody(item *taggedElement) *taggedElement {
+	if item == nil || item.Role != taggedRoleLI {
+		return item
+	}
+	var body *taggedElement
+	for _, child := range item.Children {
+		if child == nil {
+			continue
+		}
+		switch child.Role {
+		case taggedRoleLbl:
+		case taggedRoleLBody:
+			body = child
+		}
+	}
+	if body != nil {
+		return body
+	}
+	label := &taggedElement{Role: taggedRoleLbl, MCID: -1, Parent: item}
+	body = &taggedElement{Role: taggedRoleLBody, MCID: -1, Parent: item}
+	item.Children = append(item.Children, label, body)
+	f.tagged.elems = append(f.tagged.elems, label, body)
+	return body
+}
+
 func (f *Document) beginPreparedSemantic(path []preparedDisplaySemantic, elements map[layoutengine.SemanticNodeID]*taggedElement) func() {
 	if !f.tagged.enabled || len(path) == 0 {
 		return func() {}
@@ -186,8 +217,10 @@ func (f *Document) beginPreparedSemantic(path []preparedDisplaySemantic, element
 		if elem == nil {
 			elem = &taggedElement{Role: semantic.role, MCID: -1, Alt: semantic.alt,
 				ActualText: semantic.actual, Lang: semantic.lang}
-			if semantic.header {
-				elem.Table = normalizeTaggedTableAttributes(semantic.role, taggedTableAttributes{})
+			if semantic.header || semantic.scope != "" || semantic.rowSpan > 1 || semantic.colSpan > 1 {
+				elem.Table = normalizeTaggedTableAttributes(semantic.role, taggedTableAttributes{
+					Scope: semantic.scope, RowSpan: semantic.rowSpan, ColSpan: semantic.colSpan,
+				})
 			}
 			if parent != nil {
 				elem.Parent = parent
@@ -197,6 +230,10 @@ func (f *Document) beginPreparedSemantic(path []preparedDisplaySemantic, element
 			if semantic.id.Valid() {
 				elements[semantic.id] = elem
 			}
+		}
+		if semantic.role == taggedRoleLI {
+			parent = f.ensureTaggedListBody(elem)
+			continue
 		}
 		parent = elem
 	}
@@ -396,7 +433,9 @@ func (f *Document) preflightDisplayLayoutPlanPDFResourcesContextForTarget(ctx co
 				if role != "" {
 					reversed = append(reversed, preparedDisplaySemantic{id: node.ID, role: role,
 						alt: node.Attributes.AlternateText, actual: node.Attributes.ActualText,
-						lang: node.Attributes.Language, header: node.Attributes.TableHeader})
+						lang: node.Attributes.Language, header: node.Attributes.TableHeader,
+						scope: node.Attributes.TableScope, rowSpan: node.Attributes.TableRowSpan,
+						colSpan: node.Attributes.TableColumnSpan})
 				}
 			}
 			id = node.Parent

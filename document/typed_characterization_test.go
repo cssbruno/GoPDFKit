@@ -250,7 +250,7 @@ func TestTypedCharacterizationCorpusIsCompleteBoundedAndDeterministic(t *testing
 		t.Fatalf("runner is nondeterministic:\n%s\n%s", a, b)
 	}
 	digest := sha256.Sum256(a)
-	if got := hex.EncodeToString(digest[:]); got != "a3e55f9b9f7bbd1448feaa0ebaf318f6cac05a179cb7fac47b2a914843bc8cd6" {
+	if got := hex.EncodeToString(digest[:]); got != "3e7f9a13eef36e3daf2bde53c80a9fc410532e429f229616eccf9f3780ad8c3d" {
 		t.Fatalf("typed characterization golden drift: got %s", got)
 	}
 	if len(first.Fixtures) != len(inventory.Fixtures) {

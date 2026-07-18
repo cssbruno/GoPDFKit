@@ -33,6 +33,10 @@ func appendPDFInt(dst []byte, value int) []byte {
 	return strconv.AppendInt(dst, int64(value), 10)
 }
 
+func appendPDFUint(dst []byte, value uint32) []byte {
+	return strconv.AppendUint(dst, uint64(value), 10)
+}
+
 func appendPDFObjectRef(dst []byte, objectID int) []byte {
 	dst = appendPDFInt(dst, objectID)
 	dst = append(dst, " 0 R"...)

@@ -72,6 +72,9 @@ type SemanticAttributes struct {
 	HeadingLevel    uint8         `json:"heading_level,omitempty"`
 	LinkDestination DestinationID `json:"link_destination,omitempty"`
 	TableHeader     bool          `json:"table_header,omitempty"`
+	TableScope      string        `json:"table_scope,omitempty"`
+	TableRowSpan    uint32        `json:"table_row_span,omitempty"`
+	TableColumnSpan uint32        `json:"table_column_span,omitempty"`
 }
 
 type ReadingOccurrence struct {
@@ -361,6 +364,21 @@ func validateSemanticAttributes(node SemanticNode, destinationCount int) error {
 	}
 	if attributes.TableHeader && node.Role != SemanticRoleCell {
 		return errors.New("table header is only valid on a cell node")
+	}
+	if attributes.TableScope != "" {
+		if node.Role != SemanticRoleCell || !attributes.TableHeader {
+			return errors.New("table scope is only valid on a header cell node")
+		}
+		switch attributes.TableScope {
+		case "Row", "Column", "Both":
+		default:
+			return errors.New("table scope must be Row, Column, or Both")
+		}
+	}
+	if attributes.TableRowSpan != 0 || attributes.TableColumnSpan != 0 {
+		if node.Role != SemanticRoleCell {
+			return errors.New("table spans are only valid on cell nodes")
+		}
 	}
 	return nil
 }

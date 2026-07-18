@@ -62,8 +62,8 @@ type taggedElement struct {
 
 type taggedTableAttributes struct {
 	Scope   string
-	RowSpan int
-	ColSpan int
+	RowSpan uint32
+	ColSpan uint32
 }
 
 type taggedMarkedContent struct {
@@ -462,11 +462,11 @@ func (f *Document) taggedTableAttributeString(elem *taggedElement) string {
 	}
 	if elem.Table.RowSpan > 1 {
 		out = append(out, " /RowSpan "...)
-		out = appendPDFInt(out, elem.Table.RowSpan)
+		out = appendPDFUint(out, elem.Table.RowSpan)
 	}
 	if elem.Table.ColSpan > 1 {
 		out = append(out, " /ColSpan "...)
-		out = appendPDFInt(out, elem.Table.ColSpan)
+		out = appendPDFUint(out, elem.Table.ColSpan)
 	}
 	out = append(out, " >>"...)
 	return string(out)
@@ -477,10 +477,10 @@ func normalizeTaggedTableAttributes(role string, attrs taggedTableAttributes) ta
 	if role != taggedRoleTH && role != taggedRoleTD {
 		return taggedTableAttributes{}
 	}
-	if attrs.RowSpan < 1 {
+	if attrs.RowSpan == 0 {
 		attrs.RowSpan = 1
 	}
-	if attrs.ColSpan < 1 {
+	if attrs.ColSpan == 0 {
 		attrs.ColSpan = 1
 	}
 	scope := normalizeTaggedRole(attrs.Scope)

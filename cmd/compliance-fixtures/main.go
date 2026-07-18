@@ -292,7 +292,7 @@ func complianceSigner() (*x509.Certificate, crypto.Signer, error) {
 }
 
 func complianceTaggedHTMLFragment() string {
-	return `<ul><li>Tagged list label and body</li><li>Second semantic item</li></ul><table><caption>Tagged table caption</caption><tr><th>Name</th><th>Status</th><th>Detail</th></tr><tr><th rowspan="2">Structure tree</th><td colspan="2"><p>Generated</p><div>Mixed block content</div><ul><li>Generated<ul><li>Nested table-cell list</li></ul></li></ul><table><tr><td>Nested table cell</td></tr></table></td></tr><tr><td>Parent tree</td><td>OK</td></tr></table>`
+	return `<ul><li>Tagged list label and body</li><li>Second semantic item</li></ul><table><caption>Tagged table caption</caption><tr><th>Name</th><th>Status</th><th>Detail</th></tr><tr><th scope="row" rowspan="2">Structure tree</th><td colspan="2"><p>Generated</p><div>Mixed block content</div><ul><li>Generated<ul><li>Nested table-cell list</li></ul></li></ul><table><tr><td>Nested table cell</td></tr></table></td></tr><tr><td>Parent tree</td><td>OK</td></tr></table>`
 }
 
 func baseDocument(fontPath, boldFontPath string) *document.Document {

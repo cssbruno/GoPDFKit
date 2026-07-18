@@ -189,6 +189,8 @@ func TestPDFUA2HTMLListsAndTablesUseStructureRoles(t *testing.T) {
 	for _, want := range []string{
 		"/S /L",
 		"/S /LI",
+		"/S /Lbl",
+		"/S /LBody",
 		"/S /Table",
 		"/S /Caption",
 		"/S /TR",
@@ -223,7 +225,8 @@ func TestPDFUA2HTMLTableCellsUseStructureAttributes(t *testing.T) {
 	}
 	text := output.String()
 	for _, want := range []string{
-		"/A << /O /Table /Scope /Column >>",
+		"/A << /O /Table /Scope /Column /RowSpan 2 >>",
+		"/A << /O /Table /ColSpan 2 >>",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("generated tagged HTML table PDF does not contain %q", want)

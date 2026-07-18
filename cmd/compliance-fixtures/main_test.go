@@ -119,7 +119,7 @@ func TestUnsignedComplianceFixturesHaveDeterministicCharacterization(t *testing.
 		"pdfa4-metadata.pdf":                       "59c329d6721f10a361b39444c9521feb6d706d51855bf58eeec4d55fd915d65a",
 		"pdfa4e-attachment-metadata.pdf":           "b22383412126d7770ea9733bab35d59600f3b9402a42febddcd55f898c0ca4b4",
 		"pdfa4f-attachment-metadata.pdf":           "4d565daaf4955fcdbccaef27ea70e8e0d8deadb54f409200691eb78d0b32b41f",
-		"pdfua2-arlington-metadata-foundation.pdf": "fea59ddc468abbfc027600f3cc44cc5c6e53b9ce12a3964083010d8060d8e60c",
+		"pdfua2-arlington-metadata-foundation.pdf": "9c63f12d5f68e63128223bc5e435a88fa20a4edadcafbd7dd184ac17f3fc04eb",
 	}
 	for _, fixture := range report.Fixtures {
 		byName[fixture.Name] = fixture

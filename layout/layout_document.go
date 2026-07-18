@@ -479,6 +479,7 @@ type TableRow struct {
 type TableCell struct {
 	Blocks        []Block    // Cell content blocks.
 	Header        bool       // Whether this cell carries header semantics.
+	Scope         string     // Optional header scope: row, column, or both.
 	ColSpan       int        // Number of columns spanned by the cell.
 	RowSpan       int        // Number of rows spanned by the cell.
 	Align         string     // Horizontal cell alignment.

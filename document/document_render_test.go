@@ -97,7 +97,7 @@ func TestWriteDocumentEmitsTaggedRoles(t *testing.T) {
 		"/S /TR",
 		"/S /TH",
 		"/S /TD",
-		"/A << /O /Table /Scope /Column >>",
+		"/A << /O /Table /Scope /Column /ColSpan 2 >>",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("tagged document output missing %q", want)

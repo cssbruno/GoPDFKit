@@ -25,6 +25,7 @@ type typedTableCellMeasurement struct {
 	rowSpan    uint32
 	columnSpan uint32
 	header     bool
+	scope      string
 	caption    bool
 	vertical   string
 	actualText string
@@ -558,6 +559,23 @@ func (f *Document) measureTypedTableCell(ctx context.Context, doc *layout.Layout
 		row: placement.row, column: placement.column, rowSpan: placement.rowSpan, columnSpan: placement.columnSpan,
 		header: placement.header, vertical: vertical,
 	}
+	scope := strings.TrimSpace(cell.Scope)
+	if scope != "" {
+		if !placement.header {
+			return typedTableCellMeasurement{}, typedTableUnsupported(placement.path+".scope", "scope is only valid on header cells")
+		}
+		switch strings.ToLower(scope) {
+		case "row":
+			scope = "Row"
+		case "column":
+			scope = "Column"
+		case "both":
+			scope = "Both"
+		default:
+			return typedTableCellMeasurement{}, typedTableUnsupported(placement.path+".scope", "scope must be row, column, or both")
+		}
+	}
+	result.scope = scope
 	padding := []float64{cell.Box.Padding.Top, cell.Box.Padding.Right, cell.Box.Padding.Bottom, cell.Box.Padding.Left}
 	for index, value := range padding {
 		if !finiteNumbers(value) || value < 0 {
@@ -2161,10 +2179,17 @@ func attachTypedTableSemantics(plan layoutengine.LayoutPlan, measurements []type
 			appendContentSemantics(id, cell)
 			continue
 		}
+		attributes := layoutengine.SemanticAttributes{TableHeader: cell.header, TableScope: cell.scope}
+		if cell.rowSpan > 1 {
+			attributes.TableRowSpan = cell.rowSpan
+		}
+		if cell.columnSpan > 1 {
+			attributes.TableColumnSpan = cell.columnSpan
+		}
 		nodes = append(nodes, layoutengine.SemanticNode{
 			ID: id, Parent: rowSemantics[cell.row], Role: layoutengine.SemanticRoleCell,
 			Key: semanticKey, Instance: layoutengine.InstanceID(semanticKey),
-			Attributes: layoutengine.SemanticAttributes{TableHeader: cell.header},
+			Attributes: attributes,
 		})
 		artifactID := layoutengine.SemanticNodeID(len(nodes) + 1)
 		nodes = append(nodes, layoutengine.SemanticNode{ID: artifactID, Parent: id, Role: layoutengine.SemanticRoleArtifact, Key: cell.key, Instance: cell.instance})

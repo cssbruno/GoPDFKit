@@ -47,7 +47,7 @@ func TestCharacterizationRasterPagesArePinnedBoundedAndFailureAtomic(t *testing.
 	}
 	// Includes the documented local-canvas characterization fixture so the
 	// public typed inventory and its visual evidence stay in lockstep.
-	if got := characterizationRasterPinsHash(t, typedPins); got != "46bf5c1738130047fb9f52b8a195e22cb3067b0f878295a22fcd5268a1d9d60c" {
+	if got := characterizationRasterPinsHash(t, typedPins); got != "6a88abd716d64899669013b2c1d08725b6c0e3e2c533c8a01a7028bd1763e366" {
 		t.Fatalf("typed raster baseline drift: got %s", got)
 	}
 

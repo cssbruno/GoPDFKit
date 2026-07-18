@@ -656,8 +656,24 @@ func htmlPlanTableRows(ctx context.Context, compiled *CompiledHTML, start, end i
 				continue
 			}
 			for name := range cellToken.Attr {
-				if name != "colspan" && name != "rowspan" && name != "style" && name != "width" && name != "align" && name != "valign" {
+				if name != "colspan" && name != "rowspan" && name != "scope" && name != "style" && name != "width" && name != "align" && name != "valign" {
 					return nil, nil, htmlPlanUnsupported(cellToken.Str, cellIndex, "cells allow only colspan, rowspan, width, and resolved style")
+				}
+			}
+			scope := strings.TrimSpace(cellToken.Attr["scope"])
+			if scope != "" {
+				if cellToken.Str != "th" {
+					return nil, nil, htmlPlanUnsupported(cellToken.Str, cellIndex, "scope is only valid on header cells")
+				}
+				switch strings.ToLower(scope) {
+				case "row":
+					scope = "row"
+				case "column":
+					scope = "column"
+				case "both":
+					scope = "both"
+				default:
+					return nil, nil, htmlPlanUnsupported(cellToken.Str, cellIndex, "scope must be row, column, or both")
 				}
 			}
 			colspanRaw, colspanSet := cellToken.Attr["colspan"]
@@ -688,7 +704,7 @@ func htmlPlanTableRows(ctx context.Context, compiled *CompiledHTML, start, end i
 			if len(blocks) == 0 {
 				return nil, nil, htmlPlanUnsupported(cellToken.Str, cellIndex, "empty cells are unsupported")
 			}
-			cell := layout.TableCell{Header: cellToken.Str == "th", ColSpan: colspan, RowSpan: rowspan, Blocks: blocks, Style: style}
+			cell := layout.TableCell{Header: cellToken.Str == "th", Scope: scope, ColSpan: colspan, RowSpan: rowspan, Blocks: blocks, Style: style}
 			cell.Box.KeepTogether = compiled.unifiedResolved[cellIndex].box.KeepTogether
 			switch strings.ToLower(strings.TrimSpace(cellToken.Attr["align"])) {
 			case "", "left":
