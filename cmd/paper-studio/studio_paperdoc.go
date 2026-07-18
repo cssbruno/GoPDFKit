@@ -43,7 +43,7 @@ func readStudioPaperDocumentSource(file string) (string, [32]byte, error) {
 }
 
 func readStudioPaperDocument(file string) (paperdoc.Document, [32]byte, error) {
-	input, err := os.Open(file) // #nosec G304 -- file is the explicit Studio document selected by the caller.
+	input, err := os.Open(file) // #nosec G304,G703 -- file is the explicit Studio document selected by the caller.
 	if err != nil {
 		return paperdoc.Document{}, [32]byte{}, err
 	}

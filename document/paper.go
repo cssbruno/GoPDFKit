@@ -2641,10 +2641,16 @@ func paperRevisionScopedFallbackIdentity(revision string, fallback paperSourceId
 	if err != nil {
 		return fallback
 	}
+	if ordinal < 0 {
+		ordinal = 0
+	}
+	if uint64(ordinal) > uint64(^uint32(0)) {
+		return fallback
+	}
 	fingerprintInput := fmt.Sprintf("%s\x00%d\x00%d\x00%d\x00%d\x00%d\x00%d", kind, bodyIndex, segmentIndex, nestedIndex, span.Start.Offset, span.End.Offset, ordinal)
 	fingerprint := sha256.Sum256([]byte(fingerprintInput))
 	key, err := layoutengine.DeriveAnonymousStructuralKey(layoutengine.AnonymousStructuralKeyInput{
-		Revision: sourceRevision, Kind: "paper-block", Ordinal: uint32(max(ordinal, 0)), Fingerprint: hex.EncodeToString(fingerprint[:]),
+		Revision: sourceRevision, Kind: "paper-block", Ordinal: uint32(ordinal), Fingerprint: hex.EncodeToString(fingerprint[:]),
 	})
 	if err != nil {
 		return fallback

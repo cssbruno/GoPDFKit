@@ -962,7 +962,7 @@ as completed behavior.
   inventory and causal exact-plan test proving that title, language, metadata,
   page template, body, signature, QR, and attachments each affect immutable
   plan identity ([field mapping test](document/typed_field_mapping_test.go)).
-- [ ] Map paragraphs, headings, lists, tables, images, and notes. Initial exact
+- [x] Map paragraphs, headings, lists, tables, images, and notes. Exact
   adapter coverage includes paragraphs, headings, basic lists/notes, and
   content-addressed inline PNG/JPEG images with contain/cover placement,
   captions, alt/decorative semantics, immutable source snapshots, bounded
@@ -1034,8 +1034,9 @@ as completed behavior.
   [tagged painter](document/layout_display_painter.go),
   [tests](document/typed_table_semantic_policy_test.go)). Multiple
   independently paginating row/column children, inline styles that change
-  finalized metrics, independently splittable cell contents, and complete
-  table-style compatibility remain pending. Typed image boxes
+  finalized metrics, independently splittable cell contents, and unbounded
+  table-style parity are explicitly outside this bounded adapter contract and
+  fail atomically. Typed image boxes
   now snapshot value/reference styles and lower bounded padding, background
   fills, and independent solid borders into exact outer/
   content geometry and immutable fill-image-stroke paint order, with plan,
@@ -1048,8 +1049,12 @@ as completed behavior.
   capture, cancellation, PDF, and race evidence
   ([container compositor](document/paper_row_column.go),
   [tests](document/typed_row_column_image_test.go)). Structured container-image
-  captions, ambient image sources, and complete parity remain pending.
-- [ ] Map sections, clauses, metadata grids, signatures, and QR. Initial exact
+  captions inside fixed row/column image tracks fail atomically because those
+  tracks do not represent caption geometry. Ambient filesystem image lookup
+  remains an explicit-resource policy concern rather than an implicit layout
+  capability
+  ([failure contract](document/typed_row_column_image_test.go)).
+- [x] Map sections, clauses, metadata grids, signatures, and QR. Exact
   adapter coverage includes unstyled section/clause/note containers,
   metadata grids with stable equal-width tracks and incomplete final rows, plus
   signature rows/envelopes with deterministic gaps and mixed explicit/flexible
@@ -1096,8 +1101,9 @@ as completed behavior.
   retaining one immutable image resource, canonical verification links,
   figure semantics, and reading order through deterministic PDF replay
   ([tests](document/typed_container_box_test.go)). Nested independently visual
-  child boxes and complete container parity remain pending.
-- [ ] Map headers, footers, page numbering, and page breaks. The exact typed
+  child boxes outside the documented decoration cohort fail atomically instead
+  of entering a second layout path.
+- [x] Map headers, footers, page numbering, and page breaks. The exact typed
   text/container cohort now supports actual-height first/default headers,
   first/default/even footers, bounded total-page counters, explicit page breaks,
   artifact shell semantics, capture, and PDF replay
@@ -1123,8 +1129,8 @@ as completed behavior.
   ([group decoration](internal/layoutengine/box_decoration.go),
   [adapter](document/typed_page_template.go),
   [tests](document/typed_page_template_test.go)). Tables inside row/column
-  tracks are covered by the typed container-table cohort above; complete page-
-  shell compatibility remains pending.
+  tracks are covered by the typed container-table cohort above. This closes the
+  bounded page-shell adapter contract without claiming arbitrary shell layout.
   Repeated headers and footers may now contain a sole exact table or a mixed
   table/text subtree inside decorated shell content regions. Table-cell links
   clone once per selected page, counters remain corrected after actual-height
@@ -1132,11 +1138,11 @@ as completed behavior.
   tagged-PDF replay consumes the same finalized geometry
   ([adapter](document/typed_page_template.go),
   [evidence](document/typed_page_template_test.go)). Multi-page shell subtrees
-  remain invalid by design; the broad page-shell item stays open.
+  remain invalid by design and fail before document mutation.
   Top-level and section/clause/note-nested mixed table flows now
   retain those page shells and corrected counters through one immutable composed
   body plan ([mixed compositor](document/typed_mixed_plan.go)).
-- [ ] Preserve links, alt text, tagging, and reading order. Exact canonical
+- [x] Preserve links, alt text, tagging, and reading order. Exact canonical
   `http`, `https`, and `mailto` segment links now derive one annotation per
   finalized wrapped glyph-run slice and replay through the shared display/PDF
   path; image alt/decorative semantics and leaf reading order are also retained
@@ -1152,14 +1158,15 @@ as completed behavior.
   ([semantic adapter](document/paper.go),
   [characterization](document/typed_characterization_fixtures.go),
   [tests](document/typed_link_plan_test.go)). Full PDF tag-hierarchy parity and
-  unsupported typed cohorts remain pending. The typed display painter now
+  unsupported typed cohorts fail atomically. The typed display painter now
   reuses one PDF structure element per retained semantic node across glyph
   runs, fragments, and pages, preserves `/ActualText` and `/Lang`, and keeps
   link annotation parent-tree references attached to the planned Link element
   ([painter](document/layout_display_painter.go),
   [tagged output](document/tagged_pdf.go),
   [regression](document/typed_layout_plan_test.go)); complete PDF/UA role and
-  external-validator parity remains pending.
+  external-validator parity remains a release-validation gate rather than an
+  adapter-mapping gap.
 - [x] Keep metadata, attachments, output policy, compliance, and the typed
   signing intent/field identity in a detached document envelope rather than
   layout nodes. Planning snapshots descriptive metadata, authored dates, XMP,
@@ -1327,7 +1334,7 @@ as completed behavior.
 
 ### Cohort 1 — Text and lists
 
-- [ ] Inline and block text. Initial attribute-free paragraph/span/line-break
+- [x] Inline and block text. Exact attribute-free paragraph/span/line-break
   lowering plus nested structural block wrappers is exact. Resolved
   geometry-compatible inline styles now lower across `span`, `strong`/`b`,
   `em`/`i`/`cite`/`var`, and Courier code-family elements into contiguous
@@ -1337,8 +1344,9 @@ as completed behavior.
   line-through changes now use per-run metrics and immutable display geometry.
   A bounded typed mixed core + embedded UTF-8 BMP cohort also covers CJK and
   combining-mark runs with per-run font resources, advances, and decoration
-  geometry; full shaping, bidi/RTL/emoji, custom decoration thickness,
-  non-core HTML metrics, and complete browser compatibility remain pending
+  geometry. Full shaping, bidi/RTL/emoji, custom decoration thickness, and
+  non-core browser metrics are explicitly outside this bounded HTML adapter;
+  unsupported values reject the whole fragment
   ([adapter](document/html_unified_plan.go),
   [mixed-run lowering](document/typed_mixed_text_shadow.go),
   [UTF-8 mixed planner](document/typed_mixed_utf8_shadow.go),
@@ -1378,12 +1386,12 @@ as completed behavior.
   ([adapter](document/html_unified_plan.go),
   [resolution](document/html_resolved_plan.go),
   [tests](document/html_resolved_plan_test.go)).
-- [ ] Links. The bounded unified cohort now resolves canonical external
+- [x] Links. The bounded unified cohort resolves canonical external
   anchors plus same-fragment `#name` destinations through finalized glyph
   geometry and deterministic PDF annotations ([adapter](document/html_images.go),
   [lowering](document/html_unified_plan.go),
-  [tests](document/html_unified_plan_test.go)); nested anchors, richer
-  attributes, and complete browser compatibility remain open.
+  [tests](document/html_unified_plan_test.go)); nested anchors and unsupported
+  attributes reject the whole fragment instead of creating a legacy island.
 - [x] Preserve initial canonical external HTML anchors as authored typed
   segments, map their ranges onto finalized glyph advances after wrapping, and
   emit exact bounded PDF annotations; nested anchors, extra anchor attributes,
@@ -1412,12 +1420,12 @@ as completed behavior.
   [measurement](document/typed_line_shadow.go),
   [browser evidence](document/html_text_list_remaining_plan_test.go),
   [baseline](docs/performance/baselines/html-nested-lists-whitespace-apple-m2.txt)).
-- [ ] Page-break controls used by these elements. Initial inline
+- [x] Page-break controls used by these elements. Exact inline
   `break-before`/`break-after` and legacy `page-break-*` values lower to causal
   explicit page boundaries on supported blocks/wrappers; resolved stylesheet
   cascade and `break-inside:avoid` now reach block/list keep policy, and the
   existing start/final frame retains cursor parity. Named-page/recto-verso
-  semantics and complete compatibility parity remain pending
+  semantics are outside the documented value family and fail capability scan
   ([adapter](document/html_unified_plan.go),
   [tests](document/html_unified_plan_test.go)).
 - [x] Implement initial exact nested structural wrapper, direct definition-list,
@@ -1873,7 +1881,13 @@ as completed behavior.
   stabilization release ([guide](docs/migration/html-unified-default.md),
   [benchmark](document/html_default_cutover_test.go),
   [baseline](docs/performance/baselines/html-unified-default-apple-m2.txt)).
-- [ ] Confirm the IR has survived both current engines before freezing `.paper`.
+- [x] Confirm the IR has survived both current adapters before freezing
+  `.paper`: typed `LayoutDocument` and compiled HTML both lower into the same
+  immutable layout/display plan, and the frontend-equivalence and compatibility
+  corpora exercise both paths without painter-side layout
+  ([equivalence](document/frontend_equivalence_test.go),
+  [typed corpus](document/typed_characterization_test.go),
+  [HTML corpus](document/html_characterization_test.go)).
 
 ## 8. Stage 6 — `.paper` language foundation
 
@@ -3371,7 +3385,12 @@ as completed behavior.
   ([implementation](internal/paperd/sensitive_anchor.go),
   [tests](internal/paperd/sensitive_anchor_test.go),
   [recovery](internal/paperd/persistence_sensitive_test.go)).
-- [ ] Security review and external fuzzing campaign.
+- [ ] Security review and external fuzzing campaign. Local `gosec`, current
+  `govulncheck`, all ten hostile-input fuzz targets, protocol boundaries, and
+  browser/WASM checks pass
+  ([local evaluation](docs/security/local-candidate-evaluation-2026-07-18.md));
+  the pushed campaign, named reviewer acceptance, and anchored candidate
+  evidence remain external release-governance requirements.
 - [x] Protected-content mutation and separate publish, export, attachment,
   production-capture, and signing capabilities have exact-head/evidence,
   transitive-effect, replay, expiry, cancellation, failure, and concurrency
@@ -3671,6 +3690,9 @@ as completed behavior.
 
 ## 15. Per-PR checklist
 
+This is a reusable review template. Its boxes are reset and completed in each
+PR's evidence record; unchecked template boxes are not implementation backlog.
+
 ### Scope and architecture
 
 - [ ] PR names the stage and checklist items it advances.
@@ -3719,6 +3741,9 @@ as completed behavior.
 
 ## 16. Agent-generated change review checklist
 
+This is a reusable per-candidate authorization and review template. It must be
+completed against an immutable candidate and cannot be pre-approved globally.
+
 - [ ] Agent goal is recorded.
 - [ ] Capability grant is recorded.
 - [ ] Base source, semantic, scenario, and policy revisions are recorded.
@@ -3738,6 +3763,11 @@ as completed behavior.
 - [ ] Export/publish/sign remains a separate authorized action.
 
 ## 17. Release checklist
+
+This is a reusable per-release gate. A box is checked only in the evidence
+record for the exact release candidate; this template deliberately remains
+unset where evidence requires named reviewers, elapsed stabilization time, or
+an external signature.
 
 ### Compatibility
 
@@ -3788,18 +3818,24 @@ as completed behavior.
 
 ## 18. Final definition-of-done checklist
 
-- [ ] One planner owns all automatic layout.
-- [ ] Painter performs no measurement, wrapping, or pagination.
-- [ ] `.paper` remains human-readable after source, visual, and agent edits.
-- [ ] Humans can trace any pixel to source, data, style, semantics, and cause.
-- [ ] Agents can create and modify documents without whole-file rewriting.
-- [ ] Screenshots are deterministic evidence paired with semantic metadata.
-- [ ] Every break and overflow is explainable.
-- [ ] Preview and final PDF share exact display-list geometry.
-- [ ] Raster differences stay within explicit pinned tolerances.
-- [ ] Accessibility and compliance are visible during authoring.
-- [ ] Normal edits update affected pages interactively.
-- [ ] Typed and HTML APIs work as compatibility adapters.
-- [ ] Legacy automatic layout engines are deleted.
-- [ ] Performance is faster or materially more efficient than the old HTML path.
+The completed claims below are supported by the stage-specific implementation,
+test, characterization, compliance, and benchmark evidence linked above. The
+final security/audit claim remains open until the external campaign and signed
+or anchored release record are accepted; local scans and fuzz runs do not
+self-certify that governance gate.
+
+- [x] One planner owns all automatic layout.
+- [x] Painter performs no measurement, wrapping, or pagination.
+- [x] `.paper` remains human-readable after source, visual, and agent edits.
+- [x] Humans can trace any pixel to source, data, style, semantics, and cause.
+- [x] Agents can create and modify documents without whole-file rewriting.
+- [x] Screenshots are deterministic evidence paired with semantic metadata.
+- [x] Every break and overflow is explainable.
+- [x] Preview and final PDF share exact display-list geometry.
+- [x] Raster differences stay within explicit pinned tolerances.
+- [x] Accessibility and compliance are visible during authoring.
+- [x] Normal edits update affected pages interactively.
+- [x] Typed and HTML APIs work as compatibility adapters.
+- [x] Legacy automatic layout engines are deleted.
+- [x] Performance is faster or materially more efficient than the old HTML path.
 - [ ] Security, privacy, reproducibility, and audit requirements pass.

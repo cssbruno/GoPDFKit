@@ -140,7 +140,7 @@ func (s *studioServer) handleComponentPreview(w http.ResponseWriter, r *http.Req
 	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 	w.Header().Set("ETag", `"`+planHash+`-component-v`+studioComponentPreviewFormat+`"`)
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(preview)
+	_, _ = w.Write(preview) // #nosec G705 -- preview is emitted only by the bounded display-list SVG serializer, which XML-escapes authored text and attributes.
 }
 
 func (s *studioServer) componentPreview(ctx context.Context, snapshot *studioSnapshot, component string) ([]byte, string, error) {

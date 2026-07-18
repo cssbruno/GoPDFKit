@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/cssbruno/gopdfkit/internal/paperlang"
 )
 
 func TestPaperPlanExplainCarriesBindingAndTokenProvenance(t *testing.T) {
@@ -174,6 +176,22 @@ func TestAnonymousPaperSourceIdentityIsDeterministicAndRevisionScoped(t *testing
 	trace, err := first.TraceFragment(uint32(firstFragments[0].ID))
 	if err != nil || !bytes.Contains(trace.JSON(), []byte(`"key":"anon/`)) || !bytes.Contains(trace.JSON(), []byte(`"file":"anonymous.paper"`)) {
 		t.Fatalf("anonymous trace = %s, %v", trace.JSON(), err)
+	}
+}
+
+func TestAnonymousPaperSourceIdentityBoundsOrdinalBeforeConversion(t *testing.T) {
+	revision := strings.Repeat("1", 64)
+	fallback := paperSourceIdentity{key: "fallback"}
+	negative := paperRevisionScopedFallbackIdentity(revision, fallback, 0, 0, 0, -1, paperlang.NodeParagraph, paperlang.Span{})
+	zero := paperRevisionScopedFallbackIdentity(revision, fallback, 0, 0, 0, 0, paperlang.NodeParagraph, paperlang.Span{})
+	if negative.key == fallback.key || negative.key != zero.key {
+		t.Fatalf("negative ordinal identity = %q, zero = %q", negative.key, zero.key)
+	}
+	if ^uint(0) > uint(^uint32(0)) {
+		overflow := paperRevisionScopedFallbackIdentity(revision, fallback, 0, 0, 0, int(uint64(^uint32(0))+1), paperlang.NodeParagraph, paperlang.Span{})
+		if overflow != fallback {
+			t.Fatalf("overflow ordinal identity = %#v, want fallback %#v", overflow, fallback)
+		}
 	}
 }
 
