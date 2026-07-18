@@ -343,7 +343,11 @@ var listProperties = func() map[string]bool {
 	}
 	return properties
 }()
-var rowColumnProperties = map[string]bool{"gap": true, "cross-align": true, "when": true}
+var rowColumnProperties = map[string]bool{
+	"gap": true, "cross-gap": true, "cross-size": true,
+	"wrap": true, "main-align": true, "cross-align": true, "align-content": true, "reverse-main": true,
+	"when": true,
+}
 var canvasProperties = map[string]bool{"width": true, "height": true, "default-horizontal": true, "default-vertical": true}
 var canvasAnchorProperties = func() map[string]bool {
 	properties := map[string]bool{"width": true, "height": true, "alt": true,
@@ -377,7 +381,30 @@ var tableCellProperties = func() map[string]bool {
 }()
 var rowColumnChildProperties = func() map[string]bool {
 	properties := copyPropertySet(boxedTextProperties)
-	for _, name := range []string{"level", "track", "track-size", "track-min", "track-max", "track-weight", "cross-align"} {
+	for _, name := range []string{
+		"level", "track", "track-size", "track-min", "track-max", "track-weight", "track-grow", "track-shrink",
+		"cross-size", "cross-min", "cross-max", "cross-align",
+	} {
+		properties[name] = true
+	}
+	return properties
+}()
+var rowColumnImageProperties = func() map[string]bool {
+	properties := copyPropertySet(imageProperties)
+	for _, name := range []string{
+		"track", "track-size", "track-min", "track-max", "track-weight", "track-grow", "track-shrink",
+		"cross-size", "cross-min", "cross-max", "cross-align",
+	} {
+		properties[name] = true
+	}
+	return properties
+}()
+var rowColumnTableProperties = func() map[string]bool {
+	properties := copyPropertySet(tableProperties)
+	for _, name := range []string{
+		"track", "track-size", "track-min", "track-max", "track-weight", "track-grow", "track-shrink",
+		"cross-size", "cross-min", "cross-max", "cross-align",
+	} {
 		properties[name] = true
 	}
 	return properties
@@ -712,6 +739,13 @@ func parseCanvasOffset(source string) (float64, bool) {
 
 func (c *compiler) compileTable(node *paperlang.Node) {
 	properties, children := c.members(node, tableProperties)
+	table := c.compileTableBlock(node, properties, children)
+	index := len(c.result.Document.Body)
+	c.result.Document.Body = append(c.result.Document.Body, table)
+	c.mapNode(node, index, -1)
+}
+
+func (c *compiler) compileTableBlock(node *paperlang.Node, properties map[string]paperlang.Property, children []*paperlang.Node) layout.TableBlock {
 	table := layout.TableBlock{}
 	if property, ok := properties["caption"]; ok {
 		if value, valid := c.stringProperty(property); valid {
@@ -842,9 +876,6 @@ func (c *compiler) compileTable(node *paperlang.Node) {
 					c.unsupportedNode(child, "table cell supports text, paragraph, list, and image content")
 				}
 			}
-			if len(cell.Blocks) == 0 {
-				c.add("PAPER_COMPILE_TABLE_CELL", "table cell has no supported content", "add text or paragraph content", cellNode.HeaderSpan)
-			}
 			row.Cells = append(row.Cells, cell)
 		}
 		rowCount++
@@ -886,15 +917,21 @@ func (c *compiler) compileTable(node *paperlang.Node) {
 	if rowCount == 0 || rowCount > 10000 || cellCount > 100000 {
 		c.add("PAPER_COMPILE_TABLE_LIMIT", "table rows or cells are empty or exceed bounded limits", "use 1..10000 rows and at most 100000 cells", node.HeaderSpan)
 	}
-	index := len(c.result.Document.Body)
-	c.result.Document.Body = append(c.result.Document.Body, table)
-	c.mapNode(node, index, -1)
+	return table
 }
 
 const maxPaperInlineImageBytes = 512 << 10
 
 func (c *compiler) compileImage(node *paperlang.Node) {
 	properties, children := c.members(node, imageProperties)
+	block := c.compileImageBlock(node, properties, children)
+	blockIndex := len(c.result.Document.Body)
+	c.result.Document.Body = append(c.result.Document.Body, block)
+	c.mapNode(node, blockIndex, -1)
+	c.recordImageResourceMapping(block)
+}
+
+func (c *compiler) compileImageBlock(node *paperlang.Node, properties map[string]paperlang.Property, children []*paperlang.Node) layout.ImageBlock {
 	for _, child := range children {
 		c.unsupportedNode(child, "image is a property-only figure node")
 	}
@@ -972,9 +1009,10 @@ func (c *compiler) compileImage(node *paperlang.Node) {
 			block.Caption = []layout.TextSegment{{Text: value}}
 		}
 	}
-	blockIndex := len(c.result.Document.Body)
-	c.result.Document.Body = append(c.result.Document.Body, block)
-	c.mapNode(node, blockIndex, -1)
+	return block
+}
+
+func (c *compiler) recordImageResourceMapping(block layout.ImageBlock) {
 	if len(block.Data) != 0 && len(c.result.Mapping.Nodes) != 0 {
 		digest := sha256.Sum256(block.Data)
 		mapped := &c.result.Mapping.Nodes[len(c.result.Mapping.Nodes)-1]
@@ -1074,6 +1112,38 @@ func (c *compiler) compileRowColumn(node *paperlang.Node) {
 			block.Gap = value
 		}
 	}
+	if property, ok := properties["cross-gap"]; ok {
+		if value, valid := c.lengthProperty(property, false); valid {
+			block.CrossGap = value
+		}
+	}
+	if property, ok := properties["cross-size"]; ok {
+		if value, valid := c.contextualLengthProperty(property, true, true); valid && !value.auto {
+			if value.percentSet {
+				c.add("PAPER_COMPILE_PERCENT_AXIS", "row/column cross-size needs a definite physical extent", "use a physical cross-size; child cross constraints accept percentages", property.Value.Span)
+			} else {
+				block.CrossSize = value.points
+			}
+		}
+	}
+	if property, ok := properties["wrap"]; ok {
+		if value, valid := c.stringProperty(property); valid {
+			if wrap, supported := canonicalRowColumnWrap(value); supported {
+				block.Wrap = wrap
+			} else {
+				c.add("PAPER_COMPILE_WRAP", fmt.Sprintf("wrap mode %q is unsupported", value), "use nowrap, wrap, or wrap-reverse", property.Value.Span)
+			}
+		}
+	}
+	if property, ok := properties["main-align"]; ok {
+		if value, valid := c.stringProperty(property); valid {
+			if align, supported := canonicalMainAlign(value); supported {
+				block.MainAlign = align
+			} else {
+				c.add("PAPER_COMPILE_MAIN_ALIGN", fmt.Sprintf("main alignment %q is unsupported", value), "use start, center, end, space-between, space-around, or space-evenly", property.Value.Span)
+			}
+		}
+	}
 	if property, ok := properties["cross-align"]; ok {
 		if value, valid := c.stringProperty(property); valid {
 			if align, supported := canonicalCrossAlign(value); supported {
@@ -1083,17 +1153,32 @@ func (c *compiler) compileRowColumn(node *paperlang.Node) {
 			}
 		}
 	}
+	if property, ok := properties["align-content"]; ok {
+		if value, valid := c.stringProperty(property); valid {
+			if align, supported := canonicalContentAlign(value); supported {
+				block.AlignContent = align
+			} else {
+				c.add("PAPER_COMPILE_ALIGN_CONTENT", fmt.Sprintf("line alignment %q is unsupported", value), "use start, center, end, stretch, space-between, space-around, or space-evenly", property.Value.Span)
+			}
+		}
+	}
+	if property, ok := properties["reverse-main"]; ok {
+		block.ReverseMain, _ = c.boolProperty(property)
+	}
 	bodyIndex := len(c.result.Document.Body)
 	c.mapNode(node, bodyIndex, -1)
 	for _, child := range children {
-		if child.Kind != paperlang.NodeParagraph && child.Kind != paperlang.NodeHeading {
-			c.unsupportedNode(child, "row and column initially support paragraph and heading children")
+		if child.Kind != paperlang.NodeParagraph && child.Kind != paperlang.NodeHeading && child.Kind != paperlang.NodeImage && child.Kind != paperlang.NodeTable {
+			c.unsupportedNode(child, "row and column support paragraph, heading, image, and table children")
 			continue
 		}
 		itemIndex := len(block.Items)
 		item, textNodes := c.compileRowColumnItem(child)
 		block.Items = append(block.Items, item)
 		c.mapNestedNode(child, bodyIndex, itemIndex, -1)
+		if _, ok := item.Block.(layout.ImageBlock); ok {
+			c.recordImageResourceMapping(item.Block.(layout.ImageBlock))
+		}
 		for textIndex, textNode := range textNodes {
 			c.mapNestedNode(textNode, bodyIndex, itemIndex, textIndex)
 		}
@@ -1106,22 +1191,36 @@ func (c *compiler) compileRowColumn(node *paperlang.Node) {
 }
 
 func (c *compiler) compileRowColumnItem(node *paperlang.Node) (layout.RowColumnItem, []*paperlang.Node) {
-	properties, children := c.members(node, rowColumnChildProperties)
-	style := c.compileTextStyle(node, properties)
-	segments, textNodes := c.compileTextChildren(node, children)
+	allowed := rowColumnChildProperties
+	if node.Kind == paperlang.NodeImage {
+		allowed = rowColumnImageProperties
+	} else if node.Kind == paperlang.NodeTable {
+		allowed = rowColumnTableProperties
+	}
+	properties, children := c.members(node, allowed)
+	var textNodes []*paperlang.Node
 	var child layout.Block
-	if node.Kind == paperlang.NodeHeading {
-		level := 1
-		if property, ok := properties["level"]; ok {
-			if value, valid := c.numberProperty(property); valid && value >= 1 && value <= 6 && math.Trunc(value) == value {
-				level = int(value)
-			} else if valid {
-				c.add("PAPER_COMPILE_HEADING_LEVEL", "heading level must be an integer from 1 through 6", "use level: 1 through level: 6", property.Value.Span)
-			}
-		}
-		child = layout.HeadingBlock{Level: level, Segments: segments, Style: style, Box: c.compileBoxStyle(properties)}
+	if node.Kind == paperlang.NodeImage {
+		child = c.compileImageBlock(node, properties, children)
+	} else if node.Kind == paperlang.NodeTable {
+		child = c.compileTableBlock(node, properties, children)
 	} else {
-		child = layout.ParagraphBlock{Segments: segments, Style: style, Box: c.compileBoxStyle(properties)}
+		style := c.compileTextStyle(node, properties)
+		segments, nodes := c.compileTextChildren(node, children)
+		textNodes = nodes
+		if node.Kind == paperlang.NodeHeading {
+			level := 1
+			if property, ok := properties["level"]; ok {
+				if value, valid := c.numberProperty(property); valid && value >= 1 && value <= 6 && math.Trunc(value) == value {
+					level = int(value)
+				} else if valid {
+					c.add("PAPER_COMPILE_HEADING_LEVEL", "heading level must be an integer from 1 through 6", "use level: 1 through level: 6", property.Value.Span)
+				}
+			}
+			child = layout.HeadingBlock{Level: level, Segments: segments, Style: style, Box: c.compileBoxStyle(properties)}
+		} else {
+			child = layout.ParagraphBlock{Segments: segments, Style: style, Box: c.compileBoxStyle(properties)}
+		}
 	}
 	item := layout.RowColumnItem{Block: child, Track: layout.RowColumnTrack{Kind: layout.RowColumnTrackAuto}}
 	trackExplicit := false
@@ -1203,6 +1302,48 @@ func (c *compiler) compileRowColumnItem(node *paperlang.Node) (layout.RowColumnI
 			} else {
 				item.Track.Weight = uint32(value)
 			}
+		}
+	}
+	for _, factor := range []struct {
+		name string
+		set  func(uint32, uint64)
+	}{
+		{"track-grow", func(integral uint32, scaled uint64) { item.Track.Grow, item.Track.GrowFactor = integral, scaled }},
+		{"track-shrink", func(integral uint32, scaled uint64) { item.Track.Shrink, item.Track.ShrinkFactor = integral, scaled }},
+	} {
+		property, ok := properties[factor.name]
+		if !ok {
+			continue
+		}
+		value, valid := c.flexFactorProperty(property)
+		if !valid {
+			continue
+		}
+		promoteRowColumnFlexTrack(&item.Track)
+		factor.set(value.integral, value.scaled)
+	}
+	for _, constraint := range []struct {
+		name       string
+		positive   bool
+		setFixed   func(float64)
+		setPercent func(uint32)
+	}{
+		{"cross-size", true, func(value float64) { item.CrossSize = value }, func(value uint32) { item.CrossMinPercent, item.CrossMaxPercent = value, value }},
+		{"cross-min", false, func(value float64) { item.CrossMin = value }, func(value uint32) { item.CrossMinPercent = value }},
+		{"cross-max", false, func(value float64) { item.CrossMax = value }, func(value uint32) { item.CrossMaxPercent = value }},
+	} {
+		property, ok := properties[constraint.name]
+		if !ok {
+			continue
+		}
+		value, valid := c.contextualLengthProperty(property, constraint.positive, true)
+		if !valid || value.auto {
+			continue
+		}
+		if value.percentSet {
+			constraint.setPercent(value.percent)
+		} else {
+			constraint.setFixed(value.points)
 		}
 	}
 	if property, ok := properties["cross-align"]; ok {
@@ -2077,16 +2218,100 @@ func canonicalAlign(value string) (string, bool) {
 
 func canonicalCrossAlign(value string) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "start":
+	case "start", "flex-start":
 		return "start", true
 	case "center", "centre":
 		return "center", true
-	case "end":
+	case "end", "flex-end":
 		return "end", true
 	case "stretch":
 		return "stretch", true
 	default:
 		return "", false
+	}
+}
+
+func canonicalRowColumnWrap(value string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "nowrap", "no-wrap":
+		return "nowrap", true
+	case "wrap":
+		return "wrap", true
+	case "wrap-reverse":
+		return "wrap-reverse", true
+	default:
+		return "", false
+	}
+}
+
+func canonicalMainAlign(value string) (string, bool) {
+	switch normalized := strings.ToLower(strings.TrimSpace(value)); normalized {
+	case "start", "center", "end", "space-between", "space-around", "space-evenly":
+		return normalized, true
+	case "flex-start":
+		return "start", true
+	case "flex-end":
+		return "end", true
+	default:
+		return "", false
+	}
+}
+
+func canonicalContentAlign(value string) (string, bool) {
+	canonical, ok := canonicalMainAlign(value)
+	if ok {
+		return canonical, true
+	}
+	if strings.EqualFold(strings.TrimSpace(value), "stretch") {
+		return "stretch", true
+	}
+	return "", false
+}
+
+type paperFlexFactor struct {
+	integral uint32
+	scaled   uint64
+}
+
+func (c *compiler) flexFactorProperty(property paperlang.Property) (paperFlexFactor, bool) {
+	value, valid := c.numberProperty(property)
+	if !valid {
+		return paperFlexFactor{}, false
+	}
+	if !isFinite(value) || value < 0 || value > 4294.967295 {
+		c.add("PAPER_COMPILE_TRACK_FACTOR", fmt.Sprintf("property %q must be between 0 and 4294.967295", property.Name), "use a non-negative factor with at most six decimal places", property.Value.Span)
+		return paperFlexFactor{}, false
+	}
+	scaledFloat := value * 1_000_000
+	rounded := math.Round(scaledFloat)
+	if math.Abs(scaledFloat-rounded) > 0.000001 {
+		c.add("PAPER_COMPILE_TRACK_FACTOR", fmt.Sprintf("property %q has more than six decimal places", property.Name), "round the factor to at most six decimal places", property.Value.Span)
+		return paperFlexFactor{}, false
+	}
+	scaled := uint64(rounded)
+	result := paperFlexFactor{scaled: scaled}
+	if scaled%1_000_000 == 0 {
+		result.integral = uint32(scaled / 1_000_000) // #nosec G115 -- the accepted factor is bounded above by 4294.967295
+		result.scaled = 0
+	}
+	return result, true
+}
+
+func promoteRowColumnFlexTrack(track *layout.RowColumnTrack) {
+	if track == nil || track.Kind == layout.RowColumnTrackFlex {
+		return
+	}
+	previous := *track
+	*track = layout.RowColumnTrack{Kind: layout.RowColumnTrackFlex, Min: previous.Min, Max: previous.Max,
+		MinPercent: previous.MinPercent, MaxPercent: previous.MaxPercent, Shrink: 1}
+	switch previous.Kind {
+	case layout.RowColumnTrackFixed:
+		track.BasisKind, track.Basis = layout.RowColumnFlexBasisFixed, previous.Size
+	case layout.RowColumnTrackFraction:
+		track.BasisKind = layout.RowColumnFlexBasisFixed
+		track.Grow = previous.Weight
+	default:
+		track.BasisKind = layout.RowColumnFlexBasisContent
 	}
 }
 

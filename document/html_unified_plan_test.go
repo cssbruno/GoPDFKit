@@ -283,6 +283,40 @@ func TestCompiledHTMLUnifiedPlanRejectsUnsupportedTableContractsAtomically(t *te
 	}
 }
 
+func TestCompiledHTMLUnifiedPlanKeepsEmptyTableCells(t *testing.T) {
+	compiled, err := CompileHTML(`<table><tbody><tr><th></th><td>value</td></tr><tr><td>label</td><td></td></tr></tbody></table>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planner := typedTableTestPlanner()
+	resolved, err := planner.resolveCompiledHTMLUnifiedSnapshot(context.Background(), compiled, 12)
+	if err != nil {
+		t.Fatal(err)
+	}
+	model, err := lowerCompiledHTMLTextCohort(context.Background(), resolved, 12)
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, ok := model.Body[0].(layout.TableBlock)
+	if !ok || len(table.Body) != 2 || len(table.Body[0].Cells) != 2 || len(table.Body[1].Cells) != 2 ||
+		len(table.Body[0].Cells[0].Blocks) != 0 || len(table.Body[1].Cells[1].Blocks) != 0 {
+		t.Fatalf("empty-cell table = %#v", model.Body)
+	}
+	plan, err := planner.PlanCompiledHTML(12, compiled)
+	if err != nil || plan.Hash() == "" || plan.PageCount() != 1 || planner.PageCount() != 0 {
+		t.Fatalf("empty-cell plan = %#v pages=%d err=%v", plan, planner.PageCount(), err)
+	}
+	var cells int
+	for _, node := range plan.plan.Projection().SemanticNodes {
+		if node.Role == layoutengine.SemanticRoleCell {
+			cells++
+		}
+	}
+	if cells != 4 {
+		t.Fatalf("semantic cells = %d, want 4", cells)
+	}
+}
+
 func TestCompiledHTMLUnifiedPlanStrictTableDecorations(t *testing.T) {
 	compiled, err := CompileHTML(`<table style="background-color:#eeeeee;border-collapse:collapse"><thead><tr><th style="background-color:#102030;padding:2pt;border:1px solid #405060;border-right:2pt solid red;text-align:right;vertical-align:bottom">Head</th></tr></thead><tbody><tr><td style="padding-left:4pt;border-top-width:1px;border-top-style:solid;border-top-color:blue">Body</td></tr></tbody></table>`)
 	if err != nil {

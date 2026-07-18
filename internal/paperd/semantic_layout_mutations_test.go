@@ -251,6 +251,46 @@ func TestPaperSetGridTrackAcceptsResponsiveAndAutomaticSizes(t *testing.T) {
 	}
 }
 
+func TestPaperSetGridTrackAuthorsFlexFactorsAndCrossAxisConstraints(t *testing.T) {
+	tests := []struct {
+		name     string
+		property PaperGridTrackProperty
+		length   string
+		kind     string
+		factor   float64
+		want     string
+	}{
+		{name: "grow", property: PaperGridTrackGrow, factor: 1.5, want: "track-grow: 1.5"},
+		{name: "shrink-zero", property: PaperGridTrackShrink, factor: 0, want: "track-shrink: 0"},
+		{name: "cross-size", property: PaperGridCrossSize, length: "50%", want: "cross-size: 50%"},
+		{name: "cross-min", property: PaperGridCrossMin, length: "20%", want: "cross-min: 20%"},
+		{name: "cross-max", property: PaperGridCrossMax, length: "80%", want: "cross-max: 80%"},
+		{name: "cross-align", property: PaperGridCrossAlign, kind: "stretch", want: `cross-align: "stretch"`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			workspace := authorizationWorkspace(t, WorkspaceOptions{RequireMutationAuthority: true})
+			request, _, opened := gridRequest(t, workspace, "grid-flex-"+test.name)
+			request.Property, request.Points, request.Length, request.Kind, request.Factor = test.property, 0, test.length, test.kind, test.factor
+			request.Guard.Authority = grantMutationAuthority(t, workspace, opened, "agent:grid", []MutationOperation{MutationSetGridTrack}, []string{"@grid"}, nil)
+			result, err := workspace.PaperSetGridTrack(request)
+			if err != nil || !result.Revision.CompileOK || !strings.Contains(result.Revision.Source, test.want) {
+				t.Fatalf("result=%#v err=%v", result, err)
+			}
+		})
+	}
+
+	workspace := mustWorkspace(t, Limits{})
+	invalid, created, _ := gridRequest(t, workspace, "grid-flex-invalid")
+	invalid.Property, invalid.Points, invalid.Factor = PaperGridTrackGrow, 0, 0.1234567
+	if _, err := workspace.PaperSetGridTrack(invalid); errorCode(err) != "INVALID_GRID_TRACK_VALUE" {
+		t.Fatalf("invalid factor = %v", err)
+	}
+	if candidate, _ := workspace.Candidate(created.Candidate.Handle); candidate.Head != created.Revision.Handle {
+		t.Fatal("invalid flex factor advanced candidate")
+	}
+}
+
 func TestPaperSetGridTrackIdempotentRace(t *testing.T) {
 	workspace := mustWorkspace(t, Limits{})
 	request, _, _ := gridRequest(t, workspace, "grid-race")

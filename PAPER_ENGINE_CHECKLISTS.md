@@ -859,9 +859,12 @@ as completed behavior.
   [tests](internal/layoutengine/row_column_test.go)), with readable `row`/
   `column` syntax, formatter/compiler lowering, authored provenance, and exact
   core-font plan/PDF replay ([compiler tests](internal/papercompile/row_column_test.go),
-  [end-to-end tests](document/paper_row_column_test.go)); mixed top-level flow,
-  nested containers, non-text children, baselines, fragmentation, and general
-  renderer integration remain pending.
+  [end-to-end tests](document/paper_row_column_test.go)). The readable surface
+  now also exposes wrap/wrap-reverse, cross gaps and extents, main/cross/content
+  alignment, reverse flow, fixed and percentage min/max constraints, exact
+  grow/shrink factors, and direct image/table children. Empty HTML and Paper
+  table cells retain deterministic geometry and semantic ownership. General
+  multi-page fragmentation remains outside the bounded row/column contract.
 - [x] Implement an initial bounded fixed-point grid kernel with fixed/auto/
   fractional tracks, deterministic remainder distribution, intrinsic span
   contributions, canonical row-major placement, overlap detection, and exact
@@ -3063,7 +3066,8 @@ as completed behavior.
   evidence remains an exit-gate requirement.
 - [x] Grid handles write readable track values. The revision-safe service
   foundation now exposes a closed typed operation for `track`, `track-size`,
-  `track-min`, and `track-weight` on direct row/column children. It requires
+  min/max, grow/shrink, cross-size/min/max/alignment, and fractional weight on
+  direct paragraph, heading, image, and table row/column children. It requires
   exact child and parent preconditions, authorizes the complete direct effect,
   emits one minimal CST property patch, and compiles the candidate before
   publication ([mutation](internal/paperd/semantic_layout_mutations.go),

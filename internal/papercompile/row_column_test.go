@@ -76,3 +76,57 @@ func TestCompileRowColumnPreservesContainerRelativeAndAutoTrackSizes(t *testing.
 		t.Fatalf("canonical tracks lost 50%% basis: %+v", projection.Tracks)
 	}
 }
+
+func TestCompileRowColumnAcceptsResponsiveImageChildren(t *testing.T) {
+	source := "document:\n  page:\n    body:\n      row @media:\n        image @hero:\n          track-size: 40%\n          source: \"data:image/png;base64," + paperImagePNG + "\"\n          width: 100%\n          height: \"auto\"\n          alt: \"Evidence\"\n        paragraph @copy:\n          track-size: 60%\n          text: \"Caption\"\n"
+	parsed := paperlang.Parse("row-image.paper", source)
+	compiled := Compile(parsed.AST)
+	if !parsed.OK() || !compiled.OK() {
+		t.Fatalf("diagnostics = %+v / %+v", parsed.Diagnostics, compiled.Diagnostics)
+	}
+	row := compiled.Document.Body[0].(layout.RowColumnBlock)
+	image, ok := row.Items[0].Block.(layout.ImageBlock)
+	if !ok || image.WidthPercent != 100_000_000 || row.Items[0].Track.BasisPercent != 40_000_000 || len(image.Data) == 0 {
+		t.Fatalf("row image = %#v", row.Items[0])
+	}
+	mappings := map[string]NodeMapping{}
+	for _, mapping := range compiled.Mapping.Nodes {
+		mappings[mapping.ID] = mapping
+	}
+	if mappings["@hero"].BodyIndex != 0 || mappings["@hero"].SegmentIndex != 0 || mappings["@hero"].ResourceDigest == "" {
+		t.Fatalf("image mapping = %#v", mappings["@hero"])
+	}
+}
+
+func TestCompileRowColumnAcceptsTableChildren(t *testing.T) {
+	const source = "document:\n  page:\n    body:\n      row @summary:\n        table @facts:\n          track-size: 70%\n          table-track:\n            width: 50%\n          table-track:\n            width: 50%\n          table-row:\n            cell:\n              text: \"Name\"\n            cell:\n              text: \"Value\"\n        paragraph @aside:\n          track-size: 30%\n          text: \"Aside\"\n"
+	parsed := paperlang.Parse("row-table.paper", source)
+	compiled := Compile(parsed.AST)
+	if !parsed.OK() || !compiled.OK() {
+		t.Fatalf("diagnostics = %+v / %+v", parsed.Diagnostics, compiled.Diagnostics)
+	}
+	row := compiled.Document.Body[0].(layout.RowColumnBlock)
+	table, ok := row.Items[0].Block.(layout.TableBlock)
+	if !ok || len(table.Columns) != 2 || table.Columns[0].WidthPercent != 50_000_000 ||
+		len(table.Body) != 1 || len(table.Body[0].Cells) != 2 || row.Items[0].Track.BasisPercent != 70_000_000 {
+		t.Fatalf("row table = %#v", row.Items[0])
+	}
+}
+
+func TestCompileRowColumnExposesWrapAlignmentAndFlexConstraints(t *testing.T) {
+	const source = "document:\n  page:\n    body:\n      row:\n        cross-gap: 4pt\n        cross-size: 80pt\n        wrap: \"wrap-reverse\"\n        main-align: \"space-between\"\n        cross-align: \"center\"\n        align-content: \"stretch\"\n        reverse-main: true\n        paragraph:\n          track-size: 40pt\n          track-grow: 1.5\n          track-shrink: 0.5\n          cross-size: 50%\n          cross-min: 20%\n          cross-max: 80%\n          text: \"Flexible\"\n"
+	parsed := paperlang.Parse("flex-row.paper", source)
+	compiled := Compile(parsed.AST)
+	if !parsed.OK() || !compiled.OK() {
+		t.Fatalf("diagnostics = %+v / %+v", parsed.Diagnostics, compiled.Diagnostics)
+	}
+	row := compiled.Document.Body[0].(layout.RowColumnBlock)
+	track, item := row.Items[0].Track, row.Items[0]
+	if row.CrossGap != 4 || row.CrossSize != 80 || row.Wrap != "wrap-reverse" || row.MainAlign != "space-between" ||
+		row.CrossAlign != "center" || row.AlignContent != "stretch" || !row.ReverseMain ||
+		track.Kind != layout.RowColumnTrackFlex || track.BasisKind != layout.RowColumnFlexBasisFixed || track.Basis != 40 ||
+		track.GrowFactor != 1_500_000 || track.ShrinkFactor != 500_000 || item.CrossMinPercent != 20_000_000 ||
+		item.CrossMaxPercent != 80_000_000 {
+		t.Fatalf("row/item = %#v / %#v", row, item)
+	}
+}

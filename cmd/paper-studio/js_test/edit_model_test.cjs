@@ -30,7 +30,8 @@ test('selection exposes only handles supported by exact source structure', () =>
   const left = model.findSelection(root, '@left');
   assert.deepEqual(model.operations(left), ['text', 'box', 'grid', 'flow']);
   assert.equal(left.parent.id, '@grid');
-  assert.deepEqual(model.operations(model.findSelection(root, '@art')), ['image', 'flow']);
+  assert.deepEqual(model.operations(model.findSelection(root, '@art')), ['grid', 'image', 'flow']);
+  assert.deepEqual(model.operations(model.findSelection(root, '@ledger')), ['grid', 'table', 'flow']);
   assert.deepEqual(model.operations(model.findSelection(root, '@page')), ['page']);
   assert.deepEqual(model.operations(model.findSelection(root, '@badge')), ['canvas']);
   assert.deepEqual(model.operations(model.findSelection(root, '@head')), ['region']);
@@ -66,6 +67,11 @@ test('payload contains review facts and semantic intent but no capabilities', ()
   });
   assert.equal(model.buildPayload(workspace, selection, 'grid', 'track-size', '50%').length, '50%');
   assert.equal(model.buildPayload(workspace, selection, 'grid', 'track-size', 'auto').length, 'auto');
+  assert.equal(model.buildPayload(workspace, selection, 'grid', 'track-grow', '1.5').number, 1.5);
+  assert.equal(model.buildPayload(workspace, selection, 'grid', 'track-shrink', '0').number, 0);
+  assert.equal(model.buildPayload(workspace, selection, 'grid', 'cross-size', '50%').length, '50%');
+  assert.equal(model.buildPayload(workspace, selection, 'grid', 'cross-min', '0').points, 0);
+  assert.equal(model.buildPayload(workspace, selection, 'grid', 'cross-align', 'stretch').kind, 'stretch');
   assert.ok(model.properties(selection, 'grid').includes('track-max'));
   const encoded = JSON.stringify(model.buildPayload(workspace, selection, 'box', 'background', '#AABBCC'));
   assert.equal(encoded.includes('capability'), false);

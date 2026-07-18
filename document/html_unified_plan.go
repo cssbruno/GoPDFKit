@@ -701,9 +701,6 @@ func htmlPlanTableRows(ctx context.Context, compiled *CompiledHTML, start, end i
 			if err != nil {
 				return nil, nil, err
 			}
-			if len(blocks) == 0 {
-				return nil, nil, htmlPlanUnsupported(cellToken.Str, cellIndex, "empty cells are unsupported")
-			}
 			cell := layout.TableCell{Header: cellToken.Str == "th", Scope: scope, ColSpan: colspan, RowSpan: rowspan, Blocks: blocks, Style: style}
 			cell.Box.KeepTogether = compiled.unifiedResolved[cellIndex].box.KeepTogether
 			switch strings.ToLower(strings.TrimSpace(cellToken.Attr["align"])) {

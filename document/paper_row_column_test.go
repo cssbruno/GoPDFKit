@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/cssbruno/gopdfkit/internal/layoutengine"
 )
 
 func TestPlanAndWritePaperRowUsesFixedPointContainerGeometry(t *testing.T) {
@@ -101,6 +103,49 @@ func TestPlanPaperRowResolvesPercentageTracksAgainstContainingWidth(t *testing.T
 	if len(fragments) != 2 || fragments[0].BorderBox.Width.Points() != 85 || fragments[0].BorderBox.X.Points() != 10 ||
 		fragments[1].BorderBox.Width.Points() != 85 || fragments[1].BorderBox.X.Points() != 105 {
 		t.Fatalf("percentage fragments = %+v", fragments)
+	}
+}
+
+func TestPlanPaperRowSupportsResponsiveImageChildren(t *testing.T) {
+	const pixel = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+	source := "document:\n  page:\n    width: 200pt\n    height: 100pt\n    margin: 10pt\n    body:\n      row @media:\n        image @hero:\n          track-size: 40%\n          source: \"data:image/png;base64," + pixel + "\"\n          width: 100%\n          height: 20pt\n          alt: \"Evidence\"\n        paragraph @copy:\n          track-size: 60%\n          font: \"Courier\"\n          size: 10pt\n          line-height: 12pt\n          text: \"Caption\"\n"
+	plan, result, err := PlanPaper("row-image.paper", source)
+	if err != nil || !result.OK() || plan.Hash() == "" || plan.PageCount() != 1 {
+		t.Fatalf("PlanPaper() = plan=%#v result=%#v err=%v", plan, result, err)
+	}
+	projection := plan.plan.Projection()
+	if len(projection.Images) != 1 || len(projection.ImageResources) != 1 {
+		t.Fatalf("planned images = %#v resources=%#v", projection.Images, projection.ImageResources)
+	}
+}
+
+func TestPlanPaperRowSupportsResponsiveTableChildren(t *testing.T) {
+	const source = "document:\n  page:\n    width: 240pt\n    height: 120pt\n    margin: 10pt\n    body:\n      row @summary:\n        table @facts:\n          track-size: 70%\n          table-track:\n            width: 50%\n          table-track:\n            width: 50%\n          table-row:\n            cell:\n              text: \"Name\"\n            cell:\n              text: \"Value\"\n        paragraph @aside:\n          track-size: 30%\n          font: \"Courier\"\n          size: 10pt\n          line-height: 12pt\n          text: \"Aside\"\n"
+	plan, result, err := PlanPaper("row-table.paper", source)
+	if err != nil || !result.OK() || plan.Hash() == "" || plan.PageCount() != 1 {
+		t.Fatalf("PlanPaper() = plan=%#v result=%#v err=%v", plan, result, err)
+	}
+	projection := plan.plan.Projection()
+	var tableNodes int
+	for _, node := range projection.SemanticNodes {
+		if node.Role == layoutengine.SemanticRoleTable {
+			tableNodes++
+		}
+	}
+	if tableNodes != 1 {
+		t.Fatalf("table semantic nodes = %d", tableNodes)
+	}
+}
+
+func TestPlanPaperRowSupportsWrappedFlexLayoutProperties(t *testing.T) {
+	const source = "document:\n  page:\n    width: 180pt\n    height: 140pt\n    margin: 10pt\n    body:\n      row @wrapped:\n        cross-gap: 4pt\n        cross-size: 80pt\n        wrap: \"wrap\"\n        main-align: \"space-between\"\n        align-content: \"space-around\"\n        paragraph @one:\n          track-size: 70pt\n          track-grow: 1\n          track-shrink: 1\n          font: \"Courier\"\n          size: 10pt\n          line-height: 12pt\n          text: \"One\"\n        paragraph @two:\n          track-size: 70pt\n          track-grow: 1\n          track-shrink: 1\n          font: \"Courier\"\n          size: 10pt\n          line-height: 12pt\n          text: \"Two\"\n        paragraph @three:\n          track-size: 70pt\n          track-grow: 1\n          track-shrink: 1\n          font: \"Courier\"\n          size: 10pt\n          line-height: 12pt\n          text: \"Three\"\n"
+	plan, result, err := PlanPaper("wrapped-flex.paper", source)
+	if err != nil || !result.OK() || plan.Hash() == "" || plan.PageCount() != 1 {
+		t.Fatalf("PlanPaper() = plan=%#v result=%#v err=%v", plan, result, err)
+	}
+	fragments := plan.plan.Projection().Fragments
+	if len(fragments) != 3 || fragments[2].BorderBox.Y <= fragments[0].BorderBox.Y {
+		t.Fatalf("wrapped fragments = %+v", fragments)
 	}
 }
 

@@ -157,6 +157,45 @@ Run `make test-paper-studio-js` for the dependency-free page-rail model tests.
 See [`PAPER_ENGINE_PLAN.md`](PAPER_ENGINE_PLAN.md) and the
 [`.paper` asset guide](docs/paper-assets.md) for the current design.
 
+### Responsive `.paper` rows and columns
+
+Rows and columns use a deterministic, fixed-point auto-layout solver. Main-axis
+sizes can be intrinsic (`"auto"`), container-relative percentages, or flex
+bases with grow/shrink factors. Percentages are resolved from the containing
+layout region at plan time, so rendering at 50%, 100%, HiDPI, or print DPI does
+not change document geometry.
+
+```text
+row @cards:
+  gap: 3mm
+  cross-size: 45mm
+  cross-gap: 3mm
+  wrap: "wrap"
+  main-align: "space-between"
+  cross-align: "stretch"
+  align-content: "space-around"
+  paragraph @primary:
+    track: "flex"
+    track-size: 50%
+    track-grow: 1
+    track-shrink: 1
+    track-min: 30%
+    text: "Primary"
+  paragraph @secondary:
+    track: "flex"
+    track-size: "auto"
+    track-grow: 1.5
+    track-shrink: 1
+    cross-align: "center"
+    text: "Secondary"
+```
+
+`wrap` accepts `nowrap`, `wrap`, and `wrap-reverse`. Main alignment accepts
+`start`, `center`, `end`, `space-between`, `space-around`, and `space-evenly`;
+`align-content` also accepts `stretch`. Physical units such as `pt`, `mm`,
+`cm`, and `in` remain appropriate for page and print constraints because they
+are device-independent rather than screen pixels.
+
 ### Render application JSON and check generated edge cases
 
 A `.paper` document can declare one typed schema and receive ordinary JSON at

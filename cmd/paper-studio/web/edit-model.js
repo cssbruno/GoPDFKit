@@ -10,10 +10,13 @@
     'border-width', 'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
     'border-radius', 'border-color', 'background',
   ]);
-  const gridProperties = Object.freeze(['track', 'track-size', 'track-min', 'track-max', 'track-weight']);
+  const gridProperties = Object.freeze([
+    'track', 'track-size', 'track-min', 'track-max', 'track-weight', 'track-grow', 'track-shrink',
+    'cross-size', 'cross-min', 'cross-max', 'cross-align',
+  ]);
   const boxKinds = new Set(['paragraph', 'heading', 'list']);
   const coreFonts = Object.freeze(['Courier', 'Helvetica', 'Times', 'Symbol', 'ZapfDingbats']);
-  const gridKinds = new Set(['paragraph', 'heading']);
+  const gridKinds = new Set(['paragraph', 'heading', 'image', 'table']);
   const gridParents = new Set(['row', 'column']);
   const imageProperties = Object.freeze(['fit', 'focus-x', 'focus-y', 'width', 'height', 'max-width', 'max-height', 'alt', 'decorative']);
   const canvasProperties = Object.freeze(['left', 'right', 'center-x', 'top', 'bottom', 'center-y']);
@@ -86,7 +89,10 @@
     if ((operation === 'box' || operation === 'region') && ['border-color', 'background'].includes(property)) return {kind: 'color', label: 'Color'};
     if (operation === 'grid' && property === 'track') return {kind: 'choice', label: 'Track', choices: ['fixed', 'auto', 'fraction', 'flex']};
     if (operation === 'grid' && property === 'track-weight') return {kind: 'integer', label: 'Weight', min: 1, max: 4294967295};
-    if (operation === 'grid' && ['track-size', 'track-min', 'track-max'].includes(property)) return {kind: 'length', label: 'Size (auto, %, or pt)'};
+    if (operation === 'grid' && ['track-grow', 'track-shrink'].includes(property)) return {kind: 'number', label: 'Flex factor', min: 0, max: 4294.967295, step: 0.1, field: 'number'};
+    if (operation === 'grid' && ['track-size', 'cross-size'].includes(property)) return {kind: 'length', label: 'Size (auto, %, or pt)'};
+    if (operation === 'grid' && ['track-min', 'track-max', 'cross-min', 'cross-max'].includes(property)) return {kind: 'length', label: 'Constraint (auto, %, or pt)', positive: false};
+    if (operation === 'grid' && property === 'cross-align') return {kind: 'choice', label: 'Cross alignment', choices: ['start', 'center', 'end', 'stretch']};
     if (operation === 'image' && property === 'fit') return {kind: 'choice', label: 'Fit', choices: ['auto', 'contain', 'cover']};
     if (operation === 'image' && ['focus-x', 'focus-y'].includes(property)) return {kind: 'number', label: 'Ratio', min: 0, max: 1, step: 0.05, field: 'number'};
     if (operation === 'image' && ['width', 'max-width'].includes(property)) return {kind: 'length', label: 'Size (auto, %, or pt)', allowPercent: true};
@@ -134,7 +140,7 @@
         const unit = match[2] || 'pt';
         if (unit === '%' && spec.allowPercent === false) throw new Error('Percentage height needs a definite container height; use auto or pt');
         const maximum = unit === '%' ? 100 : 1000000;
-        if (!Number.isFinite(value) || value <= 0 || value > maximum) throw new Error(`Use a positive ${unit === '%' ? 'percentage up to 100%' : 'physical size'}`);
+        if (!Number.isFinite(value) || value < 0 || (spec.positive !== false && value === 0) || value > maximum) throw new Error(`Use ${spec.positive === false ? 'a non-negative' : 'a positive'} ${unit === '%' ? 'percentage up to 100%' : 'physical size'}`);
         if (match[2]) payload.length = `${value}${unit}`;
         else payload.points = value;
       }
@@ -153,7 +159,7 @@
     } else {
       const value = Number(rawValue);
       if (!Number.isFinite(value) || String(rawValue).trim() === '' || value < spec.min || value > spec.max || (spec.kind === 'integer' && !Number.isInteger(value))) {
-        throw new Error(spec.kind === 'integer' ? 'Weight must be a positive whole number' : 'Points must be a finite non-negative number');
+        throw new Error(spec.kind === 'integer' ? 'Weight must be a positive whole number' : spec.field === 'number' ? 'Factor must be a finite number in range' : 'Points must be a finite non-negative number');
       }
       if (spec.kind === 'integer') payload.weight = value;
       else if (spec.field === 'number') payload.number = value;

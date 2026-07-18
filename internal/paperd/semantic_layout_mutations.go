@@ -322,6 +322,12 @@ const (
 	PaperGridTrackMin    PaperGridTrackProperty = "track-min"
 	PaperGridTrackMax    PaperGridTrackProperty = "track-max"
 	PaperGridTrackWeight PaperGridTrackProperty = "track-weight"
+	PaperGridTrackGrow   PaperGridTrackProperty = "track-grow"
+	PaperGridTrackShrink PaperGridTrackProperty = "track-shrink"
+	PaperGridCrossSize   PaperGridTrackProperty = "cross-size"
+	PaperGridCrossMin    PaperGridTrackProperty = "cross-min"
+	PaperGridCrossMax    PaperGridTrackProperty = "cross-max"
+	PaperGridCrossAlign  PaperGridTrackProperty = "cross-align"
 )
 
 type PaperSetGridTrackRequest struct {
@@ -331,6 +337,7 @@ type PaperSetGridTrackRequest struct {
 	Points   float64                `json:"points,omitempty"`
 	Length   string                 `json:"length,omitempty"`
 	Weight   uint32                 `json:"weight,omitempty"`
+	Factor   float64                `json:"factor,omitempty"`
 }
 
 type PaperImageProperty string
@@ -439,8 +446,8 @@ func imageBoolProperty(node *paperlang.Node, name string) bool {
 	return false
 }
 
-// PaperSetGridTrack changes one readable track property on a direct
-// paragraph/heading child of a row or column. The parent is an explicit direct
+// PaperSetGridTrack changes one readable flex-item property on a direct
+// paragraph, heading, image, or table child of a row or column. The parent is an explicit direct
 // authorization effect and requires its own exact target precondition because
 // changing one track can reposition every sibling.
 func (w *Workspace) PaperSetGridTrack(request PaperSetGridTrackRequest) (PaperMutationResult, error) {
@@ -449,7 +456,7 @@ func (w *Workspace) PaperSetGridTrack(request PaperSetGridTrackRequest) (PaperMu
 		return PaperMutationResult{}, err
 	}
 	node, parent := sourceNodeAndParent(revision.parsed.AST.Root, request.Guard.Target)
-	if node == nil || parent == nil || (node.Kind != paperlang.NodeParagraph && node.Kind != paperlang.NodeHeading) ||
+	if node == nil || parent == nil || (node.Kind != paperlang.NodeParagraph && node.Kind != paperlang.NodeHeading && node.Kind != paperlang.NodeImage && node.Kind != paperlang.NodeTable) ||
 		(parent.Kind != paperlang.NodeRow && parent.Kind != paperlang.NodeColumn) || parent.ID == "" {
 		return PaperMutationResult{}, workspaceError("INVALID_GRID_TRACK_TARGET", "grid track handles require a readable paragraph or heading directly inside a readable row or column", paperedit.ErrInvalidOperation)
 	}
@@ -460,21 +467,40 @@ func (w *Workspace) PaperSetGridTrack(request PaperSetGridTrackRequest) (PaperMu
 	switch request.Property {
 	case PaperGridTrackKind:
 		kind := strings.ToLower(strings.TrimSpace(request.Kind))
-		if kind != "fixed" && kind != "auto" && kind != "fraction" && kind != "flex" || request.Points != 0 || request.Length != "" || request.Weight != 0 {
+		if kind != "fixed" && kind != "auto" && kind != "fraction" && kind != "flex" || request.Points != 0 || request.Length != "" || request.Weight != 0 || request.Factor != 0 {
 			return PaperMutationResult{}, workspaceError("INVALID_GRID_TRACK_VALUE", "track kind must be fixed, auto, fraction, or flex without unrelated values", paperedit.ErrInvalidOperation)
 		}
 		value = paperedit.StringValue(kind)
-	case PaperGridTrackSize, PaperGridTrackMin, PaperGridTrackMax:
+	case PaperGridTrackSize, PaperGridTrackMin, PaperGridTrackMax, PaperGridCrossSize, PaperGridCrossMin, PaperGridCrossMax:
 		resolved, ok := responsiveLayoutLengthValue(request.Length, request.Points, true, request.Property == PaperGridTrackSize)
-		if request.Kind != "" || request.Weight != 0 || !ok {
+		if request.Property == PaperGridCrossSize {
+			resolved, ok = responsiveLayoutLengthValue(request.Length, request.Points, true, true)
+		}
+		if request.Kind != "" || request.Weight != 0 || request.Factor != 0 || !ok {
 			return PaperMutationResult{}, workspaceError("INVALID_GRID_TRACK_VALUE", "track length must be auto, a bounded percentage, or a finite physical length", paperedit.ErrInvalidOperation)
 		}
 		value = resolved
 	case PaperGridTrackWeight:
-		if request.Kind != "" || request.Points != 0 || request.Length != "" || request.Weight == 0 {
+		if request.Kind != "" || request.Points != 0 || request.Length != "" || request.Weight == 0 || request.Factor != 0 {
 			return PaperMutationResult{}, workspaceError("INVALID_GRID_TRACK_VALUE", "track weight must be a positive 32-bit integer", paperedit.ErrInvalidOperation)
 		}
 		value = paperedit.NumberValue(float64(request.Weight))
+	case PaperGridTrackGrow, PaperGridTrackShrink:
+		if request.Kind != "" || request.Points != 0 || request.Length != "" || request.Weight != 0 || !validLayoutFlexFactor(request.Factor) {
+			return PaperMutationResult{}, workspaceError("INVALID_GRID_TRACK_VALUE", "flex factor must be between 0 and 4294.967295 with at most six decimal places", paperedit.ErrInvalidOperation)
+		}
+		value = paperedit.NumberValue(request.Factor)
+	case PaperGridCrossAlign:
+		align := strings.ToLower(strings.TrimSpace(request.Kind))
+		if align == "flex-start" {
+			align = "start"
+		} else if align == "flex-end" {
+			align = "end"
+		}
+		if align != "start" && align != "center" && align != "end" && align != "stretch" || request.Points != 0 || request.Length != "" || request.Weight != 0 || request.Factor != 0 {
+			return PaperMutationResult{}, workspaceError("INVALID_GRID_TRACK_VALUE", "cross alignment must be start, center, end, or stretch", paperedit.ErrInvalidOperation)
+		}
+		value = paperedit.StringValue(align)
 	default:
 		return PaperMutationResult{}, workspaceError("INVALID_GRID_TRACK_PROPERTY", "grid track property is outside the closed handle vocabulary", paperedit.ErrInvalidOperation)
 	}
@@ -483,6 +509,14 @@ func (w *Workspace) PaperSetGridTrack(request PaperSetGridTrackRequest) (PaperMu
 }
 
 func finiteLayoutHandle(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }
+
+func validLayoutFlexFactor(value float64) bool {
+	if !finiteLayoutHandle(value) || value < 0 || value > 4294.967295 {
+		return false
+	}
+	scaled := value * 1_000_000
+	return math.Abs(scaled-math.Round(scaled)) <= 0.000001
+}
 
 func responsiveLayoutLengthValue(length string, points float64, allowAuto, positive bool) (paperedit.Value, bool) {
 	length = strings.ToLower(strings.TrimSpace(length))

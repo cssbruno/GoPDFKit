@@ -182,6 +182,23 @@ func TestPaperTableMultiPageRepeatHeaderSplitSpansAndNestedContent(t *testing.T)
 	}
 }
 
+func TestPlanPaperTableSupportsExplicitEmptyCells(t *testing.T) {
+	const source = "document:\n  page:\n    width: 180pt\n    height: 100pt\n    margin: 10pt\n    body:\n      table:\n        table-track:\n          width: 50%\n        table-track:\n          width: 50%\n        table-row:\n          cell:\n            colspan: 1\n          cell:\n            text: \"value\"\n"
+	plan, result, err := PlanPaper("empty-cell.paper", source)
+	if err != nil || !result.OK() || plan.Hash() == "" || plan.PageCount() != 1 {
+		t.Fatalf("PlanPaper() = plan=%#v result=%#v err=%v", plan, result, err)
+	}
+	var cells int
+	for _, node := range plan.plan.Projection().SemanticNodes {
+		if node.Role == layoutengine.SemanticRoleCell {
+			cells++
+		}
+	}
+	if cells != 2 {
+		t.Fatalf("semantic cells = %d, want 2", cells)
+	}
+}
+
 func TestPaperFixedTableTracksRemainValidWhenPageChangesToA4(t *testing.T) {
 	source := "document @report:\n" +
 		"  page @sheet:\n" +

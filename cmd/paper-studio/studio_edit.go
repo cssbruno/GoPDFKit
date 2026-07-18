@@ -505,8 +505,12 @@ func applyStudioSemanticMutation(workspace *paperd.Workspace, guard paperd.Paper
 	if request.Weight != nil {
 		weight = *request.Weight
 	}
+	factor := 0.0
+	if request.Number != nil {
+		factor = *request.Number
+	}
 	return workspace.PaperSetGridTrack(paperd.PaperSetGridTrackRequest{
-		Guard: guard, Property: paperd.PaperGridTrackProperty(request.Property), Kind: request.Kind, Points: points, Length: request.Length, Weight: weight,
+		Guard: guard, Property: paperd.PaperGridTrackProperty(request.Property), Kind: request.Kind, Points: points, Length: request.Length, Weight: weight, Factor: factor,
 	})
 }
 

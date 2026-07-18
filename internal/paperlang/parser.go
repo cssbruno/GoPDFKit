@@ -329,7 +329,7 @@ func allowedChild(parent, child NodeKind) bool {
 	case NodeTableCell:
 		return child == NodeText || child == NodeParagraph || child == NodeImage || child == NodeList
 	case NodeRow, NodeColumn:
-		return child == NodeHeading || child == NodeParagraph || child == NodeUse
+		return child == NodeHeading || child == NodeParagraph || child == NodeImage || child == NodeTable || child == NodeUse
 	case NodeList:
 		return child == NodeItem
 	case NodeItem:
@@ -384,7 +384,7 @@ func hierarchyHint(parent NodeKind) string {
 	case NodeTableCell:
 		return "cell accepts text, paragraph, list, and image children"
 	case NodeRow, NodeColumn:
-		return "row and column accept heading and paragraph children"
+		return "row and column accept heading, paragraph, image, table, and component-use children"
 	case NodeList:
 		return "list accepts item children"
 	case NodeItem:

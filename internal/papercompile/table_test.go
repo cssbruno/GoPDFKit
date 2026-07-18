@@ -36,3 +36,16 @@ func TestCompileTablePreservesContainerRelativeTracks(t *testing.T) {
 		t.Fatalf("columns = %#v", table.Columns)
 	}
 }
+
+func TestCompileTablePreservesExplicitEmptyCells(t *testing.T) {
+	const source = "document:\n  page:\n    body:\n      table:\n        table-track:\n          width: 50%\n        table-track:\n          width: 50%\n        table-row:\n          cell:\n            colspan: 1\n          cell:\n            text: \"value\"\n"
+	parsed := paperlang.Parse("empty-cell.paper", source)
+	compiled := Compile(parsed.AST)
+	if !parsed.OK() || !compiled.OK() {
+		t.Fatalf("diagnostics = %+v / %+v", parsed.Diagnostics, compiled.Diagnostics)
+	}
+	table := compiled.Document.Body[0].(layout.TableBlock)
+	if len(table.Body) != 1 || len(table.Body[0].Cells) != 2 || len(table.Body[0].Cells[0].Blocks) != 0 {
+		t.Fatalf("table = %#v", table)
+	}
+}
