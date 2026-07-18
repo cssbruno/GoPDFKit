@@ -19,7 +19,10 @@ trap cleanup EXIT INT TERM
 
 cd "$workspace_dir"
 go build -o "$server_binary" ./cmd/paper-studio
-"$server_binary" -addr 127.0.0.1:17331 testdata/paper/studio-demo.paper >"$server_log" 2>&1 &
+"$server_binary" -addr 127.0.0.1:17331 \
+	-assets testdata/paper/studio-assets.json \
+	-asset-root testdata/paper/assets \
+	testdata/paper/studio-demo.paper >"$server_log" 2>&1 &
 server_pid=$!
 
 attempt=0

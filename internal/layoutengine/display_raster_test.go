@@ -17,6 +17,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"golang.org/x/image/font/opentype"
 )
 
 func TestCaptureDisplayPlanPNGDeterministicLosslessPageAndManifest(t *testing.T) {
@@ -46,7 +48,7 @@ func TestCaptureDisplayPlanPNGDeterministicLosslessPageAndManifest(t *testing.T)
 	if manifest.PNGSHA256 != hex.EncodeToString(digest[:]) || manifest.PNGByteLength != uint64(len(first.PNG())) {
 		t.Fatalf("PNG evidence = %+v", manifest)
 	}
-	if manifest.PNGSHA256 != "29043bd5aa62857587229a8278ad710ccdff40d40d16d57db20b0ffa13d25f60" {
+	if manifest.PNGSHA256 != "9515ef97ae551017a2ec606bf385ca24a5d269e0970e6ca13725d13aa2de2549" {
 		t.Fatalf("fixture raster hash = %s", manifest.PNGSHA256)
 	}
 	decoded, err := png.Decode(bytes.NewReader(first.PNG()))
@@ -173,6 +175,47 @@ func TestRasterOpacityAlphaRoundsAndPreservesMaximum(t *testing.T) {
 	}
 	if got := rasterOpacityAlpha(127, Fixed(FixedScale/2)); got != 64 {
 		t.Fatalf("combined alpha = %d, want rounded 64", got)
+	}
+}
+
+func TestRasterCoreFontSubstituteFitsPlannedRunWithoutGlyphCollisions(t *testing.T) {
+	fontBytes, err := os.ReadFile("../../assets/static/font/DejaVuSansCondensed.ttf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := opentype.Parse(fontBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canvas := image.NewRGBA(image.Rect(0, 0, 144, 144))
+	for y := 0; y < canvas.Bounds().Dy(); y++ {
+		for x := 0; x < canvas.Bounds().Dx(); x++ {
+			canvas.SetRGBA(x, y, color.RGBA{255, 255, 255, 255})
+		}
+	}
+	unit := Fixed(FixedScale)
+	run := CoreGlyphRun{
+		Font: 1, FontSize: 12 * unit, Origin: Point{X: 10 * unit, Y: 30 * unit},
+		Codes: "MMMM", Advances: []Fixed{4 * unit, 4 * unit, 4 * unit, 4 * unit},
+	}
+	if err := (&rasterSizedFace{font: parsed}).draw(canvas, CoreFontResource{ID: 1, Face: CoreFontHelvetica}, run,
+		IdentityTransform(), Rect{Width: 72 * unit, Height: 72 * unit}, 144, canvas.Bounds()); err != nil {
+		t.Fatal(err)
+	}
+	ink := false
+	for y := 20; y < 64; y++ {
+		for x := 20; x < 52; x++ {
+			pixel := canvas.RGBAAt(x, y)
+			ink = ink || pixel.R < 240 || pixel.G < 240 || pixel.B < 240
+		}
+		for x := 52; x < 72; x++ {
+			if pixel := canvas.RGBAAt(x, y); pixel != (color.RGBA{255, 255, 255, 255}) {
+				t.Fatalf("substitute ink escaped planned run at (%d,%d): %+v", x, y, pixel)
+			}
+		}
+	}
+	if !ink {
+		t.Fatal("core-font substitute painted no visible glyphs")
 	}
 }
 

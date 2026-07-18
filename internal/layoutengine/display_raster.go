@@ -18,7 +18,9 @@ import (
 	"image/png"
 	"math"
 	"sort"
+	"strings"
 
+	xdraw "golang.org/x/image/draw"
 	xfont "golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
@@ -28,7 +30,7 @@ import (
 
 const (
 	DisplayRasterManifestVersion uint16 = 1
-	DisplayRasterRendererVersion        = "layoutengine/go-display-raster@2"
+	DisplayRasterRendererVersion        = "layoutengine/go-display-raster@3"
 
 	DisplayRasterHardMaxPixels      uint64 = 64 << 20
 	DisplayRasterHardMaxSourceBytes uint64 = 64 << 20
@@ -449,6 +451,9 @@ func (face *rasterSizedFace) draw(dst *image.RGBA, resource CoreFontResource, ru
 	if run.Color.Set {
 		colorValue.R, colorValue.G, colorValue.B = run.Color.R, run.Color.G, run.Color.B
 	}
+	if !resource.IsEmbeddedUTF8() {
+		return drawRasterCoreFontRun(dst, actual, run, transform, crop, colorValue, clip)
+	}
 	x := origin.X
 	var target draw.Image = dst
 	if clip != dst.Bounds() {
@@ -467,6 +472,68 @@ func (face *rasterSizedFace) draw(dst *image.RGBA, resource CoreFontResource, ru
 		x, _ = x.Add(run.Advances[index])
 		index++
 	}
+	return nil
+}
+
+// Standard-14 PDF fonts carry exact metrics but no outline program. Web
+// previews therefore receive a deterministic substitute outline. Painting
+// that substitute one glyph at a time at Standard-14 advances makes its
+// unrelated side bearings collide. Shape the substitute naturally as one run,
+// then fit only its horizontal extent to the already-planned run width. The
+// authoritative baseline, width, pagination, and hit geometry stay unchanged.
+func drawRasterCoreFontRun(dst *image.RGBA, face xfont.Face, run CoreGlyphRun, transform Transform, crop Rect, colorValue color.NRGBA, clip image.Rectangle) error {
+	var text strings.Builder
+	text.Grow(len(run.Codes))
+	for index := 0; index < len(run.Codes); index++ {
+		text.WriteRune(charmap.Windows1252.DecodeByte(run.Codes[index]))
+	}
+	value := text.String()
+	naturalAdvance := xfont.MeasureString(face, value)
+	if naturalAdvance <= 0 {
+		return nil
+	}
+	plannedAdvance := Fixed(0)
+	for _, advance := range run.Advances {
+		var err error
+		plannedAdvance, err = plannedAdvance.Add(advance)
+		if err != nil {
+			return fmt.Errorf("%w: glyph run advance overflow", ErrDisplayRasterUnsupported)
+		}
+	}
+	if plannedAdvance <= 0 {
+		return nil
+	}
+
+	metrics := face.Metrics()
+	sourceWidth := naturalAdvance.Ceil()
+	sourceHeight := (metrics.Ascent + metrics.Descent).Ceil()
+	if sourceWidth <= 0 || sourceHeight <= 0 {
+		return nil
+	}
+	source := image.NewRGBA(image.Rect(0, 0, sourceWidth, sourceHeight))
+	drawer := xfont.Drawer{
+		Dst: source, Src: image.NewUniform(colorValue), Face: face,
+		Dot: fixed.Point26_6{Y: fixed.I(metrics.Ascent.Ceil())},
+	}
+	drawer.DrawString(value)
+
+	origin, _ := transform.Apply(run.Origin)
+	x0 := pageToRaster26_6(origin.X, crop.X, uint32(dst.Bounds().Dx()), crop.Width) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	xEnd, addErr := origin.X.Add(plannedAdvance)
+	if addErr != nil {
+		return fmt.Errorf("%w: glyph run destination overflow", ErrDisplayRasterUnsupported)
+	}
+	x1 := pageToRaster26_6(xEnd, crop.X, uint32(dst.Bounds().Dx()), crop.Width)            // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	baseline := pageToRaster26_6(origin.Y, crop.Y, uint32(dst.Bounds().Dy()), crop.Height) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	destination := image.Rect(x0.Floor(), (baseline - metrics.Ascent).Floor(), x1.Ceil(), (baseline-metrics.Ascent).Floor()+sourceHeight)
+	if destination.Empty() || destination.Intersect(clip).Empty() {
+		return nil
+	}
+	target := dst
+	if clip != dst.Bounds() {
+		target = dst.SubImage(clip).(*image.RGBA)
+	}
+	xdraw.ApproxBiLinear.Scale(target, destination, source, source.Bounds(), draw.Over, nil)
 	return nil
 }
 
