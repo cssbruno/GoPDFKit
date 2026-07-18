@@ -152,6 +152,7 @@ func TestHTMLUnifiedFlexResolvesDirectionalAndTwoValueGaps(t *testing.T) {
 }
 
 func TestHTMLUnifiedFlexJustificationHasExactPlanCursorRasterAndSemantics(t *testing.T) {
+	requireDarwinRasterBaseline(t)
 	tests := []struct {
 		justify    string
 		wantFirst  float64

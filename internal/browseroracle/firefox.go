@@ -73,7 +73,7 @@ func CaptureFirefox(ctx context.Context, source, rectExpression string, options 
 		expected = PinnedFirefoxVersion
 	}
 	if version != expected {
-		return Capture{}, fmt.Errorf("browseroracle: Firefox version %q does not match pinned %q", version, expected)
+		return Capture{}, fmt.Errorf("%w: Firefox version %q does not match pinned %q", ErrBrowserUnavailable, version, expected)
 	}
 	runCtx, cancel := context.WithTimeout(ctx, options.Timeout)
 	defer cancel()

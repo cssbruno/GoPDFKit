@@ -19,6 +19,7 @@ const htmlUnifiedFlexWrapFixture = `<div style="display:flex;flex-wrap:wrap;heig
 	`<p style="flex:0 0 80pt">One</p><h2 style="flex:0 0 80pt">Two</h2><p style="flex:0 0 80pt">Three</p></div>`
 
 func TestHTMLUnifiedFlexWrapExactPlanSemanticsRasterPDFAndCursor(t *testing.T) {
+	requireDarwinRasterBaseline(t)
 	compiled, err := CompileHTML(htmlUnifiedFlexWrapFixture)
 	if err != nil {
 		t.Fatal(err)

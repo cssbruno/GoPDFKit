@@ -113,8 +113,7 @@ func TestUnixProtocolSocketBoundsPathsAndFrames(t *testing.T) {
 	}
 	replacedPath := filepath.Join(shortProtocolSocketDir(t), "replaced.sock")
 	owned := requireUnixProtocolListener(t, replacedPath, server, UnixProtocolOptions{MaxConcurrent: 1, IOTimeout: time.Second})
-	_ = owned.listener.Close()
-	if err := os.Remove(replacedPath); err != nil {
+	if err := owned.Close(); err != nil {
 		t.Fatal(err)
 	}
 	replacement, err := net.ListenUnix("unix", &net.UnixAddr{Name: replacedPath, Net: "unix"})

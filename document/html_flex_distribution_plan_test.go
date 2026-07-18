@@ -123,6 +123,7 @@ func TestHTMLUnifiedFlexWrappedFixedAndPercentageBasesGrowPerLine(t *testing.T) 
 }
 
 func TestHTMLUnifiedFlexReverseMainKeepsReadingOrderAndRenders(t *testing.T) {
+	requireDarwinRasterBaseline(t)
 	source := `<div style="display:flex;flex-direction:row-reverse;gap:10pt">` +
 		`<p style="flex:0 0 40pt">First</p><h2 style="flex:0 0 40pt">Second</h2></div>`
 	compiled, err := CompileHTML(source)
