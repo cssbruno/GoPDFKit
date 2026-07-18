@@ -3261,9 +3261,12 @@ as completed behavior.
   boundaries.
 - [x] All current public compatibility entry points still work
   (`go test ./...`, including typed/HTML adapter and template tests).
-- [x] Fixture, benchmark, security, and compliance gates pass: `go test ./...`,
-  `go vet ./...`, focused document/compliance race tests, generation benchmark
-  budgets, Paper Engine calibration gate, and Paper Studio JavaScript tests.
+- [ ] Fixture, benchmark, security, and compliance gates pass. Local
+  `go test ./...`, `go vet ./...`, repository-wide race tests, generation
+  benchmark budgets, the Paper Engine calibration gate, and Paper Studio
+  JavaScript tests pass; strict `gosec` still reports 650 `G115` findings, and
+  the external PDF/A, PDF/UA, and Arlington validators require the release
+  environment described in the stabilization record.
 
 ## 13. Stage 11 — Ecosystem and production hardening
 
