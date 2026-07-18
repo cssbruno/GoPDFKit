@@ -207,6 +207,9 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 	revisionIndexes := make(map[RevisionHandle]int, len(revisionSerials))
 	for _, serial := range revisionSerials {
 		record := w.revisions[serial]
+		if record == nil {
+			return persistentWorkspace{}, workspaceError("PERSISTENCE_REVISION", "retained source revision is missing", ErrPersistenceCorrupt)
+		}
 		if !w.ownsPartition(record.partition) {
 			return persistentWorkspace{}, workspaceError("PERSISTENCE_PARTITION", "retained state has an invalid cache partition", ErrPersistenceCorrupt)
 		}
@@ -215,6 +218,9 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 	}
 	for _, serial := range sortedRecordKeys(w.candidates) {
 		record := w.candidates[serial]
+		if record == nil {
+			return persistentWorkspace{}, workspaceError("PERSISTENCE_CANDIDATE", "retained candidate is missing", ErrPersistenceCorrupt)
+		}
 		head, ok := revisionIndexes[record.head]
 		if !w.ownsPartition(record.partition) {
 			return persistentWorkspace{}, workspaceError("PERSISTENCE_HEAD", "candidate head is not retained in its partition", ErrPersistenceCorrupt)
@@ -235,6 +241,9 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 	scenarioIndexes := make(map[ScenarioRevisionHandle]int, len(scenarioSerials))
 	for _, serial := range scenarioSerials {
 		record := w.scenarioRevisions[serial]
+		if record == nil {
+			return persistentWorkspace{}, workspaceError("PERSISTENCE_SCENARIO", "retained scenario revision is missing", ErrPersistenceCorrupt)
+		}
 		if !w.ownsPartition(record.partition) {
 			return persistentWorkspace{}, workspaceError("PERSISTENCE_PARTITION", "retained state has an invalid cache partition", ErrPersistenceCorrupt)
 		}
@@ -243,6 +252,9 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 	}
 	for _, serial := range sortedRecordKeys(w.scenarioCandidates) {
 		record := w.scenarioCandidates[serial]
+		if record == nil {
+			return persistentWorkspace{}, workspaceError("PERSISTENCE_SCENARIO_CANDIDATE", "retained scenario candidate is missing", ErrPersistenceCorrupt)
+		}
 		head, ok := scenarioIndexes[record.head]
 		if !w.ownsPartition(record.partition) {
 			return persistentWorkspace{}, workspaceError("PERSISTENCE_HEAD", "scenario candidate head is not retained in its partition", ErrPersistenceCorrupt)
@@ -256,6 +268,9 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 	semanticIndexes := make(map[SemanticTemplateRevisionHandle]int, len(semanticSerials))
 	for _, serial := range semanticSerials {
 		record := w.semanticTemplateRevisions[serial]
+		if record == nil {
+			return persistentWorkspace{}, workspaceError("PERSISTENCE_SEMANTIC_TEMPLATE", "retained semantic-template revision is missing", ErrPersistenceCorrupt)
+		}
 		if !w.ownsPartition(record.partition) {
 			return persistentWorkspace{}, workspaceError("PERSISTENCE_PARTITION", "retained semantic-template state has an invalid cache partition", ErrPersistenceCorrupt)
 		}
@@ -264,6 +279,9 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 	}
 	for _, serial := range sortedRecordKeys(w.semanticTemplateCandidates) {
 		record := w.semanticTemplateCandidates[serial]
+		if record == nil {
+			return persistentWorkspace{}, workspaceError("PERSISTENCE_SEMANTIC_TEMPLATE_CANDIDATE", "retained semantic-template candidate is missing", ErrPersistenceCorrupt)
+		}
 		head, ok := semanticIndexes[record.head]
 		if !w.ownsPartition(record.partition) {
 			return persistentWorkspace{}, workspaceError("PERSISTENCE_HEAD", "semantic-template candidate partition is invalid", ErrPersistenceCorrupt)
@@ -276,6 +294,9 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 	policyIndexes := make(map[PolicyRevisionHandle]int, len(policySerials))
 	for _, serial := range policySerials {
 		record := w.policyRevisions[serial]
+		if record == nil {
+			return persistentWorkspace{}, workspaceError("PERSISTENCE_POLICY", "retained policy revision is missing", ErrPersistenceCorrupt)
+		}
 		if !w.ownsPartition(record.partition) {
 			return persistentWorkspace{}, workspaceError("PERSISTENCE_PARTITION", "retained policy state has an invalid cache partition", ErrPersistenceCorrupt)
 		}
@@ -284,6 +305,9 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 	}
 	for _, serial := range sortedRecordKeys(w.policyCandidates) {
 		record := w.policyCandidates[serial]
+		if record == nil {
+			return persistentWorkspace{}, workspaceError("PERSISTENCE_POLICY_CANDIDATE", "retained policy candidate is missing", ErrPersistenceCorrupt)
+		}
 		head, ok := policyIndexes[record.head]
 		if !w.ownsPartition(record.partition) {
 			return persistentWorkspace{}, workspaceError("PERSISTENCE_HEAD", "policy candidate partition is invalid", ErrPersistenceCorrupt)
@@ -306,6 +330,9 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 }
 
 func (w *Workspace) restoreCandidateJournal(head *revisionRecord, persisted *paperedit.JournalState) (*paperedit.Journal, error) {
+	if head == nil {
+		return nil, workspaceError("PERSISTENCE_JOURNAL", "persisted candidate head is missing", ErrPersistenceCorrupt)
+	}
 	if persisted == nil {
 		journal, err := paperedit.NewJournal(head.file, head.source, w.journalLimits())
 		if err != nil {

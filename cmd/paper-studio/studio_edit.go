@@ -259,13 +259,22 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 		Target: request.Target, ExpectedFingerprint: fingerprint, ExpectedInstance: instance,
 		IdempotencyKey: studioEditIdempotencyKey(request),
 	}
+	parentID := ""
+	if parent != nil {
+		parentID = parent.ID
+	}
 	additionalTarget := ""
+	if request.Operation == "grid" || request.Operation == "canvas" || request.Operation == "region" {
+		if parentID == "" {
+			return studioEditResponse{}, fmt.Errorf("%w: operation requires an addressed governing parent", errStudioInvalidEdit)
+		}
+	}
 	if request.Operation == "grid" {
-		additionalTarget = parent.ID
+		additionalTarget = parentID
 	} else if request.Operation == "canvas" {
-		additionalTarget = parent.ID
+		additionalTarget = parentID
 	} else if request.Operation == "region" {
-		additionalTarget = parent.ID
+		additionalTarget = parentID
 	} else if request.Operation == "flow" {
 		additionalTarget = request.NewParent
 	} else if request.Operation == "table" && len(directTargets) == 2 {

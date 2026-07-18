@@ -252,10 +252,13 @@ func (w *Workspace) authorizeMutation(guard PaperMutationGuard, operation Mutati
 	}
 	w.mu.RLock()
 	record, lookupErr := w.mutationAuthorityLocked(guard.Authority)
-	if lookupErr == nil && (record.open != guard.Open || record.candidate != guard.Candidate) {
+	if lookupErr != nil || record == nil {
+		if lookupErr == nil {
+			lookupErr = workspaceError("AUTHORITY_NOT_FOUND", "mutation authority is unavailable", ErrMutationAuthorityDenied)
+		}
+	} else if record.open != guard.Open || record.candidate != guard.Candidate {
 		lookupErr = workspaceError("AUTHORITY_BINDING", "mutation authority does not bind the exact open and candidate", ErrMutationAuthorityDenied)
-	}
-	if lookupErr == nil {
+	} else {
 		evidence.Explicit, evidence.Actor = true, record.actor
 		if _, allowed := record.operations[operation]; !allowed {
 			lookupErr = workspaceError("AUTHORITY_OPERATION_DENIED", "mutation operation is outside the granted capability", ErrMutationAuthorityDenied)

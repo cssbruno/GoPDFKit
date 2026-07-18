@@ -388,7 +388,7 @@ func literalOperation(node *paperlang.Node, target, text string) (paperedit.Oper
 		return nil, nil, workspaceError("AMBIGUOUS_TARGET", "literal target has more than one text representation", paperedit.ErrInvalidOperation)
 	}
 	if children == 1 {
-		if child.ID == "" || child.Value == nil {
+		if child == nil || child.ID == "" || child.Value == nil {
 			return nil, nil, workspaceError("AMBIGUOUS_TARGET", "literal child must have a readable ID and inline value", paperedit.ErrInvalidOperation)
 		}
 		return paperedit.ReplaceText{Target: child.ID, Text: text}, []string{target, child.ID}, nil

@@ -426,6 +426,9 @@ func textFromContentStreamContext(ctx context.Context, stream []byte) (string, e
 }
 
 func lastActualTextToken(tokens []pdfTextToken) string {
+	if len(tokens) == 0 {
+		return ""
+	}
 	for i := len(tokens); i > 0; i-- {
 		if tokens[i-1].actualText {
 			return tokens[i-1].text

@@ -200,29 +200,37 @@ func (r *resolver) indexScope(theme *indexedTheme, path []string, tokens []Token
 
 func (r *resolver) validateParents() {
 	for _, name := range r.themeOrder {
-		parent := r.themes[name].input.Parent
+		theme := r.themes[name]
+		if theme == nil || theme.input == nil {
+			continue
+		}
+		parent := theme.input.Parent
 		if parent != "" {
 			if !validName(parent) {
-				r.add("PAPER_THEME_PARENT", fmt.Sprintf("theme %q has invalid parent %q", name, parent), "use the name of another theme", r.themes[name].input.Source)
+				r.add("PAPER_THEME_PARENT", fmt.Sprintf("theme %q has invalid parent %q", name, parent), "use the name of another theme", theme.input.Source)
 			} else if _, exists := r.themes[parent]; !exists {
-				r.add("PAPER_THEME_PARENT_UNKNOWN", fmt.Sprintf("theme %q has unknown parent %q", name, parent), "declare the parent theme", r.themes[name].input.Source)
+				r.add("PAPER_THEME_PARENT_UNKNOWN", fmt.Sprintf("theme %q has unknown parent %q", name, parent), "declare the parent theme", theme.input.Source)
 			}
 		}
 	}
 	var visit func(string, uint32)
 	visit = func(name string, depth uint32) {
+		theme := r.themes[name]
+		if theme == nil || theme.input == nil {
+			return
+		}
 		if depth > r.limits.MaxDepth {
-			r.addOnce("parent-depth", "PAPER_THEME_DEPTH_LIMIT", "theme inheritance exceeds the configured depth", "shorten the parent chain", r.themes[name].input.Source)
+			r.addOnce("parent-depth", "PAPER_THEME_DEPTH_LIMIT", "theme inheritance exceeds the configured depth", "shorten the parent chain", theme.input.Source)
 			return
 		}
 		r.parentState[name] = 1
-		parent := r.themes[name].input.Parent
+		parent := theme.input.Parent
 		if _, exists := r.themes[parent]; exists && parent != "" {
 			switch r.parentState[parent] {
 			case 0:
 				visit(parent, depth+1)
 			case 1:
-				r.addOnce("parent-cycle:"+name, "PAPER_THEME_PARENT_CYCLE", fmt.Sprintf("theme inheritance cycle reaches %q", parent), "remove one parent edge from the cycle", r.themes[name].input.Source)
+				r.addOnce("parent-cycle:"+name, "PAPER_THEME_PARENT_CYCLE", fmt.Sprintf("theme inheritance cycle reaches %q", parent), "remove one parent edge from the cycle", theme.input.Source)
 			}
 		}
 		r.parentState[name] = 2
@@ -238,6 +246,9 @@ func (r *resolver) resolveThemes() {
 	resolved := make([]ResolvedTheme, 0, len(r.themeOrder))
 	for _, themeName := range r.themeOrder {
 		theme := r.themes[themeName]
+		if theme == nil || theme.input == nil {
+			continue
+		}
 		output := ResolvedTheme{Name: themeName, Parent: theme.input.Parent}
 		keys := make([]string, 0, len(theme.scopes))
 		for key := range theme.scopes {
@@ -246,13 +257,20 @@ func (r *resolver) resolveThemes() {
 		sort.Strings(keys)
 		for _, key := range keys {
 			scope := theme.scopes[key]
+			if scope == nil {
+				continue
+			}
 			names := make([]string, 0, len(scope.tokens))
 			for name := range scope.tokens {
 				names = append(names, name)
 			}
 			sort.Strings(names)
 			for _, name := range names {
-				value, chain, ok := r.resolveAt(themeName, scope.path, name, scope.tokens[name].Source)
+				token := scope.tokens[name]
+				if token == nil {
+					continue
+				}
+				value, chain, ok := r.resolveAt(themeName, scope.path, name, token.Source)
 				if ok {
 					output.Tokens = append(output.Tokens, ResolvedToken{Name: name, Scope: cloneStrings(scope.path), Value: value, Provenance: Provenance{Chain: cloneSteps(chain)}})
 				}
@@ -371,6 +389,9 @@ func (r *resolver) resolveToken(theme string, scope []string, token *Token, chai
 }
 
 func (r *resolver) lookup(themeName string, path []string, name string) (string, []string, *Token) {
+	if path == nil {
+		path = []string{}
+	}
 	visited := make(map[string]bool)
 	for themeName != "" && !visited[themeName] {
 		visited[themeName] = true

@@ -86,7 +86,9 @@ func (e *repeatExpansionContext) expandLoop(node *paperlang.Node, prior map[*pap
 		return nil
 	}
 	var predicate *paperexpr.Program
+	predicateSpan := node.HeaderSpan
 	if when := properties["when"]; when != nil {
+		predicateSpan = when.Value.Span
 		expression, _, valid := repeatStringProperty(when)
 		if !valid {
 			e.add("PAPER_LOOP_WHEN", "loop when must be a quoted boolean expression", "use fixture paths and loop.index, loop.first, or loop.last", when.Value.Span)
@@ -137,7 +139,7 @@ func (e *repeatExpansionContext) expandLoop(node *paperlang.Node, prior map[*pap
 		if predicate != nil {
 			bindings, err := loopExpressionBindings(predicate.Paths, root, value, iteration == 1, last)
 			if err != nil {
-				e.add("PAPER_LOOP_BINDING", err.Error(), "make the selected fixture match its schema", properties["when"].Value.Span)
+				e.add("PAPER_LOOP_BINDING", err.Error(), "make the selected fixture match its schema", predicateSpan)
 				return nil
 			}
 			result, err := paperexpr.Evaluate(e.ctx, *predicate, bindings, e.exprLimits.Program)
@@ -148,7 +150,7 @@ func (e *repeatExpansionContext) expandLoop(node *paperlang.Node, prior map[*pap
 				} else if errors.Is(err, paperexpr.ErrLimit) {
 					code = "PAPER_LOOP_LIMIT"
 				}
-				e.add(code, err.Error(), "fix the expression or its explicit bounds", properties["when"].Value.Span)
+				e.add(code, err.Error(), "fix the expression or its explicit bounds", predicateSpan)
 				return nil
 			}
 			include = result.Kind == paperexpr.Bool && result.Bool

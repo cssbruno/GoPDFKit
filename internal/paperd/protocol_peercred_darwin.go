@@ -34,6 +34,9 @@ func unixSocketPeerCredentials(connection *net.UnixConn) (unixProtocolPeer, erro
 	if err != nil {
 		return unixProtocolPeer{}, err
 	}
+	if raw == nil {
+		return unixProtocolPeer{}, errors.New("paperd: socket control is unavailable")
+	}
 	var credential darwinXUCred
 	var pid int32
 	var controlErr error
