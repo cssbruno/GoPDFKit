@@ -22,13 +22,6 @@ type htmlTextStyle struct {
 	script             int
 }
 
-type htmlListState struct {
-	kind      string
-	styleType string
-	counter   int
-	indent    float64
-}
-
 func htmlClosePops(tag string) bool {
 	switch tag {
 	case "br", "img", "hr", "meta", "link", "input":

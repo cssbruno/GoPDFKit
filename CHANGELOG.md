@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.15.0 - 2026-07-17
+
+Breaking pre-1.0 release for the unified automatic-layout engine and Paper
+Studio authoring foundation.
+
+### Changed
+
+- Made typed and supported HTML document entry points lower through the unified
+  planner and painter while retaining their public compatibility signatures.
+- Removed the legacy typed measurement and direct HTML automatic-layout
+  production engines. Unsupported contracts now fail atomically instead of
+  retrying through a hidden compatibility renderer.
+- Added the Stage 9 Paper Studio semantic editing, review, accessibility, and
+  exact-revision delivery foundations.
+- Added migration guides for typed callers, HTML callers, and legacy-engine
+  deletion, including the remaining stabilization-window release contract.
+
+### Verification
+
+- Full Go tests, vet, the full race suite, Paper Studio JavaScript tests,
+  generation budgets, and the calibrated Paper Engine benchmark gate pass on
+  the release candidate branch.
+- The stabilization-window record and formal rollback closure remain release
+  prerequisites; no release tag is implied by this changelog entry.
+
 ## v0.14.0 - 2026-07-16
 
 ### Security

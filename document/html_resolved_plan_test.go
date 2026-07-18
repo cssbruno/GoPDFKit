@@ -77,6 +77,19 @@ func TestHTMLUnifiedResolvedCSSCascadeInheritanceAndSelectorFreeBoundary(t *test
 	}
 }
 
+func TestHTMLCSSCascadeScanFallback(t *testing.T) {
+	el := HTMLSegmentType{Str: "span", Attr: map[string]string{"class": "note"}}
+	ancestors := []HTMLSegmentType{{Str: "section", Attr: map[string]string{"class": "body"}}}
+	rules := []htmlCSSRule{
+		{selectors: parseHTMLCSSSelectors("span"), declarations: map[string]string{"color": "red"}},
+		{selectors: parseHTMLCSSSelectors("section > span.note"), declarations: map[string]string{"font-weight": "bold"}},
+	}
+	declarations := htmlElementDeclarationsWithStyle(el, rules, map[string]string{"font-size": "12pt"}, ancestors...)
+	if declarations["color"] != "red" || declarations["font-weight"] != "bold" || declarations["font-size"] != "12pt" {
+		t.Fatalf("fallback declarations = %#v, want matched rules plus inline style", declarations)
+	}
+}
+
 func TestHTMLUnifiedHeadingDefaultsMatchBrowserUserAgentSubset(t *testing.T) {
 	compiled, err := CompileHTML(`<h1>Title</h1><h2>Subhead</h2>`)
 	if err != nil {

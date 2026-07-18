@@ -53,18 +53,8 @@ type HTML struct {
 	MaxTableRows int
 	// DebugLog receives best-effort diagnostics for unsupported HTML or CSS.
 	// Leave nil to keep rendering quiet.
-	DebugLog              func(message string)
-	renderStartPageCount  int
-	renderCacheActive     bool
-	dataImageCache        map[string]htmlImageSource
-	styleDeclarationCache map[string]map[string]string
-	compiledStyleCache    map[string]map[string]string
-	inlineSVGCache        map[string]*SVG
-}
-
-type htmlImageSource struct {
-	name    string
-	options ImageOptions
+	DebugLog             func(message string)
+	renderStartPageCount int
 }
 
 const (
@@ -266,154 +256,6 @@ func (html *HTML) validateCompiledTableRowLimit(compiled *CompiledHTML) error {
 	return nil
 }
 
-func (html *HTML) applyTextStyle(st htmlTextStyle, fallback CSSColorType) {
-	styleStr := htmlTextStyleFontStyle(st)
-	fontStyle := htmlTextStyleBaseFontStyle(st)
-	fontFamilyChanged := st.fontFamily != "" && !strings.EqualFold(fontFamilyEscape(st.fontFamily), html.pdf.fontFamily)
-	fontSizeChanged := st.fontSize != 0 && html.pdf.fontSizePt != st.fontSize
-	if html.pdf.currentFont.Name == "" || fontFamilyChanged || html.pdf.fontStyle != fontStyle || html.pdf.underline != st.underline || html.pdf.strikeout != st.strike || fontSizeChanged {
-		html.pdf.SetFont(st.fontFamily, styleStr, st.fontSize)
-	}
-	color := fallback
-	if st.color.Set {
-		color = st.color
-	}
-	if html.pdf.color.text.mode != colorModeRGB || html.pdf.color.text.ir != color.R || html.pdf.color.text.ig != color.G || html.pdf.color.text.ib != color.B {
-		html.pdf.SetTextColor(color.R, color.G, color.B)
-	}
-}
-
-func htmlTextStyleMask(st htmlTextStyle) int {
-	mask := 0
-	if st.bold {
-		mask |= 1
-	}
-	if st.italic {
-		mask |= 2
-	}
-	if st.underline {
-		mask |= 4
-	}
-	if st.strike {
-		mask |= 8
-	}
-	return mask
-}
-
-func htmlTextStyleFontStyle(st htmlTextStyle) string {
-	return [...]string{"", "B", "I", "BI", "U", "BU", "IU", "BIU", "S", "BS", "IS", "BIS", "US", "BUS", "IUS", "BIUS"}[htmlTextStyleMask(st)]
-}
-
-func htmlTextStyleBaseFontStyle(st htmlTextStyle) string {
-	return [...]string{"", "B", "I", "BI"}[htmlTextStyleMask(st)&3]
-}
-
-func htmlListStateFromElement(st htmlTextStyle, attrs map[string]string, lineHt float64) htmlListState {
-	state := htmlListState{kind: st.list, styleType: st.listStyleType, counter: htmlListStart(attrs) - 1, indent: lineHt * 1.5}
-	if state.styleType == "" {
-		state.styleType = htmlListTypeAttr(attrs, state.kind)
-	}
-	if state.styleType == "" {
-		if state.kind == "ol" {
-			state.styleType = "decimal"
-		} else {
-			state.styleType = "disc"
-		}
-	}
-	return state
-}
-
-func htmlListStart(attrs map[string]string) int {
-	start, err := strconv.Atoi(strings.TrimSpace(attrs["start"]))
-	if err != nil || start < 1 {
-		return 1
-	}
-	return start
-}
-
-func htmlListTypeAttr(attrs map[string]string, kind string) string {
-	raw := strings.TrimSpace(attrs["type"])
-	value := strings.ToLower(raw)
-	switch raw {
-	case "1":
-		return "decimal"
-	case "a":
-		return "lower-alpha"
-	case "A":
-		return "upper-alpha"
-	case "i":
-		return "lower-roman"
-	case "I":
-		return "upper-roman"
-	}
-	switch value {
-	case "disc", "circle", "square":
-		if kind == "ul" {
-			return value
-		}
-	}
-	return ""
-}
-
-func (state htmlListState) marker() string {
-	if state.styleType == "none" {
-		return ""
-	}
-	if state.kind != "ol" {
-		switch state.styleType {
-		case "circle":
-			return "o "
-		case "square":
-			return "* "
-		default:
-			return "- "
-		}
-	}
-	switch state.styleType {
-	case "lower-alpha":
-		return strings.ToLower(htmlAlphaCounter(state.counter)) + ". "
-	case "upper-alpha":
-		return htmlAlphaCounter(state.counter) + ". "
-	case "lower-roman":
-		return strings.ToLower(htmlRomanCounter(state.counter)) + ". "
-	case "upper-roman":
-		return htmlRomanCounter(state.counter) + ". "
-	default:
-		return strconv.Itoa(state.counter) + ". "
-	}
-}
-
-func htmlAlphaCounter(n int) string {
-	if n <= 0 {
-		return strconv.Itoa(n)
-	}
-	var chars []byte
-	for n > 0 {
-		n--
-		chars = append([]byte{byte('A' + n%26)}, chars...)
-		n /= 26
-	}
-	return string(chars)
-}
-
-func htmlRomanCounter(n int) string {
-	if n <= 0 || n > 3999 {
-		return strconv.Itoa(n)
-	}
-	values := []struct {
-		value int
-		text  string
-	}{{1000, "M"}, {900, "CM"}, {500, "D"}, {400, "CD"}, {100, "C"}, {90, "XC"}, {50, "L"}, {40, "XL"}, {10, "X"}, {9, "IX"}, {5, "V"}, {4, "IV"}, {1, "I"}}
-	var out strings.Builder
-	for _, item := range values {
-		for n >= item.value {
-			out.WriteString(item.text)
-			n -= item.value
-		}
-	}
-	return out.String()
-}
-
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if strings.TrimSpace(value) != "" {
@@ -423,46 +265,11 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func appendHTMLAncestors(ancestors []HTMLSegmentType, elements ...HTMLSegmentType) []HTMLSegmentType {
-	out := make([]HTMLSegmentType, 0, len(ancestors)+len(elements))
-	out = append(out, ancestors...)
-	out = append(out, elements...)
-	return out
-}
-
-func htmlEffectiveLineHeight(st htmlTextStyle, fallback float64) float64 {
-	if st.lineHeight > 0 {
-		return st.lineHeight
-	}
-	return fallback
-}
-
 func htmlStyleValue(attrs map[string]string, name string) string {
 	if attrs == nil {
 		return ""
 	}
 	return parseStyleDeclarations(attrs["style"])[strings.ToLower(name)]
-}
-
-func htmlHasBoxEdgeDeclaration(decl map[string]string, name string) bool {
-	if strings.TrimSpace(decl[name]) != "" {
-		return true
-	}
-	for _, side := range []string{"top", "right", "bottom", "left"} {
-		if strings.TrimSpace(decl[name+"-"+side]) != "" {
-			return true
-		}
-	}
-	return false
-}
-
-func htmlHasBreakDeclaration(decl map[string]string) bool {
-	for _, name := range []string{"break-before", "page-break-before", "break-after", "page-break-after", "break-inside", "page-break-inside"} {
-		if strings.TrimSpace(decl[name]) != "" {
-			return true
-		}
-	}
-	return false
 }
 
 func htmlBreakForcesPage(value string) bool {
@@ -471,64 +278,6 @@ func htmlBreakForcesPage(value string) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-func htmlBreakAvoidsInside(value string) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "avoid", "avoid-page":
-		return true
-	default:
-		return false
-	}
-}
-
-func htmlBoxEdgesFromDeclarations(decl map[string]string, name string, pdf *Document, relative float64) htmlBoxEdges {
-	var edges htmlBoxEdges
-	if values := strings.Fields(decl[name]); len(values) > 0 && len(values) <= 4 {
-		if parsed, ok := parseHTMLBoxEdgeValues(values, pdf, relative); ok {
-			edges = parsed
-		}
-	}
-	for _, side := range []struct {
-		name string
-		set  func(float64)
-	}{{"top", func(v float64) {
-		edges.top = v
-	}}, {"right", func(v float64) {
-		edges.right = v
-	}}, {"bottom", func(v float64) {
-		edges.bottom = v
-	}}, {"left", func(v float64) {
-		edges.left = v
-	}}} {
-		if value, ok := parseHTMLBoxLength(decl[name+"-"+side.name], pdf, relative); ok {
-			side.set(value)
-		}
-	}
-	return edges
-}
-
-func parseHTMLBoxEdgeValues(values []string, pdf *Document, relative float64) (htmlBoxEdges, bool) {
-	parsed := make([]float64, len(values))
-	for i, value := range values {
-		n, ok := parseHTMLBoxLength(value, pdf, relative)
-		if !ok {
-			return htmlBoxEdges{}, false
-		}
-		parsed[i] = n
-	}
-	switch len(parsed) {
-	case 1:
-		return htmlBoxEdges{top: parsed[0], right: parsed[0], bottom: parsed[0], left: parsed[0]}, true
-	case 2:
-		return htmlBoxEdges{top: parsed[0], right: parsed[1], bottom: parsed[0], left: parsed[1]}, true
-	case 3:
-		return htmlBoxEdges{top: parsed[0], right: parsed[1], bottom: parsed[2], left: parsed[1]}, true
-	case 4:
-		return htmlBoxEdges{top: parsed[0], right: parsed[1], bottom: parsed[2], left: parsed[3]}, true
-	default:
-		return htmlBoxEdges{}, false
 	}
 }
 
@@ -582,47 +331,4 @@ func parseHTMLBoxLength(value string, pdf *Document, relative float64) (float64,
 
 func isFiniteFloat(n float64) bool {
 	return !math.IsNaN(n) && !math.IsInf(n, 0)
-}
-
-func (html *HTML) htmlImageSource(src string) (string, ImageOptions, error) {
-	options := ImageOptions{ReadDpi: true}
-	if !strings.HasPrefix(strings.ToLower(src), "data:") {
-		if err := validateHTMLImageSource(src); err != nil {
-			return "", options, err
-		}
-		if !html.AllowLocalImages {
-			return "", options, errors.New("local HTML images are disabled")
-		}
-		if html.pdf != nil {
-			if err := html.pdf.requireSecurityFeature("local HTML images", html.pdf.securityPolicy.AllowLocalHTMLImages); err != nil {
-				return "", options, err
-			}
-		}
-		return src, options, nil
-	}
-	if cached, ok := html.dataImageCache[src]; ok {
-		return cached.name, cached.options, nil
-	}
-	img, ok, err := compileHTMLDataImageSource(src, html.maxDataImageBytes())
-	if err != nil {
-		return "", options, err
-	}
-	if !ok {
-		return "", options, errors.New("invalid HTML image data URI")
-	}
-	name, options, err := img.register(html.pdf)
-	if err != nil {
-		return "", options, err
-	}
-	if html.dataImageCache != nil {
-		html.dataImageCache[src] = htmlImageSource{name: name, options: options}
-	}
-	return name, options, nil
-}
-
-func (html *HTML) compiledHTMLImageSource(compiled *CompiledHTML, tokenIndex int, src string) (string, ImageOptions, error) {
-	if img, ok := compiled.dataImage(tokenIndex); ok {
-		return img.register(html.pdf)
-	}
-	return html.htmlImageSource(src)
 }

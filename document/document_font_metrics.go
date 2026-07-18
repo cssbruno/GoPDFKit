@@ -71,20 +71,6 @@ func applyPlannerTextStyle(pdf *Document, style layout.TextStyle) pdfTextStyleSt
 	return state
 }
 
-func restorePlannerTextStyle(pdf *Document, state pdfTextStyleState) {
-	family := state.family
-	if family == "" {
-		family = "Helvetica"
-	}
-	size := state.sizePt
-	if size <= 0 {
-		size = 12
-	}
-	setFontForPlannerMetrics(pdf, family, state.style, size)
-	pdf.underline = state.underline
-	pdf.strikeout = state.strikeout
-}
-
 func setFontForPlannerMetrics(pdf *Document, family, style string, size float64) {
 	page := pdf.page
 	pdf.page = 0
