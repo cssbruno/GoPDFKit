@@ -36,17 +36,18 @@ threshold from the first sample.
 
 | Budget | Approved threshold | Observed result | Evidence |
 | --- | --- | --- | --- |
-| Unified typed fallback rate | `<approved value>` | `<value>` | `<artifact>` |
-| Unified HTML fallback rate | `<approved value>` | `<value>` | `<artifact>` |
+| Typed legacy-renderer invocations | `0` | `<value>` | `<artifact>` |
+| HTML legacy-renderer invocations | `0` | `<value>` | `<artifact>` |
 | Compatibility drift | `<approved value>` | `<value>` | `<artifact>` |
 | Performance | `<approved value>` | `<value>` | `<artifact>` |
 | Compliance | `<approved value>` | `<value>` | `<artifact>` |
 | Race/concurrency | `<approved value>` | `<value>` | `<artifact>` |
 
-Fallback measurements must include numerator, denominator, cohort/corpus
-revision, platform, and the privacy-safe unsupported-reason categories. Named
-platform baselines must include the command, toolchain, hardware/OS label, and
-immutable artifact hash.
+Legacy-renderer measurements must identify the cohort/corpus revision and show
+zero invocations. Unsupported inputs are explicit failures and are reported by
+privacy-safe reason category; they are never routed to another layout engine.
+Named platform baselines must include the command, toolchain, hardware/OS
+label, and immutable artifact hash.
 
 ## Required external evidence
 
@@ -82,7 +83,7 @@ the Stage 10 checklist must not be marked complete.
 After the record is accepted, it can support these checklist claims:
 
 1. both unified routes shipped through the window;
-2. fallback rates are within the approved threshold;
+2. legacy automatic-renderer invocation counts are zero;
 3. no blocker requires legacy layout;
 4. compatibility, performance, and compliance budgets pass; and
 5. rollback criteria are expired or formally closed.

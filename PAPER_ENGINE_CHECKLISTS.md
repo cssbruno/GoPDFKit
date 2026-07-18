@@ -440,12 +440,11 @@ as completed behavior.
 - [x] Include node, instance, fragment, scenario, page, and rectangle ([contract](internal/layoutengine/diagnostics.go), [tests](internal/layoutengine/diagnostics_test.go)).
 - [x] Include structured evidence and related diagnostics ([contract](internal/layoutengine/diagnostics.go), [tests](internal/layoutengine/diagnostics_test.go)).
 - [x] Define typed fixes separately from free-form messages ([contract](internal/layoutengine/diagnostics.go), [tests](internal/layoutengine/diagnostics_test.go)).
-- [x] Define explicit strict versus fallback-allowed behavior: strict mode
-  always emits an error, while compatibility mode can authorize only a named
-  whole-fragment fallback and must retain a warning/evidence record; absent or
-  ambiguous fallbacks remain errors
-  ([contract](internal/layoutengine/compatibility.go),
-  [tests](internal/layoutengine/compatibility_test.go)).
+- [x] Define strict unsupported-capability behavior: unsupported input always
+  emits an error before output mutation; no compatibility mode or alternate
+  renderer route is exposed or retained
+  ([implementation](document/html.go),
+  [tests](document/html_default_cutover_test.go)).
 - [x] Define cancellation, work-limit, and resource-limit diagnostics ([contract](internal/layoutengine/diagnostics.go)).
 
 ### Prototype plan contracts
@@ -1248,14 +1247,11 @@ as completed behavior.
   measures a 3.57 ms/op median, at most 5,355,411 B/op, and 16,803 allocs/op
   across ten Apple M2 samples ([benchmark](document/typed_default_cutover_test.go),
   [baseline](docs/performance/baselines/typed-default-apple-m2.txt)).
-- [x] Legacy typed path is private and used only for rollback/shadow comparison.
-  `WriteDocument` selects the immutable unified plan for every fresh supported
-  model; fallback is one whole-document call with no mixed layout islands.
-  `Hooks.OnLayoutEngineRoute` exposes a bounded stable category for fallback-rate
-  aggregation without authored content or private renderer types, and malformed
-  planning failures remain pre-page atomic rather than silently changing
-  engines. Direct legacy calls exist only in package-private shadow/differential
-  tests
+- [x] `WriteDocument` selects the immutable unified plan for every fresh
+  supported model. `Hooks.OnLayoutEngineRoute` provides bounded route auditing
+  without authored content or private renderer types, and malformed planning
+  failures remain pre-page atomic rather than changing engines. No legacy
+  automatic renderer route remains
   ([implementation](document/document_render.go),
   [privacy, atomicity, route, corpus, and race evidence](document/typed_default_cutover_test.go)).
 
@@ -1869,10 +1865,10 @@ as completed behavior.
 - [x] Route `LongFormHTMLDocumentModel` through HTML-to-IR
   ([implementation](document/document_longform.go),
   [tests](document/document_longform_test.go)).
-- [x] Keep legacy fallback private and observable
+- [x] Reject unsupported HTML atomically without a legacy renderer
   ([implementation](document/html.go), [migration](docs/migration/html-unified-default.md)).
-- [x] Record fallback rate and unsupported reasons in test/release diagnostics.
-  Stable privacy-safe categories and exact corpus rates are exercised by
+- [x] Record zero legacy-renderer invocations and unsupported reasons in
+  test/release diagnostics. Stable privacy-safe categories are exercised by
   [cutover tests](document/html_default_cutover_test.go).
 - [x] Publish a compatibility and migration note
   ([guide](docs/migration/html-unified-default.md)).
@@ -3282,7 +3278,8 @@ as completed behavior.
 
 - [ ] Unified typed path has shipped through the stabilization window.
 - [ ] Unified HTML path has shipped through the stabilization window.
-- [ ] Fallback rate is within the agreed threshold.
+- [ ] Legacy automatic-renderer invocation count is verified as zero for the
+  accepted stabilization cohort.
 - [ ] No unresolved blocker requires legacy layout.
 - [ ] Compatibility, performance, and compliance error budgets pass.
 - [ ] Rollback criteria have expired or been formally closed.
@@ -3410,8 +3407,8 @@ as completed behavior.
 ### Text and internationalization
 
 - [x] Current text behavior is preserved for the initial bounded cutover through
-  pinned typed/HTML characterization, exact frontend-equivalence plans, and the
-  whole-fragment compatibility fallback for unsupported input
+  pinned typed/HTML characterization, exact frontend-equivalence plans, and
+  whole-fragment atomic rejection of unsupported input
   ([typed corpus](document/typed_characterization_test.go),
   [HTML corpus](document/html_characterization_test.go),
   [equivalence](document/frontend_equivalence_test.go)).
@@ -3813,7 +3810,8 @@ an external signature.
 - [ ] Migration guide is complete.
 - [ ] Known limitations are documented.
 - [ ] Rollback procedure is tested.
-- [ ] Legacy fallback policy is documented for stabilization releases.
+- [ ] Stabilization release policy explicitly forbids legacy automatic layout
+  fallback and requires unsupported inputs to fail atomically.
 - [ ] Deletion release confirms the fallback window is closed.
 
 ## 18. Final definition-of-done checklist

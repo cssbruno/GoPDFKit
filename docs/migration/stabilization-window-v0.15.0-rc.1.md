@@ -45,8 +45,8 @@ accepted. No threshold is inferred from these initial candidate samples.
 
 | Budget | Approved threshold | Observed result | Evidence |
 | --- | --- | --- | --- |
-| Unified typed fallback rate | pending owner approval | pending stabilization cohort | typed characterization artifact above |
-| Unified HTML fallback rate | pending owner approval | pending stabilization cohort | HTML characterization artifact above |
+| Typed legacy-renderer invocations | 0 | pending stabilization cohort | typed characterization artifact above |
+| HTML legacy-renderer invocations | 0 | pending stabilization cohort | HTML characterization artifact above |
 | Compatibility drift | pending owner approval | candidate validation passed | release workflow above |
 | Performance | pending owner approval | passed calibrated local gate | `artifacts/paper-engine-benchmarks.txt`, SHA-256 `bc173fa667a856a275ce393108a14755ef9d35742b41f1a733f882425c7562a7` |
 | Compliance | pending owner approval | release-workflow validation passed | release workflow above |

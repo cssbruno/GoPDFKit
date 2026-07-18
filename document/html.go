@@ -180,7 +180,7 @@ func (html *HTML) writeCompiledContext(ctx context.Context, lineHt float64, comp
 		html.pdf.SetError(err)
 		return
 	}
-	if err := html.validateCompiledFallbackSafety(compiled); err != nil {
+	if err := html.validateCompiledLinkSafety(compiled); err != nil {
 		html.pdf.SetError(err)
 		return
 	}
@@ -215,7 +215,7 @@ func (html *HTML) ensureCurrentFont() error {
 	return html.pdf.Error()
 }
 
-func (html *HTML) validateCompiledFallbackSafety(compiled *CompiledHTML) error {
+func (html *HTML) validateCompiledLinkSafety(compiled *CompiledHTML) error {
 	if compiled == nil {
 		return errors.New("compiled HTML is nil")
 	}

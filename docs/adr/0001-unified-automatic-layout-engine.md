@@ -139,11 +139,11 @@ The canonical IR remains private until both existing engines have exercised it.
 - Visible forms, signature placeholders, annotations, and semantic associations
   may appear in a plan because they occupy page space.
 
-Temporary legacy fallback is private and operates only on a complete input
-fragment. Capability selection happens deterministically before the output
-document is mutated and records the selected engine, compatibility cohort, and
-reason. A planner or painter failure never triggers a silent retry through the
-legacy engine. No permanent public legacy switch is introduced.
+The temporary legacy fallback described by the original migration design has
+been deleted. Capability validation happens deterministically before the output
+document is mutated. Unsupported input fails atomically; planner or painter
+failure never retries through another renderer, and no public or private legacy
+switch remains.
 
 ## Unresolved characterization gates
 
@@ -159,8 +159,7 @@ corresponding production cutover:
   `SetAcceptPageBreakFunc` callbacks can perform arbitrary drawing and state
   changes during page creation. They cannot be represented in an exact plan or
   preview as opaque closures. Characterization must precede a decision to use
-  deterministic legacy fallback, reject the combination, or replace it with
-  declarative planned page regions.
+  rejection or replacement with declarative planned page regions.
 - Current typed and HTML paths do not always choose the same page profile when
   automatic and explicit breaks interact with custom size, orientation, or
   rotation. Entry, continuation, and exit behavior must be captured before the
