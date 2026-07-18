@@ -347,11 +347,11 @@ func encodeRasterPNG(output io.Writer, canvas *image.RGBA) error {
 	binary.BigEndian.PutUint32(header[0:4], uint32(canvas.Bounds().Dx())) // #nosec G115 -- raster dimensions are bounded by the validated pixel limit.
 	binary.BigEndian.PutUint32(header[4:8], uint32(canvas.Bounds().Dy())) // #nosec G115 -- raster dimensions are bounded by the validated pixel limit.
 	header[8], header[9] = 8, 6                                           // 8-bit RGBA.
-	if err := writeRasterPNGChunk(output, "IHDR", header[:]); err != nil {
+	if err := writeRasterPNGChunk(output, [4]byte{'I', 'H', 'D', 'R'}, header[:]); err != nil {
 		return err
 	}
-	var compressed bytes.Buffer
-	deflater, err := zlib.NewWriterLevel(&compressed, zlib.BestSpeed)
+	idat := rasterPNGIDATWriter{output: output}
+	deflater, err := zlib.NewWriterLevel(&idat, zlib.BestSpeed)
 	if err != nil {
 		return err
 	}
@@ -368,14 +368,23 @@ func encodeRasterPNG(output io.Writer, canvas *image.RGBA) error {
 	if err := deflater.Close(); err != nil {
 		return err
 	}
-	if err := writeRasterPNGChunk(output, "IDAT", compressed.Bytes()); err != nil {
-		return err
-	}
-	return writeRasterPNGChunk(output, "IEND", nil)
+	return writeRasterPNGChunk(output, [4]byte{'I', 'E', 'N', 'D'}, nil)
 }
 
-func writeRasterPNGChunk(output io.Writer, kind string, payload []byte) error {
-	if len(kind) != 4 || uint64(len(payload)) > math.MaxUint32 {
+type rasterPNGIDATWriter struct{ output io.Writer }
+
+func (w rasterPNGIDATWriter) Write(payload []byte) (int, error) {
+	if len(payload) == 0 {
+		return 0, nil
+	}
+	if err := writeRasterPNGChunk(w.output, [4]byte{'I', 'D', 'A', 'T'}, payload); err != nil {
+		return 0, err
+	}
+	return len(payload), nil
+}
+
+func writeRasterPNGChunk(output io.Writer, kind [4]byte, payload []byte) error {
+	if uint64(len(payload)) > math.MaxUint32 {
 		return errors.New("invalid PNG chunk")
 	}
 	var length [4]byte
@@ -383,16 +392,15 @@ func writeRasterPNGChunk(output io.Writer, kind string, payload []byte) error {
 	if _, err := output.Write(length[:]); err != nil {
 		return err
 	}
-	if _, err := io.WriteString(output, kind); err != nil {
+	if _, err := output.Write(kind[:]); err != nil {
 		return err
 	}
 	if _, err := output.Write(payload); err != nil {
 		return err
 	}
-	checksum := crc32.NewIEEE()
-	_, _ = io.WriteString(checksum, kind)
-	_, _ = checksum.Write(payload)
-	binary.BigEndian.PutUint32(length[:], checksum.Sum32())
+	checksum := crc32.Update(0, crc32.IEEETable, kind[:])
+	checksum = crc32.Update(checksum, crc32.IEEETable, payload)
+	binary.BigEndian.PutUint32(length[:], checksum)
 	_, err := output.Write(length[:])
 	return err
 }

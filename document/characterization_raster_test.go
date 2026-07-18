@@ -48,7 +48,7 @@ func TestCharacterizationRasterPagesArePinnedBoundedAndFailureAtomic(t *testing.
 	}
 	// Includes the documented local-canvas characterization fixture so the
 	// public typed inventory and its visual evidence stay in lockstep.
-	if got := characterizationRasterPinsHash(t, typedPins); got != "f5b28c8f75a678bd55d250d10a8b943b3d082328a363a572a47cf3bfe0fc737e" {
+	if got := characterizationRasterPinsHash(t, typedPins); got != "616cc7384c775f70d66c7ee1558047084cd246d288c8332471e178c3b885bb4f" {
 		t.Fatalf("typed raster baseline drift: got %s", got)
 	}
 
@@ -76,7 +76,7 @@ func TestCharacterizationRasterPagesArePinnedBoundedAndFailureAtomic(t *testing.
 	if htmlRasterPages != 1 || htmlRasterBytes == 0 || htmlRasterBytes > characterizationRasterMaxPNGBytes {
 		t.Fatalf("HTML raster totals pages=%d bytes=%d", htmlRasterPages, htmlRasterBytes)
 	}
-	if got := characterizationRasterPinsHash(t, htmlPins); got != "79697ec527f3c582886c5ec49138e4df258bc7164c5d01005755973c25d88d93" {
+	if got := characterizationRasterPinsHash(t, htmlPins); got != "5ca97f49f1f2893067703d4a6793b611eae181cbd8519c295d86f3d99bca3eb2" {
 		t.Fatalf("HTML raster baseline drift: got %s", got)
 	}
 

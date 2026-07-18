@@ -379,7 +379,11 @@ as completed behavior.
   domains; the HTML inventory test enforces one fixture for every behavior
   class, including malformed, diagnostic, policy, and strict-unified outcomes
   ([typed corpus](document/typed_characterization_test.go), [typed fixtures](document/typed_characterization_fixtures.go), [HTML corpus](document/html_characterization_test.go)).
-- [ ] Baseline commands reproduce from a clean checkout.
+- [x] Baseline commands reproduce from a clean checkout. The executable gate
+  archives the exact committed revision, reruns deterministic typed/HTML
+  characterization twice, and executes the documented 250 ms, ten-sample
+  planner/painter/end-to-end/concurrency/table benchmark command in isolation
+  ([gate](tools/verify-clean-checkout.sh), [Make target](Makefile)).
 - [x] Benchmark comparisons are statistically usable. The report gate requires
   ten samples, exact named host/toolchain matching, upper-median timing, and
   worst-sample allocation ceilings ([gate](internal/perfgate/report.go),
