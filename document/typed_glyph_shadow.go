@@ -63,7 +63,7 @@ func typedEmbeddedUTF8FontResource(font fontDefinition) (layoutengine.CoreFontRe
 	return layoutengine.CoreFontResource{
 		ID: 1, MetricsDigest: layoutengine.CoreFontMetricsDigest(hex.EncodeToString(metricsDigest[:])),
 		EmbeddedUTF8: &layoutengine.EmbeddedUTF8Font{Name: font.Name,
-			Digest: layoutengine.CoreFontMetricsDigest(hex.EncodeToString(contentDigest[:])), ByteLength: uint32(len(data))},
+			Digest: layoutengine.CoreFontMetricsDigest(hex.EncodeToString(contentDigest[:])), ByteLength: uint32(len(data))}, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	}, data, nil
 }
 
@@ -102,7 +102,7 @@ func (f *Document) typedLayoutFontSourcesContext(ctx context.Context, plan layou
 		if _, exists := sources[descriptor.Digest]; exists {
 			continue
 		}
-		if uint32(len(data)) != descriptor.ByteLength || total+uint64(len(data)) > uint64(maxFontSourceBytes) {
+		if uint32(len(data)) != descriptor.ByteLength || total+uint64(len(data)) > uint64(maxFontSourceBytes) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return nil, errors.New("embedded UTF-8 plan font source limit exceeded")
 		}
 		total += uint64(len(data))

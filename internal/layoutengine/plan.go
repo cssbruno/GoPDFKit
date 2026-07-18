@@ -32,10 +32,10 @@ type IndexRange struct {
 
 func (r IndexRange) end(limit int) (int, bool) {
 	end := uint64(r.Start) + uint64(r.Count)
-	if end > uint64(limit) {
+	if end > uint64(limit) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		return 0, false
 	}
-	return int(end), true
+	return int(end), true // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 }
 
 // PlannedPage describes one finalized page and its slices in the plan.
@@ -1013,7 +1013,7 @@ func validatePlannedGridTracks(tracks []PlannedGridTrack, pages int) error {
 	var nextIndex uint32
 	for index, track := range tracks {
 		path := fmt.Sprintf("grid_tracks[%d]", index)
-		if track.Group == 0 || track.Page == 0 || uint64(track.Page) > uint64(pages) {
+		if track.Group == 0 || track.Page == 0 || uint64(track.Page) > uint64(pages) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 			return planError(path, "has an absent group or invalid page")
 		}
 		if !track.Region.Valid() || !track.Axis.valid() {

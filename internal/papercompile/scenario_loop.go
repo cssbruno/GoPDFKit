@@ -166,7 +166,7 @@ func (e *repeatExpansionContext) expandLoop(node *paperlang.Node, prior map[*pap
 			key := strconv.FormatInt(value, 10)
 			identity := identityPrefix + "[" + key + "]"
 			path := pathPrefix + "[" + key + "]"
-			if uint32(len(identity)) > e.repeatLimits.MaxPathBytes || uint32(len(path)) > e.repeatLimits.MaxPathBytes {
+			if uint32(len(identity)) > e.repeatLimits.MaxPathBytes || uint32(len(path)) > e.repeatLimits.MaxPathBytes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				e.loopLimit("nested loop instance path exceeds the configured byte limit", "shorten instance prefixes or nesting", node.HeaderSpan)
 				return nil
 			}
@@ -336,7 +336,7 @@ func loopNext(value, step int64) (int64, bool) {
 }
 
 func validLoopPrefix(prefix string, maxBytes uint32) bool {
-	if prefix == "" || uint32(len(prefix)) > maxBytes {
+	if prefix == "" || uint32(len(prefix)) > maxBytes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return false
 	}
 	for index, character := range prefix {

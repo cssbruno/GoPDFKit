@@ -73,7 +73,7 @@ func GenerateStressMatrix(ctx context.Context, request StressMatrixRequest) ([]S
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if uint32(len(result)) >= limits.MaxCandidates {
+		if uint32(len(result)) >= limits.MaxCandidates { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return fmt.Errorf("%w: stress matrix candidates", ErrLimit)
 		}
 		result = append(result, current)

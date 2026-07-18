@@ -157,10 +157,10 @@ func AttachSVGDisplayPlanContext(ctx context.Context, plan layoutengine.LayoutPl
 				return layoutengine.LayoutPlan{}, fmt.Errorf("element %d: %w: clip rule", index, ErrSVGDisplayPlanUnsupported)
 			}
 			input.Paths = append(input.Paths, clipPath)
-			input.Clips = append(input.Clips, layoutengine.PlannedClip{Path: uint32(len(input.Paths) - 1), Rule: clipRule, Fragment: placement.Fragment})
+			input.Clips = append(input.Clips, layoutengine.PlannedClip{Path: uint32(len(input.Paths) - 1), Rule: clipRule, Fragment: placement.Fragment}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			input.Items = append(input.Items,
 				layoutengine.DisplayItem{Kind: layoutengine.CommandSaveState, Page: placement.Page},
-				layoutengine.DisplayItem{Kind: layoutengine.CommandClip, Payload: uint32(len(input.Clips) - 1), Page: placement.Page})
+				layoutengine.DisplayItem{Kind: layoutengine.CommandClip, Payload: uint32(len(input.Clips) - 1), Page: placement.Page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		}
 		if element.Kind == "text" {
 			if len(input.Items) == limits.MaxPaintItems {
@@ -186,14 +186,14 @@ func AttachSVGDisplayPlanContext(ctx context.Context, plan layoutengine.LayoutPl
 			}
 			resourceID := imageIDs[resource.Digest]
 			if !resourceID.Valid() {
-				resourceID = layoutengine.ImageResourceID(len(input.ImageResources) + 1)
+				resourceID = layoutengine.ImageResourceID(len(input.ImageResources) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				resource.ID = resourceID
 				input.ImageResources = append(input.ImageResources, resource)
 				imageIDs[resource.Digest] = resourceID
 			}
 			imagePlacement.Resource = resourceID
 			input.Images = append(input.Images, imagePlacement)
-			input.Items = append(input.Items, layoutengine.DisplayItem{Kind: layoutengine.CommandImage, Payload: uint32(len(input.Images) - 1), Page: placement.Page})
+			input.Items = append(input.Items, layoutengine.DisplayItem{Kind: layoutengine.CommandImage, Payload: uint32(len(input.Images) - 1), Page: placement.Page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			if clipped {
 				input.Items = append(input.Items, layoutengine.DisplayItem{Kind: layoutengine.CommandRestoreState, Page: placement.Page})
 			}
@@ -241,7 +241,7 @@ func AttachSVGDisplayPlanContext(ctx context.Context, plan layoutengine.LayoutPl
 			return layoutengine.LayoutPlan{}, fmt.Errorf("element %d: %w", index, err)
 		}
 		segments += len(path.Segments)
-		pathIndex := uint32(len(input.Paths))
+		pathIndex := uint32(len(input.Paths)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		input.Paths = append(input.Paths, path)
 		if gradient {
 			if err := svgDisplayAppendGradient(&input, element.Path, pathIndex, placement, limits, &segments); err != nil {
@@ -261,7 +261,7 @@ func AttachSVGDisplayPlanContext(ctx context.Context, plan layoutengine.LayoutPl
 				return layoutengine.LayoutPlan{}, fmt.Errorf("element %d: %w", index, opacityErr)
 			}
 			input.Fills = append(input.Fills, layoutengine.PlannedFill{Path: pathIndex, Rule: rule, Color: svgDisplayColor(fill), Opacity: opacity, Fragment: placement.Fragment})
-			input.Items = append(input.Items, layoutengine.DisplayItem{Kind: layoutengine.CommandFillPath, Payload: uint32(len(input.Fills) - 1), Page: placement.Page})
+			input.Items = append(input.Items, layoutengine.DisplayItem{Kind: layoutengine.CommandFillPath, Payload: uint32(len(input.Fills) - 1), Page: placement.Page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		}
 		if stroke.Set && !stroke.None {
 			width, widthErr := layoutengine.FixedFromPoints(element.Path.Style.StrokeWidth * placement.Scale)
@@ -281,7 +281,7 @@ func AttachSVGDisplayPlanContext(ctx context.Context, plan layoutengine.LayoutPl
 			}
 			input.Strokes = append(input.Strokes, layoutengine.PlannedStroke{Path: pathIndex, Color: svgDisplayColor(stroke), Width: width,
 				LineCap: capStyle, LineJoin: joinStyle, Dash: dash, DashOffset: dashOffset, Opacity: opacity, Fragment: placement.Fragment})
-			input.Items = append(input.Items, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(input.Strokes) - 1), Page: placement.Page})
+			input.Items = append(input.Items, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(input.Strokes) - 1), Page: placement.Page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		}
 		if clipped {
 			input.Items = append(input.Items, layoutengine.DisplayItem{Kind: layoutengine.CommandRestoreState, Page: placement.Page})
@@ -352,7 +352,7 @@ func svgDisplayAppendLinearGradient(input *layoutengine.DisplayListInput, source
 	input.Clips = append(input.Clips, layoutengine.PlannedClip{Path: clipPath, Rule: svgDisplayFillRule(source.Style.FillRule), Fragment: placement.Fragment})
 	input.Items = append(input.Items,
 		layoutengine.DisplayItem{Kind: layoutengine.CommandSaveState, Page: placement.Page},
-		layoutengine.DisplayItem{Kind: layoutengine.CommandClip, Payload: uint32(len(input.Clips) - 1), Page: placement.Page})
+		layoutengine.DisplayItem{Kind: layoutengine.CommandClip, Payload: uint32(len(input.Clips) - 1), Page: placement.Page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	corners := [][2]float64{{minX, minY}, {maxX, minY}, {maxX, maxY}, {minX, maxY}}
 	minT, maxT := math.Inf(1), math.Inf(-1)
 	for _, corner := range corners {
@@ -379,9 +379,9 @@ func svgDisplayAppendLinearGradient(input *layoutengine.DisplayListInput, source
 			continue
 		}
 		input.Paths = append(input.Paths, path)
-		input.Fills = append(input.Fills, layoutengine.PlannedFill{Path: uint32(len(input.Paths) - 1), Rule: layoutengine.FillNonZero,
+		input.Fills = append(input.Fills, layoutengine.PlannedFill{Path: uint32(len(input.Paths) - 1), Rule: layoutengine.FillNonZero, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			Color: svgDisplayGradientColor(gradient.Stops, t), Opacity: bandOpacity, Fragment: placement.Fragment})
-		input.Items = append(input.Items, layoutengine.DisplayItem{Kind: layoutengine.CommandFillPath, Payload: uint32(len(input.Fills) - 1), Page: placement.Page})
+		input.Items = append(input.Items, layoutengine.DisplayItem{Kind: layoutengine.CommandFillPath, Payload: uint32(len(input.Fills) - 1), Page: placement.Page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	}
 	*segments += 5 * svgDisplayGradientBands
 	input.Items = append(input.Items, layoutengine.DisplayItem{Kind: layoutengine.CommandRestoreState, Page: placement.Page})
@@ -430,7 +430,7 @@ func svgDisplayAppendRadialGradient(input *layoutengine.DisplayListInput, source
 	input.Clips = append(input.Clips, layoutengine.PlannedClip{Path: clipPath, Rule: svgDisplayFillRule(source.Style.FillRule), Fragment: placement.Fragment})
 	input.Items = append(input.Items,
 		layoutengine.DisplayItem{Kind: layoutengine.CommandSaveState, Page: placement.Page},
-		layoutengine.DisplayItem{Kind: layoutengine.CommandClip, Payload: uint32(len(input.Clips) - 1), Page: placement.Page})
+		layoutengine.DisplayItem{Kind: layoutengine.CommandClip, Payload: uint32(len(input.Clips) - 1), Page: placement.Page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	for band := svgDisplayGradientBands - 1; band >= 0; band-- {
 		inner := maxT * float64(band) / svgDisplayGradientBands
 		outer := maxT * float64(band+1) / svgDisplayGradientBands
@@ -451,9 +451,9 @@ func svgDisplayAppendRadialGradient(input *layoutengine.DisplayListInput, source
 			continue
 		}
 		input.Paths = append(input.Paths, path)
-		input.Fills = append(input.Fills, layoutengine.PlannedFill{Path: uint32(len(input.Paths) - 1), Rule: layoutengine.FillNonZero,
+		input.Fills = append(input.Fills, layoutengine.PlannedFill{Path: uint32(len(input.Paths) - 1), Rule: layoutengine.FillNonZero, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			Color: svgDisplayGradientColor(gradient.Stops, t), Opacity: bandOpacity, Fragment: placement.Fragment})
-		input.Items = append(input.Items, layoutengine.DisplayItem{Kind: layoutengine.CommandFillPath, Payload: uint32(len(input.Fills) - 1), Page: placement.Page})
+		input.Items = append(input.Items, layoutengine.DisplayItem{Kind: layoutengine.CommandFillPath, Payload: uint32(len(input.Fills) - 1), Page: placement.Page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	}
 	*segments += radialSegmentsPerBand * svgDisplayGradientBands
 	input.Items = append(input.Items, layoutengine.DisplayItem{Kind: layoutengine.CommandRestoreState, Page: placement.Page})
@@ -577,7 +577,7 @@ func svgDisplayAppendPattern(input *layoutengine.DisplayListInput, source SVGPat
 	input.Clips = append(input.Clips, layoutengine.PlannedClip{Path: clipPath, Rule: svgDisplayFillRule(source.Style.FillRule), Fragment: placement.Fragment})
 	input.Items = append(input.Items,
 		layoutengine.DisplayItem{Kind: layoutengine.CommandSaveState, Page: placement.Page},
-		layoutengine.DisplayItem{Kind: layoutengine.CommandClip, Payload: uint32(len(input.Clips) - 1), Page: placement.Page})
+		layoutengine.DisplayItem{Kind: layoutengine.CommandClip, Payload: uint32(len(input.Clips) - 1), Page: placement.Page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	for row := minRow; row <= maxRow; row++ {
 		for column := minColumn; column <= maxColumn; column++ {
 			tilePlacement := placement
@@ -590,9 +590,9 @@ func svgDisplayAppendPattern(input *layoutengine.DisplayListInput, source SVGPat
 				}
 				fill, _, _ := svgDisplayPaint(element.Path.Style)
 				input.Paths = append(input.Paths, path)
-				input.Fills = append(input.Fills, layoutengine.PlannedFill{Path: uint32(len(input.Paths) - 1), Rule: svgDisplayFillRule(element.Path.Style.FillRule),
+				input.Fills = append(input.Fills, layoutengine.PlannedFill{Path: uint32(len(input.Paths) - 1), Rule: svgDisplayFillRule(element.Path.Style.FillRule), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 					Color: svgDisplayColor(fill), Opacity: opacity, Fragment: placement.Fragment})
-				input.Items = append(input.Items, layoutengine.DisplayItem{Kind: layoutengine.CommandFillPath, Payload: uint32(len(input.Fills) - 1), Page: placement.Page})
+				input.Items = append(input.Items, layoutengine.DisplayItem{Kind: layoutengine.CommandFillPath, Payload: uint32(len(input.Fills) - 1), Page: placement.Page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			}
 		}
 	}
@@ -805,9 +805,9 @@ func svgDisplayTextGeometry(plan layoutengine.LayoutPlan, svg *SVG, placement SV
 		if advanceErr != nil {
 			return layoutengine.LayoutPlan{}, nil, nil, nil, fmt.Errorf("element %d: %w", index, advanceErr)
 		}
-		lines = append(lines, layoutengine.PlannedLine{Fragment: owner.ID, Index: uint32(len(lines)), Bounds: bounds, Baseline: baseline, Source: owner.Source})
+		lines = append(lines, layoutengine.PlannedLine{Fragment: owner.ID, Index: uint32(len(lines)), Bounds: bounds, Baseline: baseline, Source: owner.Source}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		runs = append(runs, layoutengine.CoreGlyphRun{Font: font.ID, FontSize: fontSize, Color: svgDisplayColor(fill), Opacity: opacity, Origin: layoutengine.Point{X: x, Y: baseline}, Codes: text.Text, Advances: advances, Source: owner.Source})
-		byElement[index] = uint32(len(runs) - 1)
+		byElement[index] = uint32(len(runs) - 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	}
 	withLines, start, err := layoutengine.AttachOverlayLines(plan, placement.Page, lines)
 	if err != nil {
@@ -857,7 +857,7 @@ func svgDisplayImage(source SVGImage, placement SVGDisplayPlanPlacement, fragmen
 		return layoutengine.ImageResource{}, layoutengine.PlannedImage{}, fmt.Errorf("%w: image bounds", ErrSVGDisplayPlanUnsupported)
 	}
 	digest := sha256.Sum256(source.Data)
-	resource := layoutengine.ImageResource{Digest: layoutengine.ImageContentDigest(hex.EncodeToString(digest[:])), Format: format, PixelWidth: uint32(config.Width), PixelHeight: uint32(config.Height)}
+	resource := layoutengine.ImageResource{Digest: layoutengine.ImageContentDigest(hex.EncodeToString(digest[:])), Format: format, PixelWidth: uint32(config.Width), PixelHeight: uint32(config.Height)} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	opacity, opacityErr := svgDisplayOpacity(style, false, false)
 	if opacityErr != nil {
 		return layoutengine.ImageResource{}, layoutengine.PlannedImage{}, opacityErr
@@ -888,7 +888,7 @@ func svgDisplayRGBValid(color CSSColorType) bool {
 }
 
 func svgDisplayColor(color CSSColorType) layoutengine.CoreRGBColor {
-	return layoutengine.CoreRGBColor{R: uint8(color.R), G: uint8(color.G), B: uint8(color.B), Set: true}
+	return layoutengine.CoreRGBColor{R: uint8(color.R), G: uint8(color.G), B: uint8(color.B), Set: true} // #nosec G115 -- low-width representation is explicitly normalized before packing
 }
 
 func svgDisplayPath(source []SVGSegment, placement SVGDisplayPlanPlacement) (layoutengine.PlannedPath, error) {

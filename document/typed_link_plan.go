@@ -96,7 +96,7 @@ func attachTypedSegmentLinks(plan layoutengine.LayoutPlan, byNode map[layoutengi
 				if destinationIDs[segment.Destination].Valid() {
 					return layoutengine.LayoutPlan{}, fmt.Errorf("document: duplicate typed destination %q", segment.Destination)
 				}
-				id := layoutengine.DestinationID(len(destinationIDs) + 1)
+				id := layoutengine.DestinationID(len(destinationIDs) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				destinationIDs[segment.Destination] = id
 				state.anchors = append(state.anchors, typedDestinationRange{start: start, end: len(state.text), name: segment.Destination, id: id})
 			}
@@ -179,7 +179,7 @@ func attachTypedSegmentLinks(plan layoutengine.LayoutPlan, byNode map[layoutengi
 			}
 			startGlyph := utf8.RuneCountInString(run.Codes[:start-runStart])
 			endGlyph := utf8.RuneCountInString(run.Codes[:end-runStart])
-			span := layoutengine.GlyphRunLinkSpan{Run: uint32(runIndex), Start: uint32(startGlyph), Count: uint32(endGlyph - startGlyph)}
+			span := layoutengine.GlyphRunLinkSpan{Run: uint32(runIndex), Start: uint32(startGlyph), Count: uint32(endGlyph - startGlyph)} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 			if strings.HasPrefix(linked.target, "#") {
 				name := strings.TrimPrefix(linked.target, "#")
 				span.Destination = destinationIDs[name]

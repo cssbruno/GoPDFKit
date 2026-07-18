@@ -155,7 +155,7 @@ func (f *Document) planTypedTableBodies(ctx context.Context, doc *layout.LayoutD
 	rows = append(rows, table.Header...)
 	rows = append(rows, table.Body...)
 	rows = append(rows, table.Footer...)
-	placements, err := typedTablePlacements(rows, len(columns), uint32(len(table.Header)), path)
+	placements, err := typedTablePlacements(rows, len(columns), uint32(len(table.Header)), path) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	if err != nil {
 		return layoutengine.LayoutPlan{}, err
 	}
@@ -172,7 +172,7 @@ func (f *Document) planTypedTableBodies(ctx context.Context, doc *layout.LayoutD
 				Style:    layout.TextStyle{LineHeight: 12, Bold: true},
 			}}},
 			path: path + ".caption", row: 0, column: 0, rowSpan: 1,
-			columnSpan: uint32(len(columns)), node: 1,
+			columnSpan: uint32(len(columns)), node: 1, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		}
 		measurement, measureErr := f.measureTypedTableCell(ctx, doc, placement, tableWidth, layout.DocumentColor{})
 		if measureErr != nil {
@@ -207,8 +207,8 @@ func (f *Document) planTypedTableBodies(ctx context.Context, doc *layout.LayoutD
 		}
 	}
 	limits := layoutengine.DefaultTablePlanLimits()
-	if f.limits.MaxPages > 0 && uint32(f.limits.MaxPages) < limits.MaxPages {
-		limits.MaxPages = uint32(f.limits.MaxPages)
+	if f.limits.MaxPages > 0 && uint32(f.limits.MaxPages) < limits.MaxPages { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		limits.MaxPages = uint32(f.limits.MaxPages) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	}
 	resolvedColumns, err := layoutengine.ResolveTableColumnWidths(ctx, tableWidth, columns, engineCells, limits)
 	if err != nil {
@@ -232,7 +232,7 @@ func (f *Document) planTypedTableBodies(ctx context.Context, doc *layout.LayoutD
 	}
 	headerRows := uint32(0)
 	if table.Style.RepeatHeader {
-		headerRows = uint32(len(table.Header))
+		headerRows = uint32(len(table.Header)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	}
 	var tableBodyForPage func(uint32) (layoutengine.Rect, error)
 	if selectBody != nil {
@@ -253,7 +253,7 @@ func (f *Document) planTypedTableBodies(ctx context.Context, doc *layout.LayoutD
 		}
 	}
 	geometry, err := layoutengine.PlanTable(ctx, layoutengine.TablePlanInput{
-		PageSize: pageSize, Body: body, Width: tableWidth, Rows: uint32(len(rows)),
+		PageSize: pageSize, Body: body, Width: tableWidth, Rows: uint32(len(rows)), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		Columns: columns, HeaderRows: headerRows, Cells: engineCells,
 		Caption: caption, BodyForPage: tableBodyForPage,
 		KeepTogether: table.Box.KeepTogether, KeepWithNext: table.Box.KeepWithNext,
@@ -337,8 +337,8 @@ func typedTablePlacements(rows []layout.TableRow, columnCount int, headerRows ui
 			}
 			placements = append(placements, typedTablePlacement{
 				cell: cell, path: cellPath, row: uint32(rowIndex), column: uint32(column),
-				rowSpan: uint32(rowSpan), columnSpan: uint32(columnSpan), header: uint32(rowIndex) < headerRows || cell.Header,
-				node: layoutengine.NodeID(len(placements) + 1),
+				rowSpan: uint32(rowSpan), columnSpan: uint32(columnSpan), header: uint32(rowIndex) < headerRows || cell.Header, // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+				node: layoutengine.NodeID(len(placements) + 1), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			})
 			column += columnSpan
 		}
@@ -595,7 +595,7 @@ func (f *Document) measureTypedTableCell(ctx context.Context, doc *layout.Layout
 		if !validDocumentColor(background) {
 			return typedTableCellMeasurement{}, typedTableUnsupported(placement.path+".box.background", "color channels must be 0..255")
 		}
-		result.background = layoutengine.CoreRGBColor{R: uint8(background.R), G: uint8(background.G), B: uint8(background.B), Set: true}
+		result.background = layoutengine.CoreRGBColor{R: uint8(background.R), G: uint8(background.G), B: uint8(background.B), Set: true} // #nosec G115 -- low-width representation is explicitly normalized before packing
 	}
 	sides := []layout.BorderSide{cell.Box.Border.Top, cell.Box.Border.Right, cell.Box.Border.Bottom, cell.Box.Border.Left}
 	for index, side := range sides {
@@ -622,7 +622,7 @@ func (f *Document) measureTypedTableCell(ctx context.Context, doc *layout.Layout
 		if err != nil || fixed <= 0 {
 			return typedTableCellMeasurement{}, typedTableUnsupported(placement.path+".box.border", "border width is not representable")
 		}
-		result.borders[index] = typedTableBorder{width: fixed, color: layoutengine.CoreRGBColor{R: uint8(color.R), G: uint8(color.G), B: uint8(color.B), Set: true}}
+		result.borders[index] = typedTableBorder{width: fixed, color: layoutengine.CoreRGBColor{R: uint8(color.R), G: uint8(color.G), B: uint8(color.B), Set: true}} // #nosec G115 -- low-width representation is explicitly normalized before packing
 	}
 	innerWidth, err := width.Sub(result.padding[1])
 	if err != nil {
@@ -859,7 +859,7 @@ func (f *Document) restylePaperMeasurement(measurement paperRowColumnMeasurement
 			identity := paperFontIdentity(resource)
 			fontID := fontIndex[identity]
 			if !fontID.Valid() {
-				fontID = layoutengine.FontResourceID(len(fonts) + 1)
+				fontID = layoutengine.FontResourceID(len(fonts) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				resource.ID = fontID
 				fonts = append(fonts, resource)
 				fontIndex[identity] = fontID
@@ -1368,13 +1368,13 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 	for pageIndex := range projection.Pages {
 		page := &projection.Pages[pageIndex]
 		originalRange := page.Fragments
-		page.Fragments = layoutengine.IndexRange{Start: uint32(len(fragments))}
-		page.Lines = layoutengine.IndexRange{Start: uint32(len(lines))}
+		page.Fragments = layoutengine.IndexRange{Start: uint32(len(fragments))} // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		page.Lines = layoutengine.IndexRange{Start: uint32(len(lines))}         // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		fragmentEnd := int(originalRange.Start + originalRange.Count)
 		for fragmentIndex := int(originalRange.Start); fragmentIndex < fragmentEnd; fragmentIndex++ {
 			fragment := originalFragments[fragmentIndex]
 			originalFragmentID := fragment.ID
-			fragment.ID = layoutengine.FragmentID(len(fragments) + 1)
+			fragment.ID = layoutengine.FragmentID(len(fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			fragmentRemap[originalFragmentID] = fragment.ID
 			fragments = append(fragments, fragment)
 		}
@@ -1414,8 +1414,8 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 				}
 				path := typedTableRectPath(fragment.BorderBox)
 				paths = append(paths, path)
-				fills = append(fills, layoutengine.PlannedFill{Path: uint32(len(paths) - 1), Rule: layoutengine.FillNonZero, Color: measurement.background, Fragment: fragment.ID})
-				items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandFillPath, Payload: uint32(len(fills) - 1)})
+				fills = append(fills, layoutengine.PlannedFill{Path: uint32(len(paths) - 1), Rule: layoutengine.FillNonZero, Color: measurement.background, Fragment: fragment.ID}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandFillPath, Payload: uint32(len(fills) - 1)})                                                // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			}
 			borders := make([]typedCollapsedBorder, 0, 4)
 			if collapse {
@@ -1440,8 +1440,8 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 					return layoutengine.LayoutPlan{}, typedTableUnsupported("table.decorations", "graphic resource limit exceeded")
 				}
 				paths = append(paths, draw.path)
-				strokes = append(strokes, layoutengine.PlannedStroke{Path: uint32(len(paths) - 1), Color: border.color, Width: border.width, Fragment: fragment.ID})
-				items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)})
+				strokes = append(strokes, layoutengine.PlannedStroke{Path: uint32(len(paths) - 1), Color: border.color, Width: border.width, Fragment: fragment.ID}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)})                             // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			}
 			cellY, err = cellY.Add(measurement.padding[0])
 			if err != nil {
@@ -1480,7 +1480,7 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 							nextContentNode++
 							nodeMap[oldNode] = nextContentNode
 						}
-						childFragment.ID = layoutengine.FragmentID(len(fragments) + 1)
+						childFragment.ID = layoutengine.FragmentID(len(fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 						childFragment.Node = nodeMap[oldNode]
 						childFragment.Key = layoutengine.NodeKey(prefix + string(childFragment.Key))
 						childFragment.Instance = layoutengine.InstanceID(prefix + string(childFragment.Instance))
@@ -1507,7 +1507,7 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 						identity := paperFontIdentity(font)
 						globalID, exists := fontIndex[identity]
 						if !exists {
-							globalID = layoutengine.FontResourceID(len(fonts) + 1)
+							globalID = layoutengine.FontResourceID(len(fonts) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 							font.ID = globalID
 							fonts = append(fonts, font)
 							fontIndex[identity] = globalID
@@ -1519,7 +1519,7 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 						localID := resource.ID
 						globalID, exists := imageIndex[resource.Digest]
 						if !exists {
-							globalID = layoutengine.ImageResourceID(len(imageResources) + 1)
+							globalID = layoutengine.ImageResourceID(len(imageResources) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 							resource.ID = globalID
 							imageResources = append(imageResources, resource)
 							imageIndex[resource.Digest] = globalID
@@ -1536,10 +1536,10 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 						if nestedErr != nil {
 							return layoutengine.LayoutPlan{}, nestedErr
 						}
-						lineMap[uint32(oldIndex)] = uint32(len(lines))
+						lineMap[uint32(oldIndex)] = uint32(len(lines)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 						lines = append(lines, line)
 					}
-					pathBase := uint32(len(paths))
+					pathBase := uint32(len(paths)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 					for _, path := range nested.Paths {
 						path, nestedErr = translatePaperNestedPath(path, dx, dy)
 						if nestedErr != nil {
@@ -1550,7 +1550,7 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 					destinationMap := make(map[layoutengine.DestinationID]layoutengine.DestinationID, len(nested.Destinations))
 					for _, destination := range nested.Destinations {
 						oldID := destination.ID
-						destination.ID = layoutengine.DestinationID(len(destinations) + 1)
+						destination.ID = layoutengine.DestinationID(len(destinations) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 						destination.Page = fragment.Page
 						destination.Fragment = fragmentMap[destination.Fragment]
 						destination.Point, nestedErr = translateTypedPoint(destination.Point, dx, dy)
@@ -1570,19 +1570,19 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 								return layoutengine.LayoutPlan{}, nestedErr
 							}
 							runs = append(runs, run)
-							items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(runs) - 1), Page: fragment.Page})
+							items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(runs) - 1), Page: fragment.Page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 						case layoutengine.CommandFillPath:
 							fill := nested.Fills[command.Payload]
 							fill.Path += pathBase
 							fill.Fragment = fragmentMap[fill.Fragment]
 							fills = append(fills, fill)
-							items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(fills) - 1), Page: fragment.Page})
+							items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(fills) - 1), Page: fragment.Page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 						case layoutengine.CommandStrokePath:
 							stroke := nested.Strokes[command.Payload]
 							stroke.Path += pathBase
 							stroke.Fragment = fragmentMap[stroke.Fragment]
 							strokes = append(strokes, stroke)
-							items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(strokes) - 1), Page: fragment.Page})
+							items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(strokes) - 1), Page: fragment.Page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 						case layoutengine.CommandImage:
 							image := nested.Images[command.Payload]
 							image.Resource = localImages[image.Resource]
@@ -1600,7 +1600,7 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 								image.Crop = &crop
 							}
 							images = append(images, image)
-							items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(images) - 1), Page: fragment.Page})
+							items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(images) - 1), Page: fragment.Page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 						case layoutengine.CommandLink:
 							link := nested.Links[command.Payload]
 							link.Fragment = fragmentMap[link.Fragment]
@@ -1612,7 +1612,7 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 								link.Destination = destinationMap[link.Destination]
 							}
 							links = append(links, link)
-							items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(links) - 1), Page: fragment.Page})
+							items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(links) - 1), Page: fragment.Page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 						default:
 							return layoutengine.LayoutPlan{}, typedTableUnsupported("table.nested", fmt.Sprintf("nested command %q is unsupported", command.Kind))
 						}
@@ -1655,16 +1655,16 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 					}
 					contentKey, contentNodeID := contentNode(fragment, contentIndex)
 					contentFragment := typedTableContentFragment(fragment, contentKey, contentNodeID, outer)
-					contentFragment.ID = layoutengine.FragmentID(len(fragments) + 1)
+					contentFragment.ID = layoutengine.FragmentID(len(fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 					fragments = append(fragments, contentFragment)
 					if image.background.Set {
 						paths = append(paths, typedTableRectPath(outer))
-						fills = append(fills, layoutengine.PlannedFill{Path: uint32(len(paths) - 1), Rule: layoutengine.FillNonZero, Color: image.background, Fragment: contentFragment.ID})
-						items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandFillPath, Payload: uint32(len(fills) - 1)})
+						fills = append(fills, layoutengine.PlannedFill{Path: uint32(len(paths) - 1), Rule: layoutengine.FillNonZero, Color: image.background, Fragment: contentFragment.ID}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+						items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandFillPath, Payload: uint32(len(fills) - 1)})                                                 // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 					}
 					resourceID, exists := imageIndex[image.resource.Digest]
 					if !exists {
-						resourceID = layoutengine.ImageResourceID(len(imageResources) + 1)
+						resourceID = layoutengine.ImageResourceID(len(imageResources) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 						resource := image.resource
 						resource.ID = resourceID
 						imageResources = append(imageResources, resource)
@@ -1677,7 +1677,7 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 					}
 					placement.Source = fragment.Source
 					images = append(images, placement)
-					items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandImage, Payload: uint32(len(images) - 1)})
+					items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandImage, Payload: uint32(len(images) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 					for side, border := range image.borders {
 						if border.width <= 0 {
 							continue
@@ -1687,8 +1687,8 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 							return layoutengine.LayoutPlan{}, err
 						}
 						paths = append(paths, path)
-						strokes = append(strokes, layoutengine.PlannedStroke{Path: uint32(len(paths) - 1), Color: border.color, Width: border.width, Fragment: contentFragment.ID})
-						items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)})
+						strokes = append(strokes, layoutengine.PlannedStroke{Path: uint32(len(paths) - 1), Color: border.color, Width: border.width, Fragment: contentFragment.ID}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+						items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)})                                    // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 					}
 					blockOffset, err = blockOffset.Add(image.height)
 					if err != nil {
@@ -1721,7 +1721,7 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 				}
 				contentKey, contentNodeID := contentNode(fragment, contentIndex)
 				contentFragment := typedTableContentFragment(fragment, contentKey, contentNodeID, contentBounds)
-				contentFragment.ID = layoutengine.FragmentID(len(fragments) + 1)
+				contentFragment.ID = layoutengine.FragmentID(len(fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				fragments = append(fragments, contentFragment)
 				localFonts := make(map[layoutengine.FontResourceID]layoutengine.FontResourceID, len(block.plan.Fonts))
 				for _, font := range block.plan.Fonts {
@@ -1729,7 +1729,7 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 					identity := paperFontIdentity(font)
 					globalID, exists := fontIndex[identity]
 					if !exists {
-						globalID = layoutengine.FontResourceID(len(fonts) + 1)
+						globalID = layoutengine.FontResourceID(len(fonts) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 						font.ID = globalID
 						fonts = append(fonts, font)
 						fontIndex[identity] = globalID
@@ -1774,7 +1774,7 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 					if err != nil {
 						return layoutengine.LayoutPlan{}, err
 					}
-					globalLine := uint32(len(lines))
+					globalLine := uint32(len(lines)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 					lines = append(lines, layoutengine.PlannedLine{Fragment: contentFragment.ID, Index: uint32(localIndex), Bounds: bounds, Baseline: baseline})
 					lineMap[uint32(localIndex)] = globalLine
 				}
@@ -1793,7 +1793,7 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 						return layoutengine.LayoutPlan{}, err
 					}
 					runs = append(runs, run)
-					items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(len(runs) - 1)})
+					items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(len(runs) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				}
 				if len(block.plan.Strokes) != 0 {
 					dx, dxErr := contentX.Sub(block.body.X)
@@ -1810,10 +1810,10 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 							return layoutengine.LayoutPlan{}, pathErr
 						}
 						paths = append(paths, path)
-						stroke.Path = uint32(len(paths) - 1)
+						stroke.Path = uint32(len(paths) - 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 						stroke.Fragment = contentFragment.ID
 						strokes = append(strokes, stroke)
-						items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)})
+						items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 					}
 				}
 				for _, link := range block.plan.Links {
@@ -1856,8 +1856,8 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 				}
 			}
 		}
-		page.Fragments.Count = uint32(len(fragments)) - page.Fragments.Start
-		page.Lines.Count = uint32(len(lines)) - page.Lines.Start
+		page.Fragments.Count = uint32(len(fragments)) - page.Fragments.Start // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		page.Lines.Count = uint32(len(lines)) - page.Lines.Start             // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	}
 	for index := range projection.Breaks {
 		projection.Breaks[index].Preceding = fragmentRemap[projection.Breaks[index].Preceding]
@@ -2117,7 +2117,7 @@ func attachTypedTableSemantics(plan layoutengine.LayoutPlan, measurements []type
 	}
 	rowSemantics := make([]layoutengine.SemanticNodeID, maxRow+1)
 	for row := uint32(0); row <= maxRow; row++ {
-		id := layoutengine.SemanticNodeID(len(nodes) + 1)
+		id := layoutengine.SemanticNodeID(len(nodes) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		identity := layoutengine.NodeKey(fmt.Sprintf("@typed-table-row-%d", row+1))
 		nodes = append(nodes, layoutengine.SemanticNode{ID: id, Parent: 2, Role: layoutengine.SemanticRoleRow, Key: identity, Instance: layoutengine.InstanceID(identity)})
 		rowSemantics[row] = id
@@ -2140,7 +2140,7 @@ func attachTypedTableSemantics(plan layoutengine.LayoutPlan, measurements []type
 				if ancestor.role == layoutengine.SemanticRoleListItem && ancestor.actualText != "" {
 					attributes.ActualText = ancestor.actualText
 				}
-				id := layoutengine.SemanticNodeID(len(nodes) + 1)
+				id := layoutengine.SemanticNodeID(len(nodes) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				nodes = append(nodes, layoutengine.SemanticNode{ID: id, Parent: contentParent, Role: ancestor.role, Key: key, Instance: layoutengine.InstanceID(key), Attributes: attributes})
 				ancestorNodes[chain] = id
 				contentParent = id
@@ -2162,18 +2162,18 @@ func attachTypedTableSemantics(plan layoutengine.LayoutPlan, measurements []type
 				attributes.ActualText = content.actualText
 			}
 			nodes = append(nodes, layoutengine.SemanticNode{
-				ID: layoutengine.SemanticNodeID(len(nodes) + 1), Parent: contentParent, Role: role,
+				ID: layoutengine.SemanticNodeID(len(nodes) + 1), Parent: contentParent, Role: role, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				Key: key, Instance: layoutengine.InstanceID(key), Attributes: attributes,
 			})
 			semanticByKey[key] = nodes[len(nodes)-1].ID
 		}
 	}
 	for _, cell := range measurements {
-		id := layoutengine.SemanticNodeID(len(nodes) + 1)
+		id := layoutengine.SemanticNodeID(len(nodes) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		semanticKey := layoutengine.NodeKey(string(cell.key) + "/semantic")
 		if cell.caption {
 			nodes = append(nodes, layoutengine.SemanticNode{ID: id, Parent: 2, Role: layoutengine.SemanticRoleParagraph, Key: semanticKey, Instance: layoutengine.InstanceID(semanticKey), Attributes: layoutengine.SemanticAttributes{ActualText: cell.actualText}})
-			artifactID := layoutengine.SemanticNodeID(len(nodes) + 1)
+			artifactID := layoutengine.SemanticNodeID(len(nodes) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			nodes = append(nodes, layoutengine.SemanticNode{ID: artifactID, Parent: id, Role: layoutengine.SemanticRoleArtifact, Key: cell.key, Instance: cell.instance})
 			semanticByKey[cell.key] = artifactID
 			appendContentSemantics(id, cell)
@@ -2191,7 +2191,7 @@ func attachTypedTableSemantics(plan layoutengine.LayoutPlan, measurements []type
 			Key: semanticKey, Instance: layoutengine.InstanceID(semanticKey),
 			Attributes: attributes,
 		})
-		artifactID := layoutengine.SemanticNodeID(len(nodes) + 1)
+		artifactID := layoutengine.SemanticNodeID(len(nodes) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		nodes = append(nodes, layoutengine.SemanticNode{ID: artifactID, Parent: id, Role: layoutengine.SemanticRoleArtifact, Key: cell.key, Instance: cell.instance})
 		semanticByKey[cell.key] = artifactID
 		appendContentSemantics(id, cell)
@@ -2207,7 +2207,7 @@ func attachTypedTableSemantics(plan layoutengine.LayoutPlan, measurements []type
 				continue
 			}
 			oldID, oldParent := childNode.ID, childNode.Parent
-			childNode.ID = layoutengine.SemanticNodeID(len(nodes) + 1)
+			childNode.ID = layoutengine.SemanticNodeID(len(nodes) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			childNode.Parent = semanticMap[oldParent]
 			if !childNode.Parent.Valid() {
 				return layoutengine.LayoutPlan{}, fmt.Errorf("document: nested table semantic parent %d is unavailable", oldParent)

@@ -300,7 +300,7 @@ func (w *Workspace) ReviewHeadlessCandidate(ctx context.Context, request Headles
 		request.Selectors = []document.PaperPlanSelector{{Key: request.Candidate.Target, MaxResults: 16}}
 	}
 	if request.MaxExplainBytes == 0 {
-		request.MaxExplainBytes = uint32(min(w.limits.MaxRenderBytes, 1<<20))
+		request.MaxExplainBytes = uint32(min(w.limits.MaxRenderBytes, 1<<20)) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	}
 	explanation, err := w.ExplainPlan(PlanExplainRequest{Plan: request.Candidate.HeadPlan, Selectors: request.Selectors, MaxBytes: request.MaxExplainBytes})
 	if err != nil {

@@ -293,7 +293,7 @@ func (html *HTML) planCompiledHTMLFragmentContext(ctx context.Context, lineHeigh
 	if generatedPages > html.maxGeneratedPages() {
 		return htmlFragmentPlan{}, fmt.Errorf("%w: HTML rendering exceeded maximum generated pages: %d > %d", ErrHTMLLimitExceeded, generatedPages, html.maxGeneratedPages())
 	}
-	lastPage := uint32(len(projection.Pages))
+	lastPage := uint32(len(projection.Pages)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	finalY := layoutengine.Fixed(0)
 	fragmentPages := make(map[layoutengine.FragmentID]uint32, len(projection.Fragments))
 	for _, fragment := range projection.Fragments {
@@ -327,7 +327,7 @@ func (html *HTML) planCompiledHTMLFragmentContext(ctx context.Context, lineHeigh
 	// A live cursor must never round to a coordinate fractionally before the
 	// exact fixed-point content edge when converted back to document units.
 	finalY++
-	imageSources, err := typedLayoutImageSourcesContext(ctx, model, uint64(html.pdf.imageSourceLimit()))
+	imageSources, err := typedLayoutImageSourcesContext(ctx, model, uint64(html.pdf.imageSourceLimit())) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	if err != nil {
 		return htmlFragmentPlan{}, fmt.Errorf("document: build bounded HTML image resource catalog: %w", err)
 	}

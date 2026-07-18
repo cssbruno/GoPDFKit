@@ -478,7 +478,7 @@ func (s *studioServer) pageRail(snapshot *studioSnapshot) ([]studioPageRailSumma
 			baseline.ChangedPageCount++
 		}
 	}
-	baseline.RemovedPageCount = uint32(len(before))
+	baseline.RemovedPageCount = uint32(len(before)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	baseline.ChangedPageCount += baseline.RemovedPageCount
 	return rows, baseline
 }

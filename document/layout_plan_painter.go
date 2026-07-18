@@ -214,7 +214,7 @@ func (f *Document) preflightPlanFontContext(ctx context.Context, resource layout
 	}
 	if resource.EmbeddedUTF8 != nil {
 		data := sources[resource.EmbeddedUTF8.Digest]
-		if len(data) == 0 || uint32(len(data)) != resource.EmbeddedUTF8.ByteLength {
+		if len(data) == 0 || uint32(len(data)) != resource.EmbeddedUTF8.ByteLength { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return preparedCorePlanFont{}, fmt.Errorf("%w: embedded UTF-8 font bytes are unavailable or over budget", errCoreLayoutPlanPaintUnsupported)
 		}
 		digest := sha256.Sum256(data)

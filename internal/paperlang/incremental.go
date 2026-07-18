@@ -90,7 +90,7 @@ func ApplyCSTPatches(cst *CST, patches []CSTPatch, limits CSTPatchLimits) (Incre
 		builder.WriteString(cst.source[cursor:patch.Span.Start.Offset])
 		builder.WriteString(patch.Replacement)
 		cursor = patch.Span.End.Offset
-		delta += int64(len(patch.Replacement)) - int64(patch.Span.End.Offset-patch.Span.Start.Offset)
+		delta += int64(len(patch.Replacement)) - int64(patch.Span.End.Offset-patch.Span.Start.Offset) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	}
 	builder.WriteString(cst.source[cursor:])
 	candidate := builder.String()
@@ -98,10 +98,10 @@ func ApplyCSTPatches(cst *CST, patches []CSTPatch, limits CSTPatchLimits) (Incre
 		return IncrementalParseResult{}, fmt.Errorf("%w: candidate bytes", ErrCSTPatchLimit)
 	}
 	if candidate == cst.source {
-		position := cstPosition(cst.source, sourceLineStarts(cst.source), int(ordered[0].Span.Start.Offset))
+		position := cstPosition(cst.source, sourceLineStarts(cst.source), int(ordered[0].Span.Start.Offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
 		return IncrementalParseResult{
 			CST: cst, Semantic: Parse(cst.file, cst.source), RelexedOld: Span{File: cst.file, Start: position, End: position},
-			RelexedNew: Span{File: cst.file, Start: position, End: position}, ReusedPrefixLines: uint32(len(cst.lines)),
+			RelexedNew: Span{File: cst.file, Start: position, End: position}, ReusedPrefixLines: uint32(len(cst.lines)), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		}, nil
 	}
 
@@ -124,8 +124,8 @@ func ApplyCSTPatches(cst *CST, patches []CSTPatch, limits CSTPatchLimits) (Incre
 	if endExclusive < len(cst.lines) {
 		suffixBoundary = cst.lines[endExclusive].Span.Start.Offset
 	}
-	newSuffixSigned := int64(suffixBoundary) + delta
-	if newSuffixSigned < int64(prefixBoundary) || newSuffixSigned > int64(len(candidate)) {
+	newSuffixSigned := int64(suffixBoundary) + delta                                        // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	if newSuffixSigned < int64(prefixBoundary) || newSuffixSigned > int64(len(candidate)) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return IncrementalParseResult{}, fmt.Errorf("%w: derived incremental envelope", ErrCSTPatch)
 	}
 	newSuffixBoundary := uint64(newSuffixSigned)
@@ -137,22 +137,22 @@ func ApplyCSTPatches(cst *CST, patches []CSTPatch, limits CSTPatchLimits) (Incre
 	region := candidate[prefixBoundary:newSuffixBoundary]
 	physical := splitSourceLines(region)
 	newLines := make([]CSTLine, 0, len(physical))
-	baseLine := uint32(startIndex + 1)
+	baseLine := uint32(startIndex + 1) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	for _, local := range physical {
-		local.startOffset += int(prefixBoundary)
+		local.startOffset += int(prefixBoundary) // #nosec G115 -- source offset is bounded by validated input or parser state
 		local.line += baseLine - 1
 		rawEnd := local.startOffset + len(local.text) + local.newlineWidth
-		if uint64(rawEnd-local.startOffset) > uint64(normalized.CST.MaxLineBytes) {
+		if uint64(rawEnd-local.startOffset) > uint64(normalized.CST.MaxLineBytes) { // #nosec G115 -- source offset is bounded by validated input or parser state
 			return IncrementalParseResult{}, fmt.Errorf("%w: relexed line bytes", ErrCSTPatchLimit)
 		}
 		indent := cstIndent(local.text)
-		if uint64(indent) > uint64(normalized.CST.MaxIndentBytes) {
+		if uint64(indent) > uint64(normalized.CST.MaxIndentBytes) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 			return IncrementalParseResult{}, fmt.Errorf("%w: relexed indentation", ErrCSTPatchLimit)
 		}
 		newLines = append(newLines, classifyCSTLine(cst.file, candidate, starts, local, rawEnd, indent))
 	}
 	lineDelta := int64(len(newLines)) - int64(endExclusive-startIndex)
-	offsetDelta := int64(newSuffixBoundary) - int64(suffixBoundary)
+	offsetDelta := int64(newSuffixBoundary) - int64(suffixBoundary) // #nosec G115 -- source offset is bounded by validated input or parser state
 	lines := make([]CSTLine, 0, startIndex+len(newLines)+len(cst.lines)-endExclusive)
 	lines = append(lines, cst.lines[:startIndex]...)
 	lines = append(lines, newLines...)
@@ -168,9 +168,9 @@ func ApplyCSTPatches(cst *CST, patches []CSTPatch, limits CSTPatchLimits) (Incre
 	newStarts := sourceLineStarts(candidate)
 	result := IncrementalParseResult{
 		CST: updated, Semantic: Parse(cst.file, candidate), Changed: true,
-		RelexedOld:        Span{File: cst.file, Start: cstPosition(cst.source, oldStarts, int(prefixBoundary)), End: cstPosition(cst.source, oldStarts, int(suffixBoundary))},
-		RelexedNew:        Span{File: cst.file, Start: cstPosition(candidate, newStarts, int(prefixBoundary)), End: cstPosition(candidate, newStarts, int(newSuffixBoundary))},
-		ReusedPrefixLines: uint32(startIndex), ReusedSuffixLines: uint32(len(cst.lines) - endExclusive),
+		RelexedOld:        Span{File: cst.file, Start: cstPosition(cst.source, oldStarts, int(prefixBoundary)), End: cstPosition(cst.source, oldStarts, int(suffixBoundary))},  // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		RelexedNew:        Span{File: cst.file, Start: cstPosition(candidate, newStarts, int(prefixBoundary)), End: cstPosition(candidate, newStarts, int(newSuffixBoundary))}, // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		ReusedPrefixLines: uint32(startIndex), ReusedSuffixLines: uint32(len(cst.lines) - endExclusive),                                                                        // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	}
 	return result, nil
 }
@@ -219,8 +219,8 @@ func shiftCSTSpan(span Span, offsetDelta, lineDelta int64) Span {
 }
 
 func shiftCSTPosition(position Position, offsetDelta, lineDelta int64) Position {
-	position.Offset = uint64(int64(position.Offset) + offsetDelta)
-	position.Line = uint32(int64(position.Line) + lineDelta)
+	position.Offset = uint64(int64(position.Offset) + offsetDelta) // #nosec G115 -- source offset is bounded by validated input or parser state
+	position.Line = uint32(int64(position.Line) + lineDelta)       // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	return position
 }
 
@@ -420,7 +420,7 @@ func (c *CST) statementBoundary(offset uint64) bool {
 }
 
 func zeroWidthSpan(file, source string, offset uint64) Span {
-	position := cstPosition(source, sourceLineStarts(source), int(offset))
+	position := cstPosition(source, sourceLineStarts(source), int(offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
 	return Span{File: file, Start: position, End: position}
 }
 

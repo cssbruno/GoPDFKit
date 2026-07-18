@@ -95,7 +95,7 @@ func (f *Document) planTypedParagraphMixedCoreShadowContext(ctx context.Context,
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if err := layoutengine.ChargePlanningWork(ctx, "typed mixed paragraph measurement", uint64(maxInt(len(paragraph.Segments), 1))); err != nil {
+	if err := layoutengine.ChargePlanningWork(ctx, "typed mixed paragraph measurement", uint64(maxInt(len(paragraph.Segments), 1))); err != nil { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return typedLineShadowResult{}, err
 	}
 	if paragraph.BoxRef != nil || paragraph.Box != (layout.BoxStyle{}) || paragraph.StyleRef != nil {
@@ -180,7 +180,7 @@ func (f *Document) planTypedParagraphMixedCoreShadowContext(ctx context.Context,
 				break
 			}
 			styles = append(styles, metricIndex)
-			width := metrics[metricIndex].charWidths[byte(character)]
+			width := metrics[metricIndex].charWidths[byte(character)] // #nosec G115 -- low-width representation is explicitly normalized before packing
 			if character == ' ' {
 				width += f.ws
 			}
@@ -333,7 +333,7 @@ func (f *Document) planTypedParagraphMixedCoreShadowContext(ctx context.Context,
 			resourceIdentity := paperFontIdentity(metric.resource)
 			fontID := fontIDs[resourceIdentity]
 			if !fontID.Valid() {
-				fontID = layoutengine.FontResourceID(len(fonts) + 1)
+				fontID = layoutengine.FontResourceID(len(fonts) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				resource := metric.resource
 				resource.ID = fontID
 				fonts = append(fonts, resource)
@@ -362,7 +362,7 @@ func (f *Document) planTypedParagraphMixedCoreShadowContext(ctx context.Context,
 			runIndex := len(runs)
 			run := layoutengine.CoreGlyphRun{Line: uint32(lineIndex), Font: fontID, FontSize: metric.fontSize, Color: coreGlyphColor(metric.style.Color), Origin: layoutengine.Point{X: runOriginX, Y: plannedLine.Baseline}, Codes: text[cursor:end], Advances: advances, Source: plannedLine.Source}
 			runs = append(runs, run)
-			items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(runIndex)})
+			items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(runIndex)}) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 			if metric.style.Underline || metric.style.StrikeThrough {
 				decorationErr := appendMixedCoreDecorations(f, metric, runOriginX, runStartCursor, lineCursor, plannedLine, &paths, &strokes, &items)
 				if decorationErr != nil {
@@ -482,12 +482,12 @@ func appendMixedTextDecorations(
 		if boundsErr != nil {
 			return boundsErr
 		}
-		pathIndex := uint32(len(*paths))
+		pathIndex := uint32(len(*paths)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		*paths = append(*paths, layoutengine.PlannedPath{Segments: []layoutengine.PathSegment{
 			{Kind: layoutengine.PathMoveTo, Point: start},
 			{Kind: layoutengine.PathLineTo, Point: end},
 		}, Bounds: bounds})
-		strokeIndex := uint32(len(*strokes))
+		strokeIndex := uint32(len(*strokes)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		*strokes = append(*strokes, layoutengine.PlannedStroke{
 			Path: pathIndex, Color: color, Width: strokeWidth,
 			LineCap: layoutengine.StrokeCapButt, Fragment: line.Fragment,

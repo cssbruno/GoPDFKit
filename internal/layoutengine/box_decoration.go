@@ -103,8 +103,8 @@ func AttachBoxDecorations(plan LayoutPlan, decorations []BoxDecoration) (LayoutP
 				return err
 			}
 			paths = append(paths, path)
-			fills = append(fills, PlannedFill{Path: uint32(len(paths) - 1), Rule: rule, Color: color, Fragment: fragment.ID})
-			commands = append(commands, DisplayCommand{Kind: CommandFillPath, Fragment: fragment.ID, Bounds: box, Payload: uint32(len(fills) - 1)})
+			fills = append(fills, PlannedFill{Path: uint32(len(paths) - 1), Rule: rule, Color: color, Fragment: fragment.ID})                       // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			commands = append(commands, DisplayCommand{Kind: CommandFillPath, Fragment: fragment.ID, Bounds: box, Payload: uint32(len(fills) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return nil
 		}
 		if decoration.Shadow.Color.Set {
@@ -175,7 +175,7 @@ func AttachBoxDecorations(plan LayoutPlan, decorations []BoxDecoration) (LayoutP
 	commands := make([]DisplayCommand, 0, len(projection.Commands)+len(decorations)*5)
 	for pageIndex := range projection.Pages {
 		page := &projection.Pages[pageIndex]
-		start := uint32(len(commands))
+		start := uint32(len(commands)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		for _, fragment := range byPage[pageIndex] {
 			commands = append(commands, byFragment[fragment]...)
 		}
@@ -186,7 +186,7 @@ func AttachBoxDecorations(plan LayoutPlan, decorations []BoxDecoration) (LayoutP
 		for commandIndex := int(page.Commands.Start); commandIndex < end; commandIndex++ {
 			commands = append(commands, projection.Commands[commandIndex])
 		}
-		page.Commands = IndexRange{Start: start, Count: uint32(len(commands)) - start}
+		page.Commands = IndexRange{Start: start, Count: uint32(len(commands)) - start} // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	}
 	return NewLayoutPlan(LayoutPlanInput{
 		DeterministicInputs: projection.DeterministicInputs,

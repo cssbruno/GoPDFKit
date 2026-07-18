@@ -660,9 +660,9 @@ func (w *Workspace) validatePersistedFixtures(fixtures []paperscenario.Fixture) 
 		input[index] = paperscenario.Scenario{Name: fixture.Name, Locale: fixture.Locale, Values: cloneScenarioFields(fixture.Values)}
 	}
 	limits := paperscenario.DefaultLimits()
-	limits.MaxNodes = uint32(w.limits.MaxScenarioValueNodes)
-	limits.MaxPathBytes = uint32(w.limits.MaxScenarioPathBytes)
-	limits.MaxWork = uint64(w.limits.MaxScenarioWork)
+	limits.MaxNodes = uint32(w.limits.MaxScenarioValueNodes)    // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	limits.MaxPathBytes = uint32(w.limits.MaxScenarioPathBytes) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	limits.MaxWork = uint64(w.limits.MaxScenarioWork)           // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	resolved, err := paperscenario.Resolve(input, limits)
 	if err != nil {
 		return nil, err

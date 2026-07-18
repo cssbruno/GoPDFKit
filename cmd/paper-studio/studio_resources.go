@@ -221,8 +221,8 @@ func buildStudioResourceInventory(revision, planHash, scenario string, ast paper
 				return studioAssetInventory{}, errors.New("paper-studio: asset dimensions are invalid")
 			}
 			item.Kind = "image"
-			item.Width = uint32(config.Width)
-			item.Height = uint32(config.Height)
+			item.Width = uint32(config.Width)   // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+			item.Height = uint32(config.Height) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		} else if strings.HasPrefix(resource.MediaType, "font/") {
 			item.Kind = "font"
 		} else {

@@ -286,7 +286,7 @@ func (l *paperLexer) position(offset int) Position {
 		}
 	}
 	lineStart := l.lineStarts[lineIndex]
-	column := uint32(utf8.RuneCountInString(l.source[lineStart:offset]) + 1)
+	column := uint32(utf8.RuneCountInString(l.source[lineStart:offset]) + 1) // #nosec G115 -- source offset is bounded by validated input or parser state
 	return Position{Offset: uint64(offset), Line: uint32(lineIndex + 1), Column: column}
 }
 

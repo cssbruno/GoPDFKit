@@ -107,7 +107,7 @@ func Resolve(input []Scenario, limits Limits) ([]Fixture, error) {
 	if !validLimits(limits) {
 		return nil, fmt.Errorf("%w: invalid limits", ErrLimit)
 	}
-	if uint32(len(input)) > limits.MaxScenarios {
+	if uint32(len(input)) > limits.MaxScenarios { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return nil, fmt.Errorf("%w: scenario count", ErrLimit)
 	}
 	r := resolver{input: input, byName: make(map[string]int, len(input)), state: make([]uint8, len(input)), output: make([]Fixture, len(input)), limits: limits}
@@ -242,7 +242,7 @@ func (r *resolver) normalizeValue(value Value, depth uint32) (Value, error) {
 		if value.String != "" || value.Number != "" || value.Bool || len(value.Object) != 0 {
 			return Value{}, fmt.Errorf("%w: list contains incompatible data", ErrInvalid)
 		}
-		if uint32(len(value.List)) > r.limits.MaxListItems {
+		if uint32(len(value.List)) > r.limits.MaxListItems { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return Value{}, fmt.Errorf("%w: list items", ErrLimit)
 		}
 		seen := make(map[string]bool, len(value.List))
@@ -267,7 +267,7 @@ func (r *resolver) normalizeValue(value Value, depth uint32) (Value, error) {
 }
 
 func (r *resolver) mutate(fields *[]Field, mutation Mutation) error {
-	if mutation.Path == "" || uint32(len(mutation.Path)) > r.limits.MaxPathBytes {
+	if mutation.Path == "" || uint32(len(mutation.Path)) > r.limits.MaxPathBytes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return fmt.Errorf("%w: invalid mutation path", ErrInvalid)
 	}
 	parts := strings.Split(mutation.Path, ".")

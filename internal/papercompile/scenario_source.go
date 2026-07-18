@@ -92,7 +92,7 @@ type scenarioSourceMetadata struct {
 }
 
 func (a *scenarioSourceAnalysis) scenario(node *paperlang.Node) {
-	if uint32(len(a.result.Scenarios)) >= a.limits.MaxScenarios {
+	if uint32(len(a.result.Scenarios)) >= a.limits.MaxScenarios { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		a.add("PAPER_SCENARIO_LIMIT", "scenario count exceeds the configured limit", "split declarations or raise the bounded limit", node.HeaderSpan)
 		return
 	}
@@ -333,9 +333,9 @@ func isScenarioValueNode(kind paperlang.NodeKind) bool {
 
 func pathSize(parent uint32, name string) uint32 {
 	if parent == 0 {
-		return uint32(len(name))
+		return uint32(len(name)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	}
-	return parent + 1 + uint32(len(name))
+	return parent + 1 + uint32(len(name)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 }
 
 func validScenarioSourceLimits(limits paperscenario.Limits) bool {

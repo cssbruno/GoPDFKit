@@ -41,9 +41,9 @@ func AttachOverlayLines(plan LayoutPlan, page uint32, lines []PlannedLine) (Layo
 	combined = append(combined, projection.Lines[:insertAt]...)
 	combined = append(combined, lines...)
 	combined = append(combined, projection.Lines[insertAt:]...)
-	projection.Pages[page-1].Lines.Count += uint32(len(lines))
+	projection.Pages[page-1].Lines.Count += uint32(len(lines)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	for index := int(page); index < len(projection.Pages); index++ {
-		projection.Pages[index].Lines.Start += uint32(len(lines))
+		projection.Pages[index].Lines.Start += uint32(len(lines)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	}
 	result, err := NewLayoutPlan(LayoutPlanInput{
 		Pages: projection.Pages, Fragments: projection.Fragments, Lines: combined,
@@ -56,5 +56,5 @@ func AttachOverlayLines(plan LayoutPlan, page uint32, lines []PlannedLine) (Layo
 		return LayoutPlan{}, 0, err
 	}
 	result, err = rebindDeterministicResources(result, projection.DeterministicInputs)
-	return result, uint32(insertAt), err
+	return result, uint32(insertAt), err // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 }

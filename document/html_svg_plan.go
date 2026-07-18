@@ -277,7 +277,7 @@ func (f *Document) planUnifiedInlineSVGAtBody(ctx context.Context, meta htmlUnif
 		nodes = append(nodes, layoutengine.SemanticNode{ID: 2, Parent: 1, Role: layoutengine.SemanticRoleLink, Key: "@html-svg-link", Instance: "@html-svg-link"})
 		parent = 2
 	}
-	owner := layoutengine.SemanticNodeID(len(nodes) + 1)
+	owner := layoutengine.SemanticNodeID(len(nodes) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	nodes = append(nodes, layoutengine.SemanticNode{ID: owner, Parent: parent, Role: role, Key: "@html-svg", Instance: "@html-svg",
 		Attributes: layoutengine.SemanticAttributes{AlternateText: meta.label}})
 	associations := []layoutengine.SemanticFragmentAssociation{{Semantic: owner, Page: 1, Fragment: 1}}

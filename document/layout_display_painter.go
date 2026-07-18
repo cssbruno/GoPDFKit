@@ -499,7 +499,7 @@ func (f *Document) preflightDisplayLayoutPlanPDFResourcesContextForTarget(ctx co
 			return preparedDisplayPlanPDF{}, fmt.Errorf("%w: planned image decoded size overflows", errCoreLayoutPlanPaintUnsupported)
 		}
 		decoded := pixels * 4
-		if decoded > uint64(f.imageDecodedLimit())-decodedTotal {
+		if decoded > uint64(f.imageDecodedLimit())-decodedTotal { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 			return preparedDisplayPlanPDF{}, fmt.Errorf("%w: cumulative planned image decoded bytes exceed limit", errCoreLayoutPlanPaintUnsupported)
 		}
 		decodedTotal += decoded

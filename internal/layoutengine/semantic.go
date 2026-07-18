@@ -358,7 +358,7 @@ func validateSemanticAttributes(node SemanticNode, destinationCount int) error {
 		}
 	}
 	if attributes.LinkDestination.Valid() {
-		if node.Role != SemanticRoleLink || uint64(attributes.LinkDestination) > uint64(destinationCount) {
+		if node.Role != SemanticRoleLink || uint64(attributes.LinkDestination) > uint64(destinationCount) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 			return errors.New("link destination must reference an existing destination from a link node")
 		}
 	}

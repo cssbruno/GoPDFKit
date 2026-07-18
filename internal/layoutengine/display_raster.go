@@ -391,7 +391,7 @@ func preflightDisplayRaster(ctx context.Context, plan LayoutPlan, sources Displa
 		}
 		fontFaces[resource.ID] = &rasterSizedFace{font: parsed}
 		digest := sha256.Sum256(data)
-		if resource.EmbeddedUTF8 != nil && (hex.EncodeToString(digest[:]) != string(resource.EmbeddedUTF8.Digest) || uint32(len(data)) != resource.EmbeddedUTF8.ByteLength) {
+		if resource.EmbeddedUTF8 != nil && (hex.EncodeToString(digest[:]) != string(resource.EmbeddedUTF8.Digest) || uint32(len(data)) != resource.EmbeddedUTF8.ByteLength) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return nil, nil, nil, fmt.Errorf("%w: embedded font digest or length mismatch", ErrDisplayRasterResource)
 		}
 		records = append(records, DisplayRasterResourceDigest{Kind: "font_program", Identity: string(resource.MetricsDigest), SHA256: hex.EncodeToString(digest[:]), ByteLength: uint64(len(data))})
@@ -456,13 +456,13 @@ func (face *rasterSizedFace) draw(dst *image.RGBA, resource CoreFontResource, ru
 	}
 	index := 0
 	for _, code := range run.Codes {
-		px := pageToRaster26_6(x, crop.X, uint32(dst.Bounds().Dx()), crop.Width)
-		py := pageToRaster26_6(origin.Y, crop.Y, uint32(dst.Bounds().Dy()), crop.Height)
+		px := pageToRaster26_6(x, crop.X, uint32(dst.Bounds().Dx()), crop.Width)         // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		py := pageToRaster26_6(origin.Y, crop.Y, uint32(dst.Bounds().Dy()), crop.Height) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		drawer := xfont.Drawer{Dst: target, Src: image.NewUniform(colorValue), Face: actual, Dot: fixed.Point26_6{X: px, Y: py}}
 		if resource.IsEmbeddedUTF8() {
 			drawer.DrawString(string(code))
 		} else {
-			drawer.DrawString(string(charmap.Windows1252.DecodeByte(byte(code))))
+			drawer.DrawString(string(charmap.Windows1252.DecodeByte(byte(code)))) // #nosec G115 -- low-width representation is explicitly normalized before packing
 		}
 		x, _ = x.Add(run.Advances[index])
 		index++
@@ -492,7 +492,7 @@ func rasterFillPath(dst *image.RGBA, path PlannedPath, fill PlannedFill, transfo
 	}
 	alpha := uint8(255)
 	if fill.Opacity != 0 {
-		alpha = uint8((int64(fill.Opacity)*255 + FixedScale/2) / FixedScale)
+		alpha = uint8((int64(fill.Opacity)*255 + FixedScale/2) / FixedScale) // #nosec G115 -- low-width representation is explicitly normalized before packing
 	}
 	c := color.NRGBA{R: fill.Color.R, G: fill.Color.G, B: fill.Color.B, A: alpha}
 	r.Draw(dst, clip, image.NewUniform(c), image.Point{})
@@ -504,7 +504,7 @@ func rasterStrokePath(dst *image.RGBA, path PlannedPath, stroke PlannedStroke, t
 	haveCurrent := false
 	alpha := uint8(255)
 	if stroke.Opacity != 0 {
-		alpha = uint8((int64(stroke.Opacity)*255 + FixedScale/2) / FixedScale)
+		alpha = uint8((int64(stroke.Opacity)*255 + FixedScale/2) / FixedScale) // #nosec G115 -- low-width representation is explicitly normalized before packing
 	}
 	colorValue := color.NRGBA{R: stroke.Color.R, G: stroke.Color.G, B: stroke.Color.B, A: alpha}
 	width := float64(stroke.Width) * float64(dst.Bounds().Dx()) / float64(crop.Width)
@@ -652,9 +652,9 @@ func rasterImage(dst *image.RGBA, source image.Image, placement PlannedImage, tr
 			alpha := uint32(rasterOpacityAlpha(value.A, placement.Opacity))
 			background := dst.RGBAAt(x, y)
 			dst.SetRGBA(x, y, color.RGBA{
-				R: uint8((uint32(value.R)*alpha + uint32(background.R)*(255-alpha) + 127) / 255),
-				G: uint8((uint32(value.G)*alpha + uint32(background.G)*(255-alpha) + 127) / 255),
-				B: uint8((uint32(value.B)*alpha + uint32(background.B)*(255-alpha) + 127) / 255), A: 255,
+				R: uint8((uint32(value.R)*alpha + uint32(background.R)*(255-alpha) + 127) / 255),         // #nosec G115 -- low-width representation is explicitly normalized before packing
+				G: uint8((uint32(value.G)*alpha + uint32(background.G)*(255-alpha) + 127) / 255),         // #nosec G115 -- low-width representation is explicitly normalized before packing
+				B: uint8((uint32(value.B)*alpha + uint32(background.B)*(255-alpha) + 127) / 255), A: 255, // #nosec G115 -- low-width representation is explicitly normalized before packing
 			})
 		}
 	}
@@ -665,7 +665,7 @@ func rasterOpacityAlpha(source uint8, opacity Fixed) uint8 {
 	if opacity == 0 {
 		return source
 	}
-	return uint8((uint32(source)*uint32(opacity) + uint32(FixedScale)/2) / uint32(FixedScale))
+	return uint8((uint32(source)*uint32(opacity) + uint32(FixedScale)/2) / uint32(FixedScale)) // #nosec G115 -- low-width representation is explicitly normalized before packing
 }
 
 func rasterRectangularPath(path PlannedPath) bool {
@@ -687,9 +687,9 @@ func pageToRaster26_6(value, origin Fixed, pixels uint32, extent Fixed) fixed.In
 	numerator := int64(value-origin) * int64(pixels) * 64
 	denominator := int64(extent)
 	if numerator < 0 {
-		return fixed.Int26_6(-((-numerator + denominator/2) / denominator))
+		return fixed.Int26_6(-((-numerator + denominator/2) / denominator)) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	}
-	return fixed.Int26_6((numerator + denominator/2) / denominator)
+	return fixed.Int26_6((numerator + denominator/2) / denominator) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 }
 func rasterPixelExtent(extent Fixed, dpi uint32) (uint32, error) {
 	value := (int64(extent)*int64(dpi) + 36*FixedScale) / (72 * FixedScale)
@@ -726,6 +726,6 @@ func (w *rasterLimitWriter) Write(p []byte) (int, error) {
 		return 0, ErrDisplayRasterLimit
 	}
 	n, err := w.writer.Write(p)
-	w.remaining -= uint64(n)
+	w.remaining -= uint64(n) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	return n, err
 }

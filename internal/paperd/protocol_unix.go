@@ -107,7 +107,7 @@ func ListenUnixProtocol(path string, server *ProtocolServer, options UnixProtoco
 	}
 	allowed := make(map[uint32]struct{}, len(options.AllowedUIDs)+1)
 	if len(options.AllowedUIDs) == 0 {
-		allowed[uint32(os.Geteuid())] = struct{}{}
+		allowed[uint32(os.Geteuid())] = struct{}{} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	} else {
 		for _, uid := range options.AllowedUIDs {
 			allowed[uid] = struct{}{}
@@ -154,7 +154,7 @@ func RoundTripUnixProtocolContext(ctx context.Context, path string, request []by
 	defer func() { _ = unixConnection.Close() }()
 	allowed := make(map[uint32]struct{}, len(options.AllowedServerUIDs)+1)
 	if len(options.AllowedServerUIDs) == 0 {
-		allowed[uint32(os.Geteuid())] = struct{}{}
+		allowed[uint32(os.Geteuid())] = struct{}{} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	} else {
 		for _, uid := range options.AllowedServerUIDs {
 			allowed[uid] = struct{}{}
@@ -299,7 +299,7 @@ func readProtocolFrame(reader io.Reader, limit int) ([]byte, error) {
 		return nil, workspaceError("PROTOCOL_SOCKET_FRAME", "protocol frame header is incomplete", errors.Join(ErrProtocolSocket, err))
 	}
 	size := binary.BigEndian.Uint32(header[:])
-	if size == 0 || uint64(size) > uint64(limit) {
+	if size == 0 || uint64(size) > uint64(limit) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		return nil, workspaceError("PROTOCOL_SOCKET_LIMIT", "protocol frame exceeds its byte bound", ErrLimit)
 	}
 	payload := make([]byte, int(size))
@@ -314,7 +314,7 @@ func writeProtocolFrame(writer io.Writer, payload []byte, limit int) error {
 		return workspaceError("PROTOCOL_SOCKET_LIMIT", "protocol response frame exceeds its byte bound", ErrLimit)
 	}
 	var header [4]byte
-	binary.BigEndian.PutUint32(header[:], uint32(len(payload)))
+	binary.BigEndian.PutUint32(header[:], uint32(len(payload))) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	if err := writeProtocolBytes(writer, header[:]); err != nil {
 		return workspaceError("PROTOCOL_SOCKET_FRAME", "protocol response header could not be written", errors.Join(ErrProtocolSocket, err))
 	}

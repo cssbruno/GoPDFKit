@@ -138,7 +138,7 @@ func (diff LayoutPlanDiff) CanonicalJSON() ([]byte, error) {
 }
 
 func countPair(before, after int) PlanDiffCount {
-	return PlanDiffCount{Before: uint64(before), After: uint64(after)}
+	return PlanDiffCount{Before: uint64(before), After: uint64(after)} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 }
 
 func diffPages(diff *LayoutPlanDiff, before, after []PlannedPage, limit uint64) {

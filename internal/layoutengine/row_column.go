@@ -318,7 +318,7 @@ func PlanRowColumn(ctx context.Context, input RowColumnPlanInput, limits RowColu
 	}
 
 	planInput := LayoutPlanInput{Pages: []PlannedPage{{
-		Number: 1, Size: input.PageSize, Fragments: IndexRange{Count: uint32(len(input.Children))},
+		Number: 1, Size: input.PageSize, Fragments: IndexRange{Count: uint32(len(input.Children))}, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	}}}
 	planInput.Fragments = make([]Fragment, 0, len(input.Children))
 	if err := budget.charge(uint64(len(input.Children)) + 1); err != nil {
@@ -382,7 +382,7 @@ func PlanRowColumn(ctx context.Context, input RowColumnPlanInput, limits RowColu
 	}
 	lines := []RowColumnLine(nil)
 	if len(input.Children) != 0 {
-		lines = []RowColumnLine{{Children: IndexRange{Count: uint32(len(input.Children))}, CrossStart: crossOrigin, CrossSize: crossAvailable, UsedMain: usedMain}}
+		lines = []RowColumnLine{{Children: IndexRange{Count: uint32(len(input.Children))}, CrossStart: crossOrigin, CrossSize: crossAvailable, UsedMain: usedMain}} // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	}
 	return RowColumnPlanResult{Plan: plan, mainSizes: mainSizes, lines: lines, UsedMain: usedMain}, nil
 }

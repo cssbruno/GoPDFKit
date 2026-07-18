@@ -344,7 +344,7 @@ func characterizationPDFOutputEvidence(pdf []byte, pages int) (CharacterizationP
 		text.WriteString(value)
 	}
 	digest := sha256.Sum256(pdf)
-	count := func(token string) uint32 { return uint32(bytes.Count(pdf, []byte(token))) }
+	count := func(token string) uint32 { return uint32(bytes.Count(pdf, []byte(token))) } // #nosec G115 -- low-width representation is explicitly normalized before packing
 	return CharacterizationPDFEvidence{SHA256: hex.EncodeToString(digest[:]), Bytes: uint64(len(pdf)), Text: text.String(), PageText: pageText,
 		Links: count("/Subtype /Link"), Destinations: count("/Dest "), Widgets: count("/Subtype /Widget"),
 		Attachments: count("/Filespec"), StructureTrees: count("/StructTreeRoot"), MarkedContent: count(" BDC"),

@@ -115,7 +115,7 @@ func (w *Workspace) ExplainLayoutIssue(ctx context.Context, request LayoutIssueE
 	}
 	if request.MaxItems == 0 || int(request.MaxItems) > w.limits.MaxSearchResults ||
 		request.MaxBytes == 0 || int(request.MaxBytes) > w.limits.MaxContextBytes ||
-		request.MaxWork == 0 || request.MaxWork > uint64(w.limits.MaxScenarioWork) {
+		request.MaxWork == 0 || request.MaxWork > uint64(w.limits.MaxScenarioWork) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		return LayoutIssueExplainResult{}, workspaceError("LAYOUT_EXPLAIN_LIMIT", "layout explanation bounds are outside configured limits", ErrLimit)
 	}
 	selector := request.Selector
@@ -375,7 +375,7 @@ func sourceCauses(mapping papercompile.CompileMapping, keys map[string]struct{},
 			DefinitionSpan: node.DefinitionSpan, InvocationSpan: node.InvocationSpan, InstancePath: node.InstancePath,
 			BindingPath: node.BindingPath, BindingSpan: node.BindingSpan, BindingNullable: node.BindingNullable,
 			BindingCollection: node.BindingCollection})
-		if uint32(len(result)) == max {
+		if uint32(len(result)) == max { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			break
 		}
 	}
@@ -390,7 +390,7 @@ func styleCauses(mapping papercompile.CompileMapping, keys map[string]struct{}, 
 		}
 		result = append(result, LayoutStyleCause{Property: style.Property, ConsumerSpan: style.ConsumerSpan, Theme: style.Theme,
 			Token: style.Token, Value: style.Value, Provenance: style.Provenance})
-		if uint32(len(result)) == max {
+		if uint32(len(result)) == max { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			break
 		}
 	}

@@ -118,7 +118,7 @@ func (f *Document) planTypedParagraphMixedTextShadowContext(ctx context.Context,
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if err := layoutengine.ChargePlanningWork(ctx, "typed mixed UTF-8 paragraph measurement", uint64(maxInt(len(paragraph.Segments), 1))); err != nil {
+	if err := layoutengine.ChargePlanningWork(ctx, "typed mixed UTF-8 paragraph measurement", uint64(maxInt(len(paragraph.Segments), 1))); err != nil { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return typedLineShadowResult{}, err
 	}
 	if paragraph.BoxRef != nil || paragraph.Box != (layout.BoxStyle{}) || paragraph.StyleRef != nil {
@@ -363,7 +363,7 @@ func (f *Document) planTypedParagraphMixedTextShadowContext(ctx context.Context,
 			identity := paperFontIdentity(metric.resource)
 			fontID := fontIDs[identity]
 			if !fontID.Valid() {
-				fontID = layoutengine.FontResourceID(len(fonts) + 1)
+				fontID = layoutengine.FontResourceID(len(fonts) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				resource := metric.resource
 				resource.ID = fontID
 				fonts = append(fonts, resource)
@@ -392,7 +392,7 @@ func (f *Document) planTypedParagraphMixedTextShadowContext(ctx context.Context,
 			runIndex := len(runs)
 			run := layoutengine.CoreGlyphRun{Line: uint32(lineIndex), Font: fontID, FontSize: metric.fontSize, Color: coreGlyphColor(metric.style.Color), Origin: layoutengine.Point{X: runOriginX, Y: plannedLine.Baseline}, Codes: string(runes[cursor:end]), Advances: advances, Source: plannedLine.Source}
 			runs = append(runs, run)
-			items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(runIndex)})
+			items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(runIndex)}) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 			if metric.style.Underline || metric.style.StrikeThrough {
 				if err := appendMixedTextDecorations(f, metric.style, metric.fontSizePt, metric.up, metric.ut, runOriginX, runStartCursor, lineCursor, plannedLine, &paths, &strokes, &items); err != nil {
 					return typedLineShadowResult{}, err

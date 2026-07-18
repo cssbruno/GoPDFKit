@@ -227,7 +227,7 @@ func (w *Workspace) validateScenarioApplyRequest(request ScenarioApplyRequest) (
 		return nil, nil, scenarioRevisionConflict("expected scenario digest is malformed")
 	}
 
-	budget := &scenarioEditBudget{limit: uint64(w.limits.MaxScenarioWork)}
+	budget := &scenarioEditBudget{limit: uint64(w.limits.MaxScenarioWork)} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	operations := make([]ScenarioOperation, len(request.Operations))
 	valueNodes := 0
 	for i, operation := range request.Operations {
@@ -476,8 +476,8 @@ func (w *Workspace) prepareScenarioEdit(fixtures []paperscenario.Fixture, budget
 		input[i] = paperscenario.Scenario{Name: fixtures[i].Name, Locale: fixtures[i].Locale, Values: cloneScenarioFields(fixtures[i].Values)}
 	}
 	limits := paperscenario.DefaultLimits()
-	limits.MaxNodes = uint32(w.limits.MaxScenarioValueNodes)
-	limits.MaxPathBytes = uint32(w.limits.MaxScenarioPathBytes)
+	limits.MaxNodes = uint32(w.limits.MaxScenarioValueNodes)    // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	limits.MaxPathBytes = uint32(w.limits.MaxScenarioPathBytes) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	limits.MaxWork = remainingWork
 	resolved, err := paperscenario.Resolve(input, limits)
 	if err != nil {

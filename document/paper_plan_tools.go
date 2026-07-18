@@ -136,7 +136,7 @@ func (p PaperPlan) PageSummariesWithLimits(limits PaperPlanPageSummaryLimits) ([
 			issues = issues[:limits.MaxIssuesPerPage]
 		}
 		result = append(result, PaperPlanPageSummary{Page: page.Number, Selector: selector,
-			Regions: regions, RepeatedRegions: repeated, IssueCount: uint32(issueCount), IssuesTruncated: issueCount > len(issues),
+			Regions: regions, RepeatedRegions: repeated, IssueCount: uint32(issueCount), IssuesTruncated: issueCount > len(issues), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			Issues: append([]PaperPlanPageIssue(nil), issues...), ContentHash: hex.EncodeToString(digest[:])})
 	}
 	return result, nil
@@ -286,10 +286,10 @@ func paperPageFingerprint(projection layoutengine.LayoutPlanProjection, indexed 
 
 func paperPageSummaryRange(value layoutengine.IndexRange, limit int) (int, int, bool) {
 	start, end := uint64(value.Start), uint64(value.Start)+uint64(value.Count)
-	if start > uint64(limit) || end > uint64(limit) {
+	if start > uint64(limit) || end > uint64(limit) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		return 0, 0, false
 	}
-	return int(start), int(end), true
+	return int(start), int(end), true // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 }
 
 func sortedPageRegions(values map[string]bool) []string {

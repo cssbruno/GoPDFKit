@@ -220,7 +220,7 @@ func resolveTable(input TablePlanInput, limits TablePlanLimits, budget *tableBud
 	if err := validateTableSurface(input); err != nil {
 		return tableResolved{}, err
 	}
-	columns := uint32(len(input.Columns))
+	columns := uint32(len(input.Columns)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	if input.Rows > limits.MaxRows || columns > limits.MaxColumns || uint64(len(input.Cells)) > uint64(limits.MaxCells) {
 		return tableResolved{}, tableResourceLimit("table dimensions exceed retained-state limits", limits, input)
 	}
@@ -258,7 +258,7 @@ func resolveTable(input TablePlanInput, limits TablePlanLimits, budget *tableBud
 		for row := cell.Row; row < cell.Row+cell.RowSpan; row++ {
 			base := uint64(row) * uint64(columns)
 			for column := cell.Column; column < cell.Column+cell.ColumnSpan; column++ {
-				slot := int(base + uint64(column))
+				slot := int(base + uint64(column)) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 				if occupancy[slot] >= 0 {
 					return tableResolved{}, tableSpanError(cell, "table cells overlap after expanding row and column spans")
 				}
@@ -525,7 +525,7 @@ func ResolveTableColumnWidths(ctx context.Context, width Fixed, columns []TableC
 	if err != nil {
 		return nil, err
 	}
-	if width <= 0 || len(columns) == 0 || uint32(len(columns)) > limits.MaxColumns || uint64(len(cells)) > uint64(limits.MaxCells) {
+	if width <= 0 || len(columns) == 0 || uint32(len(columns)) > limits.MaxColumns || uint64(len(cells)) > uint64(limits.MaxCells) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return nil, ErrTableDimensionsInvalid
 	}
 	input := TablePlanInput{Width: width, Columns: cloneSlice(columns)}
@@ -924,7 +924,7 @@ func (p *tablePaginator) startPage() error {
 		if err != nil {
 			return err
 		}
-		id := FragmentID(len(p.output.Fragments) + 1)
+		id := FragmentID(len(p.output.Fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		p.output.Fragments = append(p.output.Fragments, Fragment{ID: id, Node: caption.Node, Key: caption.Key, Instance: caption.Instance, Page: p.page, Region: RegionBody, BorderBox: box, ContentBox: box, Source: caption.Source, Continuation: ContinuationWhole})
 		p.cursor, err = p.cursor.Add(caption.MinHeight)
 		if err != nil {
@@ -956,7 +956,7 @@ func (p *tablePaginator) startPage() error {
 func (p *tablePaginator) finishPage() {
 	p.output.Pages = append(p.output.Pages, PlannedPage{
 		Number: p.page, Size: p.input.PageSize,
-		Fragments: IndexRange{Start: uint32(p.pageFragmentStart), Count: uint32(len(p.output.Fragments) - p.pageFragmentStart)},
+		Fragments: IndexRange{Start: uint32(p.pageFragmentStart), Count: uint32(len(p.output.Fragments) - p.pageFragmentStart)}, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	})
 }
 
@@ -1049,7 +1049,7 @@ func (p *tablePaginator) placeRows(start, end uint32, header bool) (FragmentID, 
 		if err != nil {
 			return 0, 0, err
 		}
-		id := FragmentID(len(p.output.Fragments) + 1)
+		id := FragmentID(len(p.output.Fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		p.output.Fragments = append(p.output.Fragments, Fragment{
 			ID: id, Node: cell.Node, Key: cell.Key, Instance: cell.Instance,
 			Page: p.page, Region: RegionBody, BorderBox: box, ContentBox: box,

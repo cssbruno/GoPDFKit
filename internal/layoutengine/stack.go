@@ -139,7 +139,7 @@ func PlanStack(ctx context.Context, input StackPlanInput, limits StackPlanLimits
 	for index, child := range input.Children {
 		children[index] = indexedStackChild{child: child, index: uint32(index)}
 	}
-	sortCost := uint64(len(children)) * uint64(bits.Len(uint(len(children))+1)+1)
+	sortCost := uint64(len(children)) * uint64(bits.Len(uint(len(children))+1)+1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	if err := budget.charge(sortCost); err != nil {
 		return LayoutPlan{}, err
 	}
@@ -158,7 +158,7 @@ func PlanStack(ctx context.Context, input StackPlanInput, limits StackPlanLimits
 	}
 
 	output := LayoutPlanInput{Pages: []PlannedPage{{Number: 1, Size: input.PageSize,
-		Fragments: IndexRange{Count: uint32(len(children))}}}, Fragments: make([]Fragment, 0, len(children))}
+		Fragments: IndexRange{Count: uint32(len(children))}}}, Fragments: make([]Fragment, 0, len(children))} // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	for index, indexed := range children {
 		if err := budget.charge(1); err != nil {
 			return LayoutPlan{}, err

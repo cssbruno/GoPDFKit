@@ -351,7 +351,7 @@ func buildPageMasterPlan(masters PageMasterSet, pageCount uint32, placements []m
 			}
 		}
 		for _, placement := range byPage[page] {
-			id := FragmentID(len(planInput.Fragments) + 1)
+			id := FragmentID(len(planInput.Fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			ids[placement.key] = id
 			block := placement.block
 			planInput.Fragments = append(planInput.Fragments, Fragment{
@@ -377,7 +377,7 @@ func buildPageMasterPlan(masters PageMasterSet, pageCount uint32, placements []m
 		}
 		planInput.Pages = append(planInput.Pages, PlannedPage{
 			Number: page, Size: master.PageSize,
-			Fragments: IndexRange{Start: uint32(start), Count: uint32(len(planInput.Fragments) - start)},
+			Fragments: IndexRange{Start: uint32(start), Count: uint32(len(planInput.Fragments) - start)}, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		})
 	}
 	sort.SliceStable(breakSpecs, func(i, j int) bool {

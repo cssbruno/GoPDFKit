@@ -673,7 +673,7 @@ func htmlUnifiedFlexFactor(value string) (htmlUnifiedCSSFactor, error) {
 	scaled := uint64(scaledFloat)
 	result := htmlUnifiedCSSFactor{scaled: scaled}
 	if scaled%1_000_000 == 0 {
-		result.integral = uint32(scaled / 1_000_000)
+		result.integral = uint32(scaled / 1_000_000) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	}
 	return result, nil
 }

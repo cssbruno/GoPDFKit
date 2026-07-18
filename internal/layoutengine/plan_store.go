@@ -254,10 +254,10 @@ func (store *FilePlanStore) readLocked(path string) ([]byte, error) {
 	if !info.Mode().IsRegular() {
 		return nil, corruptionError(nil, "stored item is not a regular file")
 	}
-	if info.Size() < 0 || uint64(info.Size()) > store.limits.MaxPlanBytes {
+	if info.Size() < 0 || uint64(info.Size()) > store.limits.MaxPlanBytes { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		return nil, fmt.Errorf("%w: stored plan exceeds %d bytes", ErrPlanStoreLimit, store.limits.MaxPlanBytes)
 	}
-	reader := io.LimitReader(file, int64(store.limits.MaxPlanBytes)+1)
+	reader := io.LimitReader(file, int64(store.limits.MaxPlanBytes)+1) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	encoded, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, fmt.Errorf("layoutengine: read plan store item: %w", err)

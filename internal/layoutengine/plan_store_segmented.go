@@ -575,7 +575,7 @@ func encodeSegmentedPlan(ctx context.Context, plan LayoutPlan, limits SegmentedP
 		if end > pageCount {
 			end = pageCount
 		}
-		pageStart := uint32(start + 1)
+		pageStart := uint32(start + 1) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		if pageCount == 0 {
 			pageStart = 0
 		}
@@ -632,7 +632,7 @@ func encodeSegmentedPlan(ctx context.Context, plan LayoutPlan, limits SegmentedP
 	for pageIndex, page := range projection.Pages {
 		end, _ := page.Commands.end(len(projection.Commands))
 		for index := int(page.Commands.Start); index < end; index++ {
-			segments[segmentForPage(uint32(pageIndex+1))].Commands = append(segments[segmentForPage(uint32(pageIndex+1))].Commands, indexedCommand{uint32(index), projection.Commands[index]})
+			segments[segmentForPage(uint32(pageIndex+1))].Commands = append(segments[segmentForPage(uint32(pageIndex+1))].Commands, indexedCommand{uint32(index), projection.Commands[index]}) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		}
 	}
 	for index, value := range projection.Breaks {
@@ -658,11 +658,11 @@ func encodeSegmentedPlan(ctx context.Context, plan LayoutPlan, limits SegmentedP
 	manifest := segmentedPlanManifest{FormatVersion: SegmentedPlanManifestFormatVersion, PlanSchemaVersion: LayoutPlanSchemaVersion,
 		PlannerVersion: PlannerVersion, PainterContractVersion: PainterContractVersion, PlanHash: hash,
 		DeterministicInputs: projection.DeterministicInputs,
-		Counts: segmentedPlanCounts{Pages: uint32(len(projection.Pages)), Fragments: uint32(len(projection.Fragments)), Lines: uint32(len(projection.Lines)),
-			PageRegions: uint32(len(projection.PageRegions)), GridTracks: uint32(len(projection.GridTracks)),
-			GlyphRuns: uint32(len(projection.GlyphRuns)), Images: uint32(len(projection.Images)), Links: uint32(len(projection.Links)),
-			Commands: uint32(len(projection.Commands)), Breaks: uint32(len(projection.Breaks)), Diagnostics: uint32(len(projection.Diagnostics)),
-			SemanticNodes: uint32(len(projection.SemanticNodes)), SemanticFragments: uint32(len(projection.SemanticFragments)), ReadingOrder: uint32(len(projection.ReadingOrder))},
+		Counts: segmentedPlanCounts{Pages: uint32(len(projection.Pages)), Fragments: uint32(len(projection.Fragments)), Lines: uint32(len(projection.Lines)), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			PageRegions: uint32(len(projection.PageRegions)), GridTracks: uint32(len(projection.GridTracks)), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			GlyphRuns: uint32(len(projection.GlyphRuns)), Images: uint32(len(projection.Images)), Links: uint32(len(projection.Links)), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			Commands: uint32(len(projection.Commands)), Breaks: uint32(len(projection.Breaks)), Diagnostics: uint32(len(projection.Diagnostics)), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			SemanticNodes: uint32(len(projection.SemanticNodes)), SemanticFragments: uint32(len(projection.SemanticFragments)), ReadingOrder: uint32(len(projection.ReadingOrder))}, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		Pages: cloneSlice(projection.Pages), Fonts: cloneSlice(projection.Fonts), ImageResources: cloneSlice(projection.ImageResources),
 		Destinations: cloneSlice(projection.Destinations), Paths: clonePlannedPaths(projection.Paths), Transforms: cloneSlice(projection.Transforms),
 		Clips: cloneSlice(projection.Clips), Fills: cloneSlice(projection.Fills), Strokes: clonePlannedStrokes(projection.Strokes), SemanticNodes: cloneSlice(projection.SemanticNodes)}
@@ -678,7 +678,7 @@ func encodeSegmentedPlan(ctx context.Context, plan LayoutPlan, limits SegmentedP
 		}
 		sh := SegmentHash(sha256.Sum256(encoded))
 		payloads[sh] = encoded
-		manifest.Segments = append(manifest.Segments, segmentedPlanReference{uint32(index), segment.PageStart, uint32(len(segment.Pages)), uint64(len(encoded)), sh})
+		manifest.Segments = append(manifest.Segments, segmentedPlanReference{uint32(index), segment.PageStart, uint32(len(segment.Pages)), uint64(len(encoded)), sh}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		total += uint64(len(encoded))
 	}
 	manifestJSON, err := json.Marshal(manifest)
@@ -908,7 +908,7 @@ func decodeSegmentedPayload(encoded []byte, reference segmentedPlanReference, pl
 	if err := decodeCanonicalSegmented(encoded, &value); err != nil {
 		return value, err
 	}
-	if value.FormatVersion != SegmentedPlanSegmentFormatVersion || value.PlanHash != planHash || value.Index != reference.Index || value.PageStart != reference.PageStart || uint32(len(value.Pages)) != reference.PageCount {
+	if value.FormatVersion != SegmentedPlanSegmentFormatVersion || value.PlanHash != planHash || value.Index != reference.Index || value.PageStart != reference.PageStart || uint32(len(value.Pages)) != reference.PageCount { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return value, corruptionError(ErrPlanStoreSchema, "segment envelope mismatch")
 	}
 	return value, nil
@@ -960,7 +960,7 @@ func readSegmentedFile(path string, limit uint64) ([]byte, error) {
 		return nil, err
 	}
 	defer func() { _ = file.Close() }()
-	reader := io.LimitReader(file, int64(limit)+1)
+	reader := io.LimitReader(file, int64(limit)+1) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	encoded, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, err

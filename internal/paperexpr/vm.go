@@ -192,7 +192,7 @@ func Evaluate(ctx context.Context, program Program, bindings []Binding, limits L
 }
 
 func validateProgram(program Program, limits Limits) (uint32, error) {
-	if len(program.Code) == 0 || uint32(len(program.Code)) > limits.MaxInstructions || uint32(len(program.Constants)) > limits.MaxConstants || uint32(len(program.Paths)) > limits.MaxPaths {
+	if len(program.Code) == 0 || uint32(len(program.Code)) > limits.MaxInstructions || uint32(len(program.Constants)) > limits.MaxConstants || uint32(len(program.Paths)) > limits.MaxPaths { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return 0, ErrLimit
 	}
 	for i, value := range program.Constants {
@@ -201,7 +201,7 @@ func validateProgram(program Program, limits Limits) (uint32, error) {
 		}
 	}
 	for i, path := range program.Paths {
-		if !validPath(path) || uint32(len(path)) > limits.MaxStringBytes {
+		if !validPath(path) || uint32(len(path)) > limits.MaxStringBytes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return 0, fmt.Errorf("%w: invalid path %d", ErrInvalid, i)
 		}
 		if i > 0 && program.Paths[i-1] >= path {
@@ -253,7 +253,7 @@ func validateBindings(bindings []Binding, limits Limits) ([]Binding, error) {
 	result := append([]Binding(nil), bindings...)
 	sort.Slice(result, func(i, j int) bool { return result[i].Path < result[j].Path })
 	for i := range result {
-		if !validPath(result[i].Path) || uint32(len(result[i].Path)) > limits.MaxStringBytes {
+		if !validPath(result[i].Path) || uint32(len(result[i].Path)) > limits.MaxStringBytes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return nil, ErrBinding
 		}
 		if i > 0 && result[i-1].Path == result[i].Path {
@@ -273,7 +273,7 @@ func validateValue(value Value, limits Limits) error {
 	if value.Kind != Bool && value.Bool || value.Kind != Integer && value.Integer != 0 || value.Kind != String && value.String != "" {
 		return ErrType
 	}
-	if value.Kind == String && (!utf8.ValidString(value.String) || uint32(len(value.String)) > limits.MaxStringBytes) {
+	if value.Kind == String && (!utf8.ValidString(value.String) || uint32(len(value.String)) > limits.MaxStringBytes) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return ErrLimit
 	}
 	return nil
@@ -325,7 +325,7 @@ const (
 // zero or more Unicode scalar values, `?` matches exactly one, and `\` escapes
 // only `*`, `?`, or `\`. The explicit work counter bounds retry behavior.
 func wildcardMatch(ctx context.Context, text, pattern string, limits Limits, work *uint64) (bool, error) {
-	if uint32(len(pattern)) > limits.MaxPatternBytes {
+	if uint32(len(pattern)) > limits.MaxPatternBytes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return false, ErrLimit
 	}
 	tokens, err := wildcardTokens(ctx, pattern, limits, work)

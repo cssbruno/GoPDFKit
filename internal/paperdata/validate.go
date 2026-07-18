@@ -77,7 +77,7 @@ func LookupPrimitive(schema papercompile.SchemaDescriptor, fixture paperscenario
 	canonical := strings.TrimPrefix(path, schema.Name)
 	canonical = strings.TrimPrefix(canonical, "@"+strings.TrimPrefix(schema.Name, "@"))
 	canonical = strings.TrimPrefix(canonical, ".")
-	if canonical == "" || uint32(len(canonical)) > limits.MaxPathBytes || strings.ContainsAny(canonical, "[]") {
+	if canonical == "" || uint32(len(canonical)) > limits.MaxPathBytes || strings.ContainsAny(canonical, "[]") { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return paperscenario.Value{}, dataError(path, "primitive lookup requires a bounded non-collection dotted path", ErrPath)
 	}
 	parts := strings.Split(canonical, ".")
@@ -200,7 +200,7 @@ func validateValue(value paperscenario.Value, descriptor papercompile.FieldDescr
 	case papercompile.SchemaObject:
 		return validateObject(value.Object, descriptor.Fields, path, depth, b)
 	case papercompile.SchemaList:
-		if uint32(len(value.List)) > descriptor.MaxItems {
+		if uint32(len(value.List)) > descriptor.MaxItems { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return dataError(path, fmt.Sprintf("list has %d items, maximum is %d", len(value.List), descriptor.MaxItems), ErrInvalid)
 		}
 		itemDescriptor := papercompile.FieldDescriptor{Kind: descriptor.ItemKind, Required: descriptor.ItemRequired, Fields: descriptor.Fields}

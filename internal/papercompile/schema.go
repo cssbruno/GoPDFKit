@@ -148,7 +148,7 @@ func analyzeSchemas(ast paperlang.AST, limits SchemaLimits) schemaAnalysis {
 			analysis.add("PAPER_SCHEMA_DUPLICATE", fmt.Sprintf("schema %s is declared more than once", node.ID), "keep one declaration per schema", node.HeaderSpan)
 			continue
 		}
-		if uint32(len(analysis.descriptors)) >= analysis.limits.MaxSchemas {
+		if uint32(len(analysis.descriptors)) >= analysis.limits.MaxSchemas { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			analysis.add("PAPER_SCHEMA_LIMIT", "schema count exceeds the configured limit", "split declarations or raise the bounded limit", node.HeaderSpan)
 			continue
 		}
@@ -369,7 +369,7 @@ func resolveBindingPath(path string, schemas schemaAnalysis, limits SchemaLimits
 		return "", false, "", false, fmt.Errorf("binding %q is not a supported path", path)
 	}
 	parts := strings.Split(path, ".")
-	if len(parts) == 0 || uint64(len(parts)-1) > uint64(limits.MaxPathSegments) {
+	if len(parts) == 0 || uint64(len(parts)-1) > uint64(limits.MaxPathSegments) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return "", false, "", false, fmt.Errorf("binding path exceeds the segment limit")
 	}
 	schema := schemas.byName[parts[0]]

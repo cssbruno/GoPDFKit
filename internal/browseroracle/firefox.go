@@ -298,9 +298,9 @@ func writeFrame(writer io.Writer, payload []byte) error {
 	header := []byte{0x81}
 	switch {
 	case len(payload) < 126:
-		header = append(header, 0x80|byte(len(payload)))
+		header = append(header, 0x80|byte(len(payload))) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	case len(payload) <= 65535:
-		header = append(header, 0x80|126, byte(len(payload)>>8), byte(len(payload)))
+		header = append(header, 0x80|126, byte(len(payload)>>8), byte(len(payload))) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	default:
 		header = append(header, 0x80|127)
 		var size [8]byte

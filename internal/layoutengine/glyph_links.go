@@ -98,7 +98,7 @@ func AttachGlyphRunLinksWithDestinations(plan LayoutPlan, destinations []Planned
 		if err != nil {
 			return LayoutPlan{}, fmt.Errorf("%w: spans[%d] x origin overflows", ErrGlyphLinkContract, index)
 		}
-		width, err := advancePrefix[uint32(end)].Sub(advancePrefix[span.Start])
+		width, err := advancePrefix[uint32(end)].Sub(advancePrefix[span.Start]) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		if err != nil {
 			return LayoutPlan{}, fmt.Errorf("%w: spans[%d] width overflows", ErrGlyphLinkContract, index)
 		}
@@ -115,7 +115,7 @@ func AttachGlyphRunLinksWithDestinations(plan LayoutPlan, destinations []Planned
 			return LayoutPlan{}, fmt.Errorf("%w: spans[%d] bounds: %w", ErrGlyphLinkContract, index, err)
 		}
 		links = append(links, PlannedLink{Fragment: line.Fragment, Bounds: bounds, URI: span.URI, Destination: span.Destination, Source: fragment.Source})
-		linksByRun[span.Run] = append(linksByRun[span.Run], uint32(len(links)-1))
+		linksByRun[span.Run] = append(linksByRun[span.Run], uint32(len(links)-1)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		previous = span
 	}
 

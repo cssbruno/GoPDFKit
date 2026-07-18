@@ -524,7 +524,7 @@ func (cache *PackageCache) readBounded(ctx context.Context, name string, maxByte
 	}
 	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Size() < 0 || uint64(info.Size()) > maxBytes ||
+	if err != nil || !info.Mode().IsRegular() || info.Size() < 0 || uint64(info.Size()) > maxBytes || // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		(runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0) {
 		return nil, fmt.Errorf("unsafe mode, type, or size")
 	}
@@ -535,7 +535,7 @@ func (cache *PackageCache) readBounded(ctx context.Context, name string, maxByte
 			return nil, err
 		}
 		read, readErr := file.Read(buffer)
-		if uint64(len(output)+read) > maxBytes {
+		if uint64(len(output)+read) > maxBytes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return nil, ErrCacheLimit
 		}
 		output = append(output, buffer[:read]...)

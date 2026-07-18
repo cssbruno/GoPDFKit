@@ -223,8 +223,8 @@ func asciiAlphaNumeric(value string) bool {
 
 func writePlanIdentityField(destination hash.Hash, name, value string) {
 	var length [8]byte
-	binary.BigEndian.PutUint32(length[:4], uint32(len(name)))
-	binary.BigEndian.PutUint32(length[4:], uint32(len(value)))
+	binary.BigEndian.PutUint32(length[:4], uint32(len(name)))  // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	binary.BigEndian.PutUint32(length[4:], uint32(len(value))) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	_, _ = destination.Write(length[:])
 	_, _ = destination.Write([]byte(name))
 	_, _ = destination.Write([]byte(value))

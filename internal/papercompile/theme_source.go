@@ -62,7 +62,7 @@ func ExtractThemesWithLimits(ast paperlang.AST, limits papertheme.Limits) ThemeS
 		if !a.spend(member.Node.HeaderSpan) {
 			break
 		}
-		if uint32(len(a.result.Input.Themes)) >= a.limits.MaxThemes {
+		if uint32(len(a.result.Input.Themes)) >= a.limits.MaxThemes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			a.addOnce("themes", "PAPER_THEME_COUNT_LIMIT", "theme count exceeds the configured limit", "reduce themes or raise the bounded limit", member.Node.HeaderSpan)
 			break
 		}

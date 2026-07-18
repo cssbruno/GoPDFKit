@@ -165,7 +165,7 @@ func composeHTMLMixedSVGPlan(ctx context.Context, base layoutengine.LayoutPlan, 
 			continue
 		}
 		oldID := resource.ID
-		resource.ID = layoutengine.ImageResourceID(len(input.ImageResources) + 1)
+		resource.ID = layoutengine.ImageResourceID(len(input.ImageResources) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		resourceMap[oldID] = resource.ID
 		input.ImageResources = append(input.ImageResources, resource)
 	}
@@ -178,7 +178,7 @@ func composeHTMLMixedSVGPlan(ctx context.Context, base layoutengine.LayoutPlan, 
 		if !image.Resource.Valid() {
 			return layoutengine.LayoutPlan{}, fmt.Errorf("document: mixed HTML image resource remap is missing")
 		}
-		imageMap[uint32(index)] = uint32(len(input.Images))
+		imageMap[uint32(index)] = uint32(len(input.Images)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		input.Images = append(input.Images, image)
 	}
 
@@ -217,12 +217,12 @@ func appendHTMLMixedSVGDisplay(input *layoutengine.DisplayListInput, projection 
 	if len(projection.Fonts) != 0 || len(projection.GlyphRuns) != 0 || len(projection.ImageResources) != 0 || len(projection.Images) != 0 || len(projection.Destinations) != 0 {
 		return htmlPlanUnsupported("svg", 0, "rich SVG resources are outside the mixed-flow compositor")
 	}
-	pathBase := uint32(len(input.Paths))
-	transformBase := uint32(len(input.Transforms))
-	clipBase := uint32(len(input.Clips))
-	fillBase := uint32(len(input.Fills))
-	strokeBase := uint32(len(input.Strokes))
-	linkBase := uint32(len(input.Links))
+	pathBase := uint32(len(input.Paths))           // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	transformBase := uint32(len(input.Transforms)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	clipBase := uint32(len(input.Clips))           // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	fillBase := uint32(len(input.Fills))           // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	strokeBase := uint32(len(input.Strokes))       // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	linkBase := uint32(len(input.Links))           // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	input.Paths = append(input.Paths, projection.Paths...)
 	input.Transforms = append(input.Transforms, projection.Transforms...)
 	for _, clip := range projection.Clips {

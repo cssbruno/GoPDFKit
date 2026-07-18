@@ -502,7 +502,7 @@ func diffReviewImages(ctx context.Context, actualImage, referenceImage image.Ima
 	if err := png.Encode(&encoded, diff); err != nil {
 		return nil, 0, 0, 0, err
 	}
-	return encoded.Bytes(), uint32(bounds.Dx()), uint32(bounds.Dy()), changed, nil
+	return encoded.Bytes(), uint32(bounds.Dx()), uint32(bounds.Dy()), changed, nil // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 }
 
 func absReviewChannel(left, right uint8) uint8 {

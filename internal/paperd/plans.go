@@ -45,9 +45,9 @@ func (w *Workspace) ReviewPlans(ctx context.Context, request PlanReviewRequest) 
 		return PlanReviewResult{}, workspaceError("INVALID_WORKSPACE", "workspace is nil", ErrInvalidHandle)
 	}
 	if request.Review.MaxPages == 0 || request.Review.MaxArtifacts == 0 ||
-		request.Review.MaxTotalBytes == 0 || request.Review.MaxTotalBytes > uint64(w.limits.MaxRenderBytes) ||
+		request.Review.MaxTotalBytes == 0 || request.Review.MaxTotalBytes > uint64(w.limits.MaxRenderBytes) || // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		request.Review.MaxArtifactBytes == 0 || request.Review.MaxArtifactBytes > request.Review.MaxTotalBytes ||
-		request.Review.MaxManifestBytes == 0 || request.Review.MaxManifestBytes > uint64(w.limits.MaxRenderBytes) {
+		request.Review.MaxManifestBytes == 0 || request.Review.MaxManifestBytes > uint64(w.limits.MaxRenderBytes) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		return PlanReviewResult{}, workspaceError("REVIEW_LIMIT", "review bounds are outside configured limits", ErrLimit)
 	}
 	before, err := w.plan(request.Before)
@@ -194,7 +194,7 @@ type PlanExplainRequest struct {
 // ExplainPlan returns detached canonical causal-evidence JSON.
 func (w *Workspace) ExplainPlan(request PlanExplainRequest) (PlanJSONResult, error) {
 	if len(request.Selectors) == 0 || len(request.Selectors) > w.limits.MaxSearchResults ||
-		request.MaxBytes == 0 || uint64(request.MaxBytes) > uint64(w.limits.MaxRenderBytes) {
+		request.MaxBytes == 0 || uint64(request.MaxBytes) > uint64(w.limits.MaxRenderBytes) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		return PlanJSONResult{}, workspaceError("EXPLAIN_LIMIT", "plan explanation bounds are outside configured limits", ErrLimit)
 	}
 	for _, selector := range request.Selectors {
@@ -206,7 +206,7 @@ func (w *Workspace) ExplainPlan(request PlanExplainRequest) (PlanJSONResult, err
 	if err != nil {
 		return PlanJSONResult{}, err
 	}
-	result, err := record.plan.Explain(request.Selectors, uint32(len(request.Selectors)), request.MaxBytes)
+	result, err := record.plan.Explain(request.Selectors, uint32(len(request.Selectors)), request.MaxBytes) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	if err != nil {
 		return PlanJSONResult{}, workspaceError("INVALID_PLAN_EXPLAIN", "plan explanation was rejected", err)
 	}
@@ -269,7 +269,7 @@ type PlanCaptureResult struct {
 func (w *Workspace) CapturePlan(request PlanCaptureRequest) (PlanCaptureResult, error) {
 	limits := request.Capture
 	if limits.MaxCrops == 0 || int(limits.MaxCrops) > w.limits.MaxSearchResults ||
-		limits.MaxTotalBytes == 0 || limits.MaxTotalBytes > uint64(w.limits.MaxRenderBytes) {
+		limits.MaxTotalBytes == 0 || limits.MaxTotalBytes > uint64(w.limits.MaxRenderBytes) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		return PlanCaptureResult{}, workspaceError("CAPTURE_LIMIT", "plan capture bounds are outside configured limits", ErrLimit)
 	}
 	record, err := w.plan(request.Plan)

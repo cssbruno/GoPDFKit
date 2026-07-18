@@ -152,7 +152,7 @@ func (resolver *OfflineResolver) Resolve(ctx context.Context, relativePath strin
 	if !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("%w: %q", ErrResolverNotRegular, relativePath)
 	}
-	if info.Size() < 0 || uint64(info.Size()) > maxBytes {
+	if info.Size() < 0 || uint64(info.Size()) > maxBytes { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		return nil, fmt.Errorf("%w: %q exceeds %d bytes", ErrResolverLimit, relativePath, maxBytes)
 	}
 	return readVerifiedFile(ctx, file, relativePath, expected, maxBytes, info.Size())

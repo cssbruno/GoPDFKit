@@ -805,7 +805,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 					fontIdentity := paperFontIdentity(font)
 					globalID, exists := fontIndex[fontIdentity]
 					if !exists {
-						globalID = layoutengine.FontResourceID(len(fonts) + 1)
+						globalID = layoutengine.FontResourceID(len(fonts) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 						font.ID = globalID
 						fonts = append(fonts, font)
 						fontIndex[fontIdentity] = globalID
@@ -967,7 +967,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			identity := paperFontIdentity(font)
 			globalID, exists := fontIndex[identity]
 			if !exists {
-				globalID = layoutengine.FontResourceID(len(fonts) + 1)
+				globalID = layoutengine.FontResourceID(len(fonts) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				font.ID = globalID
 				fonts = append(fonts, font)
 				fontIndex[identity] = globalID
@@ -1058,10 +1058,10 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			}
 			paths = append(paths, path)
 			stroke := decoration.stroke
-			stroke.Path = uint32(len(paths) - 1)
+			stroke.Path = uint32(len(paths) - 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			stroke.Fragment = fragmentID
 			strokes = append(strokes, stroke)
-			displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)})
+			displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		}
 		return nil
 	}
@@ -1129,7 +1129,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 	}
 	startBodyPage := func() {
 		geometry.Pages = append(geometry.Pages, layoutengine.PlannedPage{Number: pageNumber, Size: pageSize,
-			Fragments: layoutengine.IndexRange{Start: uint32(len(geometry.Fragments))}, Lines: layoutengine.IndexRange{Start: uint32(len(geometry.Lines))}})
+			Fragments: layoutengine.IndexRange{Start: uint32(len(geometry.Fragments))}, Lines: layoutengine.IndexRange{Start: uint32(len(geometry.Lines))}}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		geometry.PageRegions = append(geometry.PageRegions, layoutengine.PlannedPageRegion{Page: pageNumber, Region: layoutengine.RegionBody, Bounds: body})
 	}
 	for blockIndex, block := range measured {
@@ -1176,7 +1176,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			fragmentMap := make(map[layoutengine.FragmentID]layoutengine.FragmentID, len(block.canvas.projection.Fragments))
 			for _, local := range block.canvas.projection.Fragments {
 				oldID := local.ID
-				local.ID = layoutengine.FragmentID(len(geometry.Fragments) + 1)
+				local.ID = layoutengine.FragmentID(len(geometry.Fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				local.Page, local.Region = pageNumber, layoutengine.RegionBody
 				local.MarginBox, moveErr = translateTypedRect(local.MarginBox, 0, dy)
 				if moveErr == nil {
@@ -1211,9 +1211,9 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 						return layoutengine.LayoutPlan{}, pathErr
 					}
 					paths = append(paths, path)
-					fill.Path, fill.Fragment = uint32(len(paths)-1), newFragment
+					fill.Path, fill.Fragment = uint32(len(paths)-1), newFragment // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 					fills = append(fills, fill)
-					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(fills) - 1)})
+					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(fills) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				case layoutengine.CommandStrokePath:
 					stroke := block.canvas.projection.Strokes[command.Payload]
 					path, pathErr := translatePaperNestedPath(block.canvas.projection.Paths[stroke.Path], 0, dy)
@@ -1221,9 +1221,9 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 						return layoutengine.LayoutPlan{}, pathErr
 					}
 					paths = append(paths, path)
-					stroke.Path, stroke.Fragment = uint32(len(paths)-1), newFragment
+					stroke.Path, stroke.Fragment = uint32(len(paths)-1), newFragment // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 					strokes = append(strokes, stroke)
-					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(strokes) - 1)})
+					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(strokes) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				}
 			}
 			for _, diagnostic := range block.canvas.projection.Diagnostics {
@@ -1403,7 +1403,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 				if err != nil {
 					return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] cell %d box: %w", blockIndex, cellIndex, err)
 				}
-				fragmentID := layoutengine.FragmentID(len(geometry.Fragments) + 1)
+				fragmentID := layoutengine.FragmentID(len(geometry.Fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				identity := cell.measurement.identity
 				geometry.Fragments = append(geometry.Fragments, layoutengine.Fragment{ID: fragmentID, Node: cell.node,
 					Key: identity.key, Instance: identity.instance, Page: pageNumber, Region: layoutengine.RegionBody,
@@ -1430,9 +1430,9 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 						{Kind: layoutengine.PathLineTo, Point: layoutengine.Point{X: rightX, Y: lineY}},
 					}})
 					strokeWidth, _ := layoutengine.FixedFromPoints(0.567)
-					strokes = append(strokes, layoutengine.PlannedStroke{Path: uint32(len(paths) - 1),
+					strokes = append(strokes, layoutengine.PlannedStroke{Path: uint32(len(paths) - 1), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 						Color: layoutengine.CoreRGBColor{Set: true}, Width: strokeWidth, Fragment: fragmentID})
-					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)})
+					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				}
 				if cell.image != nil {
 					imageBox, imageErr := layoutengine.NewRect(x, contentY, cell.image.width, cell.image.height)
@@ -1441,7 +1441,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 					}
 					resourceID, exists := imageResourceIDs[cell.image.resource.Digest]
 					if !exists {
-						resourceID = layoutengine.ImageResourceID(len(imageResources) + 1)
+						resourceID = layoutengine.ImageResourceID(len(imageResources) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 						resource := cell.image.resource
 						resource.ID = resourceID
 						imageResources = append(imageResources, resource)
@@ -1453,7 +1453,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 						return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] cell %d image placement: %w", blockIndex, cellIndex, imageErr)
 					}
 					images = append(images, placement)
-					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandImage, Payload: uint32(len(images) - 1)})
+					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandImage, Payload: uint32(len(images) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				}
 				lineMap := make(map[uint32]uint32, len(cell.measurement.plan.Lines))
 				for localIndex, line := range cell.measurement.plan.Lines {
@@ -1476,7 +1476,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 					if boundsErr != nil || baselineErr != nil || addErr != nil {
 						return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] cell %d line geometry is invalid", blockIndex, cellIndex)
 					}
-					globalLine := uint32(len(geometry.Lines))
+					globalLine := uint32(len(geometry.Lines)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 					geometry.Lines = append(geometry.Lines, layoutengine.PlannedLine{Fragment: fragmentID, Index: uint32(localIndex), Bounds: bounds, Baseline: baseline, Source: identity.source})
 					page.Lines.Count++
 					lineMap[uint32(localIndex)] = globalLine
@@ -1487,7 +1487,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 					run.Origin = layoutengine.Point{X: line.Bounds.X, Y: line.Baseline}
 					run.Source = identity.source
 					runs = append(runs, run)
-					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(len(runs) - 1)})
+					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(len(runs) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				}
 			}
 			cursorY, err = cursorY.Add(rowOuterHeight)
@@ -1527,7 +1527,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			if err != nil {
 				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] image box: %w", blockIndex, err)
 			}
-			fragmentID := layoutengine.FragmentID(len(geometry.Fragments) + 1)
+			fragmentID := layoutengine.FragmentID(len(geometry.Fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			contentBox, err := block.image.contentBox(box)
 			if err != nil {
 				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] image content box: %w", blockIndex, err)
@@ -1548,12 +1548,12 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			}
 			if block.image.background.Set {
 				paths = append(paths, typedTableRectPath(box))
-				fills = append(fills, layoutengine.PlannedFill{Path: uint32(len(paths) - 1), Rule: layoutengine.FillNonZero, Color: block.image.background, Fragment: fragmentID})
-				displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandFillPath, Payload: uint32(len(fills) - 1)})
+				fills = append(fills, layoutengine.PlannedFill{Path: uint32(len(paths) - 1), Rule: layoutengine.FillNonZero, Color: block.image.background, Fragment: fragmentID}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandFillPath, Payload: uint32(len(fills) - 1)})                                 // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			}
 			resourceID, exists := imageResourceIDs[block.image.resource.Digest]
 			if !exists {
-				resourceID = layoutengine.ImageResourceID(len(imageResources) + 1)
+				resourceID = layoutengine.ImageResourceID(len(imageResources) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				resource := block.image.resource
 				resource.ID = resourceID
 				imageResources = append(imageResources, resource)
@@ -1566,7 +1566,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			}
 			placement.Source = block.source
 			images = append(images, placement)
-			displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandImage, Payload: uint32(len(images) - 1)})
+			displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandImage, Payload: uint32(len(images) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			for side, border := range block.image.borders {
 				if border.width <= 0 {
 					continue
@@ -1576,8 +1576,8 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 					return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] image border: %w", blockIndex, pathErr)
 				}
 				paths = append(paths, path)
-				strokes = append(strokes, layoutengine.PlannedStroke{Path: uint32(len(paths) - 1), Color: border.color, Width: border.width, Fragment: fragmentID})
-				displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)})
+				strokes = append(strokes, layoutengine.PlannedStroke{Path: uint32(len(paths) - 1), Color: border.color, Width: border.width, Fragment: fragmentID}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)})              // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			}
 			cursorY, err = cursorY.Add(block.image.height)
 			if err != nil {
@@ -1663,7 +1663,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			if boxErr != nil {
 				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] content box: %w", blockIndex, boxErr)
 			}
-			fragmentID := layoutengine.FragmentID(len(geometry.Fragments) + 1)
+			fragmentID := layoutengine.FragmentID(len(geometry.Fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			geometry.Fragments = append(geometry.Fragments, layoutengine.Fragment{
 				ID: fragmentID, Node: block.node, Key: block.key, Instance: block.instance,
 				Page: pageNumber, Region: layoutengine.RegionBody, MarginBox: marginBox, BorderBox: borderBox,
@@ -1690,7 +1690,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 				if lineErr != nil || baselineErr != nil {
 					return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] box line %d geometry is invalid", blockIndex, sourceLine)
 				}
-				globalLine := uint32(len(geometry.Lines))
+				globalLine := uint32(len(geometry.Lines)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				geometry.Lines = append(geometry.Lines, layoutengine.PlannedLine{
 					Fragment: fragmentID, Index: uint32(sourceLine), Bounds: bounds, Baseline: baseline, Source: lineInput.Source,
 				})
@@ -1705,7 +1705,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 					localRun.Origin.Y = baseline
 					localRun.Source = block.source
 					runs = append(runs, localRun)
-					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(len(runs) - 1)})
+					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(len(runs) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				}
 				if err := appendMeasuredDecorations(block, uint32(sourceLine), layoutengine.PlannedLine{Fragment: fragmentID, Index: uint32(sourceLine), Bounds: bounds, Baseline: baseline, Source: lineInput.Source}, fragmentID); err != nil {
 					return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] box line %d decoration: %w", blockIndex, sourceLine, err)
@@ -1734,7 +1734,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			widows = 1
 		}
 		if block.keepTogether && len(block.lines) <= int(^uint32(0)) {
-			orphans, widows = uint32(len(block.lines)), uint32(len(block.lines))
+			orphans, widows = uint32(len(block.lines)), uint32(len(block.lines)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		}
 		paragraph, err := layoutengine.NewParagraphLinePlanContext(ctx, layoutengine.ParagraphLinePlanInput{
 			Node: block.node, Key: block.key, Instance: block.instance, Lines: block.lines,
@@ -1781,7 +1781,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 				startBodyPage()
 			}
 			page := &geometry.Pages[len(geometry.Pages)-1]
-			fragmentID := layoutengine.FragmentID(len(geometry.Fragments) + 1)
+			fragmentID := layoutengine.FragmentID(len(geometry.Fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			box, err := layoutengine.NewRect(body.X, cursorY, body.Width, fragment.Height)
 			if err != nil {
 				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] fragment box: %w", blockIndex, err)
@@ -1832,7 +1832,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 				if err != nil {
 					return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] line %d baseline: %w", blockIndex, sourceLine, err)
 				}
-				globalLine := uint32(len(geometry.Lines))
+				globalLine := uint32(len(geometry.Lines)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				geometry.Lines = append(geometry.Lines, layoutengine.PlannedLine{
 					Fragment: fragmentID, Index: sourceLine, Bounds: bounds, Baseline: baseline, Source: lineInput.Source,
 				})
@@ -1847,7 +1847,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 					localRun.Origin.Y = baseline
 					localRun.Source = block.source
 					runs = append(runs, localRun)
-					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(len(runs) - 1)})
+					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(len(runs) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				}
 				if err := appendMeasuredDecorations(block, sourceLine, layoutengine.PlannedLine{Fragment: fragmentID, Index: sourceLine, Bounds: bounds, Baseline: baseline, Source: lineInput.Source}, fragmentID); err != nil {
 					return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] line %d decoration: %w", blockIndex, sourceLine, err)
@@ -1960,7 +1960,7 @@ func attachPlanSemantics(plan layoutengine.LayoutPlan, measured []paperMeasuredB
 				parent = existing
 				continue
 			}
-			id := layoutengine.SemanticNodeID(len(nodes) + 1)
+			id := layoutengine.SemanticNodeID(len(nodes) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			identity := "@typed-container:" + ancestor.path
 			nodes = append(nodes, layoutengine.SemanticNode{ID: id, Parent: parent, Role: ancestor.role,
 				Key: layoutengine.NodeKey(identity), Instance: layoutengine.InstanceID(identity),
@@ -1978,7 +1978,7 @@ func attachPlanSemantics(plan layoutengine.LayoutPlan, measured []paperMeasuredB
 			role = layoutengine.SemanticRoleParagraph
 		}
 		parent := ensureAncestors(ancestors)
-		id := layoutengine.SemanticNodeID(len(nodes) + 1)
+		id := layoutengine.SemanticNodeID(len(nodes) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		attributes := typedPlanSemanticAttributes(role, text)
 		if role == layoutengine.SemanticRoleHeading {
 			attributes.HeadingLevel = headingLevel
@@ -2007,7 +2007,7 @@ func attachPlanSemantics(plan layoutengine.LayoutPlan, measured []paperMeasuredB
 		}
 		if block.canvas != nil {
 			parent := ensureAncestors(block.semanticAncestors)
-			canvasSemantic := layoutengine.SemanticNodeID(len(nodes) + 1)
+			canvasSemantic := layoutengine.SemanticNodeID(len(nodes) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			nodes = append(nodes, layoutengine.SemanticNode{ID: canvasSemantic, Parent: parent, Role: layoutengine.SemanticRoleSection,
 				Key: block.key, Instance: block.instance, Source: block.source})
 			byNode[block.node] = canvasSemantic
@@ -2016,7 +2016,7 @@ func attachPlanSemantics(plan layoutengine.LayoutPlan, measured []paperMeasuredB
 				if role == "" {
 					role = layoutengine.SemanticRoleArtifact
 				}
-				id := layoutengine.SemanticNodeID(len(nodes) + 1)
+				id := layoutengine.SemanticNodeID(len(nodes) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				nodes = append(nodes, layoutengine.SemanticNode{ID: id, Parent: canvasSemantic, Role: role,
 					Key: item.key, Instance: item.instance, Source: item.source,
 					Attributes: typedPlanSemanticAttributes(role, item.alt)})

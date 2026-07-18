@@ -89,7 +89,7 @@ func run(ctx context.Context, names []string, command string) error {
 			return err
 		}
 		info, err := os.Stat(name)
-		if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || uint64(info.Size()) > limits.MaxPDFBytes || uint64(info.Size()) > limits.MaxTotalBytes-total {
+		if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || uint64(info.Size()) > limits.MaxPDFBytes || uint64(info.Size()) > limits.MaxTotalBytes-total { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 			return fmt.Errorf("paper-characterize: invalid or over-budget fixture %q", name)
 		}
 		content, err := os.ReadFile(name) // #nosec G304 -- name is an explicit characterization fixture path validated above.

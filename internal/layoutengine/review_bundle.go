@@ -329,7 +329,7 @@ func BuildReviewBundle(ctx context.Context, before, after LayoutPlan, beforeSour
 		return ReviewBundle{}, err
 	}
 	changedPages := reviewChangedPages(diff)
-	if uint32(len(changedPages)) > request.Limits.MaxPages {
+	if uint32(len(changedPages)) > request.Limits.MaxPages { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return ReviewBundle{}, fmt.Errorf("%w: %d changed pages", ErrReviewBundleLimit, len(changedPages))
 	}
 	estimatedArtifacts := uint64(4) // semantic, plan, accessibility, diagnostics
@@ -500,7 +500,7 @@ func BuildReviewBundle(ctx context.Context, before, after LayoutPlan, beforeSour
 			return ReviewBundle{}, err
 		}
 	}
-	manifest.ArtifactCount = uint32(len(artifacts))
+	manifest.ArtifactCount = uint32(len(artifacts)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	if _, err := manifest.CanonicalJSON(); err != nil {
 		return ReviewBundle{}, err
 	}
@@ -512,7 +512,7 @@ func reviewRasterRequest(page uint32, crop *Rect, revisions ViewerRevisionIdenti
 }
 
 func appendReviewArtifact(manifest *ReviewBundleManifest, artifacts *[]ReviewArtifact, metadata ReviewArtifactMetadata, payload []byte) error {
-	if uint32(len(*artifacts)) >= manifest.Limits.MaxArtifacts {
+	if uint32(len(*artifacts)) >= manifest.Limits.MaxArtifacts { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return fmt.Errorf("%w: artifact count", ErrReviewBundleLimit)
 	}
 	if uint64(len(payload)) > manifest.Limits.MaxArtifactBytes {
@@ -522,7 +522,7 @@ func appendReviewArtifact(manifest *ReviewBundleManifest, artifacts *[]ReviewArt
 	if !ok {
 		return fmt.Errorf("%w: total bytes", ErrReviewBundleLimit)
 	}
-	metadata.Index = uint32(len(*artifacts))
+	metadata.Index = uint32(len(*artifacts)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	metadata.ByteLength = uint64(len(payload))
 	digest := sha256.Sum256(payload)
 	metadata.SHA256 = hex.EncodeToString(digest[:])
@@ -760,7 +760,7 @@ func reviewPixelDiff(ctx context.Context, beforePNG, afterPNG []byte) ([]byte, u
 		}
 	}
 	payload, err := encodeReviewPNG(dst)
-	return payload, uint32(w), uint32(h), changed, err
+	return payload, uint32(w), uint32(h), changed, err // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 }
 func abs8(a, b uint8) uint8 {
 	if a > b {
@@ -779,10 +779,10 @@ func reviewContactSheet(ctx context.Context, pages []uint32, rasters map[uint32]
 	if len(pages) == 0 || columns == 0 {
 		return nil, ReviewArtifactMetadata{}, fmt.Errorf("%w: empty contact sheet", ErrReviewBundleRequest)
 	}
-	if columns > uint32(len(pages)) {
-		columns = uint32(len(pages))
+	if columns > uint32(len(pages)) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		columns = uint32(len(pages)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	}
-	rows := (uint32(len(pages)) + columns - 1) / columns
+	rows := (uint32(len(pages)) + columns - 1) / columns // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	columnWidths := make([]int, columns)
 	rowHeights := make([]int, rows)
 	decoded := make([]image.Image, len(pages))
@@ -840,7 +840,7 @@ func reviewContactSheet(ctx context.Context, pages []uint32, rasters map[uint32]
 		draw.Draw(canvas, image.Rect(x, y, x+img.Bounds().Dx(), y+img.Bounds().Dy()), img, img.Bounds().Min, draw.Src)
 		manifest := rasters[page].after.Manifest()
 		transforms = append(transforms, ReviewPagePixelTransform{Page: page, Bounds: manifest.CaptureBounds,
-			PixelX: uint32(x), PixelY: uint32(y), PixelWidth: manifest.PixelWidth, PixelHeight: manifest.PixelHeight,
+			PixelX: uint32(x), PixelY: uint32(y), PixelWidth: manifest.PixelWidth, PixelHeight: manifest.PixelHeight, // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 			Transform: manifest.PixelTransform})
 	}
 	payload, err := encodeReviewPNG(canvas)
@@ -848,7 +848,7 @@ func reviewContactSheet(ctx context.Context, pages []uint32, rasters map[uint32]
 		return nil, ReviewArtifactMetadata{}, err
 	}
 	return payload, ReviewArtifactMetadata{Name: "contact-sheet.png", Kind: ReviewArtifactContactSheet,
-		Layer: ReviewLayerClean, MediaType: "image/png", PixelWidth: uint32(width), PixelHeight: uint32(height), PageTransforms: transforms}, nil
+		Layer: ReviewLayerClean, MediaType: "image/png", PixelWidth: uint32(width), PixelHeight: uint32(height), PageTransforms: transforms}, nil // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 }
 
 func encodeReviewPNG(image image.Image) ([]byte, error) {

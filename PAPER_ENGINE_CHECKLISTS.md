@@ -3266,8 +3266,9 @@ as completed behavior.
   benchmark budgets, the Paper Engine calibration gate, Paper Studio
   JavaScript tests, and the pinned external PDF/A, PDF/UA, and Arlington
   validators pass; reports are in `artifacts/compliance-release` and match
-  `testdata/compliance`. Strict `gosec` still reports 650 `G115` findings, and
-  the stabilization-window acceptance record remains open.
+  `testdata/compliance`. Strict `gosec` passes with line-level `G115`
+  justifications for the bounded fixed-width conversions, and the
+  stabilization-window acceptance record remains open.
 
 ## 13. Stage 11 — Ecosystem and production hardening
 

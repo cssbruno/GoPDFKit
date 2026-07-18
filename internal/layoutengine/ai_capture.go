@@ -166,7 +166,7 @@ func CaptureAIPlan(plan LayoutPlan, mode AICaptureMode) (AICaptureBundle, error)
 	manifest := AICaptureManifest{
 		FormatVersion: AICaptureManifestFormatVersion, PlanSchemaVersion: LayoutPlanSchemaVersion,
 		PlanHash: planHash.String(), Mode: mode, Disclosure: disclosure,
-		ContainsUserText: containsUserText, PageCount: uint32(len(plan.pages)),
+		ContainsUserText: containsUserText, PageCount: uint32(len(plan.pages)), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		Artifacts: make([]AIPageArtifactMetadata, 0, len(plan.pages)),
 	}
 	artifacts := make([]AIPageArtifact, 0, len(plan.pages))

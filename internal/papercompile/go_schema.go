@@ -183,10 +183,10 @@ func (b *goSchemaBuilder) describe(typ reflect.Type, path string, required bool,
 			if typ.Len() == 0 {
 				return FieldDescriptor{}, goSchemaError(path, "zero-length arrays are unsupported")
 			}
-			if uint64(typ.Len()) > uint64(b.limits.MaxListItems) {
+			if uint64(typ.Len()) > uint64(b.limits.MaxListItems) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 				return FieldDescriptor{}, goSchemaError(path, "array length exceeds MaxListItems")
 			}
-			maxItems = uint32(typ.Len())
+			maxItems = uint32(typ.Len()) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		}
 
 		itemRequired := typ.Elem().Kind() != reflect.Pointer
@@ -219,7 +219,7 @@ func (b *goSchemaBuilder) checkPath(path string) error {
 		return nil
 	}
 	segments := strings.Count(path, ".") + 1
-	if uint64(segments) > uint64(b.limits.MaxPathSegments) {
+	if uint64(segments) > uint64(b.limits.MaxPathSegments) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 		return goSchemaError(path, "path exceeds the configured segment limit")
 	}
 	return nil

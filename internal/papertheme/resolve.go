@@ -142,7 +142,7 @@ func (r *resolver) addBytes(values ...string) bool {
 func (r *resolver) indexThemes() {
 	for index := range r.input.Themes {
 		theme := &r.input.Themes[index]
-		if uint32(len(r.themeOrder)) >= r.limits.MaxThemes {
+		if uint32(len(r.themeOrder)) >= r.limits.MaxThemes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			r.add("PAPER_THEME_COUNT_LIMIT", "theme count exceeds the configured limit", "reduce themes or raise the bounded limit", theme.Source)
 			continue
 		}

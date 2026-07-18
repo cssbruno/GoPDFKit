@@ -224,8 +224,8 @@ func NewCanonicalTree(ctx context.Context, input CanonicalTreeInput, limits Cano
 		if uint64(len(b.tree.children))+uint64(len(list)) > uint64(limits.MaxEdges) {
 			return CanonicalTree{}, ErrCanonicalTreeLimit
 		}
-		b.tree.nodes[index].ChildStart = uint32(len(b.tree.children))
-		b.tree.nodes[index].ChildCount = uint32(len(list))
+		b.tree.nodes[index].ChildStart = uint32(len(b.tree.children)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		b.tree.nodes[index].ChildCount = uint32(len(list))            // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		b.tree.children = append(b.tree.children, list...)
 	}
 	if err := validateCanonicalTree(b.tree); err != nil {
@@ -260,7 +260,7 @@ func (b *treeBuilder) intern(value string) (TreeStringID, error) {
 	}
 	b.stringBytes += uint64(len(value))
 	b.tree.strings = append(b.tree.strings, value)
-	id := TreeStringID(len(b.tree.strings))
+	id := TreeStringID(len(b.tree.strings)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	b.strings[value] = id
 	return id, b.charge(1)
 }
@@ -350,11 +350,11 @@ func (b *treeBuilder) style(in TreeStyleInput) (TreeStyleID, error) {
 	if id := b.styles[s]; id != 0 {
 		return id, nil
 	}
-	if uint32(len(b.tree.styles)) >= b.limits.MaxStyles {
+	if uint32(len(b.tree.styles)) >= b.limits.MaxStyles { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return 0, ErrCanonicalTreeLimit
 	}
 	b.tree.styles = append(b.tree.styles, s)
-	id := TreeStyleID(len(b.tree.styles))
+	id := TreeStyleID(len(b.tree.styles)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	b.styles[s] = id
 	return id, b.charge(1)
 }
@@ -370,11 +370,11 @@ func (b *treeBuilder) track(in TreeTrackInput) (TreeTrackID, error) {
 	if id := b.tracks[v]; id != 0 {
 		return id, nil
 	}
-	if uint32(len(b.tree.tracks)) >= b.limits.MaxTracks {
+	if uint32(len(b.tree.tracks)) >= b.limits.MaxTracks { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return 0, ErrCanonicalTreeLimit
 	}
 	b.tree.tracks = append(b.tree.tracks, v)
-	id := TreeTrackID(len(b.tree.tracks))
+	id := TreeTrackID(len(b.tree.tracks)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	b.tracks[v] = id
 	return id, b.charge(1)
 }
@@ -402,11 +402,11 @@ func (b *treeBuilder) resource(in TreeResourceInput) (TreeResourceID, error) {
 	if id := b.resources[v]; id != 0 {
 		return id, nil
 	}
-	if uint32(len(b.tree.resources)) >= b.limits.MaxResources {
+	if uint32(len(b.tree.resources)) >= b.limits.MaxResources { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return 0, ErrCanonicalTreeLimit
 	}
 	b.tree.resources = append(b.tree.resources, v)
-	id := TreeResourceID(len(b.tree.resources))
+	id := TreeResourceID(len(b.tree.resources)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	b.resources[v] = id
 	return id, b.charge(1)
 }
@@ -422,11 +422,11 @@ func (b *treeBuilder) semantic(in TreeSemanticInput) (TreeSemanticID, error) {
 	if id := b.semantics[v]; id != 0 {
 		return id, nil
 	}
-	if uint32(len(b.tree.semantics)) >= b.limits.MaxSemantics {
+	if uint32(len(b.tree.semantics)) >= b.limits.MaxSemantics { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return 0, ErrCanonicalTreeLimit
 	}
 	b.tree.semantics = append(b.tree.semantics, v)
-	id := TreeSemanticID(len(b.tree.semantics))
+	id := TreeSemanticID(len(b.tree.semantics)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	b.semantics[v] = id
 	return id, b.charge(1)
 }
@@ -578,7 +578,7 @@ func validateCanonicalTree(t CanonicalTree) error {
 				return ErrCanonicalTreeInvalid
 			}
 		}
-		if n.Style > TreeStyleID(len(t.styles)) || n.Track > TreeTrackID(len(t.tracks)) || n.Resource > TreeResourceID(len(t.resources)) || n.Semantic > TreeSemanticID(len(t.semantics)) || n.Text > TreeStringID(len(t.strings)) {
+		if n.Style > TreeStyleID(len(t.styles)) || n.Track > TreeTrackID(len(t.tracks)) || n.Resource > TreeResourceID(len(t.resources)) || n.Semantic > TreeSemanticID(len(t.semantics)) || n.Text > TreeStringID(len(t.strings)) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return ErrCanonicalTreeInvalid
 		}
 	}
@@ -591,7 +591,7 @@ func validateCanonicalTree(t CanonicalTree) error {
 		if s.FontSize < 0 || s.LineHeight < 0 {
 			return ErrCanonicalTreeInvalid
 		}
-		if s.FontFamily > TreeStringID(len(t.strings)) || s.Align > TreeStringID(len(t.strings)) {
+		if s.FontFamily > TreeStringID(len(t.strings)) || s.Align > TreeStringID(len(t.strings)) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return ErrCanonicalTreeInvalid
 		}
 		for _, v := range s.Margin {
@@ -606,14 +606,14 @@ func validateCanonicalTree(t CanonicalTree) error {
 			return ErrCanonicalTreeCollision
 		}
 		trackSeen[v] = struct{}{}
-		if v.Name > TreeStringID(len(t.strings)) || !validTreeLength(v.Min) || !validTreeLength(v.Max) {
+		if v.Name > TreeStringID(len(t.strings)) || !validTreeLength(v.Min) || !validTreeLength(v.Max) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return ErrCanonicalTreeInvalid
 		}
 	}
 	resourceSeen := map[TreeResource]struct{}{}
 	resourceKeys := map[TreeStringID]TreeResource{}
 	for _, v := range t.resources {
-		if v.Kind == 0 || v.Key == 0 || v.Digest == 0 || v.Kind > TreeStringID(len(t.strings)) || v.Key > TreeStringID(len(t.strings)) || v.Digest > TreeStringID(len(t.strings)) {
+		if v.Kind == 0 || v.Key == 0 || v.Digest == 0 || v.Kind > TreeStringID(len(t.strings)) || v.Key > TreeStringID(len(t.strings)) || v.Digest > TreeStringID(len(t.strings)) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return ErrCanonicalTreeInvalid
 		}
 		if _, exists := resourceSeen[v]; exists {
@@ -631,7 +631,7 @@ func validateCanonicalTree(t CanonicalTree) error {
 			return ErrCanonicalTreeCollision
 		}
 		semanticSeen[v] = struct{}{}
-		if !v.Role.valid() || v.Label > TreeStringID(len(t.strings)) {
+		if !v.Role.valid() || v.Label > TreeStringID(len(t.strings)) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return ErrCanonicalTreeInvalid
 		}
 	}

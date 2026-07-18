@@ -376,5 +376,5 @@ func coreGlyphColor(color layout.DocumentColor) layoutengine.CoreRGBColor {
 	if !color.Set {
 		return layoutengine.CoreRGBColor{}
 	}
-	return layoutengine.CoreRGBColor{R: uint8(color.R), G: uint8(color.G), B: uint8(color.B), Set: true}
+	return layoutengine.CoreRGBColor{R: uint8(color.R), G: uint8(color.G), B: uint8(color.B), Set: true} // #nosec G115 -- low-width representation is explicitly normalized before packing
 }

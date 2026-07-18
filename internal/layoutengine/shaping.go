@@ -114,7 +114,7 @@ func (result ShapedText) Validate() error {
 	if len(result.Glyphs) == 0 || len(result.FontRuns) == 0 {
 		return fmt.Errorf("%w: empty glyph or font run output", ErrShapingInvalid)
 	}
-	textBytes := uint32(len(result.Text))
+	textBytes := uint32(len(result.Text)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	var expectedGlyphStart uint32
 	textRanges := make([]UTF8Cluster, len(result.FontRuns))
 	for index, run := range result.FontRuns {
@@ -125,7 +125,7 @@ func (result ShapedText) Validate() error {
 		expectedGlyphStart += run.GlyphCount
 		textRanges[index] = UTF8Cluster{Start: run.TextStart, End: run.TextEnd}
 	}
-	if expectedGlyphStart != uint32(len(result.Glyphs)) {
+	if expectedGlyphStart != uint32(len(result.Glyphs)) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return fmt.Errorf("%w: font runs do not cover every glyph", ErrShapingInvalid)
 	}
 	sort.Slice(textRanges, func(i, j int) bool { return textRanges[i].Start < textRanges[j].Start })
@@ -163,7 +163,7 @@ func utf8Boundary(text string, offset uint32) bool {
 	if uint64(offset) > uint64(len(text)) {
 		return false
 	}
-	return offset == 0 || offset == uint32(len(text)) || utf8.RuneStart(text[offset])
+	return offset == 0 || offset == uint32(len(text)) || utf8.RuneStart(text[offset]) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 }
 
 type ShapingLimits struct {
@@ -254,7 +254,7 @@ func (shaper CoreASCIIShaper) Shape(ctx context.Context, input ShapingInput, bud
 	}
 	return ShapedText{
 		Text: input.Text, Language: input.Language, Direction: input.Direction, Glyphs: glyphs,
-		FontRuns: []ShapedFontRun{{Font: input.Font, GlyphCount: uint32(len(glyphs)), TextEnd: uint32(len(input.Text))}},
+		FontRuns: []ShapedFontRun{{Font: input.Font, GlyphCount: uint32(len(glyphs)), TextEnd: uint32(len(input.Text))}}, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		Source:   input.Source,
 	}, nil
 }

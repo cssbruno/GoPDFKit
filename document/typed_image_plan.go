@@ -272,8 +272,8 @@ func (image paperMeasuredImage) placement(fragment layoutengine.FragmentID, targ
 		result.Bounds, err = layoutengine.NewRect(x, y, width, height)
 		return result, err
 	}
-	intrinsicW := layoutengine.Fixed(uint64(image.resource.PixelWidth) * 1024)
-	intrinsicH := layoutengine.Fixed(uint64(image.resource.PixelHeight) * 1024)
+	intrinsicW := layoutengine.Fixed(uint64(image.resource.PixelWidth) * 1024)  // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	intrinsicH := layoutengine.Fixed(uint64(image.resource.PixelHeight) * 1024) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	scale := math.Max(target.Width.Points()/float64(image.resource.PixelWidth), target.Height.Points()/float64(image.resource.PixelHeight))
 	sourceW := float64(image.resource.PixelWidth) * target.Width.Points() / (float64(image.resource.PixelWidth) * scale)
 	sourceH := float64(image.resource.PixelHeight) * target.Height.Points() / (float64(image.resource.PixelHeight) * scale)

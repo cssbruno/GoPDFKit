@@ -156,11 +156,11 @@ func (f *Document) planTypedMixedBodiesMapped(ctx context.Context, doc *layout.L
 		if len(projection.Pages) == 0 {
 			return layoutengine.LayoutPlan{}, fmt.Errorf("document: mixed block %d produced no pages", index)
 		}
-		endPage := startPage + uint32(len(projection.Pages)) - 1
+		endPage := startPage + uint32(len(projection.Pages)) - 1 // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		if f.limits.MaxPages > 0 && int(endPage) > f.limits.MaxPages {
 			return layoutengine.LayoutPlan{}, fmt.Errorf("%w: mixed typed flow requires page %d", layoutengine.ErrTablePageLimit, endPage)
 		}
-		lastLocal := uint32(len(projection.Pages))
+		lastLocal := uint32(len(projection.Pages)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		endCursor := layoutengine.Fixed(0)
 		for _, fragment := range projection.Fragments {
 			if fragment.Page != lastLocal || fragment.Region != layoutengine.RegionBody {
@@ -207,8 +207,8 @@ func (f *Document) planTypedMixedBodiesMapped(ctx context.Context, doc *layout.L
 							return layoutengine.LayoutPlan{}, err
 						}
 						projection = planned.Projection()
-						endPage = startPage + uint32(len(projection.Pages)) - 1
-						lastLocal, endCursor = uint32(len(projection.Pages)), 0
+						endPage = startPage + uint32(len(projection.Pages)) - 1 // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+						lastLocal, endCursor = uint32(len(projection.Pages)), 0 // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 						for _, fragment := range projection.Fragments {
 							if fragment.Page != lastLocal || fragment.Region != layoutengine.RegionBody {
 								continue
@@ -497,13 +497,13 @@ func (f *Document) planTypedMixedDecoratedBlock(ctx context.Context, doc *layout
 	if err != nil {
 		return layoutengine.LayoutPlan{}, err
 	}
-	last := uint32(len(planned.Projection().Pages))
+	last := uint32(len(planned.Projection().Pages)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	for attempt := 0; attempt < 3; attempt++ {
 		planned, err = planWithLastPage(last)
 		if err != nil {
 			return layoutengine.LayoutPlan{}, err
 		}
-		next := uint32(len(planned.Projection().Pages))
+		next := uint32(len(planned.Projection().Pages)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		if next == last {
 			break
 		}
@@ -650,7 +650,7 @@ func composeTypedMixedSegments(segments []typedMixedSegment, pageSize layoutengi
 			key := paperFontIdentity(font)
 			id := fontIDs[key]
 			if !id.Valid() {
-				id = layoutengine.FontResourceID(len(fonts) + 1)
+				id = layoutengine.FontResourceID(len(fonts) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				font.ID = id
 				fonts = append(fonts, font)
 				fontIDs[key] = id
@@ -663,7 +663,7 @@ func composeTypedMixedSegments(segments []typedMixedSegment, pageSize layoutengi
 				continue
 			}
 			oldID, oldParent := semantic.ID, semantic.Parent
-			semantic.ID = layoutengine.SemanticNodeID(len(input.SemanticNodes) + 1)
+			semantic.ID = layoutengine.SemanticNodeID(len(input.SemanticNodes) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			semantic.Parent = semanticMap[oldParent]
 			if !semantic.Parent.Valid() {
 				semantic.Parent = 1
@@ -679,7 +679,7 @@ func composeTypedMixedSegments(segments []typedMixedSegment, pageSize layoutengi
 				nextNode++
 				nodeMap[oldNode] = nextNode
 			}
-			fragment.ID = layoutengine.FragmentID(len(input.Fragments) + 1)
+			fragment.ID = layoutengine.FragmentID(len(input.Fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			fragment.Node = nodeMap[oldNode]
 			fragment.Key = layoutengine.NodeKey(prefix + string(fragment.Key))
 			fragment.Instance = layoutengine.InstanceID(prefix + string(fragment.Instance))
@@ -706,11 +706,11 @@ func composeTypedMixedSegments(segments []typedMixedSegment, pageSize layoutengi
 		}
 		if len(projection.Fragments) != 0 {
 			previousLast = fragmentMap[projection.Fragments[len(projection.Fragments)-1].ID]
-			previousEndPage = segment.startPage + uint32(len(projection.Pages)) - 1
+			previousEndPage = segment.startPage + uint32(len(projection.Pages)) - 1 // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		}
 		for oldIndex, line := range projection.Lines {
 			line.Fragment = fragmentMap[line.Fragment]
-			lineMap[uint32(oldIndex)] = uint32(len(input.Lines))
+			lineMap[uint32(oldIndex)] = uint32(len(input.Lines)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			input.Lines = append(input.Lines, line)
 			pageLineCounts[input.Fragments[line.Fragment-1].Page-1]++
 		}
@@ -735,7 +735,7 @@ func composeTypedMixedSegments(segments []typedMixedSegment, pageSize layoutengi
 			if semanticOwned[fragment] {
 				continue
 			}
-			owner := layoutengine.SemanticNodeID(len(input.SemanticNodes) + 1)
+			owner := layoutengine.SemanticNodeID(len(input.SemanticNodes) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			composed := input.Fragments[fragment-1]
 			input.SemanticNodes = append(input.SemanticNodes, layoutengine.SemanticNode{ID: owner, Parent: 1,
 				Role: layoutengine.SemanticRoleParagraph, Key: composed.Key, Instance: composed.Instance, Source: composed.Source})
@@ -769,9 +769,9 @@ func composeTypedMixedSegments(segments []typedMixedSegment, pageSize layoutengi
 			}
 			input.Diagnostics = append(input.Diagnostics, diagnostic)
 		}
-		pathBase := uint32(len(input.Paths))
-		transformBase := uint32(len(input.Transforms))
-		clipBase := uint32(len(input.Clips))
+		pathBase := uint32(len(input.Paths))           // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		transformBase := uint32(len(input.Transforms)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		clipBase := uint32(len(input.Clips))           // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		input.Paths = append(input.Paths, projection.Paths...)
 		commandPages := make([]uint32, len(projection.Commands))
 		for _, page := range projection.Pages {
@@ -800,20 +800,20 @@ func composeTypedMixedSegments(segments []typedMixedSegment, pageSize layoutengi
 				run.Line, run.Font = lineMap[run.Line], fontMap[run.Font]
 				run.Advances = append([]layoutengine.Fixed(nil), run.Advances...)
 				input.GlyphRuns = append(input.GlyphRuns, run)
-				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(input.GlyphRuns) - 1)})
+				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(input.GlyphRuns) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			case layoutengine.CommandImage:
 				image := projection.Images[command.Payload]
 				resource := projection.ImageResources[image.Resource-1]
 				id := imageIDs[resource.Digest]
 				if !id.Valid() {
-					id = layoutengine.ImageResourceID(len(images) + 1)
+					id = layoutengine.ImageResourceID(len(images) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 					resource.ID = id
 					images = append(images, resource)
 					imageIDs[resource.Digest] = id
 				}
 				image.Resource, image.Fragment = id, fragmentMap[image.Fragment]
 				input.Images = append(input.Images, image)
-				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(input.Images) - 1)})
+				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(input.Images) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			case layoutengine.CommandLink:
 				link := projection.Links[command.Payload]
 				if link.Destination.Valid() {
@@ -821,19 +821,19 @@ func composeTypedMixedSegments(segments []typedMixedSegment, pageSize layoutengi
 				}
 				link.Fragment = fragmentMap[link.Fragment]
 				input.Links = append(input.Links, link)
-				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(input.Links) - 1)})
+				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(input.Links) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			case layoutengine.CommandFillPath:
 				fill := projection.Fills[command.Payload]
 				fill.Path += pathBase
 				fill.Fragment = fragmentMap[fill.Fragment]
 				input.Fills = append(input.Fills, fill)
-				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(input.Fills) - 1)})
+				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(input.Fills) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			case layoutengine.CommandStrokePath:
 				stroke := projection.Strokes[command.Payload]
 				stroke.Path += pathBase
 				stroke.Fragment = fragmentMap[stroke.Fragment]
 				input.Strokes = append(input.Strokes, stroke)
-				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(input.Strokes) - 1)})
+				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(input.Strokes) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			default:
 				return layoutengine.LayoutPlan{}, fmt.Errorf("document: unsupported mixed typed command %q", command.Kind)
 			}

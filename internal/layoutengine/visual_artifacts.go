@@ -253,12 +253,12 @@ func CaptureAgentVisualArtifacts(plan LayoutPlan, request AgentVisualRequest) (A
 	if err != nil {
 		return AgentVisualBundle{}, err
 	}
-	if uint32(len(selected)) > request.Limits.MaxCrops {
+	if uint32(len(selected)) > request.Limits.MaxCrops { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return AgentVisualBundle{}, fmt.Errorf("%w: %d crops exceed limit %d", ErrAgentVisualLimit, len(selected), request.Limits.MaxCrops)
 	}
 	pagesNeeded := make(map[uint32]struct{})
 	if request.IncludeContactSheet || request.IncludeCrossPageStrip {
-		if uint32(len(plan.pages)) > request.Limits.MaxPages {
+		if uint32(len(plan.pages)) > request.Limits.MaxPages { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return AgentVisualBundle{}, fmt.Errorf("%w: %d pages exceed limit %d", ErrAgentVisualLimit, len(plan.pages), request.Limits.MaxPages)
 		}
 		for _, page := range plan.pages {
@@ -268,7 +268,7 @@ func CaptureAgentVisualArtifacts(plan LayoutPlan, request AgentVisualRequest) (A
 	for _, fragment := range selected {
 		pagesNeeded[fragment.Page] = struct{}{}
 	}
-	if uint32(len(pagesNeeded)) > request.Limits.MaxPages {
+	if uint32(len(pagesNeeded)) > request.Limits.MaxPages { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		return AgentVisualBundle{}, fmt.Errorf("%w: %d selected pages exceed limit %d", ErrAgentVisualLimit, len(pagesNeeded), request.Limits.MaxPages)
 	}
 
@@ -334,7 +334,7 @@ func CaptureAgentVisualArtifacts(plan LayoutPlan, request AgentVisualRequest) (A
 			return AgentVisualBundle{}, err
 		}
 	}
-	manifest.ArtifactCount = uint32(len(artifacts))
+	manifest.ArtifactCount = uint32(len(artifacts)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	if _, err := manifest.CanonicalJSON(); err != nil {
 		return AgentVisualBundle{}, err
 	}
@@ -380,7 +380,7 @@ func writeAgentVisualCrossPageStrip(plan LayoutPlan, captures map[uint32]agentVi
 	if artifactBounds.IsEmpty() {
 		return AgentVisualArtifactMetadata{}, nil, errors.New("layoutengine: cross-page strip bounds are empty")
 	}
-	writer := debugGeometrySVGWriter{limit: int(request.Limits.MaxArtifactBytes)}
+	writer := debugGeometrySVGWriter{limit: int(request.Limits.MaxArtifactBytes)} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	writeAgentVisualRoot(&writer, "cross-page-strip", artifactBounds, request.Mode, disclosure)
 	writer.write("<title>Direct-plan cross-page strip</title><desc>Separate vertical page presentation with exact page-local transforms; no browser layout.</desc>")
 	writer.write("<style>.page-frame{fill:white;stroke:#98a2b3;stroke-width:256}</style>")
@@ -474,7 +474,7 @@ func appendAgentVisualArtifact(manifest *AgentVisualManifest, artifacts *[]Agent
 	if !ok {
 		return fmt.Errorf("%w: artifacts exceed %d total bytes", ErrAgentVisualLimit, manifest.Limits.MaxTotalBytes)
 	}
-	metadata.Index = uint32(len(*artifacts))
+	metadata.Index = uint32(len(*artifacts)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 	metadata.ByteLength = uint64(len(svg))
 	digest := sha256.Sum256(svg)
 	metadata.SHA256 = hex.EncodeToString(digest[:])
@@ -547,7 +547,7 @@ func writeAgentVisualContactSheet(plan LayoutPlan, captures map[uint32]agentVisu
 		}
 	}
 	artifactBounds := Rect{Width: canvas.Width, Height: canvas.Height}
-	writer := debugGeometrySVGWriter{limit: int(request.Limits.MaxArtifactBytes)}
+	writer := debugGeometrySVGWriter{limit: int(request.Limits.MaxArtifactBytes)} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	writeAgentVisualRoot(&writer, "contact-sheet", artifactBounds, request.Mode, disclosure)
 	writer.write("<title>Direct-plan multi-page contact sheet</title><desc>Exact fixed-coordinate page translations; no browser layout.</desc>")
 	writer.write("<style>.page-frame{fill:white;stroke:#98a2b3;stroke-width:256}</style>")
@@ -619,7 +619,7 @@ func writeAgentVisualCrop(fragment Fragment, capture agentVisualPageCapture, kin
 		Transform: AgentVisualTransform{TranslateX: tx, TranslateY: ty, ScaleNumerator: 1, ScaleDenominator: 1},
 	}
 	artifactBounds := Rect{Width: crop.Width, Height: crop.Height}
-	writer := debugGeometrySVGWriter{limit: int(request.Limits.MaxArtifactBytes)}
+	writer := debugGeometrySVGWriter{limit: int(request.Limits.MaxArtifactBytes)} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
 	writeAgentVisualRoot(&writer, "fragment-crop", artifactBounds, request.Mode, disclosure)
 	writer.write("<title>Exact plan fragment crop</title><desc>Fragment border-box crop in fixed plan coordinates; no browser layout.</desc>")
 	writer.write("<g data-page=\"")

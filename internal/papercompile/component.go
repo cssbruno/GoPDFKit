@@ -126,7 +126,7 @@ func expandComponents(ast paperlang.AST, limits ExpansionLimits, scenario string
 			expander.add("PAPER_COMPONENT_DUPLICATE", fmt.Sprintf("component %s is defined more than once", definition.ID), "keep one definition per component name", definition.HeaderSpan)
 			continue
 		}
-		if uint32(len(expander.definitions)) >= expander.limits.MaxComponents {
+		if uint32(len(expander.definitions)) >= expander.limits.MaxComponents { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			expander.add("PAPER_COMPONENT_LIMIT", "component definition count exceeds the configured limit", "split the document or raise the bounded component limit", definition.HeaderSpan)
 			continue
 		}

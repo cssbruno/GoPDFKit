@@ -170,7 +170,7 @@ func (f *Document) planPaperCanvas(ctx context.Context, doc *layout.LayoutDocume
 			Key: identity.Key, Instance: identity.Instance, Source: identity.Source, Attributes: attributes})
 		associations = append(associations, layoutengine.SemanticFragmentAssociation{Semantic: semantic, Page: 1, Fragment: fragment})
 		if role != layoutengine.SemanticRoleArtifact {
-			reading = append(reading, layoutengine.ReadingOccurrence{Semantic: semantic, Page: 1, Fragment: fragment, ReadingIndex: uint32(len(reading))})
+			reading = append(reading, layoutengine.ReadingOccurrence{Semantic: semantic, Page: 1, Fragment: fragment, ReadingIndex: uint32(len(reading))}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 		}
 	}
 	return layoutengine.AttachSemantics(plan, semanticNodes, associations, reading)
