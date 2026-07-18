@@ -64,7 +64,7 @@ func TestHTMLUnifiedFlexWrapExactPlanSemanticsRasterPDFAndCursor(t *testing.T) {
 	if err != nil || status != "captured" || raster == nil || len(raster.Pages) != 1 {
 		t.Fatalf("raster=%+v status=%q err=%v", raster, status, err)
 	}
-	if got := raster.Pages[0].PNGSHA256; got != "2b588bd37bb5e3695a5eff49480a2bc306ce6400626cf59a7aa2a1b218b06c31" {
+	if got := raster.Pages[0].PNGSHA256; got != "31da3bf2b6301ec43d047e18a2fc38caae7582eab8230fe9f4de4c6e03026ae2" {
 		t.Fatalf("wrap raster drift: %s", got)
 	}
 

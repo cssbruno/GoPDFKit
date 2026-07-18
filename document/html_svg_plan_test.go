@@ -65,7 +65,7 @@ func TestHTMLUnifiedInlineSVGPlanCaptureRasterPDFLinkSemanticsAndCursor(t *testi
 	if err != nil || status != "captured" || raster == nil || len(raster.Pages) != 1 {
 		t.Fatalf("raster=%+v status=%q err=%v", raster, status, err)
 	}
-	if got := raster.Pages[0].PNGSHA256; got != "2fd0515d50e39e36a884809145951bafe37052785f6a8514350f6af259c69e15" {
+	if got := raster.Pages[0].PNGSHA256; got != "639d6b052a0aed97e7a88f0bed6d9d48e432ed96a06de4c128f23ee07f306e77" {
 		t.Fatalf("SVG raster drift: %s", got)
 	}
 

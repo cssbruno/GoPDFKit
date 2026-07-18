@@ -22,6 +22,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync"
 
 	xdraw "golang.org/x/image/draw"
 	xfont "golang.org/x/image/font"
@@ -45,6 +46,13 @@ var (
 	ErrDisplayRasterLimit       = errors.New("layoutengine: display raster limit exceeded")
 	ErrDisplayRasterResource    = errors.New("layoutengine: display raster resource is invalid")
 	ErrDisplayRasterUnsupported = errors.New("layoutengine: display raster operation is unsupported")
+	rasterPNGDeflaterPool       = sync.Pool{New: func() any {
+		writer, err := zlib.NewWriterLevel(io.Discard, zlib.BestSpeed)
+		if err != nil {
+			panic(err)
+		}
+		return writer
+	}}
 )
 
 // DisplayRasterProfile pins every renderer choice which can affect normative
@@ -112,6 +120,68 @@ func (limits DisplayRasterLimits) validate() error {
 type DisplayRasterSources struct {
 	FontPrograms map[CoreFontMetricsDigest][]byte
 	Images       DisplaySVGImageSources
+	cache        *WebDisplayRenderCache
+}
+
+// WebDisplayRenderCache reuses immutable decoded resources while a browser
+// session renders the same validated plan at multiple DPIs. Switching plan
+// identity clears every retained resource, so memory stays bounded by one
+// render payload rather than growing with document history.
+type WebDisplayRenderCache struct {
+	mu       sync.Mutex
+	planHash string
+	fonts    map[string]*opentype.Font
+	images   map[string]image.Image
+}
+
+func (cache *WebDisplayRenderCache) prepare(planHash string) {
+	if cache == nil {
+		return
+	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	if cache.planHash == planHash {
+		return
+	}
+	cache.planHash = planHash
+	cache.fonts = make(map[string]*opentype.Font)
+	cache.images = make(map[string]image.Image)
+}
+
+func (cache *WebDisplayRenderCache) font(hash string) *opentype.Font {
+	if cache == nil {
+		return nil
+	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	return cache.fonts[hash]
+}
+
+func (cache *WebDisplayRenderCache) storeFont(hash string, font *opentype.Font) {
+	if cache == nil {
+		return
+	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	cache.fonts[hash] = font
+}
+
+func (cache *WebDisplayRenderCache) image(hash string) image.Image {
+	if cache == nil {
+		return nil
+	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	return cache.images[hash]
+}
+
+func (cache *WebDisplayRenderCache) storeImage(hash string, value image.Image) {
+	if cache == nil {
+		return
+	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	cache.images[hash] = value
 }
 
 type DisplayRasterRequest struct {
@@ -256,6 +326,7 @@ func CaptureDisplayPlanPNGContext(ctx context.Context, plan LayoutPlan, sources 
 	draw.Draw(canvas, canvas.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
 	state := rasterPaintState{transform: IdentityTransform(), clip: canvas.Bounds()}
 	stack := []rasterPaintState{state}
+	rasterizer := &vector.Rasterizer{}
 	end, _ := page.Commands.end(len(plan.commands))
 	for commandIndex := int(page.Commands.Start); commandIndex < end; commandIndex++ {
 		if commandIndex&255 == 0 {
@@ -284,12 +355,12 @@ func CaptureDisplayPlanPNGContext(ctx context.Context, plan LayoutPlan, sources 
 			state.clip = state.clip.Intersect(image.Rect(int(math.Floor(float64(x0))), int(math.Floor(float64(y0))), int(math.Ceil(float64(x1))), int(math.Ceil(float64(y1)))))
 		case CommandFillPath:
 			fill := plan.fills[command.Payload]
-			if err := rasterFillPath(canvas, plan.paths[fill.Path], fill, state.transform, capture, state.clip); err != nil {
+			if err := rasterFillPath(canvas, rasterizer, plan.paths[fill.Path], fill, state.transform, capture, state.clip); err != nil {
 				return DisplayRasterArtifact{}, err
 			}
 		case CommandStrokePath:
 			stroke := plan.strokes[command.Payload]
-			if err := rasterStrokePath(canvas, plan.paths[stroke.Path], stroke, state.transform, capture, state.clip); err != nil {
+			if err := rasterStrokePath(canvas, rasterizer, plan.paths[stroke.Path], stroke, state.transform, capture, state.clip); err != nil {
 				return DisplayRasterArtifact{}, err
 			}
 		case CommandGlyphRun:
@@ -350,11 +421,13 @@ func encodeRasterPNG(output io.Writer, canvas *image.RGBA) error {
 	if err := writeRasterPNGChunk(output, [4]byte{'I', 'H', 'D', 'R'}, header[:]); err != nil {
 		return err
 	}
-	idat := rasterPNGIDATWriter{output: output}
-	deflater, err := zlib.NewWriterLevel(&idat, zlib.BestSpeed)
-	if err != nil {
-		return err
-	}
+	var compressed bytes.Buffer
+	deflater := rasterPNGDeflaterPool.Get().(*zlib.Writer)
+	deflater.Reset(&compressed)
+	defer func() {
+		deflater.Reset(io.Discard)
+		rasterPNGDeflaterPool.Put(deflater)
+	}()
 	row := make([]byte, 1+canvas.Bounds().Dx()*4)
 	for y := canvas.Bounds().Min.Y; y < canvas.Bounds().Max.Y; y++ {
 		row[0] = 0 // PNG filter None.
@@ -368,19 +441,10 @@ func encodeRasterPNG(output io.Writer, canvas *image.RGBA) error {
 	if err := deflater.Close(); err != nil {
 		return err
 	}
+	if err := writeRasterPNGChunk(output, [4]byte{'I', 'D', 'A', 'T'}, compressed.Bytes()); err != nil {
+		return err
+	}
 	return writeRasterPNGChunk(output, [4]byte{'I', 'E', 'N', 'D'}, nil)
-}
-
-type rasterPNGIDATWriter struct{ output io.Writer }
-
-func (w rasterPNGIDATWriter) Write(payload []byte) (int, error) {
-	if len(payload) == 0 {
-		return 0, nil
-	}
-	if err := writeRasterPNGChunk(w.output, [4]byte{'I', 'D', 'A', 'T'}, payload); err != nil {
-		return 0, err
-	}
-	return len(payload), nil
 }
 
 func writeRasterPNGChunk(output io.Writer, kind [4]byte, payload []byte) error {
@@ -463,16 +527,22 @@ func preflightDisplayRaster(ctx context.Context, plan LayoutPlan, sources Displa
 			return nil, nil, nil, fmt.Errorf("%w: missing or over-budget font %s", ErrDisplayRasterResource, resource.MetricsDigest)
 		}
 		total += uint64(len(data))
-		parsed, err := opentype.Parse(data)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("%w: parse font %s: %w", ErrDisplayRasterResource, resource.MetricsDigest, err)
-		}
-		fontFaces[resource.ID] = &rasterSizedFace{font: parsed}
 		digest := sha256.Sum256(data)
-		if resource.EmbeddedUTF8 != nil && (hex.EncodeToString(digest[:]) != string(resource.EmbeddedUTF8.Digest) || uint32(len(data)) != resource.EmbeddedUTF8.ByteLength) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		contentHash := hex.EncodeToString(digest[:])
+		if resource.EmbeddedUTF8 != nil && (contentHash != string(resource.EmbeddedUTF8.Digest) || uint32(len(data)) != resource.EmbeddedUTF8.ByteLength) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			return nil, nil, nil, fmt.Errorf("%w: embedded font digest or length mismatch", ErrDisplayRasterResource)
 		}
-		records = append(records, DisplayRasterResourceDigest{Kind: "font_program", Identity: string(resource.MetricsDigest), SHA256: hex.EncodeToString(digest[:]), ByteLength: uint64(len(data))})
+		parsed := sources.cache.font(contentHash)
+		if parsed == nil {
+			var parseErr error
+			parsed, parseErr = opentype.Parse(data)
+			if parseErr != nil {
+				return nil, nil, nil, fmt.Errorf("%w: parse font %s: %w", ErrDisplayRasterResource, resource.MetricsDigest, parseErr)
+			}
+			sources.cache.storeFont(contentHash, parsed)
+		}
+		fontFaces[resource.ID] = &rasterSizedFace{font: parsed}
+		records = append(records, DisplayRasterResourceDigest{Kind: "font_program", Identity: string(resource.MetricsDigest), SHA256: contentHash, ByteLength: uint64(len(data))})
 	}
 	for _, resource := range plan.imageResources {
 		if !neededImages[resource.ID] {
@@ -490,8 +560,19 @@ func preflightDisplayRaster(ctx context.Context, plan LayoutPlan, sources Displa
 		if hex.EncodeToString(digest[:]) != string(resource.Digest) {
 			return nil, nil, nil, fmt.Errorf("%w: image digest mismatch", ErrDisplayRasterResource)
 		}
-		decoded, _, err := image.Decode(bytes.NewReader(data))
-		if err != nil || decoded.Bounds().Dx() != int(resource.PixelWidth) || decoded.Bounds().Dy() != int(resource.PixelHeight) {
+		contentHash := hex.EncodeToString(digest[:])
+		decoded := sources.cache.image(contentHash)
+		if decoded == nil {
+			var decodeErr error
+			decoded, _, decodeErr = image.Decode(bytes.NewReader(data))
+			if decodeErr == nil {
+				sources.cache.storeImage(contentHash, decoded)
+			}
+			if decodeErr != nil {
+				return nil, nil, nil, fmt.Errorf("%w: image dimensions or encoding", ErrDisplayRasterResource)
+			}
+		}
+		if decoded.Bounds().Dx() != int(resource.PixelWidth) || decoded.Bounds().Dy() != int(resource.PixelHeight) {
 			return nil, nil, nil, fmt.Errorf("%w: image dimensions or encoding", ErrDisplayRasterResource)
 		}
 		decodedImages[resource.ID] = decoded
@@ -513,7 +594,10 @@ func rasterGlyphRun(dst *image.RGBA, face *rasterSizedFace, resource CoreFontRes
 	return face.draw(dst, resource, run, transform, crop, dpi, clip)
 }
 
-type rasterSizedFace struct{ font *opentype.Font }
+type rasterSizedFace struct {
+	font    *opentype.Font
+	scratch *image.RGBA
+}
 
 func (face *rasterSizedFace) draw(dst *image.RGBA, resource CoreFontResource, run CoreGlyphRun, transform Transform, crop Rect, dpi uint32, clip image.Rectangle) error {
 	actual, err := opentype.NewFace(face.font, &opentype.FaceOptions{Size: float64(run.FontSize) / float64(FixedScale), DPI: float64(dpi), Hinting: xfont.HintingNone})
@@ -528,7 +612,7 @@ func (face *rasterSizedFace) draw(dst *image.RGBA, resource CoreFontResource, ru
 		colorValue.R, colorValue.G, colorValue.B = run.Color.R, run.Color.G, run.Color.B
 	}
 	if !resource.IsEmbeddedUTF8() {
-		return drawRasterCoreFontRun(dst, actual, run, transform, crop, colorValue, clip)
+		return drawRasterCoreFontRun(dst, actual, &face.scratch, run, transform, crop, colorValue, clip)
 	}
 	x := origin.X
 	var target draw.Image = dst
@@ -557,7 +641,7 @@ func (face *rasterSizedFace) draw(dst *image.RGBA, resource CoreFontResource, ru
 // unrelated side bearings collide. Shape the substitute naturally as one run,
 // then fit only its horizontal extent to the already-planned run width. The
 // authoritative baseline, width, pagination, and hit geometry stay unchanged.
-func drawRasterCoreFontRun(dst *image.RGBA, face xfont.Face, run CoreGlyphRun, transform Transform, crop Rect, colorValue color.NRGBA, clip image.Rectangle) error {
+func drawRasterCoreFontRun(dst *image.RGBA, face xfont.Face, scratch **image.RGBA, run CoreGlyphRun, transform Transform, crop Rect, colorValue color.NRGBA, clip image.Rectangle) error {
 	var text strings.Builder
 	text.Grow(len(run.Codes))
 	for index := 0; index < len(run.Codes); index++ {
@@ -586,7 +670,7 @@ func drawRasterCoreFontRun(dst *image.RGBA, face xfont.Face, run CoreGlyphRun, t
 	if sourceWidth <= 0 || sourceHeight <= 0 {
 		return nil
 	}
-	source := image.NewRGBA(image.Rect(0, 0, sourceWidth, sourceHeight))
+	source := resetRasterGlyphScratch(scratch, sourceWidth, sourceHeight)
 	drawer := xfont.Drawer{
 		Dst: source, Src: image.NewUniform(colorValue), Face: face,
 		Dot: fixed.Point26_6{Y: fixed.I(metrics.Ascent.Ceil())},
@@ -613,7 +697,24 @@ func drawRasterCoreFontRun(dst *image.RGBA, face xfont.Face, run CoreGlyphRun, t
 	return nil
 }
 
-func rasterFillPath(dst *image.RGBA, path PlannedPath, fill PlannedFill, transform Transform, crop Rect, clip image.Rectangle) error {
+func resetRasterGlyphScratch(scratch **image.RGBA, width, height int) *image.RGBA {
+	if *scratch == nil || (*scratch).Bounds().Dx() < width || (*scratch).Bounds().Dy() < height {
+		canvasWidth, canvasHeight := width, height
+		if *scratch != nil {
+			canvasWidth = max(canvasWidth, (*scratch).Bounds().Dx())
+			canvasHeight = max(canvasHeight, (*scratch).Bounds().Dy())
+		}
+		*scratch = image.NewRGBA(image.Rect(0, 0, canvasWidth, canvasHeight))
+	}
+	source := (*scratch).SubImage(image.Rect(0, 0, width, height)).(*image.RGBA)
+	for y := 0; y < height; y++ {
+		offset := source.PixOffset(0, y)
+		clear(source.Pix[offset : offset+width*4])
+	}
+	return source
+}
+
+func rasterFillPath(dst *image.RGBA, rasterizer *vector.Rasterizer, path PlannedPath, fill PlannedFill, transform Transform, crop Rect, clip image.Rectangle) error {
 	type rasterSegment struct {
 		kind                 PathSegmentKind
 		x, y, x1, y1, x2, y2 float32
@@ -654,7 +755,7 @@ func rasterFillPath(dst *image.RGBA, path PlannedPath, fill PlannedFill, transfo
 	}
 	target := rasterLocalRGBA(dst, bounds)
 	ox, oy := float32(bounds.Min.X), float32(bounds.Min.Y)
-	r := newLocalRasterizer(bounds)
+	r := resetLocalRasterizer(rasterizer, bounds)
 	for _, segment := range segments {
 		switch segment.kind {
 		case PathMoveTo:
@@ -676,7 +777,7 @@ func rasterFillPath(dst *image.RGBA, path PlannedPath, fill PlannedFill, transfo
 	return nil
 }
 
-func rasterStrokePath(dst *image.RGBA, path PlannedPath, stroke PlannedStroke, transform Transform, crop Rect, clip image.Rectangle) error {
+func rasterStrokePath(dst *image.RGBA, rasterizer *vector.Rasterizer, path PlannedPath, stroke PlannedStroke, transform Transform, crop Rect, clip image.Rectangle) error {
 	var current, start Point
 	haveCurrent := false
 	alpha := uint8(255)
@@ -693,7 +794,7 @@ func rasterStrokePath(dst *image.RGBA, path PlannedPath, stroke PlannedStroke, t
 		}
 		target := rasterLocalRGBA(dst, bounds)
 		ox, oy := float64(bounds.Min.X), float64(bounds.Min.Y)
-		r := newLocalRasterizer(bounds)
+		r := resetLocalRasterizer(rasterizer, bounds)
 		r.MoveTo(float32(x+radius-ox), float32(y-oy))
 		r.CubeTo(float32(x+radius-ox), float32(y+k*radius-oy), float32(x+k*radius-ox), float32(y+radius-oy), float32(x-ox), float32(y+radius-oy))
 		r.CubeTo(float32(x-k*radius-ox), float32(y+radius-oy), float32(x-radius-ox), float32(y+k*radius-oy), float32(x-radius-ox), float32(y-oy))
@@ -730,7 +831,7 @@ func rasterStrokePath(dst *image.RGBA, path PlannedPath, stroke PlannedStroke, t
 		}
 		target := rasterLocalRGBA(dst, bounds)
 		ox, oy := float64(bounds.Min.X), float64(bounds.Min.Y)
-		r := newLocalRasterizer(bounds)
+		r := resetLocalRasterizer(rasterizer, bounds)
 		r.MoveTo(float32(ax-ox), float32(ay-oy))
 		r.LineTo(float32(bx-ox), float32(by-oy))
 		r.LineTo(float32(cx-ox), float32(cy-oy))
@@ -824,8 +925,9 @@ func rasterLocalRGBA(destination *image.RGBA, bounds image.Rectangle) *image.RGB
 	return local
 }
 
-func newLocalRasterizer(bounds image.Rectangle) *vector.Rasterizer {
-	return vector.NewRasterizer(bounds.Dx(), bounds.Dy())
+func resetLocalRasterizer(rasterizer *vector.Rasterizer, bounds image.Rectangle) *vector.Rasterizer {
+	rasterizer.Reset(bounds.Dx(), bounds.Dy())
+	return rasterizer
 }
 
 func rasterImage(dst *image.RGBA, source image.Image, placement PlannedImage, transform Transform, crop Rect, clip image.Rectangle) error {
@@ -857,7 +959,7 @@ func rasterImage(dst *image.RGBA, source image.Image, placement PlannedImage, tr
 		sy := sourceBounds.Min.Y + (y-target.Min.Y)*sourceBounds.Dy()/target.Dy()
 		for x := target.Min.X; x < target.Max.X; x++ {
 			sx := sourceBounds.Min.X + (x-target.Min.X)*sourceBounds.Dx()/target.Dx()
-			value := color.NRGBAModel.Convert(source.At(sx, sy)).(color.NRGBA)
+			value := rasterSourceNRGBA(source, sx, sy)
 			alpha := uint32(rasterOpacityAlpha(value.A, placement.Opacity))
 			background := dst.RGBAAt(x, y)
 			dst.SetRGBA(x, y, color.RGBA{
@@ -868,6 +970,26 @@ func rasterImage(dst *image.RGBA, source image.Image, placement PlannedImage, tr
 		}
 	}
 	return nil
+}
+
+func rasterSourceNRGBA(source image.Image, x, y int) color.NRGBA {
+	switch typed := source.(type) {
+	case *image.YCbCr:
+		yOffset := typed.YOffset(x, y)
+		cOffset := typed.COffset(x, y)
+		r, g, b := color.YCbCrToRGB(typed.Y[yOffset], typed.Cb[cOffset], typed.Cr[cOffset])
+		return color.NRGBA{R: r, G: g, B: b, A: 255}
+	case *image.NRGBA:
+		return typed.NRGBAAt(x, y)
+	case *image.RGBA:
+		value := typed.RGBAAt(x, y)
+		if value.A == 255 {
+			return color.NRGBA{R: value.R, G: value.G, B: value.B, A: 255}
+		}
+		return color.NRGBAModel.Convert(value).(color.NRGBA)
+	default:
+		return color.NRGBAModel.Convert(source.At(x, y)).(color.NRGBA)
+	}
 }
 
 func rasterOpacityAlpha(source uint8, opacity Fixed) uint8 {
