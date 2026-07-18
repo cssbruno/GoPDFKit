@@ -34,6 +34,27 @@ func TestCompileImageLowersResourceGeometryAndAccessibility(t *testing.T) {
 	}
 }
 
+func TestCompileImagePreservesResponsiveWidthAndAutomaticHeight(t *testing.T) {
+	source := "document:\n  page:\n    body:\n      image:\n        source: \"data:image/png;base64," + paperImagePNG + "\"\n        width: 50%\n        max-width: 100%\n        height: \"auto\"\n        alt: \"Responsive evidence\"\n"
+	parsed := paperlang.Parse("responsive-image.paper", source)
+	result := Compile(parsed.AST)
+	if !parsed.OK() || !result.OK() {
+		t.Fatalf("diagnostics = %#v / %#v", parsed.Diagnostics, result.Diagnostics)
+	}
+	image := result.Document.Body[0].(layout.ImageBlock)
+	if image.Width != 0 || image.Height != 0 || image.WidthPercent != 50_000_000 || image.MaxWidthPercent != 100_000_000 {
+		t.Fatalf("responsive image = %#v", image)
+	}
+}
+
+func TestCompileImageRejectsPercentageHeightWithoutDefiniteFlowHeight(t *testing.T) {
+	source := "document:\n  page:\n    body:\n      image:\n        source: \"data:image/png;base64," + paperImagePNG + "\"\n        width: 100%\n        height: 50%\n        alt: \"Evidence\"\n"
+	result := Compile(paperlang.Parse("bad-height.paper", source).AST)
+	if result.OK() || !hasCompileDiagnostic(result.Diagnostics, "PAPER_COMPILE_PERCENT_AXIS") {
+		t.Fatalf("diagnostics = %#v", result.Diagnostics)
+	}
+}
+
 func TestCompileImageResolvesOnlyExplicitContentAddressedAssetReferences(t *testing.T) {
 	data, err := base64.StdEncoding.DecodeString(paperImagePNG)
 	if err != nil {

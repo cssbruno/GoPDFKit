@@ -26,7 +26,7 @@ func TestTypedLayoutInventoryPinsEveryBlockFieldAndType(t *testing.T) {
 		layout.BlockKindHeading:        {"Level:int", "Segments:[]layout.TextSegment", "Style:layout.TextStyle", "StyleRef:*layout.TextStyle", "Box:layout.BoxStyle", "BoxRef:*layout.BoxStyle"},
 		layout.BlockKindList:           {"Ordered:bool", "MarkerStyle:string", "Start:int", "Items:[]layout.ListItem", "Style:layout.TextStyle", "StyleRef:*layout.TextStyle", "Box:layout.BoxStyle", "BoxRef:*layout.BoxStyle"},
 		layout.BlockKindTable:          {"Caption:string", "CaptionSegments:[]layout.TextSegment", "Columns:[]layout.TableColumn", "Header:[]layout.TableRow", "Body:[]layout.TableRow", "Footer:[]layout.TableRow", "Style:layout.TableStyle", "Box:layout.BoxStyle", "BoxRef:*layout.BoxStyle"},
-		layout.BlockKindImage:          {"Source:string", "Data:[]uint8", "DataRef:*[]uint8", "Format:string", "Alt:string", "Caption:[]layout.TextSegment", "CaptionStyle:layout.TextStyle", "Width:float64", "Height:float64", "MaxWidth:float64", "MaxHeight:float64", "Fit:layout.ImageFitMode", "FocusX:float64", "FocusY:float64", "FocusSet:bool", "Align:string", "DPI:float64", "Decorative:bool", "Box:layout.BoxStyle", "BoxRef:*layout.BoxStyle"},
+		layout.BlockKindImage:          {"Source:string", "Data:[]uint8", "DataRef:*[]uint8", "Format:string", "Alt:string", "Caption:[]layout.TextSegment", "CaptionStyle:layout.TextStyle", "Width:float64", "Height:float64", "MaxWidth:float64", "MaxHeight:float64", "WidthPercent:uint32", "MaxWidthPercent:uint32", "Fit:layout.ImageFitMode", "FocusX:float64", "FocusY:float64", "FocusSet:bool", "Align:string", "DPI:float64", "Decorative:bool", "Box:layout.BoxStyle", "BoxRef:*layout.BoxStyle"},
 		layout.BlockKindSignatureRow:   {"Columns:[]layout.SignatureColumn", "Gap:float64", "KeepTogether:bool", "Box:layout.BoxStyle", "BoxRef:*layout.BoxStyle"},
 		layout.BlockKindMetadataGrid:   {"Fields:[]layout.MetadataField", "Columns:int", "Gap:float64", "Style:layout.TextStyle", "StyleRef:*layout.TextStyle", "Box:layout.BoxStyle", "BoxRef:*layout.BoxStyle"},
 		layout.BlockKindQRVerification: {"QR:layout.QRBlock", "Text:[]layout.TextSegment", "Style:layout.TextStyle", "StyleRef:*layout.TextStyle", "Box:layout.BoxStyle", "BoxRef:*layout.BoxStyle"},
@@ -251,7 +251,7 @@ func TestTypedCharacterizationCorpusIsCompleteBoundedAndDeterministic(t *testing
 		t.Fatalf("runner is nondeterministic:\n%s\n%s", a, b)
 	}
 	digest := sha256.Sum256(a)
-	if got := hex.EncodeToString(digest[:]); got != "6324d0eba09beb5d99a80dbc458d4bdb6932092617337687fde537639dabc2e5" {
+	if got := hex.EncodeToString(digest[:]); got != "42b3cfe78f64efbeb1c5cea2f608272f4e321007f7bb9eb07bc8a51494dd966d" {
 		t.Fatalf("typed characterization golden drift: got %s", got)
 	}
 	if len(first.Fixtures) != len(inventory.Fixtures) {

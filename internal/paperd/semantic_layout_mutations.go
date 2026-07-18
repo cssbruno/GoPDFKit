@@ -320,6 +320,7 @@ const (
 	PaperGridTrackKind   PaperGridTrackProperty = "track"
 	PaperGridTrackSize   PaperGridTrackProperty = "track-size"
 	PaperGridTrackMin    PaperGridTrackProperty = "track-min"
+	PaperGridTrackMax    PaperGridTrackProperty = "track-max"
 	PaperGridTrackWeight PaperGridTrackProperty = "track-weight"
 )
 
@@ -328,6 +329,7 @@ type PaperSetGridTrackRequest struct {
 	Property PaperGridTrackProperty `json:"property"`
 	Kind     string                 `json:"kind,omitempty"`
 	Points   float64                `json:"points,omitempty"`
+	Length   string                 `json:"length,omitempty"`
 	Weight   uint32                 `json:"weight,omitempty"`
 }
 
@@ -352,6 +354,7 @@ type PaperSetImagePropertyRequest struct {
 	Fit      string             `json:"fit,omitempty"`
 	Number   float64            `json:"number,omitempty"`
 	Points   float64            `json:"points,omitempty"`
+	Length   string             `json:"length,omitempty"`
 	Text     string             `json:"text,omitempty"`
 	Bool     bool               `json:"bool,omitempty"`
 }
@@ -374,28 +377,30 @@ func (w *Workspace) PaperSetImageProperty(request PaperSetImagePropertyRequest) 
 	}
 	switch request.Property {
 	case PaperImageSource:
-		if request.Fit != "" || request.Number != 0 || request.Points != 0 || request.Bool || !strings.HasPrefix(request.Text, "asset:") || len(request.Text) <= len("asset:") {
+		if request.Fit != "" || request.Number != 0 || request.Points != 0 || request.Length != "" || request.Bool || !strings.HasPrefix(request.Text, "asset:") || len(request.Text) <= len("asset:") {
 			return PaperMutationResult{}, workspaceError("INVALID_IMAGE_VALUE", "image source replacement must be one exact asset:name reference", paperedit.ErrInvalidOperation)
 		}
 		add("source", paperedit.StringValue(request.Text))
 	case PaperImageFit:
 		fit := strings.ToLower(strings.TrimSpace(request.Fit))
-		if (fit != "auto" && fit != "contain" && fit != "cover") || request.Number != 0 || request.Points != 0 || request.Text != "" || request.Bool {
+		if (fit != "auto" && fit != "contain" && fit != "cover") || request.Number != 0 || request.Points != 0 || request.Length != "" || request.Text != "" || request.Bool {
 			return PaperMutationResult{}, workspaceError("INVALID_IMAGE_VALUE", "image fit must be auto, contain, or cover without unrelated values", paperedit.ErrInvalidOperation)
 		}
 		add("fit", paperedit.StringValue(fit))
 	case PaperImageFocusX, PaperImageFocusY:
-		if request.Fit != "" || request.Points != 0 || request.Text != "" || request.Bool || !finiteLayoutHandle(request.Number) || request.Number < 0 || request.Number > 1 {
+		if request.Fit != "" || request.Points != 0 || request.Length != "" || request.Text != "" || request.Bool || !finiteLayoutHandle(request.Number) || request.Number < 0 || request.Number > 1 {
 			return PaperMutationResult{}, workspaceError("INVALID_IMAGE_VALUE", "image focus must be a finite number between 0 and 1", paperedit.ErrInvalidOperation)
 		}
 		add(string(request.Property), paperedit.NumberValue(request.Number))
 	case PaperImageWidth, PaperImageHeight, PaperImageMaxWidth, PaperImageMaxHeight:
-		if request.Fit != "" || request.Number != 0 || request.Text != "" || request.Bool || !finiteLayoutHandle(request.Points) || request.Points <= 0 || request.Points > 1_000_000 {
-			return PaperMutationResult{}, workspaceError("INVALID_IMAGE_VALUE", "image dimension must be a finite positive point value", paperedit.ErrInvalidOperation)
+		value, ok := responsiveLayoutLengthValue(request.Length, request.Points, true, true)
+		if request.Fit != "" || request.Number != 0 || request.Text != "" || request.Bool || !ok ||
+			(request.Property == PaperImageHeight || request.Property == PaperImageMaxHeight) && strings.HasSuffix(strings.TrimSpace(request.Length), "%") {
+			return PaperMutationResult{}, workspaceError("INVALID_IMAGE_VALUE", "image dimension must be auto, a positive physical length, or a width percentage", paperedit.ErrInvalidOperation)
 		}
-		add(string(request.Property), paperedit.UnitValue(request.Points, "pt"))
+		add(string(request.Property), value)
 	case PaperImageAlt:
-		if request.Fit != "" || request.Number != 0 || request.Points != 0 || request.Bool || !utf8.ValidString(request.Text) || len(request.Text) > w.maxMutationPayloadBytes() {
+		if request.Fit != "" || request.Number != 0 || request.Points != 0 || request.Length != "" || request.Bool || !utf8.ValidString(request.Text) || len(request.Text) > w.maxMutationPayloadBytes() {
 			return PaperMutationResult{}, workspaceError("INVALID_IMAGE_VALUE", "image alt text must be valid bounded UTF-8 without unrelated values", paperedit.ErrInvalidOperation)
 		}
 		add("alt", paperedit.StringValue(request.Text))
@@ -403,7 +408,7 @@ func (w *Workspace) PaperSetImageProperty(request PaperSetImagePropertyRequest) 
 			add("decorative", paperedit.BoolValue(false))
 		}
 	case PaperImageDecorative:
-		if request.Fit != "" || request.Number != 0 || request.Points != 0 || request.Text != "" {
+		if request.Fit != "" || request.Number != 0 || request.Points != 0 || request.Length != "" || request.Text != "" {
 			return PaperMutationResult{}, workspaceError("INVALID_IMAGE_VALUE", "decorative accepts only its boolean value", paperedit.ErrInvalidOperation)
 		}
 		add("decorative", paperedit.BoolValue(request.Bool))
@@ -455,17 +460,18 @@ func (w *Workspace) PaperSetGridTrack(request PaperSetGridTrackRequest) (PaperMu
 	switch request.Property {
 	case PaperGridTrackKind:
 		kind := strings.ToLower(strings.TrimSpace(request.Kind))
-		if kind != "fixed" && kind != "auto" && kind != "fraction" || request.Points != 0 || request.Weight != 0 {
-			return PaperMutationResult{}, workspaceError("INVALID_GRID_TRACK_VALUE", "track kind must be fixed, auto, or fraction without unrelated values", paperedit.ErrInvalidOperation)
+		if kind != "fixed" && kind != "auto" && kind != "fraction" && kind != "flex" || request.Points != 0 || request.Length != "" || request.Weight != 0 {
+			return PaperMutationResult{}, workspaceError("INVALID_GRID_TRACK_VALUE", "track kind must be fixed, auto, fraction, or flex without unrelated values", paperedit.ErrInvalidOperation)
 		}
 		value = paperedit.StringValue(kind)
-	case PaperGridTrackSize, PaperGridTrackMin:
-		if request.Kind != "" || request.Weight != 0 || !finiteLayoutHandle(request.Points) || request.Points < 0 || request.Points > 1_000_000 {
-			return PaperMutationResult{}, workspaceError("INVALID_GRID_TRACK_VALUE", "track length must be a finite non-negative point value", paperedit.ErrInvalidOperation)
+	case PaperGridTrackSize, PaperGridTrackMin, PaperGridTrackMax:
+		resolved, ok := responsiveLayoutLengthValue(request.Length, request.Points, true, request.Property == PaperGridTrackSize)
+		if request.Kind != "" || request.Weight != 0 || !ok {
+			return PaperMutationResult{}, workspaceError("INVALID_GRID_TRACK_VALUE", "track length must be auto, a bounded percentage, or a finite physical length", paperedit.ErrInvalidOperation)
 		}
-		value = paperedit.UnitValue(request.Points, "pt")
+		value = resolved
 	case PaperGridTrackWeight:
-		if request.Kind != "" || request.Points != 0 || request.Weight == 0 {
+		if request.Kind != "" || request.Points != 0 || request.Length != "" || request.Weight == 0 {
 			return PaperMutationResult{}, workspaceError("INVALID_GRID_TRACK_VALUE", "track weight must be a positive 32-bit integer", paperedit.ErrInvalidOperation)
 		}
 		value = paperedit.NumberValue(float64(request.Weight))
@@ -477,6 +483,43 @@ func (w *Workspace) PaperSetGridTrack(request PaperSetGridTrackRequest) (PaperMu
 }
 
 func finiteLayoutHandle(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }
+
+func responsiveLayoutLengthValue(length string, points float64, allowAuto, positive bool) (paperedit.Value, bool) {
+	length = strings.ToLower(strings.TrimSpace(length))
+	if length == "" {
+		if !finiteLayoutHandle(points) || points < 0 || positive && points == 0 || points > 1_000_000 {
+			return paperedit.Value{}, false
+		}
+		return paperedit.UnitValue(points, "pt"), true
+	}
+	if points != 0 {
+		return paperedit.Value{}, false
+	}
+	if length == "auto" {
+		if !allowAuto {
+			return paperedit.Value{}, false
+		}
+		return paperedit.StringValue("auto"), true
+	}
+	unit := ""
+	switch {
+	case strings.HasSuffix(length, "%"):
+		unit = "%"
+	case strings.HasSuffix(length, "pt"):
+		unit = "pt"
+	default:
+		return paperedit.Value{}, false
+	}
+	number, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(length, unit)), 64)
+	maximum := 1_000_000.0
+	if unit == "%" {
+		maximum = 100
+	}
+	if err != nil || !finiteLayoutHandle(number) || number < 0 || positive && number == 0 || number > maximum {
+		return paperedit.Value{}, false
+	}
+	return paperedit.UnitValue(number, unit), true
+}
 
 func canonicalLayoutHandleColor(value string) (string, bool) {
 	if len(value) != 7 || value[0] != '#' {

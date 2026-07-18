@@ -253,7 +253,12 @@ func (b *typedTreeBuilder) table(parent int, key string, table layout.TableBlock
 	}
 	for index, column := range table.Columns {
 		track := layoutengine.TreeTrackInput{Name: fmt.Sprintf("column-%d", index), Min: typedTreeLength(column.MinWidth), Max: typedTreeLength(column.Width)}
-		if column.Width == 0 {
+		if column.MinWidthPercent != 0 {
+			track.Min = typedTreePercent(column.MinWidthPercent)
+		}
+		if column.WidthPercent != 0 {
+			track.Max = typedTreePercent(column.WidthPercent)
+		} else if column.Width == 0 {
 			track.Max = layoutengine.TreeLength{Kind: layoutengine.TreeLengthAuto}
 		}
 		if _, err := b.add(node, fmt.Sprintf("%s/column/%d", key, index), "column-track", "", nil, &track, nil, layoutengine.SemanticRoleArtifact, 0); err != nil {
@@ -370,13 +375,33 @@ func typedTreeLength(points float64) layoutengine.TreeLength {
 	return layoutengine.TreeLength{Kind: layoutengine.TreeLengthFixed, Value: fixed}
 }
 
+func typedTreePercent(percent uint32) layoutengine.TreeLength {
+	// Canonical trees encode percentages as a 1/1024 ratio. Round to the
+	// nearest representable value while the layout model retains full
+	// millionth-of-one-percent precision for actual planning.
+	value := (uint64(percent)*1024 + 50_000_000) / 100_000_000
+	return layoutengine.TreeLength{Kind: layoutengine.TreeLengthPercent, Value: layoutengine.Fixed(value)}
+}
+
 func typedTreeRowColumnTrack(track layout.RowColumnTrack, name string) layoutengine.TreeTrackInput {
 	result := layoutengine.TreeTrackInput{Name: name, Min: typedTreeLength(track.Min), Max: typedTreeLength(track.Size)}
+	if track.MinPercent != 0 {
+		result.Min = typedTreePercent(track.MinPercent)
+	}
 	switch track.Kind {
 	case layout.RowColumnTrackAuto:
 		result.Max = layoutengine.TreeLength{Kind: layoutengine.TreeLengthAuto}
 	case layout.RowColumnTrackFraction:
 		result.Max = layoutengine.TreeLength{Kind: layoutengine.TreeLengthFraction, Value: layoutengine.Fixed(maxUint32(track.Weight, 1) * 1024)}
+	case layout.RowColumnTrackFlex:
+		switch track.BasisKind {
+		case layout.RowColumnFlexBasisFixed:
+			result.Max = typedTreeLength(track.Basis)
+		case layout.RowColumnFlexBasisPercent:
+			result.Max = typedTreePercent(track.BasisPercent)
+		default:
+			result.Max = layoutengine.TreeLength{Kind: layoutengine.TreeLengthAuto}
+		}
 	}
 	return result
 }

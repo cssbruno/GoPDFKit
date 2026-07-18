@@ -10,7 +10,7 @@
     'border-width', 'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
     'border-radius', 'border-color', 'background',
   ]);
-  const gridProperties = Object.freeze(['track', 'track-size', 'track-min', 'track-weight']);
+  const gridProperties = Object.freeze(['track', 'track-size', 'track-min', 'track-max', 'track-weight']);
   const boxKinds = new Set(['paragraph', 'heading', 'list']);
   const coreFonts = Object.freeze(['Courier', 'Helvetica', 'Times', 'Symbol', 'ZapfDingbats']);
   const gridKinds = new Set(['paragraph', 'heading']);
@@ -84,15 +84,17 @@
   function valueSpec(operation, property) {
     if (operation === 'text' && property === 'font') return {kind: 'choice', label: 'Replacement font', choices: coreFonts, field: 'text'};
     if ((operation === 'box' || operation === 'region') && ['border-color', 'background'].includes(property)) return {kind: 'color', label: 'Color'};
-    if (operation === 'grid' && property === 'track') return {kind: 'choice', label: 'Track', choices: ['fixed', 'auto', 'fraction']};
+    if (operation === 'grid' && property === 'track') return {kind: 'choice', label: 'Track', choices: ['fixed', 'auto', 'fraction', 'flex']};
     if (operation === 'grid' && property === 'track-weight') return {kind: 'integer', label: 'Weight', min: 1, max: 4294967295};
+    if (operation === 'grid' && ['track-size', 'track-min', 'track-max'].includes(property)) return {kind: 'length', label: 'Size (auto, %, or pt)'};
     if (operation === 'image' && property === 'fit') return {kind: 'choice', label: 'Fit', choices: ['auto', 'contain', 'cover']};
     if (operation === 'image' && ['focus-x', 'focus-y'].includes(property)) return {kind: 'number', label: 'Ratio', min: 0, max: 1, step: 0.05, field: 'number'};
-    if (operation === 'image' && ['width', 'height', 'max-width', 'max-height'].includes(property)) return {kind: 'number', label: 'Points', min: 0.25, max: 1000000, step: 0.25};
+    if (operation === 'image' && ['width', 'max-width'].includes(property)) return {kind: 'length', label: 'Size (auto, %, or pt)', allowPercent: true};
+    if (operation === 'image' && ['height', 'max-height'].includes(property)) return {kind: 'length', label: 'Size (auto or pt)', allowPercent: false};
     if (operation === 'image' && property === 'alt') return {kind: 'text', label: 'Alt text'};
     if ((operation === 'image' && property === 'decorative') || (operation === 'table' && ['repeat-header', 'header'].includes(property))) return {kind: 'boolean', label: 'Value', choices: ['true', 'false']};
     if (operation === 'table' && property === 'split') return {kind: 'choice', label: 'Split', choices: ['rows', 'avoid'], field: 'split'};
-    if (operation === 'table' && ['width', 'min-width', 'max-width'].includes(property)) return {kind: 'number', label: 'Points', min: 0.25, max: 1000000, step: 0.25};
+    if (operation === 'table' && ['width', 'min-width', 'max-width'].includes(property)) return {kind: 'length', label: 'Size (auto, %, or pt)'};
     if (operation === 'canvas') return {kind: 'constraint', label: 'Target anchor'};
     if (operation === 'flow') return {kind: 'text', label: 'Destination @id'};
     return {kind: 'number', label: 'Points', min: 0, max: 1000000, step: 0.25};
@@ -122,6 +124,20 @@
       payload.text = match[1];
       payload.kind = match[2];
       if (match[3]) payload.points = Number(match[4]) * (match[3] === '-' ? -1 : 1);
+    } else if (spec.kind === 'length') {
+      const length = String(rawValue || '').trim().toLowerCase();
+      if (length === 'auto') payload.length = length;
+      else {
+        const match = length.match(/^(\d+(?:\.\d+)?)(%|pt)?$/);
+        if (!match) throw new Error('Use auto, a percentage such as 50%, or a physical size such as 48pt');
+        const value = Number(match[1]);
+        const unit = match[2] || 'pt';
+        if (unit === '%' && spec.allowPercent === false) throw new Error('Percentage height needs a definite container height; use auto or pt');
+        const maximum = unit === '%' ? 100 : 1000000;
+        if (!Number.isFinite(value) || value <= 0 || value > maximum) throw new Error(`Use a positive ${unit === '%' ? 'percentage up to 100%' : 'physical size'}`);
+        if (match[2]) payload.length = `${value}${unit}`;
+        else payload.points = value;
+      }
     } else if (spec.kind === 'color') {
       const color = String(rawValue || '').toLowerCase();
       if (!/^#[0-9a-f]{6}$/.test(color)) throw new Error('Use a six-digit color such as #315ee8');

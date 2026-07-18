@@ -91,6 +91,19 @@ func TestPlanPaperColumnUsesFixedAndFractionalHeightTracks(t *testing.T) {
 	}
 }
 
+func TestPlanPaperRowResolvesPercentageTracksAgainstContainingWidth(t *testing.T) {
+	const source = "document:\n  page:\n    width: 200pt\n    height: 100pt\n    margin: 10pt\n    body:\n      row:\n        gap: 10pt\n        paragraph @left:\n          track-size: 50%\n          font: \"Courier\"\n          size: 10pt\n          line-height: 12pt\n          text: \"LEFT\"\n        paragraph @right:\n          track-size: 50%\n          font: \"Courier\"\n          size: 10pt\n          line-height: 12pt\n          text: \"RIGHT\"\n"
+	plan, result, err := PlanPaper("responsive-row.paper", source)
+	if err != nil || !result.OK() {
+		t.Fatalf("PlanPaper() = %#v, %v", result, err)
+	}
+	fragments := plan.plan.Projection().Fragments
+	if len(fragments) != 2 || fragments[0].BorderBox.Width.Points() != 85 || fragments[0].BorderBox.X.Points() != 10 ||
+		fragments[1].BorderBox.Width.Points() != 85 || fragments[1].BorderBox.X.Points() != 105 {
+		t.Fatalf("percentage fragments = %+v", fragments)
+	}
+}
+
 func TestPlanPaperPlansMixedTopLevelRowColumnAtomically(t *testing.T) {
 	const source = "document:\n  page:\n    body:\n      paragraph @before:\n        text: \"before\"\n      row @stack:\n        paragraph @inside:\n          text: \"inside\"\n"
 	plan, result, err := PlanPaper("mixed.paper", source)

@@ -36,6 +36,7 @@ type studioEditRequest struct {
 	Target         string                     `json:"target"`
 	Property       string                     `json:"property"`
 	Points         *float64                   `json:"points,omitempty"`
+	Length         string                     `json:"length,omitempty"`
 	Number         *float64                   `json:"number,omitempty"`
 	Width          *float64                   `json:"width_points,omitempty"`
 	Height         *float64                   `json:"height_points,omitempty"`
@@ -326,7 +327,7 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 }
 
 func validateStudioEditRequest(request studioEditRequest) error {
-	fields := []string{request.SourceRevision, request.PlanRevision, request.Scenario, request.Operation, request.Target, request.Property, request.Color, request.Kind, request.Text, request.Split, request.Path, request.Format, request.FormatLocale, request.FormatCurrency, request.Template, request.Component, request.ImportPath, request.ID, request.NewParent, request.Schema, request.Preset, request.BreakPolicy}
+	fields := []string{request.SourceRevision, request.PlanRevision, request.Scenario, request.Operation, request.Target, request.Property, request.Length, request.Color, request.Kind, request.Text, request.Split, request.Path, request.Format, request.FormatLocale, request.FormatCurrency, request.Template, request.Component, request.ImportPath, request.ID, request.NewParent, request.Schema, request.Preset, request.BreakPolicy}
 	for _, field := range fields {
 		if len(field) > studioEditFieldLimit || !utf8.ValidString(field) {
 			return fmt.Errorf("%w: edit field exceeds its bound", errStudioInvalidEdit)
@@ -446,7 +447,7 @@ func applyStudioSemanticMutation(workspace *paperd.Workspace, guard paperd.Paper
 		}
 		return workspace.PaperSetImageProperty(paperd.PaperSetImagePropertyRequest{
 			Guard: guard, Property: paperd.PaperImageProperty(request.Property), Fit: request.Kind,
-			Number: number, Points: points, Text: request.Text, Bool: boolean,
+			Number: number, Points: points, Length: request.Length, Text: request.Text, Bool: boolean,
 		})
 	}
 	if request.Operation == "table" {
@@ -458,7 +459,7 @@ func applyStudioSemanticMutation(workspace *paperd.Workspace, guard paperd.Paper
 			boolean = *request.Bool
 		}
 		return workspace.PaperSetTableProperty(paperd.PaperSetTablePropertyRequest{
-			Guard: guard, Property: paperd.PaperTableProperty(request.Property), Split: request.Split, Points: points, Bool: boolean,
+			Guard: guard, Property: paperd.PaperTableProperty(request.Property), Split: request.Split, Points: points, Length: request.Length, Bool: boolean,
 		})
 	}
 	if request.Operation == "page" {
@@ -505,7 +506,7 @@ func applyStudioSemanticMutation(workspace *paperd.Workspace, guard paperd.Paper
 		weight = *request.Weight
 	}
 	return workspace.PaperSetGridTrack(paperd.PaperSetGridTrackRequest{
-		Guard: guard, Property: paperd.PaperGridTrackProperty(request.Property), Kind: request.Kind, Points: points, Weight: weight,
+		Guard: guard, Property: paperd.PaperGridTrackProperty(request.Property), Kind: request.Kind, Points: points, Length: request.Length, Weight: weight,
 	})
 }
 

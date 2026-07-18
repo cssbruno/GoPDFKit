@@ -232,6 +232,25 @@ func TestPaperSetGridTrackRequiresExactTransitiveGuardAndCompilesBeforeCommit(t 
 	_ = created
 }
 
+func TestPaperSetGridTrackAcceptsResponsiveAndAutomaticSizes(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		length string
+		want   string
+	}{{"percentage", "50%", "track-size: 50%"}, {"automatic", "auto", `track-size: "auto"`}} {
+		t.Run(test.name, func(t *testing.T) {
+			workspace := authorizationWorkspace(t, WorkspaceOptions{RequireMutationAuthority: true})
+			request, _, opened := gridRequest(t, workspace, "grid-responsive-"+test.name)
+			request.Points, request.Length = 0, test.length
+			request.Guard.Authority = grantMutationAuthority(t, workspace, opened, "agent:grid", []MutationOperation{MutationSetGridTrack}, []string{"@grid"}, nil)
+			result, err := workspace.PaperSetGridTrack(request)
+			if err != nil || !result.Revision.CompileOK || !strings.Contains(result.Revision.Source, test.want) {
+				t.Fatalf("result=%#v err=%v", result, err)
+			}
+		})
+	}
+}
+
 func TestPaperSetGridTrackIdempotentRace(t *testing.T) {
 	workspace := mustWorkspace(t, Limits{})
 	request, _, _ := gridRequest(t, workspace, "grid-race")

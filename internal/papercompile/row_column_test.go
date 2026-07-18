@@ -4,8 +4,10 @@
 package papercompile
 
 import (
+	"context"
 	"testing"
 
+	"github.com/cssbruno/gopdfkit/internal/layoutengine"
 	"github.com/cssbruno/gopdfkit/internal/paperlang"
 	"github.com/cssbruno/gopdfkit/layout"
 )
@@ -41,5 +43,36 @@ func TestCompileRowColumnDiagnosesInvalidTrackContract(t *testing.T) {
 	compiled := Compile(parsed.AST)
 	if !parsed.OK() || compiled.OK() {
 		t.Fatalf("parse/compile = %+v / %+v", parsed.Diagnostics, compiled.Diagnostics)
+	}
+}
+
+func TestCompileRowColumnPreservesContainerRelativeAndAutoTrackSizes(t *testing.T) {
+	const source = "document:\n  page:\n    body:\n      row:\n        paragraph:\n          track-size: 50%\n          track-min: 20%\n          text: \"Half\"\n        paragraph:\n          track: \"flex\"\n          track-size: \"auto\"\n          track-max: 40%\n          text: \"Intrinsic\"\n"
+	parsed := paperlang.Parse("responsive-row.paper", source)
+	compiled := Compile(parsed.AST)
+	if !parsed.OK() || !compiled.OK() {
+		t.Fatalf("diagnostics = %+v / %+v", parsed.Diagnostics, compiled.Diagnostics)
+	}
+	row := compiled.Document.Body[0].(layout.RowColumnBlock)
+	first, second := row.Items[0].Track, row.Items[1].Track
+	if first.Kind != layout.RowColumnTrackFlex || first.BasisKind != layout.RowColumnFlexBasisPercent ||
+		first.BasisPercent != 50_000_000 || first.MinPercent != 20_000_000 || first.Shrink != 1 {
+		t.Fatalf("percentage track = %#v", first)
+	}
+	if second.Kind != layout.RowColumnTrackFlex || second.BasisKind != layout.RowColumnFlexBasisContent ||
+		second.MaxPercent != 40_000_000 || second.Shrink != 1 {
+		t.Fatalf("automatic track = %#v", second)
+	}
+	tree, err := LowerLayoutDocumentTreeContext(context.Background(), compiled.Document, layoutengine.CanonicalTreeLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projection := tree.Projection()
+	foundPercent := false
+	for _, track := range projection.Tracks {
+		foundPercent = foundPercent || track.Max.Kind == "percent" && track.Max.Value == 512
+	}
+	if !foundPercent {
+		t.Fatalf("canonical tracks lost 50%% basis: %+v", projection.Tracks)
 	}
 }

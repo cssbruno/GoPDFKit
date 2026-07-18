@@ -1659,8 +1659,8 @@ function studioValueField(spec) {
     }
   } else {
     input = document.createElement('input');
-    input.type = spec.kind === 'color' ? 'color' : spec.kind === 'text' ? 'text' : 'number';
-    input.value = spec.kind === 'color' ? '#315ee8' : spec.kind === 'integer' ? '1' : spec.kind === 'text' ? '' : String(spec.min ?? 0);
+    input.type = spec.kind === 'color' ? 'color' : spec.kind === 'text' || spec.kind === 'length' ? 'text' : 'number';
+    input.value = spec.kind === 'color' ? '#315ee8' : spec.kind === 'integer' ? '1' : spec.kind === 'length' ? '100%' : spec.kind === 'text' ? '' : String(spec.min ?? 0);
     if (spec.min !== undefined) input.min = String(spec.min);
     if (spec.max !== undefined) input.max = String(spec.max);
     if (spec.step !== undefined) input.step = String(spec.step);

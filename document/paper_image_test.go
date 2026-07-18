@@ -66,6 +66,21 @@ func TestPaperImagePlansRendersCapturesAndRetainsFigureSemantics(t *testing.T) {
 	}
 }
 
+func TestPaperImageResolvesPercentageWidthAndIntrinsicHeightInContainingBody(t *testing.T) {
+	source := strings.Replace(paperImageSource, "width: 40pt\n        height: 24pt", "width: 50%\n        height: \"auto\"", 1)
+	plan, result, err := PlanPaper("responsive-image.paper", source)
+	if err != nil || !result.OK() {
+		t.Fatalf("PlanPaper() = %#v, %v", result, err)
+	}
+	projection := plan.plan.Projection()
+	if len(projection.Fragments) != 1 || projection.Fragments[0].BorderBox.Width.Points() != 42 || projection.Fragments[0].BorderBox.Height.Points() != 42 {
+		t.Fatalf("responsive image fragments = %+v", projection.Fragments)
+	}
+	if len(projection.Images) != 1 || projection.Images[0].Bounds.Width.Points() != 42 || projection.Images[0].Bounds.Height.Points() != 42 {
+		t.Fatalf("responsive image bounds = %+v", projection.Images)
+	}
+}
+
 func TestPaperAssetReferenceIsHumanReadableContentAddressedAndAmbientFree(t *testing.T) {
 	data, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
 	if err != nil {

@@ -50,6 +50,8 @@ func TestPaperSetImagePropertyWritesTypedMinimalPatches(t *testing.T) {
 		{"fit", PaperSetImagePropertyRequest{Property: PaperImageFit, Fit: "cover"}, `fit: "cover"`, 1},
 		{"focus", PaperSetImagePropertyRequest{Property: PaperImageFocusX, Number: 0.25}, "focus-x: 0.25", 1},
 		{"dimension", PaperSetImagePropertyRequest{Property: PaperImageWidth, Points: 48}, "width: 48pt", 1},
+		{"responsive dimension", PaperSetImagePropertyRequest{Property: PaperImageWidth, Length: "50%"}, "width: 50%", 1},
+		{"automatic height", PaperSetImagePropertyRequest{Property: PaperImageHeight, Length: "auto"}, `height: "auto"`, 1},
 		{"alt", PaperSetImagePropertyRequest{Property: PaperImageAlt, Text: "Updated evidence"}, `alt: "Updated evidence"`, 1},
 		{"decorative", PaperSetImagePropertyRequest{Property: PaperImageDecorative, Bool: true}, "decorative: true", 2},
 	}
@@ -84,6 +86,8 @@ func TestPaperSetImagePropertyRejectsAdversarialValuesAtomically(t *testing.T) {
 		{Property: PaperImageFocusY, Number: 2},
 		{Property: PaperImageWidth, Points: -1},
 		{Property: PaperImageWidth, Points: 1_000_001},
+		{Property: PaperImageWidth, Length: "101%"},
+		{Property: PaperImageHeight, Length: "50%"},
 		{Property: PaperImageAlt, Text: strings.Repeat("x", 9<<20)},
 	}
 	for index, request := range tests {

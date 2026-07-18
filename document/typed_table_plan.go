@@ -136,12 +136,21 @@ func (f *Document) planTypedTableBodies(ctx context.Context, doc *layout.LayoutD
 	for index, column := range table.Columns {
 		minimum, minimumErr := layoutengine.FixedFromPoints(f.UnitToPointConvert(column.MinWidth))
 		maximum, maximumErr := layoutengine.FixedFromPoints(f.UnitToPointConvert(column.MaxWidth))
+		if column.MinWidthPercent != 0 {
+			minimum, minimumErr = typedContainerPercent(body.Width, column.MinWidthPercent)
+		}
+		if column.MaxWidthPercent != 0 {
+			maximum, maximumErr = typedContainerPercent(body.Width, column.MaxWidthPercent)
+		}
 		if minimumErr != nil || maximumErr != nil {
 			return layoutengine.LayoutPlan{}, typedTableUnsupported(fmt.Sprintf("%s.columns[%d]", path, index), "minimum or maximum width is not representable")
 		}
 		columns[index] = layoutengine.TableColumn{Kind: layoutengine.TableTrackIntrinsic, MinWidth: minimum, MaxWidth: maximum}
-		if column.Width > 0 {
+		if column.Width > 0 || column.WidthPercent != 0 {
 			width, widthErr := layoutengine.FixedFromPoints(f.UnitToPointConvert(column.Width))
+			if column.WidthPercent != 0 {
+				width, widthErr = typedContainerPercent(body.Width, column.WidthPercent)
+			}
 			if widthErr != nil || width <= 0 {
 				return layoutengine.LayoutPlan{}, typedTableUnsupported(fmt.Sprintf("%s.columns[%d]", path, index), "fixed width must be positive and representable")
 			}
@@ -382,9 +391,11 @@ func validateTypedTableSurface(table layout.TableBlock, path string) error {
 	}
 	for index, column := range table.Columns {
 		if !finiteNumbers(column.Width, column.MinWidth, column.MaxWidth) || column.Width < 0 || column.MinWidth < 0 || column.MaxWidth < 0 ||
+			column.WidthPercent > 100_000_000 || column.MinWidthPercent > 100_000_000 || column.MaxWidthPercent > 100_000_000 ||
+			column.Width > 0 && column.WidthPercent != 0 || column.MinWidth > 0 && column.MinWidthPercent != 0 || column.MaxWidth > 0 && column.MaxWidthPercent != 0 ||
 			(column.MaxWidth > 0 && column.MaxWidth < column.MinWidth) ||
 			(column.Width > 0 && (column.Width < column.MinWidth || (column.MaxWidth > 0 && column.Width > column.MaxWidth))) {
-			return typedTableUnsupported(fmt.Sprintf("%s.columns[%d]", path, index), "width bounds must be finite, non-negative, ordered, and contain a fixed Width")
+			return typedTableUnsupported(fmt.Sprintf("%s.columns[%d]", path, index), "width bounds must be finite, non-negative, and choose one fixed or container-relative value")
 		}
 	}
 	if table.Box.Orphans > 1<<20 || table.Box.Widows > 1<<20 {

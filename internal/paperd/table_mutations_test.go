@@ -23,6 +23,16 @@ func TestPaperSetTablePropertyUsesExactTableGuardAndMinimalPatch(t *testing.T) {
 	}
 }
 
+func TestPaperSetTablePropertyAcceptsContainerRelativeTrackWidth(t *testing.T) {
+	workspace := mustWorkspace(t, Limits{})
+	guard, _, _ := mutationGuard(t, workspace, tableMutationFixture, "@name-track", "table-responsive-track", CapabilityEdit)
+	guard.TargetPreconditions = []paperedit.TargetPrecondition{exactTargetPrecondition(t, "mutation.paper", tableMutationFixture, "@ledger")}
+	result, err := workspace.PaperSetTableProperty(PaperSetTablePropertyRequest{Guard: guard, Property: PaperTableTrackWidth, Length: "50%"})
+	if err != nil || !result.Revision.CompileOK || !strings.Contains(result.Revision.Source, "width: 50%") {
+		t.Fatalf("result=%#v err=%v", result, err)
+	}
+}
+
 func TestPaperSetTablePropertyRejectsMissingStaleAndAdversarialGuards(t *testing.T) {
 	workspace := mustWorkspace(t, Limits{})
 	guard, created, _ := mutationGuard(t, workspace, tableMutationFixture, "@name-track", "table-invalid", CapabilityEdit)

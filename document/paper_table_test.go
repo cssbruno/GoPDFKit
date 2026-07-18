@@ -95,6 +95,24 @@ func TestPaperTablePlansRendersCapturesAndRetainsTableSemantics(t *testing.T) {
 	}
 }
 
+func TestPaperTableResolvesPercentageTracksAgainstContainingBody(t *testing.T) {
+	source := strings.Replace(paperTableSource, "width: 100pt", "width: 50%", 1)
+	source = strings.Replace(source, "width: 84pt", "width: 50%", 1)
+	plan, result, err := PlanPaper("responsive-table.paper", source)
+	if err != nil || !result.OK() {
+		t.Fatalf("PlanPaper() = %#v, %v", result, err)
+	}
+	matching := 0
+	for _, fragment := range plan.plan.Projection().Fragments {
+		if fragment.BorderBox.Width.Points() == 92 {
+			matching++
+		}
+	}
+	if matching < 4 {
+		t.Fatalf("percentage table did not produce four 50%% cells: %+v", plan.plan.Projection().Fragments)
+	}
+}
+
 func TestPaperTableMultiPageRepeatHeaderSplitSpansAndNestedContent(t *testing.T) {
 	const pixel = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 	source := "document @report:\n  page @sheet:\n    width: 180pt\n    height: 96pt\n    margin: 6pt\n    body @body:\n      table @ledger:\n        repeat-header: true\n        split: \"rows\"\n        table-track @left-track:\n          width: 84pt\n        table-track @right-track:\n          width: 84pt\n        table-header @head:\n          table-row @head-row:\n            cell @head-cell:\n              colspan: 2\n              text: \"REPEATED HEADER\"\n"

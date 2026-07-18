@@ -377,7 +377,7 @@ var tableCellProperties = func() map[string]bool {
 }()
 var rowColumnChildProperties = func() map[string]bool {
 	properties := copyPropertySet(boxedTextProperties)
-	for _, name := range []string{"level", "track", "track-size", "track-min", "track-weight", "cross-align"} {
+	for _, name := range []string{"level", "track", "track-size", "track-min", "track-max", "track-weight", "cross-align"} {
 		properties[name] = true
 	}
 	return properties
@@ -820,16 +820,7 @@ func (c *compiler) compileTable(node *paperlang.Node) {
 					if property, ok := p["decorative"]; ok {
 						image.Decorative, _ = c.boolProperty(property)
 					}
-					for _, dimension := range []struct {
-						name string
-						set  func(float64)
-					}{{"width", func(v float64) { image.Width = v }}, {"height", func(v float64) { image.Height = v }}, {"max-width", func(v float64) { image.MaxWidth = v }}, {"max-height", func(v float64) { image.MaxHeight = v }}} {
-						if property, ok := p[dimension.name]; ok {
-							if value, valid := c.lengthProperty(property, false); valid {
-								dimension.set(value)
-							}
-						}
-					}
+					c.compileImageDimensions(p, &image)
 					if property, ok := p["fit"]; ok {
 						if value, valid := c.stringProperty(property); valid {
 							switch strings.ToLower(strings.TrimSpace(value)) {
@@ -864,14 +855,22 @@ func (c *compiler) compileTable(node *paperlang.Node) {
 		case paperlang.NodeTableTrack:
 			p, _ := c.members(child, tableTrackProperties)
 			column := layout.TableColumn{}
-			for _, d := range []struct {
-				name string
-				set  func(float64)
-			}{{"width", func(v float64) { column.Width = v }}, {"min-width", func(v float64) { column.MinWidth = v }}, {"max-width", func(v float64) { column.MaxWidth = v }}} {
-				if property, ok := p[d.name]; ok {
-					if value, valid := c.lengthProperty(property, false); valid {
-						d.set(value)
-					}
+			for _, name := range []string{"width", "min-width", "max-width"} {
+				property, ok := p[name]
+				if !ok {
+					continue
+				}
+				value, valid := c.contextualLengthProperty(property, false, true)
+				if !valid || value.auto {
+					continue
+				}
+				switch name {
+				case "width":
+					column.Width, column.WidthPercent = value.points, value.percent
+				case "min-width":
+					column.MinWidth, column.MinWidthPercent = value.points, value.percent
+				case "max-width":
+					column.MaxWidth, column.MaxWidthPercent = value.points, value.percent
 				}
 			}
 			table.Columns = append(table.Columns, column)
@@ -912,17 +911,7 @@ func (c *compiler) compileImage(node *paperlang.Node) {
 	} else {
 		c.add("PAPER_COMPILE_IMAGE_SOURCE", "image requires an explicit source resource", "add source: \"asset:name\" or a bounded PNG/JPEG data resource", node.HeaderSpan)
 	}
-	for _, dimension := range []struct {
-		name string
-		set  func(float64)
-	}{{"width", func(value float64) { block.Width = value }}, {"height", func(value float64) { block.Height = value }},
-		{"max-width", func(value float64) { block.MaxWidth = value }}, {"max-height", func(value float64) { block.MaxHeight = value }}} {
-		if property, ok := properties[dimension.name]; ok {
-			if value, valid := c.lengthProperty(property, false); valid {
-				dimension.set(value)
-			}
-		}
-	}
+	c.compileImageDimensions(properties, &block)
 	if property, ok := properties["fit"]; ok {
 		if value, valid := c.stringProperty(property); valid {
 			switch strings.ToLower(strings.TrimSpace(value)) {
@@ -991,6 +980,40 @@ func (c *compiler) compileImage(node *paperlang.Node) {
 		mapped := &c.result.Mapping.Nodes[len(c.result.Mapping.Nodes)-1]
 		mapped.ResourceKind = "image/" + block.Format
 		mapped.ResourceDigest = hex.EncodeToString(digest[:])
+	}
+}
+
+func (c *compiler) compileImageDimensions(properties map[string]paperlang.Property, block *layout.ImageBlock) {
+	for _, name := range []string{"width", "height", "max-width", "max-height"} {
+		property, ok := properties[name]
+		if !ok {
+			continue
+		}
+		value, valid := c.contextualLengthProperty(property, false, true)
+		if !valid || value.auto {
+			continue
+		}
+		if value.percentSet {
+			switch name {
+			case "width":
+				block.WidthPercent = value.percent
+			case "max-width":
+				block.MaxWidthPercent = value.percent
+			default:
+				c.add("PAPER_COMPILE_PERCENT_AXIS", fmt.Sprintf("image %s cannot use a percentage because flow height is automatic", name), "use \"auto\" or a physical height; width and max-width accept percentages", property.Value.Span)
+			}
+			continue
+		}
+		switch name {
+		case "width":
+			block.Width = value.points
+		case "height":
+			block.Height = value.points
+		case "max-width":
+			block.MaxWidth = value.points
+		case "max-height":
+			block.MaxHeight = value.points
+		}
 	}
 }
 
@@ -1101,8 +1124,10 @@ func (c *compiler) compileRowColumnItem(node *paperlang.Node) (layout.RowColumnI
 		child = layout.ParagraphBlock{Segments: segments, Style: style, Box: c.compileBoxStyle(properties)}
 	}
 	item := layout.RowColumnItem{Block: child, Track: layout.RowColumnTrack{Kind: layout.RowColumnTrackAuto}}
+	trackExplicit := false
 	if property, ok := properties["track"]; ok {
 		if value, valid := c.stringProperty(property); valid {
+			trackExplicit = true
 			switch strings.ToLower(strings.TrimSpace(value)) {
 			case "fixed":
 				item.Track.Kind = layout.RowColumnTrackFixed
@@ -1110,19 +1135,65 @@ func (c *compiler) compileRowColumnItem(node *paperlang.Node) (layout.RowColumnI
 				item.Track.Kind = layout.RowColumnTrackAuto
 			case "fraction", "fr":
 				item.Track.Kind = layout.RowColumnTrackFraction
+			case "flex":
+				item.Track.Kind = layout.RowColumnTrackFlex
+				item.Track.BasisKind = layout.RowColumnFlexBasisContent
+				item.Track.Shrink = 1
 			default:
-				c.add("PAPER_COMPILE_TRACK", fmt.Sprintf("track kind %q is unsupported", value), "use fixed, auto, or fraction", property.Value.Span)
+				c.add("PAPER_COMPILE_TRACK", fmt.Sprintf("track kind %q is unsupported", value), "use fixed, auto, fraction, or flex", property.Value.Span)
 			}
 		}
 	}
 	if property, ok := properties["track-size"]; ok {
-		if value, valid := c.lengthProperty(property, true); valid {
-			item.Track.Size = value
+		if value, valid := c.contextualLengthProperty(property, true, true); valid {
+			switch {
+			case value.auto:
+				if trackExplicit && item.Track.Kind != layout.RowColumnTrackAuto && item.Track.Kind != layout.RowColumnTrackFlex {
+					c.warn("PAPER_COMPILE_TRACK_CONTEXT", "automatic track-size promotes the selected track to flexible sizing", "use track: \"flex\" or remove the track property for an explicit contract", property.Value.Span)
+				}
+				item.Track = layout.RowColumnTrack{Kind: layout.RowColumnTrackFlex, BasisKind: layout.RowColumnFlexBasisContent, Shrink: 1}
+			case value.percentSet:
+				if trackExplicit && item.Track.Kind != layout.RowColumnTrackAuto && item.Track.Kind != layout.RowColumnTrackFlex {
+					c.warn("PAPER_COMPILE_TRACK_CONTEXT", "percentage track-size promotes the selected track to flexible sizing", "use track: \"flex\" or remove the track property for an explicit contract", property.Value.Span)
+				}
+				item.Track = layout.RowColumnTrack{Kind: layout.RowColumnTrackFlex, BasisKind: layout.RowColumnFlexBasisPercent, BasisPercent: value.percent, Shrink: 1}
+			case item.Track.Kind == layout.RowColumnTrackFlex:
+				item.Track.BasisKind, item.Track.Basis = layout.RowColumnFlexBasisFixed, value.points
+			case !trackExplicit:
+				item.Track.Kind, item.Track.Size = layout.RowColumnTrackFixed, value.points
+			default:
+				item.Track.Size = value.points
+			}
 		}
 	}
 	if property, ok := properties["track-min"]; ok {
-		if value, valid := c.lengthProperty(property, false); valid {
-			item.Track.Min = value
+		if value, valid := c.contextualLengthProperty(property, false, true); valid && !value.auto {
+			if value.percentSet {
+				if item.Track.Kind != layout.RowColumnTrackAuto && item.Track.Kind != layout.RowColumnTrackFlex {
+					c.add("PAPER_COMPILE_TRACK_CONTEXT", "percentage track-min requires a flexible track", "use track: \"flex\" or remove the fixed/fraction track property", property.Value.Span)
+				}
+				if item.Track.Kind != layout.RowColumnTrackFlex {
+					item.Track = layout.RowColumnTrack{Kind: layout.RowColumnTrackFlex, BasisKind: layout.RowColumnFlexBasisContent, Shrink: 1}
+				}
+				item.Track.MinPercent = value.percent
+			} else {
+				item.Track.Min = value.points
+			}
+		}
+	}
+	if property, ok := properties["track-max"]; ok {
+		if value, valid := c.contextualLengthProperty(property, false, true); valid && !value.auto {
+			if item.Track.Kind != layout.RowColumnTrackFlex {
+				if item.Track.Kind != layout.RowColumnTrackAuto {
+					c.add("PAPER_COMPILE_TRACK_CONTEXT", "track-max requires a flexible track", "use track: \"flex\" or remove the fixed/fraction track property", property.Value.Span)
+				}
+				item.Track = layout.RowColumnTrack{Kind: layout.RowColumnTrackFlex, BasisKind: layout.RowColumnFlexBasisContent, Shrink: 1}
+			}
+			if value.percentSet {
+				item.Track.MaxPercent = value.percent
+			} else {
+				item.Track.Max = value.points
+			}
 		}
 	}
 	if property, ok := properties["track-weight"]; ok {
@@ -1161,6 +1232,15 @@ func (c *compiler) compileRowColumnItem(node *paperlang.Node) (layout.RowColumnI
 		}
 		if item.Track.Size != 0 {
 			c.add("PAPER_COMPILE_TRACK_SIZE", "fraction track cannot have track-size", "remove track-size", node.HeaderSpan)
+		}
+	case layout.RowColumnTrackFlex:
+		if item.Track.BasisKind == "" {
+			item.Track.BasisKind = layout.RowColumnFlexBasisContent
+			item.Track.Shrink = 1
+		}
+		if item.Track.Weight != 0 {
+			c.warn("PAPER_COMPILE_TRACK_WEIGHT", "track-weight is ignored after contextual sizing promotes the track to flex", "remove track-weight or use a fraction track without track-size", node.HeaderSpan)
+			item.Track.Weight = 0
 		}
 	}
 	return item, textNodes
@@ -1768,6 +1848,45 @@ func (c *compiler) numberProperty(property paperlang.Property) (float64, bool) {
 		return 0, false
 	}
 	return *property.Value.NumberValue, true
+}
+
+type contextualLength struct {
+	points     float64
+	percent    uint32
+	percentSet bool
+	auto       bool
+}
+
+// contextualLengthProperty retains percentages until a layout container has
+// a definite size. Percent uses millionths of one percent so compilation and
+// fixed-point planning remain deterministic across renderers and DPI values.
+func (c *compiler) contextualLengthProperty(property paperlang.Property, positive, allowAuto bool) (contextualLength, bool) {
+	if allowAuto && property.Value.Kind == paperlang.ScalarString && property.Value.StringValue != nil {
+		if strings.EqualFold(strings.TrimSpace(*property.Value.StringValue), "auto") {
+			return contextualLength{auto: true}, true
+		}
+		c.typeError(property, "physical length, percentage, or \"auto\"")
+		return contextualLength{}, false
+	}
+	if property.Value.Kind == paperlang.ScalarUnit && property.Value.UnitValue != nil && property.Value.UnitValue.Unit == "%" {
+		value := property.Value.UnitValue.Number
+		if !isFinite(value) || value < 0 || value > 100 || positive && value == 0 {
+			qualifier := "from 0% through 100%"
+			if positive {
+				qualifier = "greater than 0% and at most 100%"
+			}
+			c.add("PAPER_COMPILE_PERCENT", fmt.Sprintf("property %q must be %s", property.Name, qualifier), "use a bounded percentage such as 50% or 100%", property.Value.Span)
+			return contextualLength{}, false
+		}
+		scaled := math.Round(value * 1_000_000)
+		if scaled < 0 || scaled > 100_000_000 {
+			c.add("PAPER_COMPILE_PERCENT", fmt.Sprintf("property %q percentage is outside the representable range", property.Name), "use a percentage from 0% through 100%", property.Value.Span)
+			return contextualLength{}, false
+		}
+		return contextualLength{percent: uint32(scaled), percentSet: true}, true
+	}
+	points, valid := c.lengthProperty(property, positive)
+	return contextualLength{points: points}, valid
 }
 
 func (c *compiler) lengthProperty(property paperlang.Property, positive bool) (float64, bool) {

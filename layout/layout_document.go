@@ -454,9 +454,12 @@ func (TableBlock) DocumentBlockKind() BlockKind { return BlockKindTable }
 
 // TableColumn describes a table column width constraint.
 type TableColumn struct {
-	Width    float64 // Preferred column width.
-	MinWidth float64 // Minimum column width.
-	MaxWidth float64 // Maximum column width.
+	Width           float64 // Preferred fixed column width in document units.
+	MinWidth        float64 // Minimum fixed column width in document units.
+	MaxWidth        float64 // Maximum fixed column width in document units.
+	WidthPercent    uint32  // Preferred container-relative width; 100% is 100_000_000.
+	MinWidthPercent uint32  // Minimum container-relative width; 100% is 100_000_000.
+	MaxWidthPercent uint32  // Maximum container-relative width; 100% is 100_000_000.
 }
 
 // TableStyle stores renderer-independent table layout options.
@@ -511,19 +514,24 @@ type ImageBlock struct {
 	Alt          string        // Alternative text used by fallback rendering.
 	Caption      []TextSegment // Optional caption text.
 	CaptionStyle TextStyle     // Optional caption style; unset values use the canonical caption defaults.
-	Width        float64       // Requested image width.
+	Width        float64       // Requested fixed image width.
 	Height       float64       // Requested image height.
-	MaxWidth     float64       // Maximum rendered width.
+	MaxWidth     float64       // Maximum fixed rendered width.
 	MaxHeight    float64       // Maximum rendered height.
-	Fit          ImageFitMode  // How the image fits inside its target box.
-	FocusX       float64       // Horizontal crop focus from 0 (left) through 1 (right).
-	FocusY       float64       // Vertical crop focus from 0 (top) through 1 (bottom).
-	FocusSet     bool          // Whether FocusX and FocusY are explicitly authored.
-	Align        string        // Horizontal alignment.
-	DPI          float64       // Optional image DPI override.
-	Decorative   bool          // Whether the image is an accessibility artifact rather than a figure.
-	Box          BoxStyle      // Image box style.
-	BoxRef       *BoxStyle     // Optional shared image box style.
+	WidthPercent uint32        // Container-relative width; 100% is 100_000_000.
+	// MaxWidthPercent is resolved against the image's containing content box.
+	// Percentage height is intentionally absent because ordinary flow has no
+	// definite containing height; Height=0 retains intrinsic/automatic sizing.
+	MaxWidthPercent uint32
+	Fit             ImageFitMode // How the image fits inside its target box.
+	FocusX          float64      // Horizontal crop focus from 0 (left) through 1 (right).
+	FocusY          float64      // Vertical crop focus from 0 (top) through 1 (bottom).
+	FocusSet        bool         // Whether FocusX and FocusY are explicitly authored.
+	Align           string       // Horizontal alignment.
+	DPI             float64      // Optional image DPI override.
+	Decorative      bool         // Whether the image is an accessibility artifact rather than a figure.
+	Box             BoxStyle     // Image box style.
+	BoxRef          *BoxStyle    // Optional shared image box style.
 }
 
 // DocumentBlockKind returns BlockKindImage.

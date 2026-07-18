@@ -26,6 +26,7 @@ type PaperSetTablePropertyRequest struct {
 	Property PaperTableProperty `json:"property"`
 	Split    string             `json:"split,omitempty"`
 	Points   float64            `json:"points,omitempty"`
+	Length   string             `json:"length,omitempty"`
 	Bool     bool               `json:"bool,omitempty"`
 }
 
@@ -46,7 +47,7 @@ func (w *Workspace) PaperSetTableProperty(request PaperSetTablePropertyRequest) 
 	var value paperedit.Value
 	switch request.Property {
 	case PaperTableSplit:
-		if node.Kind != paperlang.NodeTable || request.Points != 0 || request.Bool {
+		if node.Kind != paperlang.NodeTable || request.Points != 0 || request.Length != "" || request.Bool {
 			return PaperMutationResult{}, workspaceError("INVALID_TABLE_VALUE", "split targets a table without unrelated values", paperedit.ErrInvalidOperation)
 		}
 		split := strings.ToLower(strings.TrimSpace(request.Split))
@@ -55,17 +56,18 @@ func (w *Workspace) PaperSetTableProperty(request PaperSetTablePropertyRequest) 
 		}
 		value = paperedit.StringValue(split)
 	case PaperTableRepeatHeader:
-		if node.Kind != paperlang.NodeTable || request.Split != "" || request.Points != 0 {
+		if node.Kind != paperlang.NodeTable || request.Split != "" || request.Points != 0 || request.Length != "" {
 			return PaperMutationResult{}, workspaceError("INVALID_TABLE_VALUE", "repeat-header targets a table boolean", paperedit.ErrInvalidOperation)
 		}
 		value = paperedit.BoolValue(request.Bool)
 	case PaperTableTrackWidth, PaperTableTrackMin, PaperTableTrackMax:
-		if node.Kind != paperlang.NodeTableTrack || request.Split != "" || request.Bool || !finiteLayoutHandle(request.Points) || request.Points <= 0 || request.Points > 1_000_000 {
-			return PaperMutationResult{}, workspaceError("INVALID_TABLE_VALUE", "table track requires a finite positive point value", paperedit.ErrInvalidOperation)
+		resolved, ok := responsiveLayoutLengthValue(request.Length, request.Points, true, true)
+		if node.Kind != paperlang.NodeTableTrack || request.Split != "" || request.Bool || !ok {
+			return PaperMutationResult{}, workspaceError("INVALID_TABLE_VALUE", "table track requires auto, a bounded percentage, or a finite positive physical length", paperedit.ErrInvalidOperation)
 		}
-		value = paperedit.UnitValue(request.Points, "pt")
+		value = resolved
 	case PaperTableCellHeader:
-		if node.Kind != paperlang.NodeTableCell || request.Split != "" || request.Points != 0 {
+		if node.Kind != paperlang.NodeTableCell || request.Split != "" || request.Points != 0 || request.Length != "" {
 			return PaperMutationResult{}, workspaceError("INVALID_TABLE_VALUE", "header targets a cell boolean", paperedit.ErrInvalidOperation)
 		}
 		value = paperedit.BoolValue(request.Bool)

@@ -46,6 +46,9 @@ test('image and table payloads stay typed and selection-specific', () => {
   assert.equal(model.buildPayload(workspace, model.findSelection(root, '@art'), 'image', 'decorative', 'false').bool, false);
   assert.equal(model.buildPayload(workspace, model.findSelection(root, '@ledger'), 'table', 'split', 'avoid').split, 'avoid');
   assert.equal(model.buildPayload(workspace, model.findSelection(root, '@cell'), 'table', 'header', 'true').bool, true);
+  assert.equal(model.buildPayload(workspace, model.findSelection(root, '@art'), 'image', 'width', '50%').length, '50%');
+  assert.equal(model.buildPayload(workspace, model.findSelection(root, '@art'), 'image', 'height', 'auto').length, 'auto');
+  assert.equal(model.buildPayload(workspace, model.findSelection(root, '@track'), 'table', 'width', '100%').length, '100%');
   assert.throws(() => model.buildPayload(workspace, model.findSelection(root, '@track'), 'table', 'header', 'true'), /unavailable/);
   assert.equal(model.buildPayload(workspace, model.findSelection(root, '@page'), 'page', 'margin-left', '18').points, 18);
   assert.deepEqual(model.buildPayload(workspace, model.findSelection(root, '@badge'), 'canvas', 'left', '@left.right + 8pt'), {
@@ -61,6 +64,9 @@ test('payload contains review facts and semantic intent but no capabilities', ()
     source_revision: 'source-digest', plan_revision: 'plan-hash', scenario: '@print',
     operation: 'grid', target: '@left', property: 'track-size', points: 48.25,
   });
+  assert.equal(model.buildPayload(workspace, selection, 'grid', 'track-size', '50%').length, '50%');
+  assert.equal(model.buildPayload(workspace, selection, 'grid', 'track-size', 'auto').length, 'auto');
+  assert.ok(model.properties(selection, 'grid').includes('track-max'));
   const encoded = JSON.stringify(model.buildPayload(workspace, selection, 'box', 'background', '#AABBCC'));
   assert.equal(encoded.includes('capability'), false);
   assert.equal(encoded.includes('handle'), false);

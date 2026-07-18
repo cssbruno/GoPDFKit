@@ -64,6 +64,10 @@ func validateTypedPlanningImage(block layout.ImageBlock, path string) error {
 		block.Width < 0 || block.Height < 0 || block.MaxWidth < 0 || block.MaxHeight < 0 || block.DPI < 0 {
 		return fmt.Errorf("%s: image dimensions and DPI must be finite and non-negative", path)
 	}
+	if block.WidthPercent > 100_000_000 || block.MaxWidthPercent > 100_000_000 ||
+		block.Width > 0 && block.WidthPercent != 0 || block.MaxWidth > 0 && block.MaxWidthPercent != 0 {
+		return fmt.Errorf("%s: image width constraints must choose one fixed or container-relative value from 0%% through 100%%", path)
+	}
 	if block.DPI != 0 {
 		return fmt.Errorf("%s.dpi: explicit DPI overrides are unsupported by the exact image plan", path)
 	}
@@ -112,14 +116,21 @@ func (f *Document) measureTypedPlanningImageContext(ctx context.Context, block l
 	if availableContentWidth <= 0 {
 		return paperMeasuredImage{}, errors.New("image box decorations leave no content width")
 	}
-	width := layout.FirstPositive(block.Width, block.MaxWidth, availableContentWidth)
-	if block.MaxWidth > 0 && width > block.MaxWidth {
-		width = block.MaxWidth
+	percentWidth, percentErr := f.typedContainerPercentUnits(availableContentWidth, block.WidthPercent)
+	percentMaximum, maximumErr := f.typedContainerPercentUnits(availableContentWidth, block.MaxWidthPercent)
+	if percentErr != nil || maximumErr != nil {
+		return paperMeasuredImage{}, errors.New("image percentage width is outside the representable range")
+	}
+	width := layout.FirstPositive(percentWidth, block.Width, percentMaximum, block.MaxWidth, availableContentWidth)
+	maximumWidth := layout.FirstPositive(percentMaximum, block.MaxWidth)
+	if maximumWidth > 0 && width > maximumWidth {
+		width = maximumWidth
 	}
 	if width > availableContentWidth {
 		width = availableContentWidth
 	}
-	height := layout.FirstPositive(block.Height, block.MaxHeight, width*0.75)
+	intrinsicHeight := width * info.h / info.w
+	height := layout.FirstPositive(block.Height, block.MaxHeight, intrinsicHeight)
 	if block.MaxHeight > 0 && height > block.MaxHeight {
 		height = block.MaxHeight
 	}
