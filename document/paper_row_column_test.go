@@ -149,6 +149,18 @@ func TestPlanPaperRowSupportsWrappedFlexLayoutProperties(t *testing.T) {
 	}
 }
 
+func TestPlanPaperSupportsOneReadableNestedRowColumnLevel(t *testing.T) {
+	const source = "document:\n  page:\n    width: 220pt\n    height: 140pt\n    margin: 10pt\n    body:\n      row @outer:\n        column @details:\n          track-size: 70%\n          gap: 2pt\n          paragraph @first:\n            track-size: 14pt\n            font: \"Courier\"\n            size: 10pt\n            line-height: 12pt\n            text: \"First\"\n          paragraph @second:\n            track-size: 14pt\n            font: \"Courier\"\n            size: 10pt\n            line-height: 12pt\n            text: \"Second\"\n        paragraph @aside:\n          track-size: 30%\n          font: \"Courier\"\n          size: 10pt\n          line-height: 12pt\n          text: \"Aside\"\n"
+	plan, result, err := PlanPaper("nested-layout.paper", source)
+	if err != nil || !result.OK() || plan.Hash() == "" || plan.PageCount() != 1 {
+		t.Fatalf("PlanPaper() = plan=%#v result=%#v err=%v", plan, result, err)
+	}
+	projection := plan.plan.Projection()
+	if len(projection.Fragments) < 4 || len(projection.GlyphRuns) != 3 {
+		t.Fatalf("nested projection = fragments=%d runs=%d", len(projection.Fragments), len(projection.GlyphRuns))
+	}
+}
+
 func TestPlanPaperPlansMixedTopLevelRowColumnAtomically(t *testing.T) {
 	const source = "document:\n  page:\n    body:\n      paragraph @before:\n        text: \"before\"\n      row @stack:\n        paragraph @inside:\n          text: \"inside\"\n"
 	plan, result, err := PlanPaper("mixed.paper", source)

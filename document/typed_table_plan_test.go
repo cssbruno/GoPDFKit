@@ -624,7 +624,10 @@ func TestLayoutDocumentPlanTableRejectsUnrepresentedContractsWithPaths(t *testin
 		{"inverted column bounds", func(table *layout.TableBlock) { table.Columns[0].MinWidth, table.Columns[0].MaxWidth = 30, 20 }, "body[0].columns[0]"},
 		{"fixed width outside maximum", func(table *layout.TableBlock) { table.Columns[0].MaxWidth = table.Columns[0].Width - 1 }, "body[0].columns[0]"},
 		{"table padding", func(table *layout.TableBlock) { table.Box.Padding.Top = 1 }, "body[0]"},
-		{"margin", func(table *layout.TableBlock) { table.Body[0].Cells[0].Box.Margin.Top = 1 }, "body[0].rows[1].cells[0]"},
+		{"collapsed cell margin", func(table *layout.TableBlock) {
+			table.Style.BorderCollapse = true
+			table.Body[0].Cells[0].Box.Margin.Top = 1
+		}, "cell margins require separated table borders"},
 		{"dashed border", func(table *layout.TableBlock) {
 			table.Body[0].Cells[0].Box.Border.Top = layout.BorderSide{Width: 1, Style: "dashed"}
 		}, "only solid borders"},
@@ -651,10 +654,11 @@ func TestTypedTableDecorationsPaddingAlignmentAndCommandOrder(t *testing.T) {
 	table := typedTableTestBlock(true)
 	table.Box.BackgroundColor = layout.DocumentColor{R: 240, G: 240, B: 240, Set: true}
 	cell := &table.Header[0].Cells[0]
-	cell.Box.Padding = layout.Spacing{Top: 2, Right: 3, Bottom: 4, Left: 5}
-	cell.Box.BackgroundColor = layout.DocumentColor{R: 10, G: 20, B: 30, Set: true}
+	sharedBox := layout.BoxStyle{Margin: layout.Spacing{Top: 1, Right: 2, Bottom: 3, Left: 4}, Padding: layout.Spacing{Top: 2, Right: 3, Bottom: 4, Left: 5},
+		BackgroundColor: layout.DocumentColor{R: 10, G: 20, B: 30, Set: true}}
 	side := layout.BorderSide{Width: 1, Style: "solid", Color: layout.DocumentColor{R: 40, G: 50, B: 60, Set: true}}
-	cell.Box.Border = layout.BorderStyle{Top: side, Right: side, Bottom: side, Left: side}
+	sharedBox.Border = layout.BorderStyle{Top: side, Right: side, Bottom: side, Left: side}
+	cell.BoxRef = &sharedBox
 	cell.Align = "right"
 	cell.VerticalAlign = "bottom"
 	plan, err := typedTableTestPlanner().PlanLayoutDocument(&layout.LayoutDocument{Body: []layout.Block{table}})
@@ -681,6 +685,12 @@ func TestTypedTableDecorationsPaddingAlignmentAndCommandOrder(t *testing.T) {
 	for _, fragment := range p.Fragments {
 		if fragment.Key == "@typed-table-r1-c1" {
 			decoratedHeaders++
+			if fragment.BorderBox.X.Points() != fragment.MarginBox.X.Points()+4 ||
+				fragment.BorderBox.Y.Points() != fragment.MarginBox.Y.Points()+1 ||
+				fragment.BorderBox.Width.Points() != fragment.MarginBox.Width.Points()-6 ||
+				fragment.BorderBox.Height.Points() != fragment.MarginBox.Height.Points()-4 {
+				t.Fatalf("cell margin geometry = margin %#v border %#v", fragment.MarginBox, fragment.BorderBox)
+			}
 		}
 	}
 	for _, command := range p.Commands {

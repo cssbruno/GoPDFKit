@@ -409,6 +409,16 @@ var rowColumnTableProperties = func() map[string]bool {
 	}
 	return properties
 }()
+var rowColumnNestedProperties = func() map[string]bool {
+	properties := copyPropertySet(rowColumnProperties)
+	for _, name := range []string{
+		"track", "track-size", "track-min", "track-max", "track-weight", "track-grow", "track-shrink",
+		"cross-min", "cross-max",
+	} {
+		properties[name] = true
+	}
+	return properties
+}()
 
 func (c *compiler) compileDocumentProperties(properties map[string]paperlang.Property) {
 	if property, ok := properties["theme"]; ok {
@@ -1102,6 +1112,33 @@ func (c *compiler) decodeImageSource(source string) ([]byte, string, string) {
 
 func (c *compiler) compileRowColumn(node *paperlang.Node) {
 	properties, children := c.members(node, rowColumnProperties)
+	block := c.compileRowColumnSurface(node, properties)
+	bodyIndex := len(c.result.Document.Body)
+	c.mapNode(node, bodyIndex, -1)
+	for _, child := range children {
+		if child.Kind != paperlang.NodeParagraph && child.Kind != paperlang.NodeHeading && child.Kind != paperlang.NodeImage && child.Kind != paperlang.NodeTable && child.Kind != paperlang.NodeRow && child.Kind != paperlang.NodeColumn {
+			c.unsupportedNode(child, "row and column support paragraph, heading, image, table, and one nested row/column level")
+			continue
+		}
+		itemIndex := len(block.Items)
+		item, textNodes := c.compileRowColumnItem(child, bodyIndex, itemIndex)
+		block.Items = append(block.Items, item)
+		c.mapNestedNode(child, bodyIndex, itemIndex, -1)
+		if image, ok := item.Block.(layout.ImageBlock); ok {
+			c.recordImageResourceMapping(image)
+		}
+		for textIndex, textNode := range textNodes {
+			c.mapNestedNode(textNode, bodyIndex, itemIndex, textIndex)
+		}
+	}
+	if len(block.Items) == 0 {
+		c.add("PAPER_COMPILE_ROW_COLUMN_ITEMS", fmt.Sprintf("%s has no compilable children", node.Kind), "add one or more supported children", node.HeaderSpan)
+	}
+	c.result.Document.Body = append(c.result.Document.Body, block)
+	c.recordComputedStyle(node, bodyIndex)
+}
+
+func (c *compiler) compileRowColumnSurface(node *paperlang.Node, properties map[string]paperlang.Property) layout.RowColumnBlock {
 	direction := layout.RowDirection
 	if node.Kind == paperlang.NodeColumn {
 		direction = layout.ColumnDirection
@@ -1165,37 +1202,17 @@ func (c *compiler) compileRowColumn(node *paperlang.Node) {
 	if property, ok := properties["reverse-main"]; ok {
 		block.ReverseMain, _ = c.boolProperty(property)
 	}
-	bodyIndex := len(c.result.Document.Body)
-	c.mapNode(node, bodyIndex, -1)
-	for _, child := range children {
-		if child.Kind != paperlang.NodeParagraph && child.Kind != paperlang.NodeHeading && child.Kind != paperlang.NodeImage && child.Kind != paperlang.NodeTable {
-			c.unsupportedNode(child, "row and column support paragraph, heading, image, and table children")
-			continue
-		}
-		itemIndex := len(block.Items)
-		item, textNodes := c.compileRowColumnItem(child)
-		block.Items = append(block.Items, item)
-		c.mapNestedNode(child, bodyIndex, itemIndex, -1)
-		if _, ok := item.Block.(layout.ImageBlock); ok {
-			c.recordImageResourceMapping(item.Block.(layout.ImageBlock))
-		}
-		for textIndex, textNode := range textNodes {
-			c.mapNestedNode(textNode, bodyIndex, itemIndex, textIndex)
-		}
-	}
-	if len(block.Items) == 0 {
-		c.add("PAPER_COMPILE_ROW_COLUMN_ITEMS", fmt.Sprintf("%s has no compilable children", node.Kind), "add one or more paragraph or heading children", node.HeaderSpan)
-	}
-	c.result.Document.Body = append(c.result.Document.Body, block)
-	c.recordComputedStyle(node, bodyIndex)
+	return block
 }
 
-func (c *compiler) compileRowColumnItem(node *paperlang.Node) (layout.RowColumnItem, []*paperlang.Node) {
+func (c *compiler) compileRowColumnItem(node *paperlang.Node, bodyIndex, itemIndex int) (layout.RowColumnItem, []*paperlang.Node) {
 	allowed := rowColumnChildProperties
 	if node.Kind == paperlang.NodeImage {
 		allowed = rowColumnImageProperties
 	} else if node.Kind == paperlang.NodeTable {
 		allowed = rowColumnTableProperties
+	} else if node.Kind == paperlang.NodeRow || node.Kind == paperlang.NodeColumn {
+		allowed = rowColumnNestedProperties
 	}
 	properties, children := c.members(node, allowed)
 	var textNodes []*paperlang.Node
@@ -1204,6 +1221,31 @@ func (c *compiler) compileRowColumnItem(node *paperlang.Node) (layout.RowColumnI
 		child = c.compileImageBlock(node, properties, children)
 	} else if node.Kind == paperlang.NodeTable {
 		child = c.compileTableBlock(node, properties, children)
+	} else if node.Kind == paperlang.NodeRow || node.Kind == paperlang.NodeColumn {
+		nested := c.compileRowColumnSurface(node, properties)
+		for nestedIndex, nestedChild := range children {
+			if nestedChild.Kind == paperlang.NodeRow || nestedChild.Kind == paperlang.NodeColumn {
+				c.unsupportedNode(nestedChild, "readable nested row/column source is bounded to one nested level")
+				continue
+			}
+			if nestedChild.Kind != paperlang.NodeParagraph && nestedChild.Kind != paperlang.NodeHeading && nestedChild.Kind != paperlang.NodeImage && nestedChild.Kind != paperlang.NodeTable {
+				c.unsupportedNode(nestedChild, "nested row/column supports paragraph, heading, image, and table children")
+				continue
+			}
+			nestedItem, nestedText := c.compileRowColumnItem(nestedChild, bodyIndex, itemIndex)
+			nested.Items = append(nested.Items, nestedItem)
+			c.mapNestedNode(nestedChild, bodyIndex, itemIndex, nestedIndex)
+			if image, ok := nestedItem.Block.(layout.ImageBlock); ok {
+				c.recordImageResourceMapping(image)
+			}
+			for _, textNode := range nestedText {
+				c.mapNestedNode(textNode, bodyIndex, itemIndex, nestedIndex)
+			}
+		}
+		if len(nested.Items) == 0 {
+			c.add("PAPER_COMPILE_ROW_COLUMN_ITEMS", fmt.Sprintf("nested %s has no compilable children", node.Kind), "add one or more supported children", node.HeaderSpan)
+		}
+		child = nested
 	} else {
 		style := c.compileTextStyle(node, properties)
 		segments, nodes := c.compileTextChildren(node, children)

@@ -862,9 +862,11 @@ as completed behavior.
   [end-to-end tests](document/paper_row_column_test.go)). The readable surface
   now also exposes wrap/wrap-reverse, cross gaps and extents, main/cross/content
   alignment, reverse flow, fixed and percentage min/max constraints, exact
-  grow/shrink factors, and direct image/table children. Empty HTML and Paper
-  table cells retain deterministic geometry and semantic ownership. General
-  multi-page fragmentation remains outside the bounded row/column contract.
+  grow/shrink factors, direct image/table children, image captions, and one
+  readable nested row/column level with stable source mappings. Empty HTML and
+  Paper table cells retain deterministic geometry and semantic ownership.
+  General multi-page fragmentation and deeper readable nesting remain outside
+  the bounded row/column contract.
 - [x] Implement an initial bounded fixed-point grid kernel with fixed/auto/
   fractional tracks, deterministic remainder distribution, intrinsic span
   contributions, canonical row-major placement, overlap detection, and exact
@@ -984,7 +986,7 @@ as completed behavior.
   [tests](document/typed_table_plan_test.go)). Tables nested through the exact
   section/clause/note lowering and row/column siblings now retain source order,
   title/first-content keeps, explicit clause breaks, variable shells/counters,
-  fallback leaf semantics, cancellation, capture, and PDF replay. A bounded
+  canonical leaf semantics, cancellation, capture, and PDF replay. A bounded
   one-page table can now occupy an individual row/column track: its exact table
   fragments, paths, fonts, links/destinations, semantic hierarchy, and reading
   order are translated into the shared container display plan without
@@ -1009,8 +1011,11 @@ as completed behavior.
   [tests](document/typed_table_plan_test.go)). Structured caption segments now
   preserve external and internal links, destinations, semantics, and immutable
   source snapshots, and cell StyleRef values are snapshotted before intrinsic
-  and wrapped measurement. Structured table cells now lower ordered/unordered
-  list markers, section/clause/note titles and bodies, and content-addressed
+  and wrapped measurement. Cell BoxRef values, separated-cell margins, padding,
+  backgrounds, and solid borders are likewise snapshotted into exact margin/
+  border geometry; collapsed-border tables reject nonzero cell margins because
+  they cannot preserve a shared-edge contract. Structured table cells now lower
+  ordered/unordered list markers, section/clause/note titles and bodies, and content-addressed
   inline images through the same intrinsic-measurement and final-paint sequence;
   image bytes deduplicate in the bounded document resource catalog, captions
   remain in authored order, and figure/artifact/heading child semantics retain
@@ -1040,7 +1045,7 @@ as completed behavior.
   table-style parity are explicitly outside this bounded adapter contract and
   fail atomically. Typed image boxes
   now snapshot value/reference styles and lower bounded padding, background
-  fills, and independent solid borders into exact outer/
+  fills, independent solid borders, and exact non-negative margins into outer/
   content geometry and immutable fill-image-stroke paint order, with plan,
   semantic, deterministic PDF, invalid-input, and race evidence
   ([image adapter](document/typed_image_plan.go),
@@ -1051,11 +1056,10 @@ as completed behavior.
   capture, cancellation, PDF, and race evidence
   ([container compositor](document/paper_row_column.go),
   [tests](document/typed_row_column_image_test.go)). Structured container-image
-  captions inside fixed row/column image tracks fail atomically because those
-  tracks do not represent caption geometry. Ambient filesystem image lookup
-  remains an explicit-resource policy concern rather than an implicit layout
-  capability
-  ([failure contract](document/typed_row_column_image_test.go)).
+  captions are measured below their images inside the same fixed row/column
+  track, participate in track height, retain figure ownership, and preserve
+  cancellation atomicity. Ambient filesystem image lookup remains an explicit-
+  resource policy concern rather than an implicit layout capability.
 - [x] Map sections, clauses, metadata grids, signatures, and QR. Exact
   adapter coverage includes unstyled section/clause/note containers,
   metadata grids with stable equal-width tracks and incomplete final rows, plus

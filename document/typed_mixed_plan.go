@@ -431,9 +431,7 @@ func typedMixedExpandContainers(blocks []layout.Block, path string) ([]layout.Bl
 			if policyErr != nil {
 				return nil, policyErr
 			}
-			if block.StyleRef != nil {
-				return nil, fmt.Errorf("%s: note title style references are unsupported", blockPath)
-			}
+			block.Style, block.StyleRef = block.EffectiveStyle(), nil
 			if block.Title != "" {
 				expanded = append(expanded, layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: block.Title}}, Style: block.Style,
 					Box: layout.BoxStyle{KeepWithNext: policy.keepTogether}})

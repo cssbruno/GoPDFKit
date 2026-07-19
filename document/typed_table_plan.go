@@ -33,6 +33,7 @@ type typedTableCellMeasurement struct {
 	blocks     []paperRowColumnMeasurement
 	content    []typedTableCellContent
 	segments   []layout.TextSegment
+	margins    [4]layoutengine.Fixed // top, right, bottom, left
 	padding    [4]layoutengine.Fixed // top, right, bottom, left
 	background layoutengine.CoreRGBColor
 	borders    [4]typedTableBorder
@@ -405,6 +406,13 @@ func validateTypedTableSurface(table layout.TableBlock, path string) error {
 		if row.Orphans > 1<<20 || row.Widows > 1<<20 {
 			return typedTableUnsupported(fmt.Sprintf("%s.rows[%d]", path, index), "widow and orphan counts exceed the bounded row policy limit")
 		}
+		if table.Style.BorderCollapse {
+			for cellIndex, cell := range row.Cells {
+				if cell.EffectiveBox().Margin != (layout.Spacing{}) {
+					return typedTableUnsupported(fmt.Sprintf("%s.rows[%d].cells[%d].box.margin", path, index, cellIndex), "cell margins require separated table borders")
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -444,18 +452,25 @@ func (f *Document) measureTypedTableCellIntrinsic(ctx context.Context, doc *layo
 		return 0, 0, err
 	}
 	cell := placement.cell
-	if cell.BoxRef != nil || cell.Box.Margin != (layout.Spacing{}) {
-		return 0, 0, typedTableUnsupported(placement.path, "cell box references and margins are unsupported")
-	}
+	cell.Box = cell.EffectiveBox()
+	cell.BoxRef = nil
 	if cell.Box.Orphans > 1<<20 || cell.Box.Widows > 1<<20 {
 		return 0, 0, typedTableUnsupported(placement.path, "widow and orphan counts exceed the bounded cell policy limit")
 	}
 	cell.Style, cell.StyleRef = cell.EffectiveStyle(), nil
-	padding := cell.Box.Padding.Left + cell.Box.Padding.Right
-	if !finiteNumbers(padding) || padding < 0 {
-		return 0, 0, typedTableUnsupported(placement.path+".box.padding", "horizontal padding must be finite and non-negative")
+	for _, value := range []float64{cell.Box.Padding.Top, cell.Box.Padding.Right, cell.Box.Padding.Bottom, cell.Box.Padding.Left} {
+		if !finiteNumbers(value) || value < 0 {
+			return 0, 0, typedTableUnsupported(placement.path+".box.padding", "padding must be finite and non-negative")
+		}
 	}
-	base := 2*f.cMargin + padding
+	for _, value := range []float64{cell.Box.Margin.Top, cell.Box.Margin.Right, cell.Box.Margin.Bottom, cell.Box.Margin.Left} {
+		if !finiteNumbers(value) || value < 0 {
+			return 0, 0, typedTableUnsupported(placement.path+".box.margin", "margins must be finite and non-negative")
+		}
+	}
+	padding := cell.Box.Padding.Left + cell.Box.Padding.Right
+	margin := cell.Box.Margin.Left + cell.Box.Margin.Right
+	base := 2*f.cMargin + padding + margin
 	minimum, preferred := base, base
 	blocks, err := typedTableExpandedCellBlocks(cell.Blocks, cell.EffectiveStyle(), placement.path)
 	if err != nil {
@@ -474,7 +489,7 @@ func (f *Document) measureTypedTableCellIntrinsic(ctx context.Context, doc *layo
 			if measureErr != nil {
 				return 0, 0, measureErr
 			}
-			width := f.PointConvert(measured.width.Points()) + base
+			width := f.PointConvert(measured.flowWidth().Points()) + base
 			if width > minimum {
 				minimum = width
 			}
@@ -501,7 +516,7 @@ func (f *Document) measureTypedTableCellIntrinsic(ctx context.Context, doc *layo
 			continue
 		}
 		if nested, ok := block.(layout.RowColumnBlock); ok {
-			minimumWidth, preferredWidth, widthErr := typedNestedRowColumnIntrinsicWidth(nested, padding)
+			minimumWidth, preferredWidth, widthErr := typedNestedRowColumnIntrinsicWidth(nested, base)
 			if widthErr != nil {
 				return 0, 0, typedTableUnsupported(fmt.Sprintf("%s.blocks[%d]", placement.path, blockIndex), widthErr.Error())
 			}
@@ -562,9 +577,8 @@ func (f *Document) measureTypedTableCellIntrinsic(ctx context.Context, doc *layo
 
 func (f *Document) measureTypedTableCell(ctx context.Context, doc *layout.LayoutDocument, placement typedTablePlacement, width layoutengine.Fixed, tableBackground layout.DocumentColor) (typedTableCellMeasurement, error) {
 	cell := placement.cell
-	if cell.BoxRef != nil || cell.Box.Margin != (layout.Spacing{}) {
-		return typedTableCellMeasurement{}, typedTableUnsupported(placement.path, "cell box references and margins are unsupported")
-	}
+	cell.Box = cell.EffectiveBox()
+	cell.BoxRef = nil
 	if cell.Box.Orphans > 1<<20 || cell.Box.Widows > 1<<20 {
 		return typedTableCellMeasurement{}, typedTableUnsupported(placement.path, "widow and orphan counts exceed the bounded cell policy limit")
 	}
@@ -604,6 +618,17 @@ func (f *Document) measureTypedTableCell(ctx context.Context, doc *layout.Layout
 		}
 	}
 	result.scope = scope
+	margins := []float64{cell.Box.Margin.Top, cell.Box.Margin.Right, cell.Box.Margin.Bottom, cell.Box.Margin.Left}
+	for index, value := range margins {
+		if !finiteNumbers(value) || value < 0 {
+			return typedTableCellMeasurement{}, typedTableUnsupported(placement.path+".box.margin", "margins must be finite and non-negative")
+		}
+		fixed, err := layoutengine.FixedFromPoints(f.UnitToPointConvert(value))
+		if err != nil {
+			return typedTableCellMeasurement{}, err
+		}
+		result.margins[index] = fixed
+	}
 	padding := []float64{cell.Box.Padding.Top, cell.Box.Padding.Right, cell.Box.Padding.Bottom, cell.Box.Padding.Left}
 	for index, value := range padding {
 		if !finiteNumbers(value) || value < 0 {
@@ -652,13 +677,21 @@ func (f *Document) measureTypedTableCell(ctx context.Context, doc *layout.Layout
 		}
 		result.borders[index] = typedTableBorder{width: fixed, color: layoutengine.CoreRGBColor{R: uint8(color.R), G: uint8(color.G), B: uint8(color.B), Set: true}} // #nosec G115 -- low-width representation is explicitly normalized before packing
 	}
-	innerWidth, err := width.Sub(result.padding[1])
+	innerWidth, err := width.Sub(result.margins[1])
+	if err != nil {
+		return typedTableCellMeasurement{}, err
+	}
+	innerWidth, err = innerWidth.Sub(result.margins[3])
+	if err != nil {
+		return typedTableCellMeasurement{}, err
+	}
+	innerWidth, err = innerWidth.Sub(result.padding[1])
 	if err != nil {
 		return typedTableCellMeasurement{}, err
 	}
 	innerWidth, err = innerWidth.Sub(result.padding[3])
 	if err != nil || innerWidth <= 0 {
-		return typedTableCellMeasurement{}, typedTableUnsupported(placement.path+".box.padding", "horizontal padding consumes the cell width")
+		return typedTableCellMeasurement{}, typedTableUnsupported(placement.path+".box", "horizontal margins and padding consume the cell width")
 	}
 	blocks, expandErr := typedTableExpandedCellBlocks(cell.Blocks, cell.EffectiveStyle(), placement.path)
 	if expandErr != nil {
@@ -671,6 +704,8 @@ func (f *Document) measureTypedTableCell(ctx context.Context, doc *layout.Layout
 		}
 		result.height, _ = result.height.Add(result.padding[0])
 		result.height, _ = result.height.Add(result.padding[2])
+		result.height, _ = result.height.Add(result.margins[0])
+		result.height, _ = result.height.Add(result.margins[2])
 		return result, nil
 	}
 	texts := make([]string, 0, len(blocks))
@@ -692,7 +727,7 @@ func (f *Document) measureTypedTableCell(ctx context.Context, doc *layout.Layout
 				result.content[len(result.content)-1].actualText = alt
 				texts = append(texts, alt)
 			}
-			result.height, err = result.height.Add(measured.height)
+			result.height, err = result.height.Add(measured.flowHeight())
 			if err != nil {
 				return typedTableCellMeasurement{}, err
 			}
@@ -786,6 +821,14 @@ func (f *Document) measureTypedTableCell(ctx context.Context, doc *layout.Layout
 		return typedTableCellMeasurement{}, err
 	}
 	result.height, err = result.height.Add(result.padding[2])
+	if err != nil {
+		return typedTableCellMeasurement{}, err
+	}
+	result.height, err = result.height.Add(result.margins[0])
+	if err != nil {
+		return typedTableCellMeasurement{}, err
+	}
+	result.height, err = result.height.Add(result.margins[2])
 	if err != nil {
 		return typedTableCellMeasurement{}, err
 	}
@@ -1413,7 +1456,8 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 				}
 			}
 			originalFragmentID := originalFragments[fragmentIndex].ID
-			fragment := fragments[int(page.Fragments.Start)+fragmentIndex-int(originalRange.Start)]
+			plannedFragmentIndex := int(page.Fragments.Start) + fragmentIndex - int(originalRange.Start)
+			fragment := fragments[plannedFragmentIndex]
 			measurement, ok := byNode[fragment.Node]
 			if !ok {
 				return layoutengine.LayoutPlan{}, fmt.Errorf("document: typed table fragment %d has no cell measurement", fragment.ID)
@@ -1425,6 +1469,20 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 			if remaining < 0 {
 				remaining = 0
 			}
+			marginInsets := layoutengine.Insets{
+				Top: measurement.margins[0], Right: measurement.margins[1],
+				Bottom: measurement.margins[2], Left: measurement.margins[3],
+			}
+			marginBox := fragment.ContentBox
+			borderBox, err := marginBox.Inset(marginInsets)
+			if err != nil {
+				return layoutengine.LayoutPlan{}, typedTableUnsupported("table.cell.box.margin", "cell margins consume the allocated cell box")
+			}
+			fragment.MarginBox = marginBox
+			fragment.BorderBox = borderBox
+			fragment.PaddingBox = borderBox
+			fragment.ContentBox = borderBox
+			fragments[plannedFragmentIndex] = fragment
 			yOffset := layoutengine.Fixed(0)
 			switch measurement.vertical {
 			case "M", "MIDDLE", "C", "CENTER":
@@ -1669,7 +1727,7 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 					if err != nil {
 						return layoutengine.LayoutPlan{}, err
 					}
-					target, err := layoutengine.NewRect(targetX, targetY, availableWidth, image.height)
+					target, err := layoutengine.NewRect(targetX, targetY, availableWidth, image.flowHeight())
 					if err != nil {
 						return layoutengine.LayoutPlan{}, err
 					}
@@ -1677,12 +1735,13 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 					if err != nil {
 						return layoutengine.LayoutPlan{}, err
 					}
-					outer, err := layoutengine.NewRect(x, targetY, image.width, image.height)
+					marginBox, outer, err := image.boxes(x, targetY)
 					if err != nil {
 						return layoutengine.LayoutPlan{}, err
 					}
 					contentKey, contentNodeID := contentNode(fragment, contentIndex)
 					contentFragment := typedTableContentFragment(fragment, contentKey, contentNodeID, outer)
+					contentFragment.MarginBox = marginBox
 					contentFragment.ID = layoutengine.FragmentID(len(fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 					fragments = append(fragments, contentFragment)
 					if image.background.Set {
@@ -1718,7 +1777,7 @@ func composeTypedTablePlan(ctx context.Context, base layoutengine.LayoutPlan, me
 						strokes = append(strokes, layoutengine.PlannedStroke{Path: uint32(len(paths) - 1), Color: border.color, Width: border.width, Fragment: contentFragment.ID}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 						items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)})                                    // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 					}
-					blockOffset, err = blockOffset.Add(image.height)
+					blockOffset, err = blockOffset.Add(image.flowHeight())
 					if err != nil {
 						return layoutengine.LayoutPlan{}, err
 					}

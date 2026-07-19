@@ -130,3 +130,26 @@ func TestCompileRowColumnExposesWrapAlignmentAndFlexConstraints(t *testing.T) {
 		t.Fatalf("row/item = %#v / %#v", row, item)
 	}
 }
+
+func TestCompileRowColumnAcceptsOneReadableNestedLevel(t *testing.T) {
+	const source = "document:\n  page:\n    body:\n      row @outer:\n        column @details:\n          track-size: 70%\n          gap: 2pt\n          paragraph @first:\n            track-size: 14pt\n            text: \"First\"\n          paragraph @second:\n            track-size: 14pt\n            text: \"Second\"\n        paragraph @aside:\n          track-size: 30%\n          text: \"Aside\"\n"
+	parsed := paperlang.Parse("nested-layout.paper", source)
+	compiled := Compile(parsed.AST)
+	if !parsed.OK() || !compiled.OK() {
+		t.Fatalf("diagnostics = %+v / %+v", parsed.Diagnostics, compiled.Diagnostics)
+	}
+	outer := compiled.Document.Body[0].(layout.RowColumnBlock)
+	nested, ok := outer.Items[0].Block.(layout.RowColumnBlock)
+	if !ok || nested.Direction != layout.ColumnDirection || nested.Gap != 2 || len(nested.Items) != 2 ||
+		outer.Items[0].Track.BasisPercent != 70_000_000 || nested.Items[0].Track.Size != 14 {
+		t.Fatalf("nested layout = %#v", outer.Items[0])
+	}
+	mappings := map[string]NodeMapping{}
+	for _, mapping := range compiled.Mapping.Nodes {
+		mappings[mapping.ID] = mapping
+	}
+	if mappings["@details"].SegmentIndex != 0 || mappings["@first"].SegmentIndex != 0 || mappings["@first"].NestedBlockIndex != 0 ||
+		mappings["@second"].NestedBlockIndex != 1 {
+		t.Fatalf("nested mappings = %+v", mappings)
+	}
+}

@@ -1181,7 +1181,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			return block.box.outerHeight(block.gridRow.height)
 		}
 		if block.image != nil {
-			return block.image.height, nil
+			return block.image.flowHeight(), nil
 		}
 		height, err := block.box.contentHeight(block.lines)
 		if err != nil {
@@ -1516,7 +1516,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 					displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				}
 				if cell.image != nil {
-					imageBox, imageErr := layoutengine.NewRect(x, contentY, cell.image.width, cell.image.height)
+					_, imageBox, imageErr := cell.image.boxes(x, contentY)
 					if imageErr != nil {
 						return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] cell %d image box: %w", blockIndex, cellIndex, imageErr)
 					}
@@ -1583,14 +1583,15 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			continue
 		}
 		if block.image != nil {
-			if block.image.height > body.Height {
-				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] image is taller than an empty body page", blockIndex)
+			flowHeight := block.image.flowHeight()
+			if flowHeight > body.Height {
+				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] image margin box is taller than an empty body page (%.3fpt > %.3fpt)", blockIndex, flowHeight.Points(), body.Height.Points())
 			}
-			if block.image.height > available && !regionEmpty {
+			if flowHeight > available && !regionEmpty {
 				pendingBreak = &pendingPaperBreak{
 					reason: layoutengine.BreakInsufficientRemainingBodySpace, fromPage: pageNumber,
 					preceding: geometry.Fragments[len(geometry.Fragments)-1].ID,
-					required:  block.image.height, available: available,
+					required:  flowHeight, available: available,
 				}
 				if err := advanceBodyPage(); err != nil {
 					return layoutengine.LayoutPlan{}, err
@@ -1604,7 +1605,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			if err != nil {
 				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] image x: %w", blockIndex, err)
 			}
-			box, err := layoutengine.NewRect(x, cursorY, block.image.width, block.image.height)
+			marginBox, box, err := block.image.boxes(x, cursorY)
 			if err != nil {
 				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] image box: %w", blockIndex, err)
 			}
@@ -1615,7 +1616,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			}
 			geometry.Fragments = append(geometry.Fragments, layoutengine.Fragment{
 				ID: fragmentID, Node: block.node, Key: block.key, Instance: block.instance,
-				Page: pageNumber, Region: layoutengine.RegionBody, BorderBox: box, ContentBox: contentBox,
+				Page: pageNumber, Region: layoutengine.RegionBody, MarginBox: marginBox, BorderBox: box, ContentBox: contentBox,
 				Continuation: layoutengine.ContinuationWhole, Source: block.source,
 			})
 			page.Fragments.Count++
@@ -1660,11 +1661,11 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 				strokes = append(strokes, layoutengine.PlannedStroke{Path: uint32(len(paths) - 1), Color: border.color, Width: border.width, Fragment: fragmentID}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				displayItems = append(displayItems, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)})              // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			}
-			cursorY, err = cursorY.Add(block.image.height)
+			cursorY, err = cursorY.Add(flowHeight)
 			if err != nil {
 				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] image cursor: %w", blockIndex, err)
 			}
-			available, err = available.Sub(block.image.height)
+			available, err = available.Sub(flowHeight)
 			if err != nil {
 				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] image remaining height: %w", blockIndex, err)
 			}
@@ -2594,9 +2595,7 @@ func paperExpandPlanningBlock(ctx context.Context, expanded *[]paperPlanningBloc
 	case layout.NoteBoxBlock:
 		policy, visualBox := paperContainerBoxPolicy(block.EffectiveBox())
 		start := len(*expanded)
-		if block.StyleRef != nil {
-			return fmt.Errorf("%s: note title style references are unsupported", path)
-		}
+		block.Style, block.StyleRef = block.EffectiveStyle(), nil
 		if strings.TrimSpace(block.Title) != "" {
 			appendParagraph(layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: block.Title}}, Style: block.Style}, path+".title")
 		}

@@ -22,10 +22,17 @@ type paperRowColumnMeasurement struct {
 	role         layoutengine.SemanticRole
 	heading      uint8
 	image        *paperMeasuredImage
+	caption      *paperRowColumnCaptionMeasurement
 	alt          string
 	table        *layoutengine.LayoutPlanProjection
 	tableBodies  []layoutengine.Rect
 	tableHeights []layoutengine.Fixed
+}
+
+type paperRowColumnCaptionMeasurement struct {
+	plan   layoutengine.LayoutPlanProjection
+	body   layoutengine.Rect
+	height layoutengine.Fixed
 }
 
 type paperNestedTableSemantics struct {
@@ -225,9 +232,6 @@ func (f *Document) planPaperRowColumnMappedDepth(ctx context.Context, doc *layou
 			}
 		} else if imageBlock, isImage := item.Block.(layout.ImageBlock); isImage {
 			path := fmt.Sprintf("body[%d].items[%d].image", bodyIndex, index)
-			if len(imageBlock.Caption) != 0 {
-				return layoutengine.LayoutPlan{}, newTypedShadowUnsupported(typedShadowBlockKind, fmt.Sprintf("row/column child %d image captions are not represented", index))
-			}
 			if err := validateTypedPlanningImage(imageBlock, path); err != nil {
 				return layoutengine.LayoutPlan{}, err
 			}
@@ -235,8 +239,20 @@ func (f *Document) planPaperRowColumnMappedDepth(ctx context.Context, doc *layou
 			if measureErr != nil {
 				return layoutengine.LayoutPlan{}, fmt.Errorf("row/column child %d: %w", index, measureErr)
 			}
-			measurement.height = measured.height
+			measurement.height = measured.flowHeight()
 			measurement.image = &measured
+			if len(imageBlock.Caption) != 0 {
+				captionStyle := layout.MergedTextStyle(layout.TextStyle{FontFamily: "Helvetica", FontSize: 9, Italic: true, Align: "C", LineHeight: 10}, imageBlock.CaptionStyle)
+				caption, captionErr := f.measurePaperRowColumnChild(ctx, doc, layout.ParagraphBlock{Segments: imageBlock.Caption, Style: captionStyle}, left, top, right, bottom, measureWidths[index])
+				if captionErr != nil {
+					return layoutengine.LayoutPlan{}, fmt.Errorf("row/column child %d caption: %w", index, captionErr)
+				}
+				measurement.caption = &paperRowColumnCaptionMeasurement{plan: caption.plan, body: caption.body, height: caption.height}
+				measurement.height, captionErr = measurement.height.Add(caption.height)
+				if captionErr != nil {
+					return layoutengine.LayoutPlan{}, fmt.Errorf("row/column child %d caption height overflows", index)
+				}
+			}
 			measurement.alt = imageBlock.Alt
 			measurement.role = layoutengine.SemanticRoleArtifact
 			if imageBlock.Alt != "" {
@@ -281,12 +297,12 @@ func (f *Document) planPaperRowColumnMappedDepth(ctx context.Context, doc *layou
 				children[index].CrossSize = measureWidths[index]
 			}
 			if measurement.image != nil {
-				children[index].CrossSize = measurement.image.width
+				children[index].CrossSize = measurement.image.flowWidth()
 			} else if measurement.table != nil {
 				children[index].CrossSize = measureWidths[index]
 			}
 			if explicitCross[index] > 0 {
-				if measurement.image != nil && explicitCross[index] < measurement.image.width {
+				if measurement.image != nil && explicitCross[index] < measurement.image.flowWidth() {
 					return layoutengine.LayoutPlan{}, newTypedShadowUnsupported(typedShadowGeometry, fmt.Sprintf("row/column child %d cross size is smaller than its measured image", index))
 				}
 				children[index].CrossSize = explicitCross[index]
@@ -871,11 +887,12 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 		}
 		if measurement.image != nil {
 			image := *measurement.image
+			itemBox := fragment.BorderBox
 			x, err := image.targetX(fragment.BorderBox)
 			if err != nil {
 				return layoutengine.LayoutPlan{}, fmt.Errorf("document: row/column image %d: %w", childIndex, err)
 			}
-			outer, err := layoutengine.NewRect(x, fragment.BorderBox.Y, image.width, image.height)
+			marginBox, outer, err := image.boxes(x, fragment.BorderBox.Y)
 			if err != nil {
 				return layoutengine.LayoutPlan{}, err
 			}
@@ -883,10 +900,17 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 			if err != nil {
 				return layoutengine.LayoutPlan{}, err
 			}
-			projection.Fragments[childIndex].MarginBox = outer
-			projection.Fragments[childIndex].BorderBox = outer
-			projection.Fragments[childIndex].PaddingBox = content
-			projection.Fragments[childIndex].ContentBox = content
+			if measurement.caption == nil {
+				projection.Fragments[childIndex].MarginBox = marginBox
+				projection.Fragments[childIndex].BorderBox = outer
+				projection.Fragments[childIndex].PaddingBox = content
+				projection.Fragments[childIndex].ContentBox = content
+			} else {
+				projection.Fragments[childIndex].MarginBox = itemBox
+				projection.Fragments[childIndex].BorderBox = itemBox
+				projection.Fragments[childIndex].PaddingBox = itemBox
+				projection.Fragments[childIndex].ContentBox = itemBox
+			}
 			fragment = projection.Fragments[childIndex]
 			if image.background.Set {
 				paths = append(paths, typedTableRectPath(outer))
@@ -920,6 +944,60 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 				paths = append(paths, path)
 				strokes = append(strokes, layoutengine.PlannedStroke{Path: uint32(len(paths) - 1), Color: border.color, Width: border.width, Fragment: fragment.ID}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 				items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)})                             // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			}
+			if measurement.caption != nil {
+				caption := measurement.caption
+				localFonts := make(map[layoutengine.FontResourceID]layoutengine.FontResourceID)
+				for _, font := range caption.plan.Fonts {
+					localID := font.ID
+					identity := paperFontIdentity(font)
+					globalID, exists := fontIndex[identity]
+					if !exists {
+						globalID = layoutengine.FontResourceID(len(fonts) + 1) // #nosec G115 -- collection length is bounded by the row/column plan
+						font.ID = globalID
+						fonts = append(fonts, font)
+						fontIndex[identity] = globalID
+					}
+					localFonts[localID] = globalID
+				}
+				captionY, addErr := itemBox.Y.Add(image.flowHeight())
+				if addErr != nil {
+					return layoutengine.LayoutPlan{}, addErr
+				}
+				lineMap := make(map[uint32]uint32, len(caption.plan.Lines))
+				for localIndex, line := range caption.plan.Lines {
+					xOffset, offsetErr := line.Bounds.X.Sub(caption.body.X)
+					yOffset, yOffsetErr := line.Bounds.Y.Sub(caption.body.Y)
+					x, xErr := itemBox.X.Add(xOffset)
+					y, yErr := captionY.Add(yOffset)
+					if offsetErr != nil || yOffsetErr != nil || xErr != nil || yErr != nil {
+						return layoutengine.LayoutPlan{}, fmt.Errorf("document: row/column image caption geometry overflows")
+					}
+					bounds, boundsErr := layoutengine.NewRect(x, y, line.Bounds.Width, line.Bounds.Height)
+					baselineOffset, baselineErr := line.Baseline.Sub(line.Bounds.Y)
+					baseline, addBaselineErr := y.Add(baselineOffset)
+					if boundsErr != nil || baselineErr != nil || addBaselineErr != nil {
+						return layoutengine.LayoutPlan{}, fmt.Errorf("document: row/column image caption line is invalid")
+					}
+					globalLine := uint32(len(projection.Lines)) // #nosec G115 -- collection length is bounded by the row/column plan
+					projection.Lines = append(projection.Lines, layoutengine.PlannedLine{Fragment: fragment.ID, Index: uint32(localIndex), Bounds: bounds, Baseline: baseline, Source: measurement.identity.source})
+					lineMap[uint32(localIndex)] = globalLine
+				}
+				for _, run := range caption.plan.GlyphRuns {
+					globalLine := lineMap[run.Line]
+					xOffset, xOffsetErr := run.Origin.X.Sub(caption.body.X)
+					yOffset, yOffsetErr := run.Origin.Y.Sub(caption.body.Y)
+					x, xErr := itemBox.X.Add(xOffset)
+					y, yErr := captionY.Add(yOffset)
+					if xOffsetErr != nil || yOffsetErr != nil || xErr != nil || yErr != nil {
+						return layoutengine.LayoutPlan{}, fmt.Errorf("document: row/column image caption run geometry overflows")
+					}
+					run.Line, run.Font = globalLine, localFonts[run.Font]
+					run.Origin = layoutengine.Point{X: x, Y: y}
+					run.Source = measurement.identity.source
+					runs = append(runs, run)
+					items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(len(runs) - 1)}) // #nosec G115 -- collection length is bounded by the row/column plan
+				}
 			}
 			continue
 		}

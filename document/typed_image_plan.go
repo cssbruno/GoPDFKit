@@ -25,6 +25,7 @@ type paperMeasuredImage struct {
 	contentWidth  layoutengine.Fixed
 	contentHeight layoutengine.Fixed
 	insets        [4]layoutengine.Fixed
+	margins       [4]layoutengine.Fixed
 	background    layoutengine.CoreRGBColor
 	borders       [4]typedTableBorder
 	fit           layout.ImageFitMode
@@ -37,9 +38,6 @@ func validateTypedPlanningImage(block layout.ImageBlock, path string) error {
 	box := block.EffectiveBox()
 	plain := box
 	plain.KeepTogether, plain.KeepWithNext, plain.Orphans, plain.Widows = false, false, 0, 0
-	if plain.Margin != (layout.Spacing{}) {
-		return fmt.Errorf("%s.box.margin: image margins are unsupported by the exact image plan", path)
-	}
 	if box.KeepWithNext {
 		return fmt.Errorf("%s: image keep-with-next is unsupported", path)
 	}
@@ -79,6 +77,9 @@ func validateTypedPlanningImage(block layout.ImageBlock, path string) error {
 	if _, _, _, err := typedImageBoxDecoration(box, path, func(value float64) float64 { return value }); err != nil {
 		return err
 	}
+	if _, err := typedImageMargins(box, path, func(value float64) float64 { return value }); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -111,7 +112,11 @@ func (f *Document) measureTypedPlanningImageContext(ctx context.Context, block l
 	if err != nil {
 		return paperMeasuredImage{}, err
 	}
-	horizontal := insets[1].Points() + insets[3].Points()
+	margins, err := typedImageMargins(block.EffectiveBox(), "image", f.UnitToPointConvert)
+	if err != nil {
+		return paperMeasuredImage{}, err
+	}
+	horizontal := insets[1].Points() + insets[3].Points() + margins[1].Points() + margins[3].Points()
 	availableContentWidth := f.PointConvert(f.UnitToPointConvert(contentWidth) - horizontal)
 	if availableContentWidth <= 0 {
 		return paperMeasuredImage{}, errors.New("image box decorations leave no content width")
@@ -154,17 +159,41 @@ func (f *Document) measureTypedPlanningImageContext(ctx context.Context, block l
 	if err != nil || heightErr != nil {
 		return paperMeasuredImage{}, errors.New("resolved decorated image size overflows")
 	}
+	flowWidth, flowErr := outerWidth.Add(margins[1])
+	if flowErr == nil {
+		flowWidth, flowErr = flowWidth.Add(margins[3])
+	}
+	flowHeight, flowHeightErr := outerHeight.Add(margins[0])
+	if flowHeightErr == nil {
+		flowHeight, flowHeightErr = flowHeight.Add(margins[2])
+	}
+	if flowErr != nil || flowHeightErr != nil || flowWidth <= 0 || flowHeight <= 0 {
+		return paperMeasuredImage{}, errors.New("resolved image margin box overflows")
+	}
 	return paperMeasuredImage{
 		resource: layoutengine.ImageResource{
 			Digest: layoutengine.ImageContentDigest(hex.EncodeToString(digest[:])), Format: engineFormat,
 			PixelWidth: uint32(info.w), PixelHeight: uint32(info.h),
 		},
 		encoded: data, width: outerWidth, height: outerHeight,
-		contentWidth: widthFixed, contentHeight: heightFixed, insets: insets,
+		contentWidth: widthFixed, contentHeight: heightFixed, insets: insets, margins: margins,
 		background: background, borders: borders, fit: block.Fit,
 		focusX: imageFocus(block.FocusX, block.FocusSet), focusY: imageFocus(block.FocusY, block.FocusSet),
 		align: strings.ToLower(strings.TrimSpace(block.Align)),
 	}, nil
+}
+
+func typedImageMargins(box layout.BoxStyle, path string, toPoints func(float64) float64) ([4]layoutengine.Fixed, error) {
+	values := []float64{box.Margin.Top, box.Margin.Right, box.Margin.Bottom, box.Margin.Left}
+	var result [4]layoutengine.Fixed
+	for index, value := range values {
+		fixed, err := layoutengine.FixedFromPoints(toPoints(value))
+		if err != nil || fixed < 0 {
+			return result, fmt.Errorf("%s.box.margin: values must be finite and non-negative", path)
+		}
+		result[index] = fixed
+	}
+	return result, nil
 }
 
 func imageFocus(value float64, set bool) float64 {
@@ -226,7 +255,7 @@ func typedImageColor(color layout.DocumentColor, path string) (layoutengine.Core
 }
 
 func (image paperMeasuredImage) targetX(body layoutengine.Rect) (layoutengine.Fixed, error) {
-	remaining, err := body.Width.Sub(image.width)
+	remaining, err := body.Width.Sub(image.flowWidth())
 	if err != nil || remaining < 0 {
 		return 0, errors.New("resolved image width exceeds the body")
 	}
@@ -238,6 +267,31 @@ func (image paperMeasuredImage) targetX(body layoutengine.Rect) (layoutengine.Fi
 		offset = remaining
 	}
 	return body.X.Add(offset)
+}
+
+func (image paperMeasuredImage) flowWidth() layoutengine.Fixed {
+	return image.width + image.margins[1] + image.margins[3]
+}
+
+func (image paperMeasuredImage) flowHeight() layoutengine.Fixed {
+	return image.height + image.margins[0] + image.margins[2]
+}
+
+func (image paperMeasuredImage) boxes(x, y layoutengine.Fixed) (layoutengine.Rect, layoutengine.Rect, error) {
+	marginBox, err := layoutengine.NewRect(x, y, image.flowWidth(), image.flowHeight())
+	if err != nil {
+		return layoutengine.Rect{}, layoutengine.Rect{}, err
+	}
+	borderX, err := x.Add(image.margins[3])
+	if err != nil {
+		return layoutengine.Rect{}, layoutengine.Rect{}, err
+	}
+	borderY, err := y.Add(image.margins[0])
+	if err != nil {
+		return layoutengine.Rect{}, layoutengine.Rect{}, err
+	}
+	borderBox, err := layoutengine.NewRect(borderX, borderY, image.width, image.height)
+	return marginBox, borderBox, err
 }
 
 func (image paperMeasuredImage) contentBox(outer layoutengine.Rect) (layoutengine.Rect, error) {

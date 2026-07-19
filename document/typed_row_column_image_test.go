@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/cssbruno/gopdfkit/internal/layoutengine"
@@ -125,15 +126,26 @@ func TestTypedRowColumnInterleavesTextAndDecoratedImagesExactly(t *testing.T) {
 	}
 }
 
-func TestTypedRowColumnImageRejectsUnsupportedCaptionAndCancellationAtomically(t *testing.T) {
+func TestTypedRowColumnImagePlansCaptionAndCancellationAtomically(t *testing.T) {
 	pixel, _ := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
-	planner := MustNew(WithUnit(UnitPoint), WithCustomPageSize(Size{Wd: 120, Ht: 100}))
+	planner := MustNew(WithUnit(UnitPoint), WithCustomPageSize(Size{Wd: 120, Ht: 140}))
 	image := layout.ImageBlock{Data: pixel, Format: "png", Width: 20, Height: 20, Caption: []layout.TextSegment{{Text: "pending"}}}
 	doc := &layout.LayoutDocument{Body: []layout.Block{layout.RowColumnBlock{Direction: layout.RowDirection, Items: []layout.RowColumnItem{{
 		Track: layout.RowColumnTrack{Kind: layout.RowColumnTrackFixed, Size: 40}, Block: image,
 	}}}}}
-	if _, err := planner.PlanLayoutDocument(doc); err == nil || !bytes.Contains([]byte(err.Error()), []byte("captions are not represented")) || planner.PageCount() != 0 {
-		t.Fatalf("caption failure = %v, pages %d", err, planner.PageCount())
+	captionPlan, err := planner.PlanLayoutDocument(doc)
+	if err != nil || captionPlan.Hash() == "" || planner.PageCount() != 0 {
+		t.Fatalf("caption plan = %#v, %v, source pages %d", captionPlan, err, planner.PageCount())
+	}
+	var caption strings.Builder
+	for _, run := range captionPlan.plan.Projection().GlyphRuns {
+		caption.WriteString(run.Codes)
+	}
+	projection := captionPlan.plan.Projection()
+	if caption.String() != "pending" || len(projection.Images) != 1 || len(projection.GlyphRuns) != 1 ||
+		projection.GlyphRuns[0].Origin.X <= projection.Fragments[0].ContentBox.X ||
+		projection.GlyphRuns[0].Origin.Y <= projection.Images[0].Bounds.Y+projection.Images[0].Bounds.Height {
+		t.Fatalf("caption output = %q images=%d", caption.String(), len(captionPlan.plan.Projection().Images))
 	}
 	image.Caption = nil
 	doc.Body = []layout.Block{layout.RowColumnBlock{Direction: layout.RowDirection, Items: []layout.RowColumnItem{{

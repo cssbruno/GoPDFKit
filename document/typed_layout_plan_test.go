@@ -393,6 +393,7 @@ func TestLayoutDocumentPlanStyledImageBoxHasExactGeometryGraphicsSemanticsAndPDF
 	red := layout.DocumentColor{R: 210, G: 20, B: 30, Set: true}
 	blue := layout.DocumentColor{R: 10, G: 30, B: 220, Set: true}
 	box := layout.BoxStyle{
+		Margin:          layout.Spacing{Top: 4, Right: 5, Bottom: 6, Left: 7},
 		Padding:         layout.Spacing{Top: 2, Right: 4, Bottom: 8, Left: 6},
 		BackgroundColor: red,
 		Border: layout.BorderStyle{
@@ -402,7 +403,7 @@ func TestLayoutDocumentPlanStyledImageBoxHasExactGeometryGraphicsSemanticsAndPDF
 			Left:   layout.BorderSide{Width: 3, Style: "solid", Color: blue},
 		},
 	}
-	planner := MustNew(WithUnit(UnitPoint), WithCustomPageSize(Size{Wd: 180, Ht: 120}), WithNoCompression(), WithDeterministicOutput())
+	planner := MustNew(WithUnit(UnitPoint), WithCustomPageSize(Size{Wd: 180, Ht: 140}), WithNoCompression(), WithDeterministicOutput())
 	planner.SetMargins(20, 20, 20)
 	plan, err := planner.PlanLayoutDocument(&layout.LayoutDocument{Body: []layout.Block{layout.ImageBlock{
 		Data: data, Format: "png", Alt: "Decorated proof", Width: 60, Height: 30,
@@ -418,9 +419,11 @@ func TestLayoutDocumentPlanStyledImageBoxHasExactGeometryGraphicsSemanticsAndPDF
 			len(projection.Fragments), len(projection.Images), len(projection.Paths), len(projection.Fills), len(projection.Strokes), len(projection.Commands))
 	}
 	fragment := projection.Fragments[0]
-	if fragment.BorderBox.X.Points() != 53 || fragment.BorderBox.Y.Points() != 20 ||
+	if fragment.MarginBox.X.Points() != 47 || fragment.MarginBox.Y.Points() != 20 ||
+		fragment.MarginBox.Width.Points() != 86 || fragment.MarginBox.Height.Points() != 53 ||
+		fragment.BorderBox.X.Points() != 54 || fragment.BorderBox.Y.Points() != 24 ||
 		fragment.BorderBox.Width.Points() != 74 || fragment.BorderBox.Height.Points() != 43 ||
-		fragment.ContentBox.X.Points() != 62 || fragment.ContentBox.Y.Points() != 23 ||
+		fragment.ContentBox.X.Points() != 63 || fragment.ContentBox.Y.Points() != 27 ||
 		fragment.ContentBox.Width.Points() != 60 || fragment.ContentBox.Height.Points() != 30 {
 		t.Fatalf("styled image boxes = border %#v content %#v", fragment.BorderBox, fragment.ContentBox)
 	}
@@ -483,7 +486,6 @@ func TestLayoutDocumentPlanImageLimitsAndUnsupportedInputsAreAtomic(t *testing.T
 		{"format", layout.ImageBlock{Data: data, Format: "gif"}, "body[0].format"},
 		{"alignment", layout.ImageBlock{Data: data, Format: "png", Align: "justify"}, "body[0].align"},
 		{"dpi", layout.ImageBlock{Data: data, Format: "png", DPI: 144}, "body[0].dpi"},
-		{"margin", layout.ImageBlock{Data: data, Format: "png", Box: layout.BoxStyle{Margin: layout.Spacing{Left: 1}}}, "body[0].box.margin"},
 		{"border style", layout.ImageBlock{Data: data, Format: "png", Box: layout.BoxStyle{Border: layout.BorderStyle{Top: layout.BorderSide{Width: 1, Style: "dashed"}}}}, "body[0].box.border"},
 		{"background color", layout.ImageBlock{Data: data, Format: "png", Box: layout.BoxStyle{BackgroundColor: layout.DocumentColor{R: 999, Set: true}}}, "body[0].box.background"},
 	}
@@ -495,6 +497,22 @@ func TestLayoutDocumentPlanImageLimitsAndUnsupportedInputsAreAtomic(t *testing.T
 				t.Fatalf("unsupported image = pages %d, %v, want %q", planner.PageCount(), err, test.want)
 			}
 		})
+	}
+}
+
+func TestLayoutDocumentPlanSnapshotsNoteTitleStyleReferences(t *testing.T) {
+	shared := layout.TextStyle{FontFamily: "Courier", FontSize: 11, Bold: true, LineHeight: 13}
+	doc := &layout.LayoutDocument{Body: []layout.Block{layout.NoteBoxBlock{Title: "Notice", StyleRef: &shared,
+		Body: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Body"}}}}}}}
+	planner := MustNew(WithUnit(UnitPoint))
+	plan, err := planner.PlanLayoutDocument(doc)
+	if err != nil || plan.Hash() == "" || plan.PageCount() != 1 {
+		t.Fatalf("note style plan = %#v, %v", plan, err)
+	}
+	before := plan.Hash()
+	shared.FontSize = 99
+	if plan.Hash() != before {
+		t.Fatal("note title plan aliases StyleRef")
 	}
 }
 

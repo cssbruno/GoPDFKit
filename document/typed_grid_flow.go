@@ -117,7 +117,7 @@ func (f *Document) measurePaperGridRow(ctx context.Context, doc *layout.LayoutDo
 			if measureErr != nil {
 				return paperMeasuredGridRow{}, fmt.Errorf("%s: %w", cell.path, measureErr)
 			}
-			if measuredImage.width > widths[index] {
+			if measuredImage.flowWidth() > widths[index] {
 				return paperMeasuredGridRow{}, fmt.Errorf("%s: resolved image exceeds its grid track", cell.path)
 			}
 			image = &measuredImage
@@ -167,7 +167,7 @@ func (f *Document) measurePaperGridRow(ctx context.Context, doc *layout.LayoutDo
 			offsetX:  offset, width: widths[index], topInset: topInset, artifactOnly: cell.artifactOnly}
 		cellHeight := measurement.height
 		if image != nil {
-			cellHeight = image.height
+			cellHeight = image.flowHeight()
 		}
 		cellHeight, err = cellHeight.Add(topInset)
 		if err != nil {
