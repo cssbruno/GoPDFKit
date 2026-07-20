@@ -207,7 +207,15 @@ func runCheck(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	edgeSeed := set.Int64("seed", 1, "seed for reproducible edge-case data")
 	edgeMaxItems := set.Uint("edge-max-items", 64, "maximum generated items per schema list")
 	edgeOutput := set.String("edge-output", "", "write generated JSON and PDF cases under DIR")
-	edgeVisual := set.Bool("edge-visual", false, "write SVG previews and an HTML gallery under --edge-output")
+	edgeVisual := set.Bool("edge-visual", false, "rasterize final PDFs and write a PDF review book under --edge-output")
+	edgeVisualDPI := set.Uint("edge-visual-dpi", 144, "rasterization DPI for --edge-visual (36..300)")
+	edgeMaxPageIssues := set.Uint("edge-max-page-issues", 0, "maximum allowed layout issues per case")
+	edgeMinTextRunes := set.Uint("edge-min-text-runes", 0, "minimum extracted text runes per case")
+	edgeMaxPages := set.Uint("edge-max-pages", 64, "maximum allowed PDF pages per case")
+	edgeBaseline := set.String("edge-baseline", "", "compare results with a previous edge-report.json")
+	edgeAllowBaselineChange := set.Bool("edge-allow-baseline-change", false, "report baseline changes without failing the check")
+	var edgeInputs stringList
+	set.Var(&edgeInputs, "edge-input", "validate a user JSON case from FILE (repeatable)")
 	assets := addAssetFlags(set)
 	file, code := parseOneFile(set, args)
 	if code >= 0 {
@@ -224,9 +232,16 @@ func runCheck(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if *scenario != "" && *data.file != "" {
 		return commandError(*jsonMode, stdout, stderr, "check", errors.New("--scenario and --data are mutually exclusive"))
 	}
-	if *edgeCases != 0 {
+	edgeMode := *edgeCases != 0 || len(edgeInputs) != 0
+	var edgeOptionsUsed []string
+	set.Visit(func(option *flag.Flag) {
+		if strings.HasPrefix(option.Name, "edge-") || option.Name == "seed" {
+			edgeOptionsUsed = append(edgeOptionsUsed, "--"+option.Name)
+		}
+	})
+	if edgeMode {
 		if *scenario != "" || *data.file != "" {
-			return commandError(*jsonMode, stdout, stderr, "check", errors.New("--edge-cases cannot be combined with --scenario or --data"))
+			return commandError(*jsonMode, stdout, stderr, "check", errors.New("edge-case checks cannot be combined with --scenario or --data"))
 		}
 		if *edgeVisual && *edgeOutput == "" {
 			return commandError(*jsonMode, stdout, stderr, "check", errors.New("--edge-visual requires --edge-output"))
@@ -234,11 +249,13 @@ func runCheck(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return checkGeneratedEdgeCases(edgeCheckRequest{
 			file: displayFile(file), source: string(source), schema: *data.schema, locale: *data.locale,
 			count: *edgeCases, seed: *edgeSeed, maxItems: *edgeMaxItems, outputDir: *edgeOutput, visual: *edgeVisual,
-			assets: catalog, jsonMode: *jsonMode,
+			visualDPI: *edgeVisualDPI, inputFiles: edgeInputs, maxPageIssues: *edgeMaxPageIssues,
+			minTextRunes: *edgeMinTextRunes, maxPages: *edgeMaxPages, baseline: *edgeBaseline,
+			allowBaselineChange: *edgeAllowBaselineChange, assets: catalog, jsonMode: *jsonMode,
 		}, stdout, stderr)
 	}
-	if *edgeOutput != "" || *edgeVisual {
-		return commandError(*jsonMode, stdout, stderr, "check", errors.New("--edge-output and --edge-visual require --edge-cases"))
+	if len(edgeOptionsUsed) != 0 {
+		return commandError(*jsonMode, stdout, stderr, "check", fmt.Errorf("%s requires --edge-cases or --edge-input", edgeOptionsUsed[0]))
 	}
 	input, err := data.load(file, stdin)
 	if err != nil {
@@ -389,6 +406,20 @@ func runExplain(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 type uint32List []uint32
+
+type stringList []string
+
+func (v *stringList) String() string {
+	return strings.Join(*v, ",")
+}
+
+func (v *stringList) Set(value string) error {
+	if strings.TrimSpace(value) == "" {
+		return errors.New("must not be empty")
+	}
+	*v = append(*v, value)
+	return nil
+}
 
 func (v *uint32List) String() string {
 	parts := make([]string, len(*v))

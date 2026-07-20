@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Existing semver tag to release, for example v0.1.0 or v0.1.0-rc.1
+        description: Existing semver tag to release, for example v0.16.0 or v0.16.0-rc.1
         required: true
-        default: v0.1.0
+        default: v0.16.0-rc.1
 
 permissions:
   contents: read
@@ -49,13 +49,13 @@ jobs:
         shell: bash
         run: git checkout --detach "refs/tags/${VERSION}"
 
-      - name: Verify release version and tests
-        run: make release-version test VERSION="${VERSION}"
-
       - name: Install compliance dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y colord-data poppler-utils
+
+      - name: Verify release version and tests
+        run: make release-version test VERSION="${VERSION}"
 
       - name: Verify representative PDFs with Poppler
         run: make pdf-reader-smoke

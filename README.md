@@ -262,14 +262,23 @@ A seed makes failures replayable.
 `--edge-output` keeps every input and PDF plus `edge-report.json`. The report
 records empty/whitespace/multiline string counts, the JSON Pointer and size of
 the longest string and largest list, input/PDF hashes, per-page extracted-text
-hashes, exact page summaries, and positioned layout issues. Add `--edge-visual`
-to create SVG contact sheets and a portable `edge-gallery.html` for side-by-side
-human review.
+hashes, exact page summaries, and positioned layout issues. Layout issues fail
+the check by default; use `--edge-max-page-issues`, `--edge-min-text-runes`, and
+`--edge-max-pages` to make the acceptance policy explicit.
+
+Add repeatable `--edge-input FILE` options to exercise real user payloads in
+addition to, or instead of, generated cases. `--edge-baseline edge-report.json`
+detects changed, added, and missing cases. Add `--edge-visual` to rasterize the
+final PDFs with Poppler, retain one PNG per PDF page, and create
+`edge-visual-review.pdf`. The visual evidence therefore comes from the written
+PDF files, not an HTML layout or an internal planning preview.
 
 ```shell
 go run ./cmd/paper check --edge-cases 16 --seed 42 report.paper
 go run ./cmd/paper check --edge-cases 16 --seed 42 --edge-output ./edge-artifacts report.paper
 go run ./cmd/paper check --edge-cases 16 --seed 42 --edge-output ./edge-artifacts --edge-visual report.paper
+go run ./cmd/paper check --edge-input ./production-shape.json --edge-output ./edge-artifacts --edge-visual report.paper
+go run ./cmd/paper check --edge-input ./production-shape.json --edge-baseline ./known-good/edge-report.json report.paper
 ```
 
 Use `--schema NAME` when the document declares multiple schemas and

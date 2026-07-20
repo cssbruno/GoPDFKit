@@ -14,7 +14,7 @@ import (
 
 var (
 	paperruneDir string
-	pdfDir      string
+	pdfDir       string
 )
 
 const pdfDisplayDir = "assets/generated/pdf"

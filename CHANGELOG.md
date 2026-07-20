@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.16.0-rc.1 - 2026-07-20
+
+First release candidate under the independent PaperRune project identity.
+
+### Added
+
+- Added repeatable real-world JSON edge inputs, explicit page-issue, text, and
+  page-count thresholds, and deterministic baseline regression comparison to
+  `paper check`.
+- Added final-PDF visual evidence: Poppler rasterizes every written PDF page to
+  a hashed PNG and PaperRune assembles the results into a PDF review book.
+
+### Changed
+
+- Renamed the project, Go module, commands, package imports, documentation, and
+  release identity from GoPDFKit to PaperRune.
+- Made edge checks fail when generated PDFs contain positioned layout issues
+  above the configured threshold instead of merely recording those issues.
+- Removed the HTML/SVG edge gallery so visual review cannot be mistaken for
+  evidence from the final PDF artifact.
+
+### Verification
+
+- Edge reports now bind input, plan, PDF, extracted text, per-page raster, and
+  acceptance-policy evidence in report format 3.
+- Automated repository gates and the laboratory PDF visual review are required
+  before this candidate is published. Elapsed stabilization and named external
+  security acceptance remain external release gates and are not self-certified.
+
 ## v0.15.0-rc.1 - 2026-07-18
 
 Release candidate for the breaking pre-1.0 unified automatic-layout engine and

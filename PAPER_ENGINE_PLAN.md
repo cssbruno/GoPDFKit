@@ -1,6 +1,6 @@
 # Paper: Unified Layout Engine, Studio, and Agentic Authoring Plan
 
-- Status: proposed architecture and execution plan
+- Status: implemented architecture; stabilization and named external acceptance gates remain open
 - Scope: replace both automatic layout engines while preserving the low-level PDF API
 - Working names: `.paper` source, Paper engine, Paper Studio, `paperd` service
 

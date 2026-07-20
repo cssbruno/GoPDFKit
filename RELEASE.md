@@ -1,13 +1,14 @@
 # Release Process
 
-This repository releases Go modules by pushing semver tags. The current release
-line starts at `v0.1.0`.
+This repository releases Go modules by pushing semver tags. PaperRune continues
+the existing pre-1.0 API history under its new independent module and repository
+identity; the first PaperRune-branded candidate is `v0.16.0-rc.1`.
 
 ## Versioning
 
 - Use Go module semver tags: `vMAJOR.MINOR.PATCH` for final releases and
   `vMAJOR.MINOR.PATCH-PRERELEASE` for candidates.
-- Use an `-rc.N` prerelease, such as `v0.15.0-rc.1`, when a stabilization
+- Use an `-rc.N` prerelease, such as `v0.16.0-rc.1`, when a stabilization
   window must complete before the final release.
 - Keep `VERSION` set to the next tag.
 - Keep `CHANGELOG.md` updated with a section matching the exact release or
@@ -69,7 +70,7 @@ Makefile runs them with the Go toolchain declared by `tools/go.mod`.
 
 ## GitHub Release
 
-Pushing a tag such as `v0.1.0` or `v0.1.0-rc.1` runs
+Pushing a tag such as `v0.16.0` or `v0.16.0-rc.1` runs
 `.github/workflows/release.yml`. The workflow runs the release validation,
 extracts the matching changelog section, and creates or updates the GitHub
 Release. Tags containing a prerelease suffix are published as GitHub

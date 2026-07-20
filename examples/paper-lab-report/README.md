@@ -30,11 +30,19 @@ go run ./cmd/paper check \
   examples/paper-lab-report/lab-report.paper
 ```
 
-Open `/tmp/lab-report-edge-cases/edge-gallery.html` to inspect every case as a
-multi-page SVG contact sheet. Read `edge-report.json` from tests or other tools
-to inspect empty/whitespace/multiline values, longest-string and largest-list
-JSON Pointers, deterministic input/PDF hashes, independent PDF page counts,
-per-page extracted-text sizes and hashes, and positioned layout issues.
+Open `/tmp/lab-report-edge-cases/edge-visual-review.pdf` to inspect every page
+as rasterized from the final PDF. The directory also contains one PNG per PDF
+page. Read `edge-report.json` from tests or other tools to inspect
+empty/whitespace/multiline values, longest-string and largest-list JSON
+Pointers, deterministic input/PDF hashes, independent PDF page counts,
+per-page extracted-text sizes and hashes, raster hashes and dimensions, and
+positioned layout issues.
+
+Use repeatable `--edge-input FILE` options for real laboratory payloads, and
+`--edge-baseline edge-report.json` to reject output regressions. By default any
+positioned layout issue fails the command; the page-issue, extracted-text, and
+page-count thresholds can be changed explicitly when a paper has a documented
+acceptance policy.
 
 Repeat the same seed to reproduce a failure exactly. The command exits nonzero
 when any generated case exposes a layout or PDF problem; generated inputs and

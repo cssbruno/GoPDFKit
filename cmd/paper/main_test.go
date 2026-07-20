@@ -10,10 +10,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/cssbruno/paperrune/inspect"
 	"github.com/cssbruno/paperrune/internal/paperscenario"
 )
 
@@ -532,11 +534,12 @@ func TestCheckGeneratesReproducibleEdgeCasesAndCompletePDFs(t *testing.T) {
 	}
 
 	visualDir := filepath.Join(dir, "edge-visual")
+	requirePoppler(t)
 	code, stdout, stderr = invoke([]string{"check", "--json", "--edge-cases", "2", "--seed", "42", "--edge-output", visualDir, "--edge-visual", template}, "")
-	if code != exitOK || stderr != "" || !strings.Contains(stdout, `"gallery_file":"edge-gallery.html"`) {
+	if code != exitOK || stderr != "" || !strings.Contains(stdout, `"visual_review_file":"edge-visual-review.pdf"`) {
 		t.Fatalf("visual edge output = %d, %q, %q", code, stdout, stderr)
 	}
-	for _, name := range []string{"edge-report.json", "edge-gallery.html", "001-empty-text.svg", "002-minimal.svg"} {
+	for _, name := range []string{"edge-report.json", "edge-visual-review.pdf", "001-empty-text-page-001.png", "002-minimal-page-001.png"} {
 		payload, readErr := os.ReadFile(filepath.Join(visualDir, name))
 		if readErr != nil || len(payload) == 0 {
 			t.Fatalf("visual artifact %s = %d bytes, %v", name, len(payload), readErr)
@@ -571,7 +574,65 @@ func TestInspectEdgeCaseInputReportsShapeAndStressLocations(t *testing.T) {
 	}
 }
 
-func TestLaboratoryTemplateEdgeGalleryHasProgrammaticPageEvidence(t *testing.T) {
+func TestCheckUsesUserEdgeInputsThresholdsAndBaselines(t *testing.T) {
+	dir := t.TempDir()
+	template := filepath.Join(dir, "lab.paper")
+	input := filepath.Join(dir, "real-world.json")
+	if err := os.WriteFile(template, []byte(externalDataSource), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	firstPayload := []byte(`{"patient":"A very long patient name from production","results":[{"name":"Hemoglobin with a deliberately long label","value":12.5}]}`)
+	if err := os.WriteFile(input, firstPayload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	baselineDir := filepath.Join(dir, "baseline")
+	code, stdout, stderr := invoke([]string{
+		"check", "--json", "--edge-input", input, "--edge-output", baselineDir, template,
+	}, "")
+	if code != exitOK || stderr != "" {
+		t.Fatalf("custom edge input = %d, stderr=%q, stdout=%q", code, stderr, stdout)
+	}
+	var first edgeCheckResult
+	if err := json.Unmarshal([]byte(stdout), &first); err != nil || !first.OK || len(first.Cases) != 1 || first.Cases[0].Name != "user-real-world" {
+		t.Fatalf("custom edge report = %#v, %v", first, err)
+	}
+	if first.Cases[0].InputInspection == nil || first.Cases[0].InputInspection.MaxStringRunes < 40 {
+		t.Fatalf("custom input was not inspected: %#v", first.Cases[0])
+	}
+
+	baselineFile := filepath.Join(baselineDir, "edge-report.json")
+	matchingDir := filepath.Join(dir, "matching")
+	code, stdout, stderr = invoke([]string{
+		"check", "--json", "--edge-input", input, "--edge-baseline", baselineFile,
+		"--edge-output", matchingDir, template,
+	}, "")
+	var matching edgeCheckResult
+	if err := json.Unmarshal([]byte(stdout), &matching); err != nil || code != exitOK || stderr != "" || matching.Baseline == nil || matching.Baseline.Unchanged != 1 || len(matching.Baseline.Changes) != 0 {
+		t.Fatalf("matching baseline = %d, stderr=%q, report=%#v, err=%v", code, stderr, matching, err)
+	}
+
+	if err := os.WriteFile(input, []byte(`{"patient":"Changed","results":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr = invoke([]string{
+		"check", "--json", "--edge-input", input, "--edge-baseline", baselineFile, template,
+	}, "")
+	var changed edgeCheckResult
+	if err := json.Unmarshal([]byte(stdout), &changed); err != nil || code != exitFailure || stderr != "" || changed.Baseline == nil || changed.Baseline.Changed != 1 || changed.Baseline.Changes[0].Status != "changed" {
+		t.Fatalf("changed baseline = %d, stderr=%q, report=%#v, err=%v", code, stderr, changed, err)
+	}
+
+	code, stdout, stderr = invoke([]string{
+		"check", "--json", "--edge-input", input, "--edge-min-text-runes", "10000", template,
+	}, "")
+	var threshold edgeCheckResult
+	if err := json.Unmarshal([]byte(stdout), &threshold); err != nil || code != exitFailure || stderr != "" || threshold.OK || threshold.Cases[0].Stage != "threshold" || !strings.Contains(threshold.Cases[0].Error, "below minimum") {
+		t.Fatalf("threshold result = %d, stderr=%q, report=%#v, err=%v", code, stderr, threshold, err)
+	}
+}
+
+func TestLaboratoryTemplateVisualReviewHasProgrammaticPageEvidence(t *testing.T) {
+	requirePoppler(t)
 	template := filepath.Clean("../../examples/paper-lab-report/lab-report.paper")
 	assets := filepath.Clean("../../examples/paper-lab-report/assets.json")
 	outputDir := filepath.Join(t.TempDir(), "lab-edges")
@@ -587,7 +648,7 @@ func TestLaboratoryTemplateEdgeGalleryHasProgrammaticPageEvidence(t *testing.T) 
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("decode laboratory edge report: %v\n%s", err, stdout)
 	}
-	if !report.OK || report.FormatVersion != 2 || len(report.Cases) != 10 || report.GalleryFile != "edge-gallery.html" {
+	if !report.OK || report.FormatVersion != 3 || len(report.Cases) != 10 || report.VisualReviewFile != "edge-visual-review.pdf" {
 		t.Fatalf("laboratory edge report = %#v", report)
 	}
 	byName := make(map[string]edgeCheckCaseResult, len(report.Cases))
@@ -598,6 +659,14 @@ func TestLaboratoryTemplateEdgeGalleryHasProgrammaticPageEvidence(t *testing.T) 
 		}
 		if checked.Pages != checked.Inspection.ParsedPages || len(checked.Inspection.PageText) != checked.Pages || len(checked.Inspection.PageSummaries) != checked.Pages {
 			t.Fatalf("page evidence mismatch for %s: %#v", checked.Name, checked)
+		}
+		if len(checked.RasterPages) != checked.Pages {
+			t.Fatalf("raster evidence mismatch for %s: %#v", checked.Name, checked.RasterPages)
+		}
+		for pageIndex, page := range checked.RasterPages {
+			if page.Page != pageIndex+1 || page.Bytes <= 0 || page.Width <= 0 || page.Height <= 0 || len(page.SHA256) != 64 {
+				t.Fatalf("invalid raster evidence for %s: %#v", checked.Name, page)
+			}
 		}
 		for pageIndex, page := range checked.Inspection.PageText {
 			if page.Page != pageIndex+1 || page.Bytes <= 0 || page.Runes <= 0 || len(page.SHA256) != 64 {
@@ -612,15 +681,33 @@ func TestLaboratoryTemplateEdgeGalleryHasProgrammaticPageEvidence(t *testing.T) 
 	if byName["long-unbroken-string"].Pages < 2 || byName["dense-lists"].Pages < 2 || byName["dense-lists"].InputInspection.MaxListItems != 64 {
 		t.Fatalf("multi-page stress cases were not exercised: long=%#v dense=%#v", byName["long-unbroken-string"], byName["dense-lists"])
 	}
-	for _, artifact := range []string{"edge-report.json", "edge-gallery.html", "006-long-unbroken-string.svg", "007-dense-lists.pdf"} {
+	for _, artifact := range []string{"edge-report.json", "edge-visual-review.pdf", "006-long-unbroken-string-page-001.png", "007-dense-lists.pdf"} {
 		payload, err := os.ReadFile(filepath.Join(outputDir, artifact))
 		if err != nil || len(payload) == 0 {
 			t.Fatalf("laboratory artifact %s = %d bytes, %v", artifact, len(payload), err)
 		}
 	}
-	gallery, err := os.ReadFile(filepath.Join(outputDir, "edge-gallery.html"))
-	if err != nil || !bytes.Contains(gallery, []byte("max string 256 runes at /results/0/name")) || !bytes.Contains(gallery, []byte("10 passed · 0 failed")) {
-		t.Fatalf("laboratory gallery evidence missing: %v", err)
+	review, err := os.ReadFile(filepath.Join(outputDir, "edge-visual-review.pdf"))
+	if err != nil {
+		t.Fatalf("read visual review: %v", err)
+	}
+	if err := inspect.ValidateStructure(review); err != nil {
+		t.Fatalf("invalid visual review PDF: %v", err)
+	}
+	reviewPages, err := inspect.PageCount(review)
+	wantReviewPages := 1
+	for _, checked := range report.Cases {
+		wantReviewPages += checked.Pages
+	}
+	if err != nil || reviewPages != wantReviewPages {
+		t.Fatalf("visual review pages = %d, %v; want %d", reviewPages, err, wantReviewPages)
+	}
+}
+
+func requirePoppler(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("pdftoppm"); err != nil {
+		t.Skip("pdftoppm is required for final-PDF visual evidence")
 	}
 }
 
