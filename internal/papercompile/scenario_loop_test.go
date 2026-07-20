@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -10,15 +10,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/internal/paperrepeat"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperrepeat"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 const loopScenarioSource = `document:
-  schema @settings:
-    field @enabled:
-      type: "bool"
+  schema settings:
+    bool enabled
   scenario @preview:
     value @enabled: true
   page:
@@ -163,13 +162,10 @@ func TestLoopRejectsDirectionBoundsWorkDepthAndCancellationDeterministically(t *
 
 func TestLoopCanLowerInsideTypedRepeatItemContext(t *testing.T) {
 	const source = `document:
-  schema @invoice:
-    field @items:
-      type: "list"
-      item-type: "object"
+  schema invoice:
+    list object items:
       max-items: 2
-      field @active:
-        type: "bool"
+      bool active
   scenario @preview:
     keyed-list @items:
       object @alpha:
@@ -177,7 +173,7 @@ func TestLoopCanLowerInsideTypedRepeatItemContext(t *testing.T) {
   page:
     body:
       repeat @items:
-        source: "@invoice.items"
+        source: "items"
         instance-prefix: "items"
         max-items: 1
         loop @copies:

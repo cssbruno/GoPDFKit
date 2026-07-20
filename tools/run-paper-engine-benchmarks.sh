@@ -26,7 +26,7 @@ else
 fi
 
 {
-	printf '# gopdfkit-paper-engine-benchmark-v3\n'
+	printf '# paperrune-paper-engine-benchmark-v3\n'
 	printf '# command: go test ./document ./internal/layoutengine -run ^$ -bench %s -benchmem -benchtime=%s -count=%s\n' "$benchmark" "$benchtime" "$count"
 	printf '# go-version: %s\n' "$(go version)"
 	printf '# goos: %s\n' "$(go env GOOS)"

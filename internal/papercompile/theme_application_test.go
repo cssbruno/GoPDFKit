@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -7,9 +7,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/internal/papertheme"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/papertheme"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 func TestCompileAppliesSelectedRootThemeTokensWithProvenance(t *testing.T) {

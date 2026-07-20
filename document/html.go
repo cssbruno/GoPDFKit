@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -15,7 +15,7 @@ import (
 // HTML is used for rendering a controlled subset of HTML fragments. It
 // supports common text tags, links, paragraphs, headings, lists, tables, images,
 // inline SVG, alignment, font color, font size, and CSS declarations that map
-// directly to gopdfkit text and drawing operations.
+// directly to paperrune text and drawing operations.
 //
 // HTML is not a browser engine. It does not implement the full HTML parsing
 // algorithm, CSS cascade, browser layout model, grid, floats, positioning,

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -12,8 +12,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 func TestLayoutDocumentPlanEmbedsImmutableUTF8FontForPDFA(t *testing.T) {
@@ -22,7 +22,7 @@ func TestLayoutDocumentPlanEmbedsImmutableUTF8FontForPDFA(t *testing.T) {
 	if err := source.AddUTF8FontFromBytesError("PlanSans", "", fontBytes); err != nil {
 		t.Fatal(err)
 	}
-	source.SetComplianceMetadata(ComplianceMetadata{PDFA: PDFAMode4, Identifier: "urn:gopdfkit:typed-font-plan"})
+	source.SetComplianceMetadata(ComplianceMetadata{PDFA: PDFAMode4, Identifier: "urn:paperrune:typed-font-plan"})
 	if err := source.SetOutputIntent([]byte("deterministic-test-icc"), "sRGB IEC61966-2.1"); err != nil {
 		t.Fatal(err)
 	}

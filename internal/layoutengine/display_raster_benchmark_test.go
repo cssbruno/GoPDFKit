@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -16,7 +16,7 @@ import (
 
 // BenchmarkDisplayRasterPNGEncode compares the production filter-none encoder
 // with the previous standard-library BestSpeed path when
-// GOPDFKIT_RASTER_BENCH_LEGACY=1. Keeping one benchmark name allows benchstat
+// PAPERRUNE_RASTER_BENCH_LEGACY=1. Keeping one benchmark name allows benchstat
 // to compare exact before/after samples without editing benchmark output.
 func BenchmarkDisplayRasterPNGEncode(b *testing.B) {
 	canvas := image.NewRGBA(image.Rect(0, 0, 480, 320))
@@ -30,7 +30,7 @@ func BenchmarkDisplayRasterPNGEncode(b *testing.B) {
 	}
 	draw.Draw(canvas, image.Rect(32, 18, 448, 21), accent, image.Point{}, draw.Src)
 	draw.Draw(canvas, image.Rect(32, 286, 448, 288), accent, image.Point{}, draw.Src)
-	legacy := os.Getenv("GOPDFKIT_RASTER_BENCH_LEGACY") == "1"
+	legacy := os.Getenv("PAPERRUNE_RASTER_BENCH_LEGACY") == "1"
 	b.ReportAllocs()
 	b.SetBytes(int64(len(canvas.Pix)))
 	b.ResetTimer()
@@ -49,9 +49,9 @@ func BenchmarkDisplayRasterPNGEncode(b *testing.B) {
 }
 
 func BenchmarkDisplayRasterPrescriptionPayload(b *testing.B) {
-	path := os.Getenv("GOPDFKIT_RASTER_PAYLOAD")
+	path := os.Getenv("PAPERRUNE_RASTER_PAYLOAD")
 	if path == "" {
-		b.Skip("set GOPDFKIT_RASTER_PAYLOAD to an exact web render payload")
+		b.Skip("set PAPERRUNE_RASTER_PAYLOAD to an exact web render payload")
 	}
 	payload, err := os.ReadFile(path)
 	if err != nil {
@@ -60,7 +60,7 @@ func BenchmarkDisplayRasterPrescriptionPayload(b *testing.B) {
 	b.ReportAllocs()
 	b.SetBytes(int64(len(payload)))
 	var cache WebDisplayRenderCache
-	useCache := os.Getenv("GOPDFKIT_RASTER_BENCH_CACHE") == "1"
+	useCache := os.Getenv("PAPERRUNE_RASTER_BENCH_CACHE") == "1"
 	b.ResetTimer()
 	for range b.N {
 		var artifact DisplayRasterArtifact

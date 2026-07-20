@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 var htmlUnifiedBlockBoxProperties = func() map[string]bool {
@@ -71,7 +71,7 @@ func htmlUnifiedParseBlockBox(tag string, token int, decl map[string]string, fon
 	}
 	if len(borderDecl) != 0 {
 		cell := layout.TableCell{}
-		if err := htmlPlanApplyStrictCellStyle(&cell, htmlUnifiedDeclarationString(borderDecl), pdf.PointConvert); err != nil {
+		if err := htmlPlanApplyStrictCellStyle(&cell, borderDecl, pdf.PointConvert); err != nil {
 			return layout.BoxStyle{}, htmlPlanUnsupported(tag, token, err.Error())
 		}
 		box.Border = cell.Box.Border

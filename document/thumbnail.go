@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -53,7 +53,7 @@ type ImageRegistrar interface {
 }
 
 // GenerateThumbnail decodes an image from r and returns encoded thumbnail bytes
-// plus the gopdfkit image type string.
+// plus the paperrune image type string.
 func GenerateThumbnail(r io.Reader, options ThumbnailOptions) ([]byte, string, error) {
 	if r == nil {
 		return nil, "", errors.New("thumbnail source reader is nil")
@@ -77,7 +77,7 @@ func GenerateThumbnail(r io.Reader, options ThumbnailOptions) ([]byte, string, e
 }
 
 // GenerateThumbnailImage returns encoded thumbnail bytes for src plus the
-// gopdfkit image type string.
+// paperrune image type string.
 func GenerateThumbnailImage(src image.Image, sourceFormat string, options ThumbnailOptions) ([]byte, string, error) {
 	if src == nil {
 		return nil, "", errors.New("thumbnail source image is nil")

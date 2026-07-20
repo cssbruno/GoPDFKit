@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -7,10 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/cssbruno/gopdfkit/internal/papercompile"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/internal/papertheme"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/papercompile"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/papertheme"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 // PaperPlanSourceSpan identifies the authored source range that caused one

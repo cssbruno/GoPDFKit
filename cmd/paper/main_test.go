@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/paperscenario"
+	"github.com/cssbruno/paperrune/internal/paperscenario"
 )
 
 const validSource = "document @report:\n" +
@@ -25,15 +25,11 @@ const validSource = "document @report:\n" +
 	"        text @copy: \"Hello plan\"\n"
 
 const scenarioRepeatSource = `document @doc:
-  schema @invoice:
-    field @items:
-      type: "list"
-      item-type: "object"
+  schema invoice:
+    list object items:
       max-items: 4
-      field @active:
-        type: "bool"
-      field @name:
-        type: "string"
+      bool active
+      string name
   scenario @preview:
     keyed-list @items:
       object @alpha:
@@ -48,7 +44,7 @@ const scenarioRepeatSource = `document @doc:
   page:
     body:
       repeat @visible:
-        source: "@invoice.items"
+        source: "items"
         instance-prefix: "preview-lines"
         max-items: 2
         when: "active"
@@ -59,27 +55,22 @@ const scenarioRepeatSource = `document @doc:
 
 const externalDataSource = `document @report:
   language: "pt-BR"
-  schema @lab:
-    field @patient:
-      type: "string"
-    field @results:
-      type: "list"
-      item-type: "object"
+  schema lab:
+    string patient
+    list object results:
       max-items: 6
-      field @name:
-        type: "string"
-      field @value:
-        type: "number"
+      string name
+      number value
   page:
     size: "A4"
     margin: 24pt
     body:
       heading @patient:
         level: 1
-        bind: "@lab.patient"
+        bind: "patient"
         text: "Patient"
       repeat @results:
-        source: "@lab.results"
+        source: "results"
         instance-prefix: "results"
         max-items: 6
         paragraph @result:
@@ -186,22 +177,18 @@ func TestRunFmtAndCheckJSON(t *testing.T) {
 
 func TestRunCheckAndRenderExternalJSONAndGeneratedEdges(t *testing.T) {
 	const source = `document @report:
-  schema @invoice:
-    field @customer:
-      type: "string"
-    field @items:
-      type: "list"
-      item-type: "object"
+  schema invoice:
+    string customer
+    list object items:
       max-items: 4
-      field @name:
-        type: "string"
+      string name
   page:
     body:
       heading:
-        bind: "@invoice.customer"
+        bind: "customer"
         text: "Customer"
       repeat @items-repeat:
-        source: "@invoice.items"
+        source: "items"
         instance-prefix: "items"
         max-items: 4
         paragraph @item-name:
@@ -234,16 +221,16 @@ func TestRunCheckAndRenderExternalJSONAndGeneratedEdges(t *testing.T) {
 
 	edgeDir := filepath.Join(dir, "edges")
 	code, stdout, stderr = invoke([]string{"check", "--json", "--edge-cases", "3", "--seed", "42", "--edge-max-items", "3", "--edge-output", edgeDir, paperFile}, "")
-	if code != exitOK || stderr != "" || !strings.Contains(stdout, `"ok":true`) || !strings.Contains(stdout, `"name":"dense-lists"`) {
+	if code != exitOK || stderr != "" || !strings.Contains(stdout, `"ok":true`) || !strings.Contains(stdout, `"name":"whitespace-text"`) {
 		t.Fatalf("edge check = %d, %q, %q", code, stdout, stderr)
 	}
 	jsonFiles, _ := filepath.Glob(filepath.Join(edgeDir, "*.json"))
 	pdfFiles, _ := filepath.Glob(filepath.Join(edgeDir, "*.pdf"))
-	if len(jsonFiles) != 3 || len(pdfFiles) != 3 {
+	if len(jsonFiles) != 4 || len(pdfFiles) != 3 {
 		t.Fatalf("edge artifacts = %d JSON / %d PDF", len(jsonFiles), len(pdfFiles))
 	}
 
-	code, stdout, stderr = invoke([]string{"check", "--json", "--edge-cases", "4", "--seed", "42", paperFile}, "")
+	code, stdout, stderr = invoke([]string{"check", "--json", "--edge-cases", "8", "--seed", "42", paperFile}, "")
 	if code != exitFailure || stderr != "" || !strings.Contains(stdout, `"name":"unicode-pt-br"`) || !strings.Contains(stdout, `"code":"PAPER_PLAN_UNSUPPORTED"`) {
 		t.Fatalf("failing edge report = %d, %q, %q", code, stdout, stderr)
 	}
@@ -534,7 +521,7 @@ func TestCheckGeneratesReproducibleEdgeCasesAndCompletePDFs(t *testing.T) {
 		t.Fatalf("edge output = %d, %q, %q", code, stdout, stderr)
 	}
 	files, err := filepath.Glob(filepath.Join(outputDir, "*"))
-	if err != nil || len(files) != 4 {
+	if err != nil || len(files) != 5 {
 		t.Fatalf("generated files = %#v, %v", files, err)
 	}
 	for _, name := range files {
@@ -542,6 +529,98 @@ func TestCheckGeneratesReproducibleEdgeCasesAndCompletePDFs(t *testing.T) {
 		if readErr != nil || len(payload) == 0 {
 			t.Fatalf("generated %s = %d bytes, %v", name, len(payload), readErr)
 		}
+	}
+
+	visualDir := filepath.Join(dir, "edge-visual")
+	code, stdout, stderr = invoke([]string{"check", "--json", "--edge-cases", "2", "--seed", "42", "--edge-output", visualDir, "--edge-visual", template}, "")
+	if code != exitOK || stderr != "" || !strings.Contains(stdout, `"gallery_file":"edge-gallery.html"`) {
+		t.Fatalf("visual edge output = %d, %q, %q", code, stdout, stderr)
+	}
+	for _, name := range []string{"edge-report.json", "edge-gallery.html", "001-empty-text.svg", "002-minimal.svg"} {
+		payload, readErr := os.ReadFile(filepath.Join(visualDir, name))
+		if readErr != nil || len(payload) == 0 {
+			t.Fatalf("visual artifact %s = %d bytes, %v", name, len(payload), readErr)
+		}
+	}
+}
+
+func TestInspectEdgeCaseInputReportsShapeAndStressLocations(t *testing.T) {
+	inspection, err := inspectEdgeCaseInput([]byte(`{
+  "a": "",
+  "b": "  \n",
+  "c": "éé",
+  "items": [true, null, 12, {"long": "abc\ndef"}]
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inspection.StringCount != 4 || inspection.EmptyStringCount != 1 || inspection.WhitespaceOnlyCount != 1 ||
+		inspection.MultilineStringCount != 2 || inspection.NumberCount != 1 || inspection.BooleanCount != 1 ||
+		inspection.NullCount != 1 || inspection.ObjectCount != 2 || inspection.ListCount != 1 ||
+		inspection.MaxListItems != 4 || inspection.MaxListPath != "/items" || inspection.MaxDepth != 3 {
+		t.Fatalf("input inspection counts = %#v", inspection)
+	}
+	if inspection.MaxStringBytes != 7 || inspection.MaxStringBytesPath != "/items/3/long" ||
+		inspection.MaxStringRunes != 7 || inspection.MaxStringRunesPath != "/items/3/long" {
+		t.Fatalf("input inspection maxima = %#v", inspection)
+	}
+
+	escaped, err := inspectEdgeCaseInput([]byte(`{"a/b~c":"value"}`))
+	if err != nil || escaped.MaxStringRunesPath != "/a~1b~0c" {
+		t.Fatalf("escaped JSON pointer = %#v, %v", escaped, err)
+	}
+}
+
+func TestLaboratoryTemplateEdgeGalleryHasProgrammaticPageEvidence(t *testing.T) {
+	template := filepath.Clean("../../examples/paper-lab-report/lab-report.paper")
+	assets := filepath.Clean("../../examples/paper-lab-report/assets.json")
+	outputDir := filepath.Join(t.TempDir(), "lab-edges")
+	code, stdout, stderr := invoke([]string{
+		"check", "--json", "--assets", assets,
+		"--edge-cases", "10", "--edge-max-items", "64", "--seed", "42",
+		"--edge-output", outputDir, "--edge-visual", template,
+	}, "")
+	if code != exitOK || stderr != "" {
+		t.Fatalf("laboratory edge check = %d, stderr=%q, stdout=%q", code, stderr, stdout)
+	}
+	var report edgeCheckResult
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("decode laboratory edge report: %v\n%s", err, stdout)
+	}
+	if !report.OK || report.FormatVersion != 2 || len(report.Cases) != 10 || report.GalleryFile != "edge-gallery.html" {
+		t.Fatalf("laboratory edge report = %#v", report)
+	}
+	byName := make(map[string]edgeCheckCaseResult, len(report.Cases))
+	for _, checked := range report.Cases {
+		byName[checked.Name] = checked
+		if !checked.OK || checked.InputInspection == nil || checked.Inspection == nil || !checked.Inspection.StructureOK {
+			t.Fatalf("incomplete edge evidence for %s: %#v", checked.Name, checked)
+		}
+		if checked.Pages != checked.Inspection.ParsedPages || len(checked.Inspection.PageText) != checked.Pages || len(checked.Inspection.PageSummaries) != checked.Pages {
+			t.Fatalf("page evidence mismatch for %s: %#v", checked.Name, checked)
+		}
+		for pageIndex, page := range checked.Inspection.PageText {
+			if page.Page != pageIndex+1 || page.Bytes <= 0 || page.Runes <= 0 || len(page.SHA256) != 64 {
+				t.Fatalf("invalid page text evidence for %s: %#v", checked.Name, page)
+			}
+		}
+	}
+	if byName["empty-text"].InputInspection.EmptyStringCount == 0 || byName["whitespace-text"].InputInspection.WhitespaceOnlyCount == 0 ||
+		byName["multiline-text"].InputInspection.MultilineStringCount == 0 || byName["long-unbroken-string"].InputInspection.MaxStringRunes < 256 {
+		t.Fatalf("fixed profiles did not expose expected input shapes: %#v", byName)
+	}
+	if byName["long-unbroken-string"].Pages < 2 || byName["dense-lists"].Pages < 2 || byName["dense-lists"].InputInspection.MaxListItems != 64 {
+		t.Fatalf("multi-page stress cases were not exercised: long=%#v dense=%#v", byName["long-unbroken-string"], byName["dense-lists"])
+	}
+	for _, artifact := range []string{"edge-report.json", "edge-gallery.html", "006-long-unbroken-string.svg", "007-dense-lists.pdf"} {
+		payload, err := os.ReadFile(filepath.Join(outputDir, artifact))
+		if err != nil || len(payload) == 0 {
+			t.Fatalf("laboratory artifact %s = %d bytes, %v", artifact, len(payload), err)
+		}
+	}
+	gallery, err := os.ReadFile(filepath.Join(outputDir, "edge-gallery.html"))
+	if err != nil || !bytes.Contains(gallery, []byte("max string 256 runes at /results/0/name")) || !bytes.Contains(gallery, []byte("10 passed · 0 failed")) {
+		t.Fatalf("laboratory gallery evidence missing: %v", err)
 	}
 }
 

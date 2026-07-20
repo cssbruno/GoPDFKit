@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -6,7 +6,7 @@ package paperd
 import (
 	"unicode/utf8"
 
-	"github.com/cssbruno/gopdfkit/internal/paperedit"
+	"github.com/cssbruno/paperrune/internal/paperedit"
 )
 
 // WorkingCopySnapshot is a detached view of a candidate's single revision

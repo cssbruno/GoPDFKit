@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -17,8 +17,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/internal/characterize"
+	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/paperrune/internal/characterize"
 )
 
 func TestBaseDocumentProducesDeterministicUnsignedBytes(t *testing.T) {
@@ -116,10 +116,10 @@ func TestUnsignedComplianceFixturesHaveDeterministicCharacterization(t *testing.
 	}
 	byName := make(map[string]characterize.FixtureEvidence, len(report.Fixtures))
 	wantSHA256 := map[string]string{
-		"pdfa4-metadata.pdf":                       "59c329d6721f10a361b39444c9521feb6d706d51855bf58eeec4d55fd915d65a",
-		"pdfa4e-attachment-metadata.pdf":           "b22383412126d7770ea9733bab35d59600f3b9402a42febddcd55f898c0ca4b4",
-		"pdfa4f-attachment-metadata.pdf":           "4d565daaf4955fcdbccaef27ea70e8e0d8deadb54f409200691eb78d0b32b41f",
-		"pdfua2-arlington-metadata-foundation.pdf": "df8f1f58677fa9f961d22c692e06774c84d39494a9887a3add8190ec26dca047",
+		"pdfa4-metadata.pdf":                       "bd25d09c3c3e163b564aa0147150fccdf624937004d9c8f4348c04f56230752e",
+		"pdfa4e-attachment-metadata.pdf":           "fd47bc71f178e9a6735e23a8e1a4d3de159e518e714eb97c7b072a03da6c21a4",
+		"pdfa4f-attachment-metadata.pdf":           "5524d63395c9eb2b5e90fdb9992a9e5e854291cd727c0e1979624ea87dc6649c",
+		"pdfua2-arlington-metadata-foundation.pdf": "b6e0720e3831837f57c3516801c9fad5e8b2a8622036d693d8ccec9b2486b68f",
 	}
 	for _, fixture := range report.Fixtures {
 		byName[fixture.Name] = fixture
@@ -183,7 +183,7 @@ func TestPDFUAComplianceStructuredTableCellRasterIsPinned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := fmt.Sprintf("%x", sha256.Sum256(pngBytes)); got != "95cef4494114626bf65a0ed1ad869b0fc4e85d29ae7cdf7992e7f7f0e67093db" {
+	if got := fmt.Sprintf("%x", sha256.Sum256(pngBytes)); got != "9f1fbfcbda9f91541aa843b9501bd67c685720ee1d7ea2429f7cc9096ef48237" {
 		t.Fatalf("structured-cell raster drift = %s", got)
 	}
 	raster, err := png.Decode(bytes.NewReader(pngBytes))

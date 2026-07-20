@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -11,15 +11,11 @@ import (
 )
 
 const paperScenarioRepeatFixture = `document @doc:
-  schema @invoice:
-    field @items:
-      type: "list"
-      item-type: "object"
+  schema invoice:
+    list object items:
       max-items: 4
-      field @active:
-        type: "bool"
-      field @name:
-        type: "string"
+      bool active
+      string name
   scenario @preview:
     keyed-list @items:
       object @alpha:
@@ -34,7 +30,7 @@ const paperScenarioRepeatFixture = `document @doc:
   page:
     body:
       repeat @visible:
-        source: "@invoice.items"
+        source: "items"
         instance-prefix: "preview-lines"
         max-items: 2
         when: "active"
@@ -80,9 +76,8 @@ func TestPlanAndWritePaperScenarioRepeatEndToEnd(t *testing.T) {
 func TestPlanAndWritePaperScenarioBoundedLoopEndToEnd(t *testing.T) {
 	t.Parallel()
 	const source = `document:
-  schema @settings:
-    field @enabled:
-      type: "bool"
+  schema settings:
+    bool enabled
   scenario @preview:
     value @enabled: true
   page:

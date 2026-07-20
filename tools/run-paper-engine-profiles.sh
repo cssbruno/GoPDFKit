@@ -45,7 +45,7 @@ fi
 
 manifest="$out/report.txt"
 {
-	echo "# gopdfkit-paper-engine-profiles-v1"
+	echo "# paperrune-paper-engine-profiles-v1"
 	echo "# generator: tools/run-paper-engine-profiles.sh"
 	echo "# go-version: $(go version)"
 	echo "# goos: $(go env GOOS)"

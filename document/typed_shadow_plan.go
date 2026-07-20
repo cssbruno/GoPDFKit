@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 // errTypedShadowUnsupported is retained as an internal capability diagnostic

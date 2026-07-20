@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/internal/papertheme"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/papertheme"
 )
 
 // ThemeSourceResult is the source-located .paper-to-theme projection. Input is

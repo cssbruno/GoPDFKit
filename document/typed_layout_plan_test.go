@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -17,8 +17,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 func TestLayoutDocumentPlanLowersNestedSectionClauseAndNoteToExactPDF(t *testing.T) {
@@ -27,7 +27,7 @@ func TestLayoutDocumentPlanLowersNestedSectionClauseAndNoteToExactPDF(t *testing
 	source.SetAutoPageBreak(true, 18)
 	doc := &layout.LayoutDocument{
 		Title: "Typed exact plan", Language: "en-US",
-		Metadata: layout.DocumentMetadata{Subject: "Cutover", Author: "GoPDFKit"},
+		Metadata: layout.DocumentMetadata{Subject: "Cutover", Author: "PaperRune"},
 		Body: []layout.Block{
 			layout.SectionBlock{Title: "Overview", Blocks: []layout.Block{
 				layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "Section paragraph"}}},
@@ -73,7 +73,7 @@ func TestLayoutDocumentPlanLowersNestedSectionClauseAndNoteToExactPDF(t *testing
 		t.Fatal(err)
 	}
 	if output.Len() == 0 || target.title != utf8toutf16("Typed exact plan") ||
-		target.subject != utf8toutf16("Cutover") || target.author != utf8toutf16("GoPDFKit") ||
+		target.subject != utf8toutf16("Cutover") || target.author != utf8toutf16("PaperRune") ||
 		target.compliance.Lang != "en-US" {
 		t.Fatalf("painted plan metadata/output = %d bytes, title %q subject %q author %q lang %q",
 			output.Len(), target.title, target.subject, target.author, target.compliance.Lang)

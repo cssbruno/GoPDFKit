@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -130,28 +130,46 @@ func PaintDisplayPlanWithLimits(plan LayoutPlan, sink DisplayPlanPaintSink, limi
 			command := plan.commands[index]
 			switch command.Kind {
 			case CommandSaveState:
+				if graphics == nil {
+					return errors.New("layoutengine: display plan graphics sink is required")
+				}
 				if err := graphics.SaveGraphicsState(command); err != nil {
 					return fmt.Errorf("layoutengine: paint command %d on page %d: %w", index, page.Number, err)
 				}
 			case CommandRestoreState:
+				if graphics == nil {
+					return errors.New("layoutengine: display plan graphics sink is required")
+				}
 				if err := graphics.RestoreGraphicsState(command); err != nil {
 					return fmt.Errorf("layoutengine: paint command %d on page %d: %w", index, page.Number, err)
 				}
 			case CommandTransform:
+				if graphics == nil {
+					return errors.New("layoutengine: display plan graphics sink is required")
+				}
 				if err := graphics.ConcatTransform(plan.transforms[command.Payload], command); err != nil {
 					return fmt.Errorf("layoutengine: paint command %d on page %d: %w", index, page.Number, err)
 				}
 			case CommandClip:
+				if graphics == nil {
+					return errors.New("layoutengine: display plan graphics sink is required")
+				}
 				clip := plan.clips[command.Payload]
 				if err := graphics.ClipPlannedPath(clonePlannedPath(plan.paths[clip.Path]), clip, command); err != nil {
 					return fmt.Errorf("layoutengine: paint command %d on page %d: %w", index, page.Number, err)
 				}
 			case CommandFillPath:
+				if graphics == nil {
+					return errors.New("layoutengine: display plan graphics sink is required")
+				}
 				fill := plan.fills[command.Payload]
 				if err := graphics.FillPlannedPath(clonePlannedPath(plan.paths[fill.Path]), fill, command); err != nil {
 					return fmt.Errorf("layoutengine: paint command %d on page %d: %w", index, page.Number, err)
 				}
 			case CommandStrokePath:
+				if graphics == nil {
+					return errors.New("layoutengine: display plan graphics sink is required")
+				}
 				stroke := plan.strokes[command.Payload]
 				if err := graphics.StrokePlannedPath(clonePlannedPath(plan.paths[stroke.Path]), stroke, command); err != nil {
 					return fmt.Errorf("layoutengine: paint command %d on page %d: %w", index, page.Number, err)

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/paperedit"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperedit"
+	"github.com/cssbruno/paperrune/internal/paperlang"
 )
 
 const slotMutationFixture = "document @report:\n" +

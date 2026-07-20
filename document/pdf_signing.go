@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -9,7 +9,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/sign"
+	"github.com/cssbruno/paperrune/sign"
 )
 
 // OutputSigned writes the current document as a signed PDF.

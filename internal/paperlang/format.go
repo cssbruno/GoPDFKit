@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperlang
@@ -101,7 +101,7 @@ func (f *astFormatter) writeNode(node *Node, path string, depth int) error {
 	if depth > f.maxDepth {
 		return &FormatError{Path: path, Problem: fmt.Sprintf("nesting exceeds %d levels", f.maxDepth), Cause: ErrFormatDepthLimit}
 	}
-	if _, valid := parseNodeKind(string(node.Kind)); !valid {
+	if _, valid := parseNodeKind(string(node.Kind)); !valid && node.Kind != NodeField && node.Kind != NodeObjectType {
 		return f.invalid(path+".kind", fmt.Sprintf("%q is not a document component", node.Kind))
 	}
 	if node.ID != "" {
@@ -114,6 +114,9 @@ func (f *astFormatter) writeNode(node *Node, path string, depth int) error {
 			}
 			f.ids[node.ID] = path + ".id"
 		}
+	}
+	if node.Kind != NodeField && (node.FieldType != "" || node.TypeRef != "" || node.ItemType != "" || node.ItemTypeRef != "" || node.Optional) {
+		return f.invalid(path, "only typed schema fields can carry type or optional state")
 	}
 
 	properties := make([]*Property, 0, len(node.Members))
@@ -163,6 +166,35 @@ func (f *astFormatter) writeNode(node *Node, path string, depth int) error {
 		if len(node.Members) != 0 {
 			return f.invalid(path+".members", "page-break cannot contain members")
 		}
+	case NodeField:
+		if node.Value != nil {
+			return f.invalid(path+".value", "typed schema field cannot have an inline scalar value")
+		}
+		if node.TypeRef != "" {
+			if node.FieldType != "" || !validSchemaTypeName(node.TypeRef) {
+				return f.invalid(path+".type_ref", fmt.Sprintf("%q is not a custom object reference", node.TypeRef))
+			}
+		} else if _, valid := parseSchemaFieldType(string(node.FieldType)); !valid {
+			return f.invalid(path+".field_type", fmt.Sprintf("%q is not a schema field type", node.FieldType))
+		}
+		if node.FieldType == FieldList {
+			if node.ItemTypeRef != "" {
+				if node.ItemType != "" || !validSchemaTypeName(node.ItemTypeRef) {
+					return f.invalid(path+".item_type_ref", fmt.Sprintf("%q is not a custom object reference", node.ItemTypeRef))
+				}
+			} else if _, valid := parseSchemaFieldType(string(node.ItemType)); !valid || node.ItemType == FieldList {
+				return f.invalid(path+".item_type", fmt.Sprintf("%q is not a supported list item type", node.ItemType))
+			}
+		} else if node.ItemType != "" || node.ItemTypeRef != "" {
+			return f.invalid(path+".item_type", "only list fields can carry an item type")
+		}
+		block := node.FieldType == FieldObject || node.FieldType == FieldList
+		if block && len(node.Members) == 0 {
+			return f.invalid(path+".members", fmt.Sprintf("%s schema field requires indented content", node.FieldType))
+		}
+		if !block && len(node.Members) != 0 {
+			return f.invalid(path+".members", fmt.Sprintf("%s schema field cannot contain members", node.FieldType))
+		}
 	default:
 		if node.Value != nil {
 			return f.invalid(path+".value", fmt.Sprintf("%s cannot have an inline scalar value", node.Kind))
@@ -170,6 +202,9 @@ func (f *astFormatter) writeNode(node *Node, path string, depth int) error {
 		if len(node.Members) == 0 && node.Kind != NodeScenario && node.Kind != NodeObject && node.Kind != NodeKeyedList && node.Kind != NodeTheme && node.Kind != NodeStyle && node.Kind != NodeScope {
 			return f.invalid(path+".members", fmt.Sprintf("%s requires indented content", node.Kind))
 		}
+	}
+	if node.Kind == NodeObjectType && node.ID == "" {
+		return f.invalid(path+".id", "custom object requires a name")
 	}
 	if (node.Kind == NodeScenario || isFixtureNodeKind(node.Kind)) && node.ID == "" {
 		return f.invalid(path+".id", fmt.Sprintf("%s requires a readable @name", node.Kind))
@@ -193,16 +228,51 @@ func (f *astFormatter) writeNode(node *Node, path string, depth int) error {
 	if err := f.writeIndent(depth); err != nil {
 		return err
 	}
-	if err := f.write(string(node.Kind)); err != nil {
-		return err
-	}
-	if node.ID != "" {
-		if err := f.write(" " + node.ID); err != nil {
+	if node.Kind == NodeField {
+		if node.Optional {
+			if err := f.write("optional "); err != nil {
+				return err
+			}
+		}
+		declaration := string(node.FieldType)
+		if node.TypeRef != "" {
+			declaration = node.TypeRef
+		}
+		if node.FieldType == FieldList {
+			itemDeclaration := string(node.ItemType)
+			if node.ItemTypeRef != "" {
+				itemDeclaration = node.ItemTypeRef
+			}
+			declaration += " " + itemDeclaration
+		}
+		if err := f.write(declaration + " " + strings.TrimPrefix(node.ID, "@")); err != nil {
 			return err
 		}
-	}
-	if err := f.write(":"); err != nil {
-		return err
+		if node.FieldType == FieldObject || node.FieldType == FieldList {
+			if err := f.write(":"); err != nil {
+				return err
+			}
+		}
+	} else if node.Kind == NodeObjectType {
+		if err := f.write("object " + strings.TrimPrefix(node.ID, "@") + ":"); err != nil {
+			return err
+		}
+	} else {
+		if err := f.write(string(node.Kind)); err != nil {
+			return err
+		}
+		if node.ID != "" {
+			id := node.ID
+			if node.Kind == NodeSchema {
+				id = strings.TrimPrefix(id, "@")
+			}
+			if err := f.write(" " + id); err != nil {
+				return err
+			}
+		}
+		if err := f.write(":"); err != nil {
+			return err
+		}
 	}
 	if node.Value != nil {
 		formatted, err := formatScalar(*node.Value, path+".value")

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -475,7 +475,7 @@ func (t CanonicalTree) SemanticHash() (string, error) {
 	encoded, err := json.Marshal(struct {
 		Domain string                  `json:"domain"`
 		Tree   CanonicalTreeProjection `json:"tree"`
-	}{Domain: "gopdfkit.semantic-template.v1", Tree: projection})
+	}{Domain: "paperrune.semantic-template.v1", Tree: projection})
 	if err != nil {
 		return "", err
 	}

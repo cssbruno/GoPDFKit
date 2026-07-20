@@ -11,7 +11,7 @@ require_line() {
 	grep -Fq "$1" "$report" || { echo "profile report is missing: $1" >&2; exit 1; }
 }
 
-require_line '# gopdfkit-paper-engine-profiles-v1'
+require_line '# paperrune-paper-engine-profiles-v1'
 require_line '# generator: tools/run-paper-engine-profiles.sh'
 require_line '# go-version: go version '
 require_line '# goos: '

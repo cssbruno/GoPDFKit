@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/sign"
+	"github.com/cssbruno/paperrune/sign"
 )
 
 func TestProductionPolicyAppliesSupportedSettings(t *testing.T) {

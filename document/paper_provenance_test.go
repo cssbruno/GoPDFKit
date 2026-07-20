@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -10,32 +10,45 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperlang"
 )
 
 func TestPaperPlanExplainCarriesBindingAndTokenProvenance(t *testing.T) {
-	source := "document @report:\n" +
-		"  theme: \"@print\"\n" +
-		"  theme @base:\n" +
-		"    token @font:\n      type: \"string\"\n      value: \"Courier\"\n" +
-		"    token @size:\n      type: \"length\"\n      value: 11pt\n" +
-		"    token @leading:\n      type: \"length\"\n      value: 14pt\n" +
-		"    token @ink:\n      type: \"color\"\n      value: \"#336699\"\n" +
-		"  theme @print:\n" +
-		"    parent: \"base\"\n" +
-		"    token @print-ink:\n      type: \"color\"\n      reference: \"ink\"\n" +
-		"  schema @invoice:\n" +
-		"    field @total:\n      type: \"number\"\n" +
-		"  page:\n" +
-		"    width: 160pt\n    height: 80pt\n    margin: 8pt\n" +
-		"    body:\n" +
-		"      paragraph @message:\n" +
-		"        bind: \"@invoice.total\"\n" +
-		"        font-token: \"font\"\n" +
-		"        size-token: \"size\"\n" +
-		"        line-height-token: \"leading\"\n" +
-		"        color-token: \"print-ink\"\n" +
-		"        text: \"Visible\"\n"
+	source := `document @report:
+  theme: "@print"
+  theme @base:
+    token @font:
+      type: "string"
+      value: "Courier"
+    token @size:
+      type: "length"
+      value: 11pt
+    token @leading:
+      type: "length"
+      value: 14pt
+    token @ink:
+      type: "color"
+      value: "#336699"
+  theme @print:
+    parent: "base"
+    token @print-ink:
+      type: "color"
+      reference: "ink"
+  schema invoice:
+    number total
+  page:
+    width: 160pt
+    height: 80pt
+    margin: 8pt
+    body:
+      paragraph @message:
+        bind: "total"
+        font-token: "font"
+        size-token: "size"
+        line-height-token: "leading"
+        color-token: "print-ink"
+        text: "Visible"
+`
 
 	plan, planned, err := PlanPaper("provenance.paper", source)
 	if err != nil || !planned.OK() {
@@ -83,13 +96,12 @@ func TestPaperPlanTraceFragmentJoinsExactLayoutAndCompilerProvenance(t *testing.
     token @size:
       type: "length"
       value: 11pt
-  schema @invoice:
-    field @total:
-      type: "number"
+  schema invoice:
+    number total
   page:
     body:
       paragraph @message:
-        bind: "@invoice.total"
+        bind: "total"
         font-token: "font"
         size-token: "size"
         text: "Visible"

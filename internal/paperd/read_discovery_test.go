@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/paperedit"
+	"github.com/cssbruno/paperrune/internal/paperedit"
 )
 
 const discoveryFixture = "document @report:\n" +

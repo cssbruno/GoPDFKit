@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -8,9 +8,9 @@ import (
 	"log"
 	"path/filepath"
 
-	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/examples/internal/assets"
-	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
+	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/paperrune/examples/internal/assets"
+	"github.com/cssbruno/paperrune/examples/internal/outpath"
 )
 
 func main() {
@@ -55,7 +55,7 @@ func main() {
 		"document_id": "HTM-2026-0042",
 		"message":     "The HTML/CSS shape was compiled once. Only text and safe attributes change at render time.",
 		"logo":        filepath.ToSlash(assets.File("image", "document.png")),
-		"logo_alt":    "GoPDFKit logo",
+		"logo_alt":    "PaperRune logo",
 	})
 	if err != nil {
 		log.Fatal(err)

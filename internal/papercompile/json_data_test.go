@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -8,40 +8,31 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/internal/paperscenario"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperscenario"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 const jsonDataPaperSource = `document @report:
   language: "pt-BR"
-  schema @lab:
-    field @patient:
-      type: "object"
-      field @name:
-        type: "string"
-      field @note:
-        type: "string"
-        required: false
-    field @results:
-      type: "list"
-      item-type: "object"
+  schema lab:
+    object patient:
+      string name
+      optional string note
+    list object results:
       max-items: 4
-      field @name:
-        type: "string"
-      field @value:
-        type: "number"
-      field @critical:
-        type: "bool"
+      string name
+      number value
+      bool critical
   page:
     size: "A4"
     margin: 20pt
     body:
       paragraph @patient-name:
-        bind: "@lab.patient.name"
+        bind: "patient.name"
         text: "placeholder"
       repeat @result-lines:
-        source: "@lab.results"
+        source: "results"
         instance-prefix: "results"
         max-items: 4
         paragraph @result-name:
@@ -91,6 +82,54 @@ func TestCompileJSONDataBindsAndExpandsRepeats(t *testing.T) {
 		paragraph, ok := block.(layout.ParagraphBlock)
 		if !ok || layout.TextSegmentsPlainText(paragraph.Segments) != want[index] {
 			t.Fatalf("body[%d] = %#v", index, block)
+		}
+	}
+}
+
+func TestCompileJSONDataExpandsRepeatedTableRows(t *testing.T) {
+	t.Parallel()
+	const source = `document @report:
+  schema lab:
+    list object results:
+      max-items: 4
+      string name
+  page:
+    body:
+      table @results-table:
+        repeat-header: true
+        split: "rows"
+        table-track:
+          width: 100%
+        table-header:
+          table-row:
+            cell:
+              text: "NAME"
+        repeat @result-rows:
+          source: "results"
+          instance-prefix: "results"
+          max-items: 4
+          table-row @result-row:
+            cell:
+              paragraph @result-name:
+                bind: "name"
+                text: "placeholder"
+`
+	parsed := paperlang.Parse("table-repeat.paper", source)
+	if !parsed.OK() {
+		t.Fatalf("parse diagnostics = %#v", parsed.Diagnostics)
+	}
+	compiled := CompileJSONData(parsed.AST, []byte(`{"results":[{"name":"A"},{"name":"B"}]}`), JSONDataOptions{})
+	if !compiled.OK() || len(compiled.Document.Body) != 1 {
+		t.Fatalf("compiled = %#v", compiled.Diagnostics)
+	}
+	table, ok := compiled.Document.Body[0].(layout.TableBlock)
+	if !ok || len(table.Header) != 1 || len(table.Body) != 2 {
+		t.Fatalf("table = %#v", compiled.Document.Body[0])
+	}
+	for index, want := range []string{"A", "B"} {
+		paragraph, ok := table.Body[index].Cells[0].Blocks[0].(layout.ParagraphBlock)
+		if !ok || layout.TextSegmentsPlainText(paragraph.Segments) != want {
+			t.Fatalf("row %d = %#v", index, table.Body[index])
 		}
 	}
 }

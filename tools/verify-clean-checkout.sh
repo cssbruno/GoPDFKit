@@ -1,12 +1,12 @@
 #!/bin/sh
-# SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+# SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 # Copyright (c) 2026 cssBruno
 
 set -eu
 
 root=$(git rev-parse --show-toplevel)
 revision=$(git -C "$root" rev-parse HEAD)
-temporary=$(mktemp -d "${TMPDIR:-/tmp}/gopdfkit-clean-checkout.XXXXXX")
+temporary=$(mktemp -d "${TMPDIR:-/tmp}/paperrune-clean-checkout.XXXXXX")
 archive="$temporary/source.tar"
 checkout="$temporary/checkout"
 trap 'rm -rf "$temporary"' EXIT HUP INT TERM

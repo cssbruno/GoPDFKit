@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/paperedit"
+	"github.com/cssbruno/paperrune/internal/paperedit"
 )
 
 const tableMutationFixture = "document @report:\n  page @sheet:\n    body @body:\n      table @ledger:\n        repeat-header: true\n        split: \"rows\"\n        table-track @name-track:\n          width: 60pt\n        table-row @body-row:\n          cell @name:\n            text: \"Alpha\"\n"

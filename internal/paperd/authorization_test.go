@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cssbruno/gopdfkit/internal/paperedit"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperedit"
+	"github.com/cssbruno/paperrune/internal/paperlang"
 )
 
 const authorizationComponentFixture = "document @report:\n" +
@@ -115,7 +115,7 @@ func TestMutationAuthorityEnforcesOperationProtectedAndTransitiveScopes(t *testi
 
 func TestDiagnosticFixRequiresApplyFixAuthority(t *testing.T) {
 	workspace := authorizationWorkspace(t, WorkspaceOptions{RequireMutationAuthority: true})
-	request, _, opened := diagnosticFixRequest(t, workspace, invalidBindingFixFixture, "@amount", "authorized-fix", "PAPER_BIND_PATH", RemedySetBindingPath, PaperDiagnosticFixPayload{Path: "@invoice.total"}, CapabilityEdit)
+	request, _, opened := diagnosticFixRequest(t, workspace, invalidBindingFixFixture, "@amount", "authorized-fix", "PAPER_BIND_PATH", RemedySetBindingPath, PaperDiagnosticFixPayload{Path: "total"}, CapabilityEdit)
 	request.Guard.Authority = grantMutationAuthority(t, workspace, opened, "agent:fix", []MutationOperation{MutationSetBinding}, []string{"@amount"}, nil)
 	if _, err := workspace.PaperApplyDiagnosticFix(request); errorCode(err) != "AUTHORITY_OPERATION_DENIED" {
 		t.Fatalf("diagnostic fix accepted binding authority: %v", err)

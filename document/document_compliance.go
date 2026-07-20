@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -75,7 +75,7 @@ type ComplianceValidationReport struct {
 }
 
 // Validator is the integration point for external PDF/A, PDF/UA, or Arlington
-// validation tools. GoPDFKit records compliance metadata; callers should use an
+// validation tools. PaperRune records compliance metadata; callers should use an
 // external validator when standards conformance must be enforced.
 type Validator interface {
 	ValidatePDF(data []byte) (ComplianceValidationReport, error)
@@ -276,7 +276,7 @@ func (f *Document) buildComplianceXMP() []byte {
 		out.WriteString(` xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"`)
 	}
 	if f.compliance.Arlington {
-		out.WriteString(` xmlns:gopdfkit="https://github.com/cssbruno/gopdfkit/ns/compliance/1.0/"`)
+		out.WriteString(` xmlns:paperrune="https://github.com/cssbruno/paperrune/ns/compliance/1.0/"`)
 	}
 	out.WriteString(`>` + "\n")
 	if title != "" {
@@ -334,7 +334,7 @@ func (f *Document) buildComplianceXMP() []byte {
 		out.WriteString(`<pdfuaid:rev>2024</pdfuaid:rev>` + "\n")
 	}
 	if f.compliance.Arlington {
-		out.WriteString(`<gopdfkit:ArlingtonValidationRequired>True</gopdfkit:ArlingtonValidationRequired>` + "\n")
+		out.WriteString(`<paperrune:ArlingtonValidationRequired>True</paperrune:ArlingtonValidationRequired>` + "\n")
 	}
 	out.WriteString(`</rdf:Description>` + "\n")
 	out.WriteString(`</rdf:RDF>` + "\n")

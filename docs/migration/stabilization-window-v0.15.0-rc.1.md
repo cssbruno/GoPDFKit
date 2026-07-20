@@ -13,8 +13,8 @@ evidence and approvals.
 - Window end (UTC): pending — the stabilization window is active
 - Owner: pending — release owner confirmation is required
 - Decision: `pending`
-- Release workflow: <https://github.com/cssbruno/GoPDFKit/actions/runs/29641974462>
-- Published prerelease: <https://github.com/cssbruno/GoPDFKit/releases/tag/v0.15.0-rc.1>
+- Release workflow: <https://github.com/cssbruno/PaperRune/actions/runs/29641974462>
+- Published prerelease: <https://github.com/cssbruno/PaperRune/releases/tag/v0.15.0-rc.1>
 - Published (UTC): `2026-07-18T11:08:09Z`
 
 ## Candidate corpus and routes
@@ -56,7 +56,7 @@ The performance baseline was recorded on Apple M2, darwin/arm64, Go
 `go1.26.5`, using:
 
 ```text
-GOCACHE=/tmp/gopdfkit-go-cache make bench-paper-engine-budget
+GOCACHE=/tmp/paperrune-go-cache make bench-paper-engine-budget
 ```
 
 The report used profile `docs/performance/calibrations/apple-m2-go1.26.json`,

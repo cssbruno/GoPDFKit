@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 // Package paperrepeat expands stable-keyed scenario items into deterministic
@@ -14,8 +14,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/cssbruno/gopdfkit/internal/paperexpr"
-	"github.com/cssbruno/gopdfkit/internal/paperscenario"
+	"github.com/cssbruno/paperrune/internal/paperexpr"
+	"github.com/cssbruno/paperrune/internal/paperscenario"
 )
 
 const (

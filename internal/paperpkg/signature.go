@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperpkg
@@ -21,7 +21,7 @@ const (
 	HardMaxSignatures              uint32 = 4_096
 	HardMaxTrustedKeys             uint32 = 4_096
 	HardMaxKeyIDBytes              uint32 = 256
-	signaturePayloadDomain                = "gopdfkit.paperpkg.entry-signature.v1"
+	signaturePayloadDomain                = "paperrune.paperpkg.entry-signature.v1"
 )
 
 var (

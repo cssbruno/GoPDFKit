@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -393,58 +393,57 @@ func (p LayoutPlan) Validate() error {
 		instance InstanceID
 	}]bool)
 	for i, fragment := range p.fragments {
-		path := fmt.Sprintf("fragments[%d]", i)
 		if !fragment.ID.Valid() || !fragment.Node.Valid() || !fragment.Instance.Valid() {
-			return planError(path, "has an absent identity")
+			return planIndexedError("fragments", i, "", "has an absent identity")
 		}
 		if err := validateTextIdentity("fragment node key", string(fragment.Key)); err != nil {
-			return planError(path, err.Error())
+			return planIndexedError("fragments", i, "", err.Error())
 		}
 		if err := validateTextIdentity("fragment instance ID", string(fragment.Instance)); err != nil {
-			return planError(path, err.Error())
+			return planIndexedError("fragments", i, "", err.Error())
 		}
 		if _, exists := fragmentIDs[fragment.ID]; exists {
-			return planError(path, fmt.Sprintf("duplicates fragment ID %d", fragment.ID))
+			return planIndexedError("fragments", i, "", fmt.Sprintf("duplicates fragment ID %d", fragment.ID))
 		}
 		if key, exists := nodeKeys[fragment.Node]; exists && key != fragment.Key {
-			return planError(path, "reuses a node ID with another key")
+			return planIndexedError("fragments", i, "", "reuses a node ID with another key")
 		}
 		if node, exists := keyNodes[fragment.Key]; exists && node != fragment.Node {
-			return planError(path, "reuses a node key with another node ID")
+			return planIndexedError("fragments", i, "", "reuses a node key with another node ID")
 		}
 		if fragment.Page == 0 || uint64(fragment.Page) > uint64(len(p.pages)) {
-			return planError(path, "references an invalid page")
+			return planIndexedError("fragments", i, "", "references an invalid page")
 		}
 		if !fragment.Region.Valid() {
-			return planError(path, "references an invalid region")
+			return planIndexedError("fragments", i, "", "references an invalid region")
 		}
 		if err := fragment.BorderBox.Validate(); err != nil {
-			return planError(path+".border_box", err.Error())
+			return planIndexedError("fragments", i, ".border_box", err.Error())
 		}
 		if err := fragment.MarginBox.Validate(); err != nil {
-			return planError(path+".margin_box", err.Error())
+			return planIndexedError("fragments", i, ".margin_box", err.Error())
 		}
 		if err := fragment.PaddingBox.Validate(); err != nil {
-			return planError(path+".padding_box", err.Error())
+			return planIndexedError("fragments", i, ".padding_box", err.Error())
 		}
 		if err := fragment.ContentBox.Validate(); err != nil {
-			return planError(path+".content_box", err.Error())
+			return planIndexedError("fragments", i, ".content_box", err.Error())
 		}
 		if !fragmentBoxContains(fragment.MarginBox, fragment.BorderBox) || !fragmentBoxContains(fragment.BorderBox, fragment.PaddingBox) || !fragmentBoxContains(fragment.PaddingBox, fragment.ContentBox) {
-			return planError(path, "box-model rectangles are not nested margin/border/padding/content")
+			return planIndexedError("fragments", i, "", "box-model rectangles are not nested margin/border/padding/content")
 		}
 		if err := fragment.Source.Validate(); err != nil {
-			return planError(path+".source", err.Error())
+			return planIndexedError("fragments", i, ".source", err.Error())
 		}
 		if !fragment.Continuation.valid() {
-			return planError(path, "has an invalid continuation")
+			return planIndexedError("fragments", i, "", "has an invalid continuation")
 		}
 		identity := struct {
 			node     NodeID
 			instance InstanceID
 		}{fragment.Node, fragment.Instance}
 		if fragment.Repeated && !seenFragmentInstances[identity] {
-			return planError(path, "repeated fragment has no earlier original")
+			return planIndexedError("fragments", i, "", "repeated fragment has no earlier original")
 		}
 		seenFragmentInstances[identity] = true
 		fragmentIDs[fragment.ID] = fragment
@@ -464,39 +463,37 @@ func (p LayoutPlan) Validate() error {
 	fragmentCursor, lineCursor, commandCursor := 0, 0, 0
 	commandPages := make([]uint32, len(p.commands))
 	for i, page := range p.pages {
-		path := fmt.Sprintf("pages[%d]", i)
 		if page.Number != uint32(i+1) {
-			return planError(path, "page numbers are not consecutive and one-based")
+			return planIndexedError("pages", i, "", "page numbers are not consecutive and one-based")
 		}
 		if err := page.Size.Validate(); err != nil || page.Size.IsEmpty() {
-			return planError(path+".size", "page size must have positive extents")
+			return planIndexedError("pages", i, ".size", "page size must have positive extents")
 		}
 		fragmentEnd, ok := page.Fragments.end(len(p.fragments))
 		if !ok || int(page.Fragments.Start) != fragmentCursor {
-			return planError(path+".fragments", "range is invalid or non-contiguous")
+			return planIndexedError("pages", i, ".fragments", "range is invalid or non-contiguous")
 		}
 		for j := fragmentCursor; j < fragmentEnd; j++ {
 			if p.fragments[j].Page != page.Number {
-				return planError(path+".fragments", "contains a fragment owned by another page")
+				return planIndexedError("pages", i, ".fragments", "contains a fragment owned by another page")
 			}
 		}
 		fragmentCursor = fragmentEnd
 
 		lineEnd, ok := page.Lines.end(len(p.lines))
 		if !ok || int(page.Lines.Start) != lineCursor {
-			return planError(path+".lines", "range is invalid or non-contiguous")
+			return planIndexedError("pages", i, ".lines", "range is invalid or non-contiguous")
 		}
 		var activeLineFragment FragmentID
 		for j := lineCursor; j < lineEnd; j++ {
 			line := p.lines[j]
-			linePath := fmt.Sprintf("lines[%d]", j)
 			fragment, exists := fragmentIDs[line.Fragment]
 			if !exists || fragment.Page != page.Number {
-				return planError(linePath, "references a missing or cross-page fragment")
+				return planIndexedError("lines", j, "", "references a missing or cross-page fragment")
 			}
 			if activeLineFragment != line.Fragment {
 				if closedLineFragments[line.Fragment] {
-					return planError(linePath, "returns to a non-contiguous fragment line group")
+					return planIndexedError("lines", j, "", "returns to a non-contiguous fragment line group")
 				}
 				if activeLineFragment.Valid() {
 					closedLineFragments[activeLineFragment] = true
@@ -504,14 +501,14 @@ func (p LayoutPlan) Validate() error {
 				activeLineFragment = line.Fragment
 			}
 			if err := line.Bounds.Validate(); err != nil {
-				return planError(linePath+".bounds", err.Error())
+				return planIndexedError("lines", j, ".bounds", err.Error())
 			}
 			bottom, err := line.Bounds.Bottom()
 			if err != nil || line.Baseline < line.Bounds.Y || line.Baseline > bottom {
-				return planError(linePath, "baseline lies outside line bounds")
+				return planIndexedError("lines", j, "", "baseline lies outside line bounds")
 			}
 			if err := line.Source.Validate(); err != nil {
-				return planError(linePath+".source", err.Error())
+				return planIndexedError("lines", j, ".source", err.Error())
 			}
 			identity := struct {
 				node     NodeID
@@ -520,15 +517,15 @@ func (p LayoutPlan) Validate() error {
 			if fragment.Repeated {
 				want := fragmentLineCounts[line.Fragment]
 				if line.Index != want {
-					return planError(linePath, fmt.Sprintf("repeated fragment line index is %d, want %d", line.Index, want))
+					return planIndexedError("lines", j, "", fmt.Sprintf("repeated fragment line index is %d, want %d", line.Index, want))
 				}
 			} else if lineIndexSeen[identity] {
 				want := lineIndexes[identity] + 1
 				if line.Index != want {
-					return planError(linePath, fmt.Sprintf("paragraph line index is %d, want %d", line.Index, want))
+					return planIndexedError("lines", j, "", fmt.Sprintf("paragraph line index is %d, want %d", line.Index, want))
 				}
 			} else if line.Index != 0 {
-				return planError(linePath, "first paragraph line index is not zero")
+				return planIndexedError("lines", j, "", "first paragraph line index is not zero")
 			}
 			lineIndexes[identity] = line.Index
 			lineIndexSeen[identity] = true
@@ -541,7 +538,7 @@ func (p LayoutPlan) Validate() error {
 
 		commandEnd, ok := page.Commands.end(len(p.commands))
 		if !ok || int(page.Commands.Start) != commandCursor {
-			return planError(path+".commands", "range is invalid or non-contiguous")
+			return planIndexedError("pages", i, ".commands", "range is invalid or non-contiguous")
 		}
 		for j := commandCursor; j < commandEnd; j++ {
 			command := p.commands[j]
@@ -579,72 +576,71 @@ func (p LayoutPlan) Validate() error {
 	var activeLineWidth Fixed
 	lineActive := false
 	for index, run := range p.glyphRuns {
-		path := fmt.Sprintf("glyph_runs[%d]", index)
 		if index > 0 && run.Line < p.glyphRuns[index-1].Line {
-			return planError(path+".line", "glyph runs are not in global line order")
+			return planIndexedError("glyph_runs", index, ".line", "glyph runs are not in global line order")
 		}
 		if uint64(run.Line) >= uint64(len(p.lines)) {
-			return planError(path+".line", "references a missing planned line")
+			return planIndexedError("glyph_runs", index, ".line", "references a missing planned line")
 		}
 		if !run.Font.Valid() || uint64(run.Font) > fontCount {
-			return planError(path+".font", "references a missing font resource")
+			return planIndexedError("glyph_runs", index, ".font", "references a missing font resource")
 		}
 		fontReferences[run.Font-1]++
 		if run.FontSize <= 0 {
-			return planError(path+".font_size", "must be positive")
+			return planIndexedError("glyph_runs", index, ".font_size", "must be positive")
 		}
 		if !run.Color.Set && (run.Color.R != 0 || run.Color.G != 0 || run.Color.B != 0) {
-			return planError(path+".color", "unset color must have zero RGB components")
+			return planIndexedError("glyph_runs", index, ".color", "unset color must have zero RGB components")
 		}
 		if run.Opacity < 0 || run.Opacity > Fixed(FixedScale) {
-			return planError(path+".opacity", "must be between zero and one")
+			return planIndexedError("glyph_runs", index, ".opacity", "must be between zero and one")
 		}
 		line := p.lines[run.Line]
 		if !lineActive || run.Line != activeLine {
 			if lineActive && activeLineWidth != p.lines[activeLine].Bounds.Width {
-				return planError(path+".line", "preceding line glyph-run advances do not cover its exact width")
+				return planIndexedError("glyph_runs", index, ".line", "preceding line glyph-run advances do not cover its exact width")
 			}
 			activeLine, activeLineWidth, lineActive = run.Line, 0, true
 		}
 		expectedX, err := line.Bounds.X.Add(activeLineWidth)
 		if err != nil || run.Origin != (Point{X: expectedX, Y: line.Baseline}) {
-			return planError(path+".origin", fmt.Sprintf("does not continue the owning line at its exact baseline (codes %q got %d,%d want %d,%d)", run.Codes, run.Origin.X, run.Origin.Y, expectedX, line.Baseline))
+			return planIndexedError("glyph_runs", index, ".origin", fmt.Sprintf("does not continue the owning line at its exact baseline (codes %q got %d,%d want %d,%d)", run.Codes, run.Origin.X, run.Origin.Y, expectedX, line.Baseline))
 		}
 		if run.Source != line.Source {
-			return planError(path+".source", "does not match the owning line provenance")
+			return planIndexedError("glyph_runs", index, ".source", "does not match the owning line provenance")
 		}
 		if err := run.Source.Validate(); err != nil {
-			return planError(path+".source", err.Error())
+			return planIndexedError("glyph_runs", index, ".source", err.Error())
 		}
 		resource := p.fonts[run.Font-1]
 		glyphCount := resource.GlyphCount(run.Codes)
 		if len(run.Codes) == 0 || !utf8.ValidString(run.Codes) || len(run.Advances) != glyphCount {
-			return planError(path, "codes and advances must be non-empty and have equal lengths")
+			return planIndexedError("glyph_runs", index, "", "codes and advances must be non-empty and have equal lengths")
 		}
 		var width Fixed
 		codeIndex := 0
 		for _, code := range run.Codes {
 			if resource.IsEmbeddedUTF8() {
 				if code < 0x20 || code == utf8.RuneError || code > 0xffff {
-					return planError(path+".codes", "contains an unsupported embedded-font Unicode scalar")
+					return planIndexedError("glyph_runs", index, ".codes", "contains an unsupported embedded-font Unicode scalar")
 				}
 			} else if code < 0x20 || code > 0x7e {
-				return planError(path+".codes", "contains a non-printable core-font code")
+				return planIndexedError("glyph_runs", index, ".codes", "contains a non-printable core-font code")
 			}
 			advance := run.Advances[codeIndex]
 			if advance < 0 {
-				return planError(fmt.Sprintf("%s.advances[%d]", path, codeIndex), "must be non-negative")
+				return planError(fmt.Sprintf("glyph_runs[%d].advances[%d]", index, codeIndex), "must be non-negative")
 			}
 			var err error
 			width, err = width.Add(advance)
 			if err != nil {
-				return planError(path+".advances", "sum overflows fixed-point geometry")
+				return planIndexedError("glyph_runs", index, ".advances", "sum overflows fixed-point geometry")
 			}
 			codeIndex++
 		}
 		activeLineWidth, err = activeLineWidth.Add(width)
 		if err != nil || activeLineWidth > line.Bounds.Width {
-			return planError(path+".advances", "cumulative runs exceed the owning line width")
+			return planIndexedError("glyph_runs", index, ".advances", "cumulative runs exceed the owning line width")
 		}
 	}
 	if lineActive && activeLineWidth != p.lines[activeLine].Bounds.Width {
@@ -842,163 +838,165 @@ func (p LayoutPlan) Validate() error {
 			return planError(fmt.Sprintf("image_resources[%d]", index), "is not referenced by a planned image")
 		}
 	}
-	paragraphStates := make(map[struct {
-		node     NodeID
-		instance InstanceID
-	}]FragmentContinuation)
-	paragraphIdentities := make(map[struct {
-		node     NodeID
-		instance InstanceID
-	}]bool)
-	paragraphSources := make(map[struct {
-		node     NodeID
-		instance InstanceID
-	}]SourceSpan)
-	paragraphOrder := make([]struct {
-		node     NodeID
-		instance InstanceID
-	}, 0)
-	for _, fragment := range p.fragments {
-		if fragmentLineCounts[fragment.ID] > 0 {
-			identity := struct {
-				node     NodeID
-				instance InstanceID
-			}{fragment.Node, fragment.Instance}
-			paragraphIdentities[identity] = true
+	if err := validateParagraphContinuations(p.fragments, fragmentLineCounts); err != nil {
+		return err
+	}
+	if err := validateBreakDecisions(p.breaks, p.pages, fragmentIDs); err != nil {
+		return err
+	}
+	return validatePlanDiagnostics(p.diagnostics, p.pages, fragmentIDs)
+}
+
+type planParagraphIdentity struct {
+	node     NodeID
+	instance InstanceID
+}
+
+func validateParagraphContinuations(fragments []Fragment, lineCounts map[FragmentID]uint32) error {
+	states := make(map[planParagraphIdentity]FragmentContinuation)
+	identities := make(map[planParagraphIdentity]bool)
+	sources := make(map[planParagraphIdentity]SourceSpan)
+	order := make([]planParagraphIdentity, 0)
+	for _, fragment := range fragments {
+		if lineCounts[fragment.ID] > 0 {
+			identities[planParagraphIdentity{fragment.Node, fragment.Instance}] = true
 		}
 	}
-	for i, fragment := range p.fragments {
-		identity := struct {
-			node     NodeID
-			instance InstanceID
-		}{fragment.Node, fragment.Instance}
-		if !paragraphIdentities[identity] {
+	for i, fragment := range fragments {
+		identity := planParagraphIdentity{fragment.Node, fragment.Instance}
+		if !identities[identity] {
 			continue
 		}
-		if fragmentLineCounts[fragment.ID] == 0 {
-			return planError(fmt.Sprintf("fragments[%d]", i), "paragraph fragment owns no planned lines")
+		if lineCounts[fragment.ID] == 0 {
+			return planIndexedError("fragments", i, "", "paragraph fragment owns no planned lines")
 		}
 		if fragment.Repeated {
 			if fragment.Continuation != ContinuationWhole {
-				return planError(fmt.Sprintf("fragments[%d]", i), "repeated fragments must be whole")
+				return planIndexedError("fragments", i, "", "repeated fragments must be whole")
 			}
-			state := paragraphStates[identity]
+			state := states[identity]
 			if state != ContinuationWhole && state != ContinuationEnd {
-				return planError(fmt.Sprintf("fragments[%d]", i), "repeated fragment has no completed original")
+				return planIndexedError("fragments", i, "", "repeated fragment has no completed original")
 			}
-			if fragment.Source != paragraphSources[identity] {
-				return planError(fmt.Sprintf("fragments[%d]", i), "repeated fragment changes source provenance")
+			if fragment.Source != sources[identity] {
+				return planIndexedError("fragments", i, "", "repeated fragment changes source provenance")
 			}
 			continue
 		}
-		state := paragraphStates[identity]
+		state := states[identity]
 		if state == "" {
-			paragraphOrder = append(paragraphOrder, identity)
-			paragraphSources[identity] = fragment.Source
-		} else if fragment.Source != paragraphSources[identity] {
-			return planError(fmt.Sprintf("fragments[%d]", i), "paragraph continuation changes source provenance")
+			order = append(order, identity)
+			sources[identity] = fragment.Source
+		} else if fragment.Source != sources[identity] {
+			return planIndexedError("fragments", i, "", "paragraph continuation changes source provenance")
 		}
 		switch state {
 		case "":
 			if fragment.Continuation != ContinuationWhole && fragment.Continuation != ContinuationStart {
-				return planError(fmt.Sprintf("fragments[%d]", i), "paragraph continuation must begin with whole or start")
+				return planIndexedError("fragments", i, "", "paragraph continuation must begin with whole or start")
 			}
 		case ContinuationStart, ContinuationMiddle:
 			if fragment.Continuation != ContinuationMiddle && fragment.Continuation != ContinuationEnd {
-				return planError(fmt.Sprintf("fragments[%d]", i), "paragraph continuation must continue with middle or end")
+				return planIndexedError("fragments", i, "", "paragraph continuation must continue with middle or end")
 			}
 		case ContinuationWhole, ContinuationEnd:
-			return planError(fmt.Sprintf("fragments[%d]", i), "paragraph has lines after its terminal fragment")
+			return planIndexedError("fragments", i, "", "paragraph has lines after its terminal fragment")
 		}
-		paragraphStates[identity] = fragment.Continuation
+		states[identity] = fragment.Continuation
 	}
-	for _, identity := range paragraphOrder {
-		state := paragraphStates[identity]
+	for _, identity := range order {
+		state := states[identity]
 		if state == ContinuationStart || state == ContinuationMiddle {
 			return planError("fragments", fmt.Sprintf("paragraph node %d instance %q has no end fragment", identity.node, identity.instance))
 		}
 	}
-	for i, decision := range p.breaks {
-		path := fmt.Sprintf("breaks[%d]", i)
+	return nil
+}
+
+func validateBreakDecisions(decisions []BreakDecision, pages []PlannedPage, fragments map[FragmentID]Fragment) error {
+	for i, decision := range decisions {
 		if !decision.Reason.valid() {
-			return planError(path, "has an invalid reason")
+			return planIndexedError("breaks", i, "", "has an invalid reason")
 		}
 		fromPage, toPage := uint64(decision.FromPage), uint64(decision.ToPage)
-		if fromPage == 0 || fromPage > uint64(len(p.pages)) ||
-			toPage > uint64(len(p.pages)) || toPage != fromPage+1 {
-			return planError(path, "must transition between consecutive plan pages")
+		if fromPage == 0 || fromPage > uint64(len(pages)) || toPage > uint64(len(pages)) || toPage != fromPage+1 {
+			return planIndexedError("breaks", i, "", "must transition between consecutive plan pages")
 		}
 		if !decision.Region.Valid() {
-			return planError(path, "has an invalid region")
+			return planIndexedError("breaks", i, "", "has an invalid region")
 		}
-		if !decision.Preceding.Valid() || !decision.Triggering.Valid() ||
-			decision.Preceding == decision.Triggering {
-			return planError(path, "must reference distinct preceding and triggering fragments")
+		if !decision.Preceding.Valid() || !decision.Triggering.Valid() || decision.Preceding == decision.Triggering {
+			return planIndexedError("breaks", i, "", "must reference distinct preceding and triggering fragments")
 		}
-		preceding, precedingExists := fragmentIDs[decision.Preceding]
-		triggering, triggeringExists := fragmentIDs[decision.Triggering]
+		preceding, precedingExists := fragments[decision.Preceding]
+		triggering, triggeringExists := fragments[decision.Triggering]
 		if !precedingExists || preceding.Page != decision.FromPage || preceding.Region != decision.Region {
-			return planError(path, "preceding fragment does not match the source page and region")
+			return planIndexedError("breaks", i, "", "preceding fragment does not match the source page and region")
 		}
 		if !triggeringExists || triggering.Page != decision.ToPage || triggering.Region != decision.Region {
-			return planError(path, "triggering fragment does not match the destination page and region")
+			return planIndexedError("breaks", i, "", "triggering fragment does not match the destination page and region")
 		}
 		if decision.Required < 0 || decision.Available < 0 {
-			return planError(path, "has a negative height")
+			return planIndexedError("breaks", i, "", "has a negative height")
 		}
 		switch decision.Reason {
 		case BreakInsufficientRemainingBodySpace, BreakPaginationConstraint:
 			if decision.Required <= decision.Available {
-				return planError(path, "space or policy evidence must require more than is available")
+				return planIndexedError("breaks", i, "", "space or policy evidence must require more than is available")
 			}
 		case BreakPreviousFragmentOverflow:
 			if decision.Required <= 0 || decision.Available != 0 {
-				return planError(path, "post-overflow evidence must have positive required height and zero available height")
+				return planIndexedError("breaks", i, "", "post-overflow evidence must have positive required height and zero available height")
 			}
 		case BreakExplicitPageBreak:
 			if decision.Required != 0 || decision.Available != 0 {
-				return planError(path, "explicit page-break evidence must have zero required and available height")
+				return planIndexedError("breaks", i, "", "explicit page-break evidence must have zero required and available height")
 			}
 		}
 	}
-	for i, diagnostic := range p.diagnostics {
+	return nil
+}
+
+func validatePlanDiagnostics(diagnostics []Diagnostic, pages []PlannedPage, fragments map[FragmentID]Fragment) error {
+	for i, diagnostic := range diagnostics {
 		if err := diagnostic.Validate(); err != nil {
-			return planError(fmt.Sprintf("diagnostics[%d]", i), err.Error())
+			return planIndexedError("diagnostics", i, "", err.Error())
 		}
 		// A retained layout diagnostic is positioned evidence, not a global log
 		// message. Authored inputs carry a source span; generated typed inputs
 		// carry their stable logical node key instead.
 		if diagnostic.Stage == StageLayout {
 			if diagnostic.Location.Page == 0 {
-				return planError(fmt.Sprintf("diagnostics[%d]", i), "layout diagnostic has no page evidence")
+				return planIndexedError("diagnostics", i, "", "layout diagnostic has no page evidence")
 			}
 			if diagnostic.Location.Source.IsZero() && diagnostic.Location.Key == "" && !diagnostic.Location.Node.Valid() {
-				return planError(fmt.Sprintf("diagnostics[%d]", i), "layout diagnostic has no source evidence")
+				return planIndexedError("diagnostics", i, "", "layout diagnostic has no source evidence")
 			}
 		}
-		if uint64(diagnostic.Location.Page) > uint64(len(p.pages)) {
-			return planError(fmt.Sprintf("diagnostics[%d]", i), "references an invalid page")
+		if uint64(diagnostic.Location.Page) > uint64(len(pages)) {
+			return planIndexedError("diagnostics", i, "", "references an invalid page")
 		}
-		if diagnostic.Location.Fragment.Valid() {
-			fragment, exists := fragmentIDs[diagnostic.Location.Fragment]
-			if !exists {
-				return planError(fmt.Sprintf("diagnostics[%d]", i), "references a missing fragment")
-			}
-			if diagnostic.Location.Page != 0 && diagnostic.Location.Page != fragment.Page {
-				return planError(fmt.Sprintf("diagnostics[%d]", i), "references a fragment on another page")
-			}
-			if diagnostic.Location.Region != "" && diagnostic.Location.Region != fragment.Region {
-				return planError(fmt.Sprintf("diagnostics[%d]", i), "references a fragment in another region")
-			}
-			if diagnostic.Location.Node.Valid() && diagnostic.Location.Node != fragment.Node {
-				return planError(fmt.Sprintf("diagnostics[%d]", i), "references a fragment owned by another node")
-			}
-			if diagnostic.Location.Key != "" && diagnostic.Location.Key != fragment.Key {
-				return planError(fmt.Sprintf("diagnostics[%d]", i), "references a fragment owned by another node key")
-			}
-			if diagnostic.Location.Instance.Valid() && diagnostic.Location.Instance != fragment.Instance {
-				return planError(fmt.Sprintf("diagnostics[%d]", i), "references a fragment owned by another instance")
-			}
+		if !diagnostic.Location.Fragment.Valid() {
+			continue
+		}
+		fragment, exists := fragments[diagnostic.Location.Fragment]
+		if !exists {
+			return planIndexedError("diagnostics", i, "", "references a missing fragment")
+		}
+		if diagnostic.Location.Page != 0 && diagnostic.Location.Page != fragment.Page {
+			return planIndexedError("diagnostics", i, "", "references a fragment on another page")
+		}
+		if diagnostic.Location.Region != "" && diagnostic.Location.Region != fragment.Region {
+			return planIndexedError("diagnostics", i, "", "references a fragment in another region")
+		}
+		if diagnostic.Location.Node.Valid() && diagnostic.Location.Node != fragment.Node {
+			return planIndexedError("diagnostics", i, "", "references a fragment owned by another node")
+		}
+		if diagnostic.Location.Key != "" && diagnostic.Location.Key != fragment.Key {
+			return planIndexedError("diagnostics", i, "", "references a fragment owned by another node key")
+		}
+		if diagnostic.Location.Instance.Valid() && diagnostic.Location.Instance != fragment.Instance {
+			return planIndexedError("diagnostics", i, "", "references a fragment owned by another instance")
 		}
 	}
 	return nil
@@ -1006,6 +1004,10 @@ func (p LayoutPlan) Validate() error {
 
 func planError(path, problem string) error {
 	return fmt.Errorf("layoutengine: invalid layout plan at %s: %s", path, problem)
+}
+
+func planIndexedError(section string, index int, suffix, problem string) error {
+	return fmt.Errorf("layoutengine: invalid layout plan at %s[%d]%s: %s", section, index, suffix, problem)
 }
 
 func fragmentBoxContains(outer, inner Rect) bool {
@@ -1023,38 +1025,37 @@ func validatePlannedGridTracks(tracks []PlannedGridTrack, pages int) error {
 	var previousAxis GridTrackAxis
 	var nextIndex uint32
 	for index, track := range tracks {
-		path := fmt.Sprintf("grid_tracks[%d]", index)
 		if track.Group == 0 || track.Page == 0 || uint64(track.Page) > uint64(pages) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-			return planError(path, "has an absent group or invalid page")
+			return planIndexedError("grid_tracks", index, "", "has an absent group or invalid page")
 		}
 		if !track.Region.Valid() || !track.Axis.valid() {
-			return planError(path, "has an invalid region or axis")
+			return planIndexedError("grid_tracks", index, "", "has an invalid region or axis")
 		}
 		if err := track.Bounds.Validate(); err != nil || track.Bounds.IsEmpty() {
-			return planError(path+".bounds", "track bounds must have positive extents")
+			return planIndexedError("grid_tracks", index, ".bounds", "track bounds must have positive extents")
 		}
 		if track.GapAfter < 0 {
-			return planError(path+".gap_after", "gap must be non-negative")
+			return planIndexedError("grid_tracks", index, ".gap_after", "gap must be non-negative")
 		}
 		if track.Group != previousGroup {
 			if track.Group != previousGroup+1 || track.Axis != GridTrackColumn || track.Index != 0 {
-				return planError(path, "groups must be consecutive and begin with column zero")
+				return planIndexedError("grid_tracks", index, "", "groups must be consecutive and begin with column zero")
 			}
 			previousGroup, groupPage, previousAxis, nextIndex = track.Group, track.Page, track.Axis, 1
 			continue
 		}
 		if track.Page != groupPage {
-			return planError(path, "one grid group spans multiple pages")
+			return planIndexedError("grid_tracks", index, "", "one grid group spans multiple pages")
 		}
 		if track.Axis != previousAxis {
 			if previousAxis != GridTrackColumn || track.Axis != GridTrackRow || track.Index != 0 {
-				return planError(path, "row tracks must follow all column tracks")
+				return planIndexedError("grid_tracks", index, "", "row tracks must follow all column tracks")
 			}
 			previousAxis, nextIndex = track.Axis, 1
 			continue
 		}
 		if track.Index != nextIndex {
-			return planError(path, "track indexes are not consecutive")
+			return planIndexedError("grid_tracks", index, "", "track indexes are not consecutive")
 		}
 		nextIndex++
 	}
@@ -1065,25 +1066,24 @@ func validatePlannedPageRegions(regions []PlannedPageRegion, pages []PlannedPage
 	var previousPage uint32
 	previousOrder := -1
 	for index, region := range regions {
-		path := fmt.Sprintf("page_regions[%d]", index)
 		if region.Page == 0 || uint64(region.Page) > uint64(len(pages)) || !region.Region.Valid() {
-			return planError(path, "has an invalid page or region")
+			return planIndexedError("page_regions", index, "", "has an invalid page or region")
 		}
 		if err := region.Bounds.Validate(); err != nil || region.Bounds.IsEmpty() {
-			return planError(path+".bounds", "region bounds must have positive extents")
+			return planIndexedError("page_regions", index, ".bounds", "region bounds must have positive extents")
 		}
 		if region.Master != "" && !region.Master.valid() {
-			return planError(path+".master", "master ID is invalid")
+			return planIndexedError("page_regions", index, ".master", "master ID is invalid")
 		}
 		right, rightErr := region.Bounds.Right()
 		bottom, bottomErr := region.Bounds.Bottom()
 		page := pages[region.Page-1]
 		if rightErr != nil || bottomErr != nil || region.Bounds.X < 0 || region.Bounds.Y < 0 || right > page.Size.Width || bottom > page.Size.Height {
-			return planError(path+".bounds", "region lies outside its page")
+			return planIndexedError("page_regions", index, ".bounds", "region lies outside its page")
 		}
 		order := regionOrder(region.Region)
 		if region.Page < previousPage || region.Page == previousPage && order <= previousOrder {
-			return planError(path, "regions must be unique and ordered by page, header, body, footer")
+			return planIndexedError("page_regions", index, "", "regions must be unique and ordered by page, header, body, footer")
 		}
 		if region.Page != previousPage {
 			previousPage, previousOrder = region.Page, order

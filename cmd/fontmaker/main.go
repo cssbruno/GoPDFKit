@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/cssbruno/gopdfkit/font"
+	"github.com/cssbruno/paperrune/font"
 )
 
 type fontBuildFunc func(fontPath, encodingPath, outputDir string, log io.Writer, embed bool) error

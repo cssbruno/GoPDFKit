@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -8,22 +8,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 const repeatSourceFixture = `document @doc:
-  schema @invoice:
-    field @items:
-      type: "list"
-      item-type: "object"
+  schema invoice:
+    list object items:
       max-items: 10
-      field @name:
-        type: "string"
-      field @active:
-        type: "bool"
-      field @quantity:
-        type: "number"
+      string name
+      bool active
+      number quantity
   scenario @sample:
     keyed-list @items:
       object @line-a:
@@ -41,7 +36,7 @@ const repeatSourceFixture = `document @doc:
   page:
     body:
       repeat @visible-lines:
-        source: "@invoice.items"
+        source: "items"
         instance-prefix: "invoice-lines"
         max-items: 2
         when: "active && quantity == 1"
@@ -125,16 +120,11 @@ func TestCompileScenarioInjectsPrimitiveAndOptionalBindingValues(t *testing.T) {
 	t.Parallel()
 
 	const source = `document @doc:
-  schema @invoice:
-    field @customer:
-      type: "string"
-    field @quantity:
-      type: "number"
-    field @paid:
-      type: "bool"
-    field @note:
-      type: "string"
-      required: false
+  schema invoice:
+    string customer
+    number quantity
+    bool paid
+    optional string note
   scenario @sample:
     value @customer: "Ada"
     value @quantity: 12.50
@@ -143,22 +133,22 @@ func TestCompileScenarioInjectsPrimitiveAndOptionalBindingValues(t *testing.T) {
   page:
     body:
       heading @customer:
-        bind: "@invoice.customer"
+        bind: "customer"
         text: "Customer placeholder"
       paragraph @quantity:
-        bind: "@invoice.quantity"
+        bind: "quantity"
         format: "decimal"
         format-locale: "en-US"
         format-min-fraction: 2
         format-max-fraction: 2
         text: "Quantity placeholder"
       paragraph @paid:
-        bind: "@invoice.paid"
+        bind: "paid"
         text: "Paid placeholder"
       list:
         item:
           paragraph @note:
-            bind: "@invoice.note"
+            bind: "note"
             bind-required: false
             text: "Note placeholder"
 `
@@ -189,13 +179,37 @@ func TestCompileScenarioInjectsPrimitiveAndOptionalBindingValues(t *testing.T) {
 	}
 }
 
+func TestCompileScenarioEvaluatesSingleSchemaRootRelativeBinding(t *testing.T) {
+	const source = `document @doc:
+  schema invoice:
+    number total
+  scenario @sample:
+    value @total: 42
+  page:
+    body:
+      paragraph @total:
+        bind: "total"
+        text: "placeholder"
+`
+	parsed := paperlang.Parse("relative-scenario-binding.paper", source)
+	compiled := CompileScenario(parsed.AST, "sample")
+	if !parsed.OK() || !compiled.OK() {
+		t.Fatalf("diagnostics = %#v / %#v", parsed.Diagnostics, compiled.Diagnostics)
+	}
+	if got := layout.TextSegmentsPlainText(compiled.Document.Body[0].(layout.ParagraphBlock).Segments); got != "42" {
+		t.Fatalf("evaluated relative binding = %q, want 42", got)
+	}
+	if got := mappingByID(compiled.Mapping, "@total").BindingPath; got != "@invoice.total" {
+		t.Fatalf("canonical relative binding = %q, want @invoice.total", got)
+	}
+}
+
 func TestCompileScenarioLocaleControlsDeterministicFormatting(t *testing.T) {
 	t.Parallel()
 
 	const source = `document @doc:
-  schema @invoice:
-    field @total:
-      type: "number"
+  schema invoice:
+    number total
   scenario @english:
     locale: "en-US"
     value @total: 1234.5
@@ -205,7 +219,7 @@ func TestCompileScenarioLocaleControlsDeterministicFormatting(t *testing.T) {
   page:
     body:
       paragraph @total:
-        bind: "@invoice.total"
+        bind: "total"
         format: "decimal"
         format-min-fraction: 2
         format-max-fraction: 2
@@ -234,15 +248,14 @@ func TestCompileScenarioLocaleControlsDeterministicFormatting(t *testing.T) {
 func TestCompileScenarioDiagnosesIncompleteBindingFormat(t *testing.T) {
 	t.Parallel()
 	const source = `document:
-  schema @invoice:
-    field @total:
-      type: "number"
+  schema invoice:
+    number total
   scenario @sample:
     value @total: 12.5
   page:
     body:
       paragraph:
-        bind: "@invoice.total"
+        bind: "total"
         format: "currency"
         format-locale: "en-US"
         text: "placeholder"
@@ -258,15 +271,14 @@ func TestCompileScenarioDiagnosesRequiredMissingNullAndTypeMismatch(t *testing.T
 	t.Parallel()
 
 	base := `document:
-  schema @invoice:
-    field @name:
-      type: "string"
+  schema invoice:
+    string name
   scenario @sample:
 %s
   page:
     body:
       paragraph:
-        bind: "@invoice.name"
+        bind: "name"
         text: "placeholder"
 `
 	tests := []struct {
@@ -347,7 +359,7 @@ func TestCompileScenarioRejectsInvalidSelectionSchemaPredicateAndBounds(t *testi
 	}{
 		{name: "missing selection", source: repeatSourceFixture, scenario: "", code: "PAPER_REPEAT_SCENARIO_REQUIRED"},
 		{name: "unknown selection", source: repeatSourceFixture, scenario: "missing", code: "PAPER_REPEAT_SCENARIO_UNKNOWN"},
-		{name: "unknown schema path", source: strings.Replace(repeatSourceFixture, "@invoice.items\"", "@invoice.missing\"", 1), scenario: "sample", code: "PAPER_REPEAT_SCHEMA"},
+		{name: "unknown schema path", source: strings.Replace(repeatSourceFixture, "items\"", "missing\"", 1), scenario: "sample", code: "PAPER_REPEAT_SCHEMA"},
 		{name: "unknown predicate path", source: strings.Replace(repeatSourceFixture, "active && quantity == 1", "missing == 1", 1), scenario: "sample", code: "PAPER_REPEAT_WHEN"},
 		{name: "predicate type", source: strings.Replace(repeatSourceFixture, "active && quantity == 1", "quantity + 1", 1), scenario: "sample", code: "PAPER_REPEAT_WHEN_TYPE"},
 		{name: "output bound", source: strings.Replace(repeatSourceFixture, "max-items: 2", "max-items: 1", 1), scenario: "sample", code: "PAPER_REPEAT_LIMIT"},

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 // Package paperpkg defines the bounded, deterministic storage contract for
@@ -203,8 +203,9 @@ func validatePackageVersion(version string) error {
 		return errors.New("version must be non-empty, NFC, valid UTF-8, and at most 128 bytes")
 	}
 	for index, character := range version {
-		if character > unicode.MaxASCII || !(unicode.IsLetter(character) || unicode.IsDigit(character) ||
-			(index > 0 && strings.ContainsRune("._+-", character))) {
+		validPunctuation := index > 0 && strings.ContainsRune("._+-", character)
+		if character > unicode.MaxASCII || !unicode.IsLetter(character) && !unicode.IsDigit(character) &&
+			!validPunctuation {
 			return errors.New("version must use canonical ASCII letters, digits, dots, underscores, pluses, or hyphens")
 		}
 	}

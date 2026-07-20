@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package pdfverify
@@ -32,7 +32,7 @@ func (r PopplerRasterizer) Rasterize(ctx context.Context, pdf []byte, dpi uint32
 	if err := versionCommand.Run(); err != nil || !strings.Contains(versionOutput.String(), "pdftoppm version "+r.Version) {
 		return RasterOutput{}, fmt.Errorf("pdftoppm version does not match pinned %q", r.Version)
 	}
-	root, err := os.MkdirTemp(r.TempRoot, "gopdfkit-pdfverify-")
+	root, err := os.MkdirTemp(r.TempRoot, "paperrune-pdfverify-")
 	if err != nil {
 		return RasterOutput{}, err
 	}

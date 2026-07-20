@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -12,9 +12,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/cssbruno/gopdfkit/internal/papercompile"
-	"github.com/cssbruno/gopdfkit/internal/paperedit"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/papercompile"
+	"github.com/cssbruno/paperrune/internal/paperedit"
+	"github.com/cssbruno/paperrune/internal/paperlang"
 )
 
 type sourceIdempotencyRecord struct {
@@ -171,7 +171,7 @@ func (w *Workspace) PaperSetBinding(request PaperSetBindingRequest) (PaperMutati
 		return PaperMutationResult{}, err
 	}
 	if len(request.Path) == 0 || len(request.Path) > w.limits.MaxQueryBytes || !validBindingPath(request.Path) {
-		return PaperMutationResult{}, workspaceError("INVALID_BINDING", "binding path must be a bounded absolute or relative dotted path", paperedit.ErrInvalidOperation)
+		return PaperMutationResult{}, workspaceError("INVALID_BINDING", "binding path must be a bounded root-relative or schema-qualified dotted path without @", paperedit.ErrInvalidOperation)
 	}
 	if request.Format != "" {
 		switch request.Format {
@@ -397,10 +397,10 @@ func literalOperation(node *paperlang.Node, target, text string) (paperedit.Oper
 }
 
 func validBindingPath(path string) bool {
-	if !utf8.ValidString(path) || strings.ContainsAny(path, " \t\r\n") {
+	if !utf8.ValidString(path) || strings.HasPrefix(path, "@") || strings.ContainsAny(path, " \t\r\n") {
 		return false
 	}
-	parts := strings.Split(strings.TrimPrefix(path, "@"), ".")
+	parts := strings.Split(path, ".")
 	if len(parts) == 0 || parts[0] == "" {
 		return false
 	}

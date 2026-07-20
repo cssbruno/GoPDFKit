@@ -2,13 +2,13 @@
 
 - Status: Accepted for staged implementation
 - Date: 2026-07-16
-- Decision owners: GoPDFKit maintainers
+- Decision owners: PaperRune maintainers
 - Execution plan: [PAPER_ENGINE_PLAN.md](../../PAPER_ENGINE_PLAN.md)
 - Checklists: [PAPER_ENGINE_CHECKLISTS.md](../../PAPER_ENGINE_CHECKLISTS.md)
 
 ## Context
 
-GoPDFKit currently has two automatic layout implementations:
+PaperRune currently has two automatic layout implementations:
 
 1. Typed `layout.LayoutDocument` measurement in `layout/measure.go` followed by
    renderer-local positioning and pagination in `document/document_render.go`.
@@ -28,7 +28,7 @@ explicit manual drawing path and does not need to be removed.
 
 ## Decision
 
-GoPDFKit will implement one automatic layout engine with multiple input
+PaperRune will implement one automatic layout engine with multiple input
 frontends:
 
 ```text

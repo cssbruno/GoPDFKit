@@ -16,6 +16,7 @@
       templateTargets: Object.freeze((payload.template_targets || []).map(Object.freeze)),
       bindingTargets: Object.freeze((payload.binding_targets || []).map(Object.freeze)),
       schemas: Object.freeze((payload.schemas || []).map(schema => Object.freeze({name: schema.name, fields: Object.freeze((schema.fields || []).map(Object.freeze))}))),
+      objectTypes: Object.freeze([...(payload.object_types || [])]),
       schemaFields: Object.freeze((payload.schema_field_targets || []).map(Object.freeze)),
       scenarios: Object.freeze([...(payload.scenarios || [])]),
       scenarioValues: Object.freeze((payload.scenario_values || []).map(Object.freeze)),
@@ -44,6 +45,10 @@
     }
     if (draft.operation === 'schema') {
       if (draft.target !== metadata.documentTarget || !readableID(draft.id)) throw new Error('Choose the document and a readable schema @id');
+      return {...base, target: draft.target, id: draft.id};
+    }
+    if (draft.operation === 'schema-object') {
+      if (draft.target !== metadata.documentTarget || !readableID(draft.id)) throw new Error('Choose the document and a readable custom object @id');
       return {...base, target: draft.target, id: draft.id};
     }
     if (draft.operation === 'import') {
@@ -84,9 +89,9 @@
     }
     if (draft.operation === 'schema-field') {
       const target = metadata.schemaFields.find(item => item.id === draft.target);
-      const types = ['string', 'number', 'bool', 'object', 'list'];
+      const types = ['string', 'number', 'bool', 'object', 'list', ...metadata.objectTypes];
       if (!target || !types.includes(draft.kind) || !readableID(draft.id)) throw new Error('Choose an object/schema target, field type, and readable @id');
-      if (draft.kind === 'list' && !['string', 'number', 'bool', 'object'].includes(draft.itemType)) throw new Error('Choose a supported list item type');
+      if (draft.kind === 'list' && !['string', 'number', 'bool', 'object', ...metadata.objectTypes].includes(draft.itemType)) throw new Error('Choose a supported list item type');
       const payload = {...base, target: draft.target, id: draft.id, kind: draft.kind};
       if (draft.kind === 'list') { payload.text = draft.itemType; payload.weight = Number(draft.maxItems || 16); }
       return payload;

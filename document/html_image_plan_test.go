@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -23,8 +23,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cssbruno/gopdfkit/internal/browseroracle"
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
+	"github.com/cssbruno/paperrune/internal/browseroracle"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
 )
 
 func TestHTMLUnifiedImagesResolveIntrinsicContainCoverAlignmentReuseAndAlt(t *testing.T) {
@@ -483,9 +483,9 @@ func BenchmarkHTMLUnifiedImagePlanning(b *testing.B) {
 }
 
 func TestHTMLUnifiedImageVisualFixture(t *testing.T) {
-	destination := os.Getenv("GOPDFKIT_IMAGE_FIXTURE_PDF")
+	destination := os.Getenv("PAPERRUNE_IMAGE_FIXTURE_PDF")
 	if destination == "" {
-		t.Skip("set GOPDFKIT_IMAGE_FIXTURE_PDF to write the reviewed image/figure PDF")
+		t.Skip("set PAPERRUNE_IMAGE_FIXTURE_PDF to write the reviewed image/figure PDF")
 	}
 	data := htmlImagePlanFixturePNG(t)
 	uri := "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)

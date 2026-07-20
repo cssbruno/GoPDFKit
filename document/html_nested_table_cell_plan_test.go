@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -13,8 +13,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 func TestHTMLUnifiedNestedTableCellPreservesImageDisplayResource(t *testing.T) {
@@ -176,9 +176,9 @@ func TestHTMLUnifiedNestedTableCellLimitsCancellationAndConcurrentReuse(t *testi
 }
 
 func TestHTMLUnifiedNestedTableCellVisualFixture(t *testing.T) {
-	destination := os.Getenv("GOPDFKIT_NESTED_TABLE_FIXTURE_PDF")
+	destination := os.Getenv("PAPERRUNE_NESTED_TABLE_FIXTURE_PDF")
 	if destination == "" {
-		t.Skip("set GOPDFKIT_NESTED_TABLE_FIXTURE_PDF to write the reviewed nested-table PDF")
+		t.Skip("set PAPERRUNE_NESTED_TABLE_FIXTURE_PDF to write the reviewed nested-table PDF")
 	}
 	compiled, err := CompileHTML(htmlNestedTableCellFixture)
 	if err != nil {

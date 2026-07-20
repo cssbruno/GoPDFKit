@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cssbruno/gopdfkit/internal/browseroracle"
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/browseroracle"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 func htmlUnifiedTableStructuredFixture(t testing.TB) string {
@@ -288,9 +288,9 @@ func BenchmarkHTMLUnifiedStructuredTablePlanning(b *testing.B) {
 }
 
 func TestHTMLUnifiedTableVisualFixture(t *testing.T) {
-	destination := os.Getenv("GOPDFKIT_TABLE_FIXTURE_PDF")
+	destination := os.Getenv("PAPERRUNE_TABLE_FIXTURE_PDF")
 	if destination == "" {
-		t.Skip("set GOPDFKIT_TABLE_FIXTURE_PDF to write the reviewed table PDF")
+		t.Skip("set PAPERRUNE_TABLE_FIXTURE_PDF to write the reviewed table PDF")
 	}
 	compiled, err := CompileHTML(htmlUnifiedTableStructuredFixture(t))
 	if err != nil {

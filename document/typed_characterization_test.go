@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -17,7 +17,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 func TestTypedLayoutInventoryPinsEveryBlockFieldAndType(t *testing.T) {
@@ -251,7 +251,7 @@ func TestTypedCharacterizationCorpusIsCompleteBoundedAndDeterministic(t *testing
 		t.Fatalf("runner is nondeterministic:\n%s\n%s", a, b)
 	}
 	digest := sha256.Sum256(a)
-	if got := hex.EncodeToString(digest[:]); got != "42b3cfe78f64efbeb1c5cea2f608272f4e321007f7bb9eb07bc8a51494dd966d" {
+	if got := hex.EncodeToString(digest[:]); got != "0e980d26e744958b49b33ba0bc83d4257be969b9c7e434efff6f7ce35e00b953" {
 		t.Fatalf("typed characterization golden drift: got %s", got)
 	}
 	if len(first.Fixtures) != len(inventory.Fixtures) {

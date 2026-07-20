@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 // Package characterize produces bounded, deterministic compatibility evidence
@@ -20,7 +20,7 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
-	"github.com/cssbruno/gopdfkit/inspect"
+	"github.com/cssbruno/paperrune/inspect"
 )
 
 const ReportSchemaVersion uint16 = 1
@@ -233,7 +233,7 @@ func inspectStructure(data []byte) PDFStructure {
 		PDFUA2:            bytes.Contains(data, []byte("<pdfuaid:part>2</pdfuaid:part>")),
 		PDFA4:             bytes.Contains(data, []byte("<pdfaid:part>4</pdfaid:part>")),
 		PDFAConformance:   pdfAConformance(data),
-		ArlingtonRequired: bytes.Contains(data, []byte("<gopdfkit:ArlingtonValidationRequired>True</gopdfkit:ArlingtonValidationRequired>")),
+		ArlingtonRequired: bytes.Contains(data, []byte("<paperrune:ArlingtonValidationRequired>True</paperrune:ArlingtonValidationRequired>")),
 	}
 }
 

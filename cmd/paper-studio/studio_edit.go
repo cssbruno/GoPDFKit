@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -17,10 +17,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/cssbruno/gopdfkit/internal/papercompile"
-	"github.com/cssbruno/gopdfkit/internal/paperd"
-	"github.com/cssbruno/gopdfkit/internal/paperedit"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/papercompile"
+	"github.com/cssbruno/paperrune/internal/paperd"
+	"github.com/cssbruno/paperrune/internal/paperedit"
+	"github.com/cssbruno/paperrune/internal/paperlang"
 )
 
 const studioEditFieldLimit = 256
@@ -142,7 +142,7 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 		return studioEditResponse{}, err
 	}
 	fontRepair := request.Operation == "text" && request.Property == "font"
-	if request.SourceRevision != studioSourceRevision(snapshot.source) || request.PlanRevision != snapshot.revision || (snapshot.pages == 0 && request.Operation != "template" && request.Operation != "import" && request.Operation != "schema" && request.Operation != "schema-field" && request.Operation != "scenario" && request.Operation != "scenario-create" && request.Operation != "scenario-matrix" && request.Operation != "scenario-value" && !fontRepair) {
+	if request.SourceRevision != studioSourceRevision(snapshot.source) || request.PlanRevision != snapshot.revision || (snapshot.pages == 0 && request.Operation != "template" && request.Operation != "import" && request.Operation != "schema" && request.Operation != "schema-object" && request.Operation != "schema-field" && request.Operation != "scenario" && request.Operation != "scenario-create" && request.Operation != "scenario-matrix" && request.Operation != "scenario-value" && !fontRepair) {
 		return studioEditResponse{}, fmt.Errorf("%w: source or plan changed after selection", errStudioStaleEdit)
 	}
 
@@ -203,6 +203,8 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 	case "import":
 		operation = paperd.MutationInsertTemplate
 	case "schema":
+		operation = paperd.MutationInsertTemplate
+	case "schema-object":
 		operation = paperd.MutationInsertTemplate
 	case "scenario-create":
 		operation = paperd.MutationCreateScenario
@@ -348,7 +350,7 @@ func validateStudioEditRequest(request studioEditRequest) error {
 	if request.Width != nil && (math.IsNaN(*request.Width) || math.IsInf(*request.Width, 0)) || request.Height != nil && (math.IsNaN(*request.Height) || math.IsInf(*request.Height, 0)) {
 		return fmt.Errorf("%w: page dimensions must be finite", errStudioInvalidEdit)
 	}
-	if request.Operation != "box" && request.Operation != "text" && request.Operation != "grid" && request.Operation != "image" && request.Operation != "table" && request.Operation != "page" && request.Operation != "page-size" && request.Operation != "canvas" && request.Operation != "region" && request.Operation != "binding" && request.Operation != "template" && request.Operation != "import" && request.Operation != "schema" && request.Operation != "schema-field" && request.Operation != "scenario-create" && request.Operation != "scenario-matrix" && request.Operation != "scenario-value" && request.Operation != "scenario" && request.Operation != "flow" {
+	if request.Operation != "box" && request.Operation != "text" && request.Operation != "grid" && request.Operation != "image" && request.Operation != "table" && request.Operation != "page" && request.Operation != "page-size" && request.Operation != "canvas" && request.Operation != "region" && request.Operation != "binding" && request.Operation != "template" && request.Operation != "import" && request.Operation != "schema" && request.Operation != "schema-object" && request.Operation != "schema-field" && request.Operation != "scenario-create" && request.Operation != "scenario-matrix" && request.Operation != "scenario-value" && request.Operation != "scenario" && request.Operation != "flow" {
 		return fmt.Errorf("%w: operation is outside the closed Studio authoring vocabulary", errStudioInvalidEdit)
 	}
 	if request.Operation == "scenario" {
@@ -393,6 +395,9 @@ func applyStudioSemanticMutation(workspace *paperd.Workspace, guard paperd.Paper
 	}
 	if request.Operation == "schema" {
 		return workspace.PaperInsertTemplate(paperd.PaperInsertTemplateRequest{Guard: guard, Template: "schema", ID: request.ID})
+	}
+	if request.Operation == "schema-object" {
+		return workspace.PaperInsertTemplate(paperd.PaperInsertTemplateRequest{Guard: guard, Template: "schema-object", ID: request.ID})
 	}
 	if request.Operation == "scenario-create" {
 		return workspace.PaperCreateScenario(paperd.PaperCreateScenarioRequest{Guard: guard, Name: request.ID, Schema: request.Schema, Preset: request.Preset})

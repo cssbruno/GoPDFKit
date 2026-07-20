@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 const (
@@ -380,7 +380,8 @@ func typedTreePercent(percent uint32) layoutengine.TreeLength {
 	// nearest representable value while the layout model retains full
 	// millionth-of-one-percent precision for actual planning.
 	value := (uint64(percent)*1024 + 50_000_000) / 100_000_000
-	return layoutengine.TreeLength{Kind: layoutengine.TreeLengthPercent, Value: layoutengine.Fixed(value)}
+	// percent is uint32, so value is at most 43,980 and always fits Fixed.
+	return layoutengine.TreeLength{Kind: layoutengine.TreeLengthPercent, Value: layoutengine.Fixed(value)} // #nosec G115 -- the preceding uint32-domain bound is far below MaxInt64
 }
 
 func typedTreeRowColumnTrack(track layout.RowColumnTrack, name string) layoutengine.TreeTrackInput {

@@ -1,4 +1,4 @@
-GoPDFKit unified HTML default-route baseline
+PaperRune unified HTML default-route baseline
 platform: darwin/arm64, Apple M2
 command: go test ./document -run '^$' -bench '^BenchmarkHTMLUnifiedDefaultWriteCompiled$' -benchmem -count=3
 recorded: 2026-07-17

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperexpr
@@ -28,10 +28,10 @@ func TestExpressionAndControlFlowRuntimeHasNoAmbientAuthority(t *testing.T) {
 	allowed := map[string]bool{
 		"context": true, "encoding/json": true, "errors": true, "fmt": true, "math": true,
 		"sort": true, "strconv": true, "strings": true, "unicode/utf8": true,
-		"github.com/cssbruno/gopdfkit/internal/paperexpr":     true,
-		"github.com/cssbruno/gopdfkit/internal/paperlang":     true,
-		"github.com/cssbruno/gopdfkit/internal/paperrepeat":   true,
-		"github.com/cssbruno/gopdfkit/internal/paperscenario": true,
+		"github.com/cssbruno/paperrune/internal/paperexpr":     true,
+		"github.com/cssbruno/paperrune/internal/paperlang":     true,
+		"github.com/cssbruno/paperrune/internal/paperrepeat":   true,
+		"github.com/cssbruno/paperrune/internal/paperscenario": true,
 	}
 	files, err := filepath.Glob("*.go")
 	if err != nil {

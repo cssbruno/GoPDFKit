@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -7,7 +7,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 // LongFormHTMLDocumentModel converts supported long-form HTML into a shared

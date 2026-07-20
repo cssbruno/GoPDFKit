@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package font
@@ -503,7 +503,7 @@ func makeDefinitionFile(fileStr, tpStr, encodingFileStr string, embed bool, encL
 
 // Make generates a font definition file in JSON format. A definition file
 // of this type is required to use non-core fonts in the PDF documents that
-// gopdfkit generates. See the fontmaker command in the gopdfkit package for a
+// paperrune generates. See the fontmaker command in the paperrune package for a
 // command-line interface to this function.
 //
 // fontFileStr is the name of the TrueType file (extension .ttf), OpenType file

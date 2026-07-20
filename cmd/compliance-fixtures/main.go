@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 // Command compliance-fixtures generates candidate PDFs for external standards
@@ -23,9 +23,9 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/internal/characterize"
-	"github.com/cssbruno/gopdfkit/sign"
+	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/paperrune/internal/characterize"
+	"github.com/cssbruno/paperrune/sign"
 )
 
 const (
@@ -157,19 +157,19 @@ func generatePDFUAArlingtonFoundation(path, root, fontPath, boldFontPath string)
 		PDFUA2:     true,
 		Arlington:  true,
 		Lang:       "en-US",
-		Identifier: "urn:uuid:gopdfkit-pdfua2-arlington-foundation",
+		Identifier: "urn:uuid:paperrune-pdfua2-arlington-foundation",
 	})
 	pdf.AddPage()
 	pdf.SetFont("DejaVu", "", 12)
 	pdf.SetNextTextRole("H1")
 	pdf.CellFormat(0, 8, "PDF/UA-2 tagged structure fixture", "", 1, "L", false, 0, "")
 	pdf.SetNextTextRole("P")
-	pdf.MultiCell(0, 6, "This file exercises GoPDFKit tagged PDF output, XMP metadata, catalog markers, parent tree entries, marked content IDs, links, images, lists, tables, and artifacts.", "", "L", false)
+	pdf.MultiCell(0, 6, "This file exercises PaperRune tagged PDF output, XMP metadata, catalog markers, parent tree entries, marked content IDs, links, images, lists, tables, and artifacts.", "", "L", false)
 	pdf.SetNextTextRole("Link")
-	pdf.CellFormat(0, 7, "External reference link", "", 1, "L", false, 0, "https://example.com/gopdfkit")
+	pdf.CellFormat(0, 7, "External reference link", "", 1, "L", false, 0, "https://example.com/paperrune")
 	pdf.ImageOptions(filepath.Join(root, "assets", "static", "image", "logo.png"), 10, pdf.GetY()+2, 24, 0, false, document.ImageOptions{
 		ImageType: "png",
-		AltText:   "GoPDFKit logo",
+		AltText:   "PaperRune logo",
 	}, 0, "")
 	pdf.Ln(18)
 	// PDF/UA requires every rendering font to be embedded. The dedicated HTML
@@ -188,7 +188,7 @@ func generatePDFAFoundation(path, fontPath, boldFontPath string, icc []byte, mod
 	pdf.SetComplianceMetadata(document.ComplianceMetadata{
 		PDFA:       mode,
 		Lang:       "en-US",
-		Identifier: "urn:uuid:gopdfkit-" + string(mode) + "-foundation",
+		Identifier: "urn:uuid:paperrune-" + string(mode) + "-foundation",
 	})
 	if err := pdf.SetOutputIntent(icc, "sRGB IEC61966-2.1"); err != nil {
 		return err
@@ -203,7 +203,7 @@ func generatePDFAFoundation(path, fontPath, boldFontPath string, icc []byte, mod
 	}
 	pdf.AddPage()
 	pdf.SetFont("DejaVu", "", 12)
-	pdf.MultiCell(0, 6, "This file exercises GoPDFKit PDF/A-4 metadata, catalog output intent, and embedded UTF-8 font generation.", "", "L", false)
+	pdf.MultiCell(0, 6, "This file exercises PaperRune PDF/A-4 metadata, catalog output intent, and embedded UTF-8 font generation.", "", "L", false)
 	return pdf.OutputFileAndClose(path)
 }
 
@@ -211,14 +211,14 @@ func generateSignedComplianceFoundation(path, root, fontPath, boldFontPath strin
 	pdf := baseDocument(fontPath, boldFontPath)
 	pdf.SetTitle("Signed PDF/A-4f PDF/UA-2 Arlington metadata foundation", false)
 	pdf.SetSubject("Generated signed compliance fixture for PDF/A-4f, PDF/UA-2, Arlington, and XMP metadata validation", false)
-	pdf.SetAuthor("GoPDFKit compliance fixtures", false)
+	pdf.SetAuthor("PaperRune compliance fixtures", false)
 	pdf.SetComplianceMetadata(document.ComplianceMetadata{
 		PDFA:       document.PDFAMode4F,
 		PDFUA2:     true,
 		Arlington:  true,
 		Lang:       "en-US",
 		Title:      "Signed PDF/A-4f PDF/UA-2 Arlington metadata foundation",
-		Identifier: "urn:uuid:gopdfkit-signed-pdfa4f-pdfua2-arlington-foundation",
+		Identifier: "urn:uuid:paperrune-signed-pdfa4f-pdfua2-arlington-foundation",
 	})
 	if err := pdf.SetOutputIntent(icc, "sRGB IEC61966-2.1"); err != nil {
 		return err
@@ -237,10 +237,10 @@ func generateSignedComplianceFoundation(path, root, fontPath, boldFontPath strin
 	pdf.SetNextTextRole("P")
 	pdf.MultiCell(0, 6, "This signed fixture exercises PDF/A-4f metadata, PDF/UA-2 tagged content, Arlington model checks, XMP metadata, attachments, output intents, and detached CMS signing.", "", "L", false)
 	pdf.SetNextTextRole("Link")
-	pdf.CellFormat(0, 7, "Signed fixture reference link", "", 1, "L", false, 0, "https://example.com/gopdfkit/signed")
+	pdf.CellFormat(0, 7, "Signed fixture reference link", "", 1, "L", false, 0, "https://example.com/paperrune/signed")
 	pdf.ImageOptions(filepath.Join(root, "assets", "static", "image", "logo.png"), 10, pdf.GetY()+2, 20, 0, false, document.ImageOptions{
 		ImageType: "png",
-		AltText:   "GoPDFKit logo",
+		AltText:   "PaperRune logo",
 	}, 0, "")
 	pdf.Ln(16)
 	// The unsigned PDF/UA fixture covers the unified HTML lowering path. Keep
@@ -259,7 +259,7 @@ func generateSignedComplianceFoundation(path, root, fontPath, boldFontPath strin
 		Certificate:     cert,
 		DigestAlgorithm: crypto.SHA256,
 		SubFilter:       sign.SubFilterAdobePKCS7Detached,
-		Name:            "GoPDFKit Compliance Signer",
+		Name:            "PaperRune Compliance Signer",
 		Reason:          "Compliance fixture",
 		Location:        "CI",
 		SigningTime:     time.Unix(1_704_067_200, 0).UTC(),
@@ -345,7 +345,7 @@ func complianceSigner() (*x509.Certificate, crypto.Signer, error) {
 	}
 	template := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "GoPDFKit Compliance Signer"},
+		Subject:               pkix.Name{CommonName: "PaperRune Compliance Signer"},
 		NotBefore:             time.Unix(1_704_067_200, 0).UTC().Add(-time.Hour),
 		NotAfter:              time.Unix(1_704_067_200, 0).UTC().Add(365 * 24 * time.Hour),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageContentCommitment,

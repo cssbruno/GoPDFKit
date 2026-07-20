@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperedge
@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/papercompile"
+	"github.com/cssbruno/paperrune/internal/papercompile"
 )
 
 func TestGenerateIsDeterministicAndSchemaValid(t *testing.T) {
@@ -16,11 +16,12 @@ func TestGenerateIsDeterministicAndSchemaValid(t *testing.T) {
 		{Name: "name", Kind: papercompile.SchemaString, Required: true},
 		{Name: "note", Kind: papercompile.SchemaString, Required: false},
 		{Name: "results", Kind: papercompile.SchemaList, Required: true, ItemKind: papercompile.SchemaObject, ItemRequired: true, MaxItems: 8, Fields: []papercompile.FieldDescriptor{
+			{Name: "label", Kind: papercompile.SchemaString, Required: true},
 			{Name: "value", Kind: papercompile.SchemaNumber, Required: true},
 			{Name: "critical", Kind: papercompile.SchemaBool, Required: true},
 		}},
 	}}
-	options := Options{Count: 8, Seed: 42, MaxListItems: 5}
+	options := Options{Count: 12, Seed: 42, MaxListItems: 5}
 	first, err := Generate(schema, options)
 	if err != nil {
 		t.Fatal(err)
@@ -29,7 +30,7 @@ func TestGenerateIsDeterministicAndSchemaValid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(first) != 8 || len(second) != len(first) {
+	if len(first) != 12 || len(second) != len(first) {
 		t.Fatalf("case count = %d / %d", len(first), len(second))
 	}
 	for index := range first {
@@ -40,8 +41,26 @@ func TestGenerateIsDeterministicAndSchemaValid(t *testing.T) {
 			t.Fatalf("case[%d] invalid: %v\n%s", index, err, first[index].JSON)
 		}
 	}
-	if !bytes.Contains(first[1].JSON, []byte("Long name value")) || bytes.Count(first[2].JSON, []byte(`"value"`)) != 5 || !bytes.Contains(first[3].JSON, []byte("João")) {
-		t.Fatalf("boundary cases missing: %s\n%s\n%s", first[1].JSON, first[2].JSON, first[3].JSON)
+	checks := []struct {
+		index  int
+		needle []byte
+	}{
+		{0, []byte(`"name": ""`)},
+		{2, []byte(`\n`)},
+		{3, []byte(`Linha 1`)},
+		{4, []byte("Long name value")},
+		{5, bytes.Repeat([]byte("W"), 128)},
+		{7, []byte("João")},
+		{8, []byte(`\"quoted\"`)},
+		{9, []byte(`-999999999999.9999`)},
+	}
+	for _, check := range checks {
+		if !bytes.Contains(first[check.index].JSON, check.needle) {
+			t.Fatalf("boundary profile %s lacks %q:\n%s", first[check.index].Name, check.needle, first[check.index].JSON)
+		}
+	}
+	if bytes.Count(first[6].JSON, []byte(`"value"`)) != 5 {
+		t.Fatalf("dense list profile lacks five values:\n%s", first[6].JSON)
 	}
 }
 

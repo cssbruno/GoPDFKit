@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 func TestCompileLowersPaperASTToLayoutDocumentAndMapping(t *testing.T) {
@@ -21,6 +21,9 @@ func TestCompileLowersPaperASTToLayoutDocumentAndMapping(t *testing.T) {
 		"    size: \"Letter\"\n" +
 		"    margin: 12mm\n" +
 		"    margin-left: 18mm\n" +
+		"    page-numbers: true\n" +
+		"    page-number-format: \"Page %d of {pages}\"\n" +
+		"    page-total-alias: \"{pages}\"\n" +
 		"    body @content:\n" +
 		"      heading @title:\n" +
 		"        level: 2\n" +
@@ -58,6 +61,9 @@ func TestCompileLowersPaperASTToLayoutDocumentAndMapping(t *testing.T) {
 	if got := result.Document.PageTemplate.Margins; got != (layout.Spacing{Top: margin12, Right: margin12, Bottom: margin12, Left: margin18}) {
 		t.Fatalf("margins = %#v", got)
 	}
+	if got := result.Document.PageTemplate.PageNumbers; got != (layout.PageNumberOptions{Enabled: true, Format: "Page %d of {pages}", TotalPageAlias: "{pages}"}) {
+		t.Fatalf("page numbers = %#v", got)
+	}
 	if len(result.Document.Body) != 3 {
 		t.Fatalf("body blocks = %d", len(result.Document.Body))
 	}
@@ -94,12 +100,12 @@ func TestCompileLowersPaperASTToLayoutDocumentAndMapping(t *testing.T) {
 	}
 }
 
-func TestCompileSupportsNamedA3AndLegalPageSizes(t *testing.T) {
+func TestCompileSupportsNamedA3A5AndLegalPageSizes(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		width  float64
 		height float64
-	}{{"A3", 841.88976378, 1190.551181102}, {"Legal", 612, 1008}} {
+	}{{"A3", 841.88976378, 1190.551181102}, {"A5", 419.527559055, 595.275590551}, {"Legal", 612, 1008}} {
 		parsed := paperlang.Parse("size.paper", "document @d:\n  page @p:\n    size: \""+test.name+"\"\n    body @b:\n")
 		result := Compile(parsed.AST)
 		if !result.OK() || math.Abs(result.Page.Width-test.width) > 1e-9 || math.Abs(result.Page.Height-test.height) > 1e-9 {

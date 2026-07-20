@@ -16,7 +16,7 @@ are identical.
 Commands:
 
 ```text
-GOPDFKIT_RASTER_BENCH_LEGACY=1 sh tools/run-benchmark.sh artifacts/display-raster-legacy.txt go test ./internal/layoutengine -run '^$' -bench '^BenchmarkDisplayRasterPNGEncode$' -benchmem -benchtime=250ms -count=10
+PAPERRUNE_RASTER_BENCH_LEGACY=1 sh tools/run-benchmark.sh artifacts/display-raster-legacy.txt go test ./internal/layoutengine -run '^$' -bench '^BenchmarkDisplayRasterPNGEncode$' -benchmem -benchtime=250ms -count=10
 sh tools/run-benchmark.sh artifacts/display-raster-candidate.txt go test ./internal/layoutengine -run '^$' -bench '^BenchmarkDisplayRasterPNGEncode$' -benchmem -benchtime=250ms -count=10
 tools/bin/benchstat artifacts/display-raster-legacy.txt artifacts/display-raster-candidate.txt
 ```

@@ -30,3 +30,7 @@ PDF_HTML_RENDERING_GAPS.md
 .gocache/
 .cache/
 .golangci-cache/
+
+# Local generated inspection and rendering artifacts
+/output/
+/tmp/

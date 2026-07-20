@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package perfgate
@@ -23,7 +23,7 @@ const testProfile = `{
   }
 }`
 
-const testReport = `# gopdfkit-paper-engine-benchmark-v3
+const testReport = `# paperrune-paper-engine-benchmark-v3
 # command: go test ./document -run ^$ -bench BenchmarkPaperEngine -benchmem -count=2
 # go-version: go version go1.26.5 darwin/arm64
 # goos: darwin

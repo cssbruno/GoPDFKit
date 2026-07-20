@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperedit
@@ -15,7 +15,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperlang"
 )
 
 const (
@@ -140,11 +140,16 @@ type PropertySpec struct {
 // NodeSpec is a typed recursive component inserted beneath a readable-ID
 // parent. Properties are emitted before children in the supplied order.
 type NodeSpec struct {
-	Kind       paperlang.NodeKind
-	ID         string
-	Value      *Value
-	Properties []PropertySpec
-	Children   []NodeSpec
+	Kind        paperlang.NodeKind
+	ID          string
+	FieldType   paperlang.SchemaFieldType
+	TypeRef     string
+	ItemType    paperlang.SchemaFieldType
+	ItemTypeRef string
+	Optional    bool
+	Value       *Value
+	Properties  []PropertySpec
+	Children    []NodeSpec
 }
 
 // Operation is one typed transactional source edit.
@@ -1057,7 +1062,7 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 func editorAllowedChild(parent, child paperlang.NodeKind) bool {
 	switch parent {
 	case paperlang.NodeDocument:
-		return child == paperlang.NodePage || child == paperlang.NodeComponent || child == paperlang.NodeSchema || child == paperlang.NodeScenario || child == paperlang.NodeTheme
+		return child == paperlang.NodePage || child == paperlang.NodeComponent || child == paperlang.NodeSchema || child == paperlang.NodeObjectType || child == paperlang.NodeScenario || child == paperlang.NodeTheme
 	case paperlang.NodePage:
 		return child == paperlang.NodeBody || child == paperlang.NodeHeader || child == paperlang.NodeFooter
 	case paperlang.NodeBody, paperlang.NodeHeader, paperlang.NodeFooter:
@@ -1097,7 +1102,7 @@ func editorAllowedChild(parent, child paperlang.NodeKind) bool {
 			child == paperlang.NodeImage || child == paperlang.NodeTable || child == paperlang.NodeRow || child == paperlang.NodeColumn || child == paperlang.NodeUse
 	case paperlang.NodeScenario, paperlang.NodeObject, paperlang.NodeKeyedList:
 		return child == paperlang.NodeValue || child == paperlang.NodeObject || child == paperlang.NodeKeyedList
-	case paperlang.NodeSchema:
+	case paperlang.NodeSchema, paperlang.NodeObjectType:
 		return child == paperlang.NodeField
 	case paperlang.NodeField:
 		return child == paperlang.NodeField
@@ -1186,12 +1191,68 @@ func renderNode(node NodeSpec, indent int, newline string) (string, error) {
 	var builder strings.Builder
 	pad := strings.Repeat(" ", indent)
 	builder.WriteString(pad)
-	builder.WriteString(string(node.Kind))
-	if node.ID != "" {
+	if node.Kind == paperlang.NodeField {
+		if node.TypeRef != "" {
+			if node.FieldType != "" || !validSchemaTypeName(node.TypeRef) {
+				return "", fmt.Errorf("custom object reference %q is invalid", node.TypeRef)
+			}
+		} else if node.FieldType != paperlang.FieldString && node.FieldType != paperlang.FieldNumber && node.FieldType != paperlang.FieldBool && node.FieldType != paperlang.FieldObject && node.FieldType != paperlang.FieldList {
+			return "", fmt.Errorf("schema field type %q is invalid", node.FieldType)
+		}
+		if node.FieldType == paperlang.FieldList {
+			if node.ItemTypeRef != "" {
+				if node.ItemType != "" || !validSchemaTypeName(node.ItemTypeRef) {
+					return "", fmt.Errorf("custom list item reference %q is invalid", node.ItemTypeRef)
+				}
+			} else if node.ItemType != paperlang.FieldString && node.ItemType != paperlang.FieldNumber && node.ItemType != paperlang.FieldBool && node.ItemType != paperlang.FieldObject {
+				return "", fmt.Errorf("list item type %q is invalid", node.ItemType)
+			}
+		} else if node.ItemType != "" || node.ItemTypeRef != "" {
+			return "", errors.New("only list fields can carry an item type")
+		}
+		if node.Optional {
+			builder.WriteString("optional ")
+		}
+		declaration := string(node.FieldType)
+		if node.TypeRef != "" {
+			declaration = node.TypeRef
+		}
+		builder.WriteString(declaration)
+		if node.FieldType == paperlang.FieldList {
+			builder.WriteByte(' ')
+			itemDeclaration := string(node.ItemType)
+			if node.ItemTypeRef != "" {
+				itemDeclaration = node.ItemTypeRef
+			}
+			builder.WriteString(itemDeclaration)
+		}
 		builder.WriteByte(' ')
-		builder.WriteString(node.ID)
+		builder.WriteString(strings.TrimPrefix(node.ID, "@"))
+		if node.FieldType == paperlang.FieldObject || node.FieldType == paperlang.FieldList {
+			builder.WriteByte(':')
+		}
+	} else if node.Kind == paperlang.NodeObjectType {
+		if node.FieldType != "" || node.TypeRef != "" || node.ItemType != "" || node.ItemTypeRef != "" || node.Optional {
+			return "", errors.New("custom object declarations cannot carry field type state")
+		}
+		builder.WriteString("object ")
+		builder.WriteString(strings.TrimPrefix(node.ID, "@"))
+		builder.WriteByte(':')
+	} else {
+		if node.FieldType != "" || node.TypeRef != "" || node.ItemType != "" || node.ItemTypeRef != "" || node.Optional {
+			return "", errors.New("only schema fields can carry a field type or optional state")
+		}
+		builder.WriteString(string(node.Kind))
+		if node.ID != "" {
+			builder.WriteByte(' ')
+			id := node.ID
+			if node.Kind == paperlang.NodeSchema {
+				id = strings.TrimPrefix(id, "@")
+			}
+			builder.WriteString(id)
+		}
+		builder.WriteByte(':')
 	}
-	builder.WriteByte(':')
 	if node.Value != nil {
 		value, err := renderValue(*node.Value)
 		if err != nil {
@@ -1234,7 +1295,7 @@ func validNodeKind(kind paperlang.NodeKind) bool {
 		paperlang.NodeTable, paperlang.NodeTableTrack, paperlang.NodeTableHeader, paperlang.NodeTableRow, paperlang.NodeTableCell,
 		paperlang.NodeRow, paperlang.NodeColumn, paperlang.NodeComponent,
 		paperlang.NodeSlot, paperlang.NodeUse, paperlang.NodeFill, paperlang.NodeRepeat, paperlang.NodeLoop,
-		paperlang.NodeSchema, paperlang.NodeField, paperlang.NodeScenario, paperlang.NodeValue, paperlang.NodeObject, paperlang.NodeKeyedList:
+		paperlang.NodeSchema, paperlang.NodeObjectType, paperlang.NodeField, paperlang.NodeScenario, paperlang.NodeValue, paperlang.NodeObject, paperlang.NodeKeyedList:
 		return true
 	default:
 		return false
@@ -1251,6 +1312,23 @@ func validPropertyName(name string) bool {
 		}
 	}
 	return true
+}
+
+func validSchemaTypeName(name string) bool {
+	if name == "" || name[0] == '_' || !identifierStart(name[0]) {
+		return false
+	}
+	for index := 1; index < len(name); index++ {
+		if !identifierContinue(name[index]) {
+			return false
+		}
+	}
+	switch name {
+	case "string", "number", "bool", "object", "list", "optional":
+		return false
+	default:
+		return true
+	}
 }
 
 func identifierStart(value byte) bool {

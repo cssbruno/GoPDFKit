@@ -1,6 +1,6 @@
 # Architecture
 
-GoPDFKit has one high-level facade: `document.Document`. New applications
+PaperRune has one high-level facade: `document.Document`. New applications
 construct it through `document.NewDocument` or `document.MustNew`. The module
 root intentionally contains no facade package.
 
@@ -62,7 +62,7 @@ coverage.
 Public layout fields are behavioral contracts. A field must not be added until
 measurement, rendering, pagination, and regression tests implement it.
 
-GoPDFKit is migrating automatic layout to one private planner shared by typed,
+PaperRune is migrating automatic layout to one private planner shared by typed,
 HTML, and future human-readable frontends. During the migration, new automatic
 layout behavior belongs in the unified planner rather than a third renderer.
 Frontends resolve syntax-specific rules and lower content; the final painter

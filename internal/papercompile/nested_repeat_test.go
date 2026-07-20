@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -8,27 +8,20 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/internal/paperrepeat"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperrepeat"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 const nestedRepeatSource = `document @doc:
-  schema @invoice:
-    field @groups:
-      type: "list"
-      item-type: "object"
+  schema invoice:
+    list object groups:
       max-items: 4
-      field @enabled:
-        type: "bool"
-      field @lines:
-        type: "list"
-        item-type: "object"
+      bool enabled
+      list object lines:
         max-items: 8
-        field @name:
-          type: "string"
-        field @visible:
-          type: "bool"
+        string name
+        bool visible
   scenario @sample:
     keyed-list @groups:
       object @group-a:
@@ -58,7 +51,7 @@ const nestedRepeatSource = `document @doc:
   page:
     body:
       repeat @groups:
-        source: "@invoice.groups"
+        source: "groups"
         instance-prefix: "groups"
         max-items: 3
         when: "enabled"

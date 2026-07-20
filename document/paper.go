@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -12,11 +12,11 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
-	"github.com/cssbruno/gopdfkit/internal/papercompile"
-	"github.com/cssbruno/gopdfkit/internal/paperedit"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
+	"github.com/cssbruno/paperrune/internal/papercompile"
+	"github.com/cssbruno/paperrune/internal/paperedit"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 // ErrPaperRender reports that a .paper pipeline failed. Inspect
@@ -578,8 +578,8 @@ func paperViewerRevisions(source, scenario string, selected bool) layoutengine.V
 	if selected {
 		scenarioName = strings.TrimPrefix(strings.TrimSpace(scenario), "@")
 	}
-	scenarioDigest := sha256.Sum256([]byte("gopdfkit.paper-scenario-revision.v1\x00" + sourceRevision + "\x00" + scenarioName))
-	policyDigest := sha256.Sum256([]byte("gopdfkit.paper-planning-policy.v1"))
+	scenarioDigest := sha256.Sum256([]byte("paperrune.paper-scenario-revision.v1\x00" + sourceRevision + "\x00" + scenarioName))
+	policyDigest := sha256.Sum256([]byte("paperrune.paper-planning-policy.v1"))
 	return layoutengine.ViewerRevisionIdentityInput{
 		SourceRevision: sourceRevision, ScenarioRevision: hex.EncodeToString(scenarioDigest[:]),
 		PolicyRevision: hex.EncodeToString(policyDigest[:]),
@@ -852,267 +852,19 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 	var measuredLines uint64
 	var nextNode layoutengine.NodeID
 	fallbackIdentity := len(planningBlocks)
+	blockMeasurer := paperBlockMeasurer{
+		pdf: f, ctx: ctx, source: doc, mapping: mapping,
+		baseBody: baseBody, body: body, pageSize: pageSize,
+		contentWidth: contentWidth, left: left, top: top, right: right, bottom: bottom,
+		fontIndex: fontIndex, fonts: &fonts, nextNode: &nextNode, fallbackIdentity: &fallbackIdentity,
+		nextFontID: 1,
+	}
 	for index, block := range planningBlocks {
-		if err := layoutengine.ChargePlanningWork(ctx, "typed document block planning", 1); err != nil {
-			return layoutengine.LayoutPlan{}, err
+		blockPlan, lineCount, measureErr := blockMeasurer.measure(block, index, measuredLines)
+		if measureErr != nil {
+			return layoutengine.LayoutPlan{}, measureErr
 		}
-		if block.explicitBreak {
-			measured = append(measured, paperMeasuredBlock{explicitBreak: true})
-			continue
-		}
-		identity := paperBlockIdentity(mapping, block.bodyIndex, block.segmentIndex, block.nestedIndex, index)
-		if block.gridRow != nil {
-			measuredBox, boxErr := f.paperMeasureBox(block.box, block.path)
-			if boxErr != nil {
-				return layoutengine.LayoutPlan{}, boxErr
-			}
-			rowWidth := baseBody.Width
-			for _, inset := range []layoutengine.Fixed{measuredBox.style.Margin.Left, measuredBox.style.Border.Left, measuredBox.style.Padding.Left,
-				measuredBox.style.Padding.Right, measuredBox.style.Border.Right, measuredBox.style.Margin.Right} {
-				rowWidth, boxErr = rowWidth.Sub(inset)
-				if boxErr != nil || rowWidth <= 0 {
-					return layoutengine.LayoutPlan{}, fmt.Errorf("%s: box horizontal edges leave no grid content width", block.path)
-				}
-			}
-			row, rowErr := f.measurePaperGridRow(ctx, doc, mapping, block, rowWidth, left, top, right, bottom, &nextNode, &fallbackIdentity)
-			if rowErr != nil {
-				return layoutengine.LayoutPlan{}, rowErr
-			}
-			for cellIndex := range row.cells {
-				measurement := &row.cells[cellIndex].measurement
-				localFonts := make(map[layoutengine.FontResourceID]layoutengine.FontResourceID)
-				for _, font := range measurement.plan.Fonts {
-					localID := font.ID
-					fontIdentity := paperFontIdentity(font)
-					globalID, exists := fontIndex[fontIdentity]
-					if !exists {
-						globalID = layoutengine.FontResourceID(len(fonts) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-						font.ID = globalID
-						fonts = append(fonts, font)
-						fontIndex[fontIdentity] = globalID
-					}
-					localFonts[localID] = globalID
-				}
-				for runIndex := range measurement.plan.GlyphRuns {
-					measurement.plan.GlyphRuns[runIndex].Font = localFonts[measurement.plan.GlyphRuns[runIndex].Font]
-				}
-				measuredLines += uint64(len(measurement.plan.Lines))
-			}
-			if measuredLines > 1_000_000 {
-				return layoutengine.LayoutPlan{}, fmt.Errorf("document: typed planner line limit exceeded: %d > 1000000", measuredLines)
-			}
-			first := row.cells[0]
-			measured = append(measured, paperMeasuredBlock{node: first.node, key: first.measurement.identity.key,
-				instance: first.measurement.identity.instance, source: first.measurement.identity.source,
-				keepTogether: true, keepWithNext: block.keepWithNext,
-				keepGroups: append([]uint32(nil), block.keepGroups...), gridRow: &row,
-				semanticAncestors: append([]typedSemanticAncestor(nil), block.semanticAncestors...), box: measuredBox})
-			continue
-		}
-		if block.image != nil {
-			nextNode++
-			imageBlock := *block.image
-			if htmlUnifiedVisualBox(block.box) {
-				merged, mergeErr := paperMergeOuterBox(imageBlock.EffectiveBox(), block.box, block.path)
-				if mergeErr != nil {
-					return layoutengine.LayoutPlan{}, mergeErr
-				}
-				imageBlock.Box, imageBlock.BoxRef = merged, nil
-			}
-			image, imageErr := f.measureTypedPlanningImageContext(ctx, imageBlock, contentWidth)
-			if imageErr != nil {
-				return layoutengine.LayoutPlan{}, fmt.Errorf("%s: %w", block.path, imageErr)
-			}
-			measured = append(measured, paperMeasuredBlock{
-				node: nextNode, key: identity.key, instance: identity.instance,
-				source: identity.source, semanticRole: block.semanticRole, semanticText: block.semanticText,
-				keepTogether: true, keepWithNext: block.keepWithNext,
-				keepGroups: append([]uint32(nil), block.keepGroups...), image: &image,
-				semanticAncestors: append([]typedSemanticAncestor(nil), block.semanticAncestors...),
-			})
-			continue
-		}
-		if block.canvas != nil {
-			nextNode++
-			containerNode := nextNode
-			canvasMapping := paperCanvasMappingForBody(mapping, block.bodyIndex)
-			canvasPlan, canvasErr := f.planPaperCanvas(ctx, doc, canvasMapping, *block.canvas)
-			if canvasErr != nil {
-				return layoutengine.LayoutPlan{}, fmt.Errorf("%s: %w", block.path, canvasErr)
-			}
-			projection := canvasPlan.Projection()
-			items := make([]paperMeasuredCanvasItem, 0, len(projection.Fragments))
-			semanticByFragment := make(map[layoutengine.FragmentID]layoutengine.SemanticNode)
-			for _, association := range projection.SemanticFragments {
-				semanticByFragment[association.Fragment] = projection.SemanticNodes[association.Semantic-1]
-			}
-			for index := range projection.Fragments {
-				oldNode := projection.Fragments[index].Node
-				nextNode++
-				projection.Fragments[index].Node = nextNode
-				semantic := semanticByFragment[projection.Fragments[index].ID]
-				items = append(items, paperMeasuredCanvasItem{node: nextNode, key: projection.Fragments[index].Key,
-					instance: projection.Fragments[index].Instance, source: projection.Fragments[index].Source,
-					role: semantic.Role, alt: semantic.Attributes.AlternateText})
-				for diagnosticIndex := range projection.Diagnostics {
-					if projection.Diagnostics[diagnosticIndex].Location.Node == oldNode {
-						projection.Diagnostics[diagnosticIndex].Location.Node = nextNode
-					}
-				}
-			}
-			identity := paperBlockIdentity(mapping, block.bodyIndex, -1, -1, index)
-			if len(projection.Fragments) == 0 {
-				return layoutengine.LayoutPlan{}, fmt.Errorf("%s: canvas produced no positioned items", block.path)
-			}
-			measured = append(measured, paperMeasuredBlock{node: containerNode, key: identity.key, instance: identity.instance,
-				source: identity.source, semanticRole: layoutengine.SemanticRoleSection, keepTogether: true,
-				semanticAncestors: append([]typedSemanticAncestor(nil), block.semanticAncestors...),
-				canvas:            &paperMeasuredCanvas{projection: projection, height: layoutFixedFromDocumentUnits(f, block.canvas.Height), items: items}})
-			continue
-		}
-		measuredBox, boxErr := f.paperMeasureBox(block.box, block.path)
-		if boxErr != nil {
-			return layoutengine.LayoutPlan{}, boxErr
-		}
-		single := *doc
-		paragraph := block.paragraph
-		authoredSegments := append([]layout.TextSegment(nil), paragraph.Segments...)
-		mixedCoreShadow := typedParagraphNeedsMixedCoreShadow(paragraph, f)
-		if !mixedCoreShadow {
-			paragraph.Segments = make([]layout.TextSegment, len(authoredSegments))
-			for index, segment := range authoredSegments {
-				paragraph.Segments[index] = layout.TextSegment{Text: segment.Text, Link: segment.Link, Destination: segment.Destination}
-			}
-		}
-		paragraph.Box, paragraph.BoxRef = layout.BoxStyle{}, nil
-		single.Body = []layout.Block{paragraph}
-		boxContentWidth, widthErr := measuredBox.contentWidth(baseBody.Width)
-		if widthErr != nil {
-			return layoutengine.LayoutPlan{}, fmt.Errorf("%s: %w", block.path, widthErr)
-		}
-		contentX, widthErr := baseBody.X.Add(measuredBox.style.Margin.Left)
-		for _, inset := range []layoutengine.Fixed{measuredBox.style.Border.Left, measuredBox.style.Padding.Left} {
-			if widthErr == nil {
-				contentX, widthErr = contentX.Add(inset)
-			}
-		}
-		contentRight, rightErr := contentX.Add(boxContentWidth)
-		if widthErr != nil || rightErr != nil || contentRight > pageSize.Width {
-			return layoutengine.LayoutPlan{}, fmt.Errorf("%s: resolved box content width overflows the page", block.path)
-		}
-		single.PageTemplate = layout.PageTemplate{Margins: layout.Spacing{
-			Left: f.PointConvert(contentX.Points()), Top: top,
-			Right: f.w - f.PointConvert(contentRight.Points()), Bottom: bottom,
-		}}
-		shadow, err := f.planTypedParagraphLineShadowContext(ctx, &single)
-		if err != nil {
-			path := block.path
-			if path == "" {
-				path = fmt.Sprintf("body[%d]", block.bodyIndex)
-			}
-			return layoutengine.LayoutPlan{}, fmt.Errorf("%s: %w", path, err)
-		}
-		measurement := paperRowColumnMeasurement{plan: shadow.Plan.Projection()}
-		if !mixedCoreShadow {
-			var restyleErr error
-			measurement, restyleErr = f.restylePaperMeasurement(measurement, paragraph.Style, authoredSegments)
-			if restyleErr != nil {
-				return layoutengine.LayoutPlan{}, fmt.Errorf("%s: %w", block.path, restyleErr)
-			}
-		}
-		projection := measurement.plan
-		nextNode++
-		blockPlan := paperMeasuredBlock{
-			lines:        make([]layoutengine.ParagraphLineInput, len(projection.Lines)),
-			runs:         make(map[uint32][]layoutengine.CoreGlyphRun),
-			fontIDs:      make(map[layoutengine.FontResourceID]layoutengine.FontResourceID),
-			node:         nextNode,
-			key:          identity.key,
-			instance:     identity.instance,
-			source:       identity.source,
-			semanticRole: block.semanticRole, semanticText: block.semanticText,
-			headingLevel: block.headingLevel,
-			segments:     append([]layout.TextSegment(nil), block.paragraph.Segments...),
-			keepTogether: block.keepTogether, keepWithNext: block.keepWithNext,
-			orphans: block.orphans, widows: block.widows,
-			keepGroups:        append([]uint32(nil), block.keepGroups...),
-			semanticAncestors: append([]typedSemanticAncestor(nil), block.semanticAncestors...),
-			box:               measuredBox,
-		}
-		measuredLines += uint64(len(projection.Lines))
-		if measuredLines > 1_000_000 {
-			return layoutengine.LayoutPlan{}, fmt.Errorf("document: typed planner line limit exceeded: %d > 1000000", measuredLines)
-		}
-		for _, font := range projection.Fonts {
-			localID := font.ID
-			identity := paperFontIdentity(font)
-			globalID, exists := fontIndex[identity]
-			if !exists {
-				globalID = layoutengine.FontResourceID(len(fonts) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-				font.ID = globalID
-				fonts = append(fonts, font)
-				fontIndex[identity] = globalID
-			}
-			blockPlan.fontIDs[localID] = globalID
-		}
-		for lineIndex, line := range projection.Lines {
-			offset, err := line.Bounds.X.Sub(body.X)
-			if err != nil {
-				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] line %d x offset: %w", block.bodyIndex, lineIndex, err)
-			}
-			baseline, err := line.Baseline.Sub(line.Bounds.Y)
-			if err != nil {
-				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] line %d baseline: %w", block.bodyIndex, lineIndex, err)
-			}
-			blockPlan.lines[lineIndex] = layoutengine.ParagraphLineInput{
-				OffsetX: offset, Width: line.Bounds.Width, Height: line.Bounds.Height,
-				Baseline: baseline, Source: identity.source,
-			}
-		}
-		for _, run := range projection.GlyphRuns {
-			run.Origin.X, err = run.Origin.X.Sub(projection.Lines[run.Line].Bounds.X)
-			if err != nil {
-				return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] glyph run offset: %w", block.bodyIndex, err)
-			}
-			run.Origin.Y = 0
-			blockPlan.runs[run.Line] = append(blockPlan.runs[run.Line], run)
-		}
-		if len(projection.Strokes) != 0 {
-			blockPlan.decorations = make(map[uint32][]paperMeasuredDecoration)
-			for _, stroke := range projection.Strokes {
-				if uint64(stroke.Path) >= uint64(len(projection.Paths)) {
-					return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] decoration references a missing path", block.bodyIndex)
-				}
-				path := projection.Paths[stroke.Path]
-				lineIndex := 0
-				found := false
-				bestDistance := int64(^uint64(0) >> 1)
-				for candidate, line := range projection.Lines {
-					bottom, bottomErr := line.Bounds.Bottom()
-					if bottomErr != nil {
-						return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] decoration line bounds: %w", block.bodyIndex, bottomErr)
-					}
-					delta := int64(path.Bounds.Y - line.Baseline)
-					if delta < 0 {
-						delta = -delta
-					}
-					if delta < bestDistance {
-						bestDistance = delta
-						lineIndex = candidate
-					}
-					if path.Bounds.Y >= line.Bounds.Y && path.Bounds.Y <= bottom {
-						lineIndex, found = candidate, true
-						break
-					}
-				}
-				if !found && len(projection.Lines) == 0 {
-					return layoutengine.LayoutPlan{}, fmt.Errorf("body[%d] decoration has no owning line", block.bodyIndex)
-				}
-				blockPlan.decorations[uint32(lineIndex)] = append(blockPlan.decorations[uint32(lineIndex)], paperMeasuredDecoration{
-					path: path, stroke: stroke, sourceLine: projection.Lines[lineIndex],
-				})
-			}
-		}
+		measuredLines = lineCount
 		measured = append(measured, blockPlan)
 	}
 
@@ -2008,6 +1760,308 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 		return layoutengine.LayoutPlan{}, fmt.Errorf("document: attach plan semantics: %w", err)
 	}
 	return plan, nil
+}
+
+type paperBlockMeasurer struct {
+	pdf              *Document
+	ctx              context.Context
+	source           *layout.LayoutDocument
+	mapping          papercompile.CompileMapping
+	baseBody         layoutengine.Rect
+	body             layoutengine.Rect
+	pageSize         layoutengine.Size
+	contentWidth     float64
+	left             float64
+	top              float64
+	right            float64
+	bottom           float64
+	fontIndex        map[paperCoreFontIdentity]layoutengine.FontResourceID
+	fonts            *[]layoutengine.CoreFontResource
+	nextFontID       layoutengine.FontResourceID
+	nextNode         *layoutengine.NodeID
+	fallbackIdentity *int
+}
+
+func (m *paperBlockMeasurer) measure(block paperPlanningBlock, index int, measuredLines uint64) (paperMeasuredBlock, uint64, error) {
+	if err := layoutengine.ChargePlanningWork(m.ctx, "typed document block planning", 1); err != nil {
+		return paperMeasuredBlock{}, measuredLines, err
+	}
+	if block.explicitBreak {
+		return paperMeasuredBlock{explicitBreak: true}, measuredLines, nil
+	}
+	identity := paperBlockIdentity(m.mapping, block.bodyIndex, block.segmentIndex, block.nestedIndex, index)
+	if block.gridRow != nil {
+		return m.measureGridRow(block, measuredLines)
+	}
+	if block.image != nil {
+		return m.measureImage(block, *block.image, identity, measuredLines)
+	}
+	if block.canvas != nil {
+		return m.measureCanvas(block, *block.canvas, index, measuredLines)
+	}
+	return m.measureParagraph(block, identity, measuredLines)
+}
+
+func (m *paperBlockMeasurer) measureGridRow(block paperPlanningBlock, measuredLines uint64) (paperMeasuredBlock, uint64, error) {
+	measuredBox, err := m.pdf.paperMeasureBox(block.box, block.path)
+	if err != nil {
+		return paperMeasuredBlock{}, measuredLines, err
+	}
+	rowWidth := m.baseBody.Width
+	for _, inset := range []layoutengine.Fixed{measuredBox.style.Margin.Left, measuredBox.style.Border.Left, measuredBox.style.Padding.Left,
+		measuredBox.style.Padding.Right, measuredBox.style.Border.Right, measuredBox.style.Margin.Right} {
+		rowWidth, err = rowWidth.Sub(inset)
+		if err != nil || rowWidth <= 0 {
+			return paperMeasuredBlock{}, measuredLines, fmt.Errorf("%s: box horizontal edges leave no grid content width", block.path)
+		}
+	}
+	row, err := m.pdf.measurePaperGridRow(m.ctx, m.source, m.mapping, block, rowWidth, m.left, m.top, m.right, m.bottom, m.nextNode, m.fallbackIdentity)
+	if err != nil {
+		return paperMeasuredBlock{}, measuredLines, err
+	}
+	for cellIndex := range row.cells {
+		measurement := &row.cells[cellIndex].measurement
+		localFonts := make(map[layoutengine.FontResourceID]layoutengine.FontResourceID)
+		for _, font := range measurement.plan.Fonts {
+			localID := font.ID
+			fontIdentity := paperFontIdentity(font)
+			globalID, exists := m.fontIndex[fontIdentity]
+			if !exists {
+				globalID = m.nextFontID
+				if !globalID.Valid() {
+					return paperMeasuredBlock{}, measuredLines, errors.New("document: typed planner font resource limit exceeded")
+				}
+				m.nextFontID++
+				font.ID = globalID
+				*m.fonts = append(*m.fonts, font)
+				m.fontIndex[fontIdentity] = globalID
+			}
+			localFonts[localID] = globalID
+		}
+		for runIndex := range measurement.plan.GlyphRuns {
+			measurement.plan.GlyphRuns[runIndex].Font = localFonts[measurement.plan.GlyphRuns[runIndex].Font]
+		}
+		measuredLines += uint64(len(measurement.plan.Lines))
+	}
+	if measuredLines > 1_000_000 {
+		return paperMeasuredBlock{}, measuredLines, fmt.Errorf("document: typed planner line limit exceeded: %d > 1000000", measuredLines)
+	}
+	first := row.cells[0]
+	return paperMeasuredBlock{node: first.node, key: first.measurement.identity.key,
+		instance: first.measurement.identity.instance, source: first.measurement.identity.source,
+		keepTogether: true, keepWithNext: block.keepWithNext,
+		keepGroups: append([]uint32(nil), block.keepGroups...), gridRow: &row,
+		semanticAncestors: append([]typedSemanticAncestor(nil), block.semanticAncestors...), box: measuredBox}, measuredLines, nil
+}
+
+func (m *paperBlockMeasurer) measureImage(block paperPlanningBlock, imageBlock layout.ImageBlock, identity paperSourceIdentity, measuredLines uint64) (paperMeasuredBlock, uint64, error) {
+	*m.nextNode = *m.nextNode + 1
+	if htmlUnifiedVisualBox(block.box) {
+		merged, err := paperMergeOuterBox(imageBlock.EffectiveBox(), block.box, block.path)
+		if err != nil {
+			return paperMeasuredBlock{}, measuredLines, err
+		}
+		imageBlock.Box, imageBlock.BoxRef = merged, nil
+	}
+	image, err := m.pdf.measureTypedPlanningImageContext(m.ctx, imageBlock, m.contentWidth)
+	if err != nil {
+		return paperMeasuredBlock{}, measuredLines, fmt.Errorf("%s: %w", block.path, err)
+	}
+	return paperMeasuredBlock{
+		node: *m.nextNode, key: identity.key, instance: identity.instance,
+		source: identity.source, semanticRole: block.semanticRole, semanticText: block.semanticText,
+		keepTogether: true, keepWithNext: block.keepWithNext,
+		keepGroups: append([]uint32(nil), block.keepGroups...), image: &image,
+		semanticAncestors: append([]typedSemanticAncestor(nil), block.semanticAncestors...),
+	}, measuredLines, nil
+}
+
+func (m *paperBlockMeasurer) measureCanvas(block paperPlanningBlock, canvas layout.CanvasBlock, index int, measuredLines uint64) (paperMeasuredBlock, uint64, error) {
+	*m.nextNode = *m.nextNode + 1
+	containerNode := *m.nextNode
+	canvasMapping := paperCanvasMappingForBody(m.mapping, block.bodyIndex)
+	canvasPlan, err := m.pdf.planPaperCanvas(m.ctx, m.source, canvasMapping, canvas)
+	if err != nil {
+		return paperMeasuredBlock{}, measuredLines, fmt.Errorf("%s: %w", block.path, err)
+	}
+	projection := canvasPlan.Projection()
+	items := make([]paperMeasuredCanvasItem, 0, len(projection.Fragments))
+	semanticByFragment := make(map[layoutengine.FragmentID]layoutengine.SemanticNode)
+	for _, association := range projection.SemanticFragments {
+		semanticByFragment[association.Fragment] = projection.SemanticNodes[association.Semantic-1]
+	}
+	for fragmentIndex := range projection.Fragments {
+		oldNode := projection.Fragments[fragmentIndex].Node
+		*m.nextNode = *m.nextNode + 1
+		projection.Fragments[fragmentIndex].Node = *m.nextNode
+		semantic := semanticByFragment[projection.Fragments[fragmentIndex].ID]
+		items = append(items, paperMeasuredCanvasItem{node: *m.nextNode, key: projection.Fragments[fragmentIndex].Key,
+			instance: projection.Fragments[fragmentIndex].Instance, source: projection.Fragments[fragmentIndex].Source,
+			role: semantic.Role, alt: semantic.Attributes.AlternateText})
+		for diagnosticIndex := range projection.Diagnostics {
+			if projection.Diagnostics[diagnosticIndex].Location.Node == oldNode {
+				projection.Diagnostics[diagnosticIndex].Location.Node = *m.nextNode
+			}
+		}
+	}
+	identity := paperBlockIdentity(m.mapping, block.bodyIndex, -1, -1, index)
+	if len(projection.Fragments) == 0 {
+		return paperMeasuredBlock{}, measuredLines, fmt.Errorf("%s: canvas produced no positioned items", block.path)
+	}
+	return paperMeasuredBlock{node: containerNode, key: identity.key, instance: identity.instance,
+		source: identity.source, semanticRole: layoutengine.SemanticRoleSection, keepTogether: true,
+		semanticAncestors: append([]typedSemanticAncestor(nil), block.semanticAncestors...),
+		canvas:            &paperMeasuredCanvas{projection: projection, height: layoutFixedFromDocumentUnits(m.pdf, canvas.Height), items: items}}, measuredLines, nil
+}
+
+func (m *paperBlockMeasurer) measureParagraph(block paperPlanningBlock, identity paperSourceIdentity, measuredLines uint64) (paperMeasuredBlock, uint64, error) {
+	measuredBox, err := m.pdf.paperMeasureBox(block.box, block.path)
+	if err != nil {
+		return paperMeasuredBlock{}, measuredLines, err
+	}
+	single := *m.source
+	paragraph := block.paragraph
+	authoredSegments := append([]layout.TextSegment(nil), paragraph.Segments...)
+	mixedCoreShadow := typedParagraphNeedsMixedCoreShadow(paragraph, m.pdf)
+	if !mixedCoreShadow {
+		paragraph.Segments = make([]layout.TextSegment, len(authoredSegments))
+		for index, segment := range authoredSegments {
+			paragraph.Segments[index] = layout.TextSegment{Text: segment.Text, Link: segment.Link, Destination: segment.Destination}
+		}
+	}
+	paragraph.Box, paragraph.BoxRef = layout.BoxStyle{}, nil
+	single.Body = []layout.Block{paragraph}
+	boxContentWidth, err := measuredBox.contentWidth(m.baseBody.Width)
+	if err != nil {
+		return paperMeasuredBlock{}, measuredLines, fmt.Errorf("%s: %w", block.path, err)
+	}
+	contentX, widthErr := m.baseBody.X.Add(measuredBox.style.Margin.Left)
+	for _, inset := range []layoutengine.Fixed{measuredBox.style.Border.Left, measuredBox.style.Padding.Left} {
+		if widthErr == nil {
+			contentX, widthErr = contentX.Add(inset)
+		}
+	}
+	contentRight, rightErr := contentX.Add(boxContentWidth)
+	if widthErr != nil || rightErr != nil || contentRight > m.pageSize.Width {
+		return paperMeasuredBlock{}, measuredLines, fmt.Errorf("%s: resolved box content width overflows the page", block.path)
+	}
+	single.PageTemplate = layout.PageTemplate{Margins: layout.Spacing{
+		Left: m.pdf.PointConvert(contentX.Points()), Top: m.top,
+		Right: m.pdf.w - m.pdf.PointConvert(contentRight.Points()), Bottom: m.bottom,
+	}}
+	shadow, err := m.pdf.planTypedParagraphLineShadowContext(m.ctx, &single)
+	if err != nil {
+		path := block.path
+		if path == "" {
+			path = fmt.Sprintf("body[%d]", block.bodyIndex)
+		}
+		return paperMeasuredBlock{}, measuredLines, fmt.Errorf("%s: %w", path, err)
+	}
+	measurement := paperRowColumnMeasurement{plan: shadow.Plan.Projection()}
+	if !mixedCoreShadow {
+		measurement, err = m.pdf.restylePaperMeasurement(measurement, paragraph.Style, authoredSegments)
+		if err != nil {
+			return paperMeasuredBlock{}, measuredLines, fmt.Errorf("%s: %w", block.path, err)
+		}
+	}
+	projection := measurement.plan
+	*m.nextNode = *m.nextNode + 1
+	blockPlan := paperMeasuredBlock{
+		lines:        make([]layoutengine.ParagraphLineInput, len(projection.Lines)),
+		runs:         make(map[uint32][]layoutengine.CoreGlyphRun),
+		fontIDs:      make(map[layoutengine.FontResourceID]layoutengine.FontResourceID),
+		node:         *m.nextNode,
+		key:          identity.key,
+		instance:     identity.instance,
+		source:       identity.source,
+		semanticRole: block.semanticRole, semanticText: block.semanticText,
+		headingLevel: block.headingLevel,
+		segments:     append([]layout.TextSegment(nil), block.paragraph.Segments...),
+		keepTogether: block.keepTogether, keepWithNext: block.keepWithNext,
+		orphans: block.orphans, widows: block.widows,
+		keepGroups:        append([]uint32(nil), block.keepGroups...),
+		semanticAncestors: append([]typedSemanticAncestor(nil), block.semanticAncestors...),
+		box:               measuredBox,
+	}
+	measuredLines += uint64(len(projection.Lines))
+	if measuredLines > 1_000_000 {
+		return paperMeasuredBlock{}, measuredLines, fmt.Errorf("document: typed planner line limit exceeded: %d > 1000000", measuredLines)
+	}
+	for _, font := range projection.Fonts {
+		localID := font.ID
+		fontIdentity := paperFontIdentity(font)
+		globalID, exists := m.fontIndex[fontIdentity]
+		if !exists {
+			globalID = m.nextFontID
+			if !globalID.Valid() {
+				return paperMeasuredBlock{}, measuredLines, errors.New("document: typed planner font resource limit exceeded")
+			}
+			m.nextFontID++
+			font.ID = globalID
+			*m.fonts = append(*m.fonts, font)
+			m.fontIndex[fontIdentity] = globalID
+		}
+		blockPlan.fontIDs[localID] = globalID
+	}
+	for lineIndex, line := range projection.Lines {
+		offset, lineErr := line.Bounds.X.Sub(m.body.X)
+		if lineErr != nil {
+			return paperMeasuredBlock{}, measuredLines, fmt.Errorf("body[%d] line %d x offset: %w", block.bodyIndex, lineIndex, lineErr)
+		}
+		baseline, lineErr := line.Baseline.Sub(line.Bounds.Y)
+		if lineErr != nil {
+			return paperMeasuredBlock{}, measuredLines, fmt.Errorf("body[%d] line %d baseline: %w", block.bodyIndex, lineIndex, lineErr)
+		}
+		blockPlan.lines[lineIndex] = layoutengine.ParagraphLineInput{
+			OffsetX: offset, Width: line.Bounds.Width, Height: line.Bounds.Height,
+			Baseline: baseline, Source: identity.source,
+		}
+	}
+	for _, run := range projection.GlyphRuns {
+		run.Origin.X, err = run.Origin.X.Sub(projection.Lines[run.Line].Bounds.X)
+		if err != nil {
+			return paperMeasuredBlock{}, measuredLines, fmt.Errorf("body[%d] glyph run offset: %w", block.bodyIndex, err)
+		}
+		run.Origin.Y = 0
+		blockPlan.runs[run.Line] = append(blockPlan.runs[run.Line], run)
+	}
+	if len(projection.Strokes) != 0 {
+		blockPlan.decorations = make(map[uint32][]paperMeasuredDecoration)
+		for _, stroke := range projection.Strokes {
+			if uint64(stroke.Path) >= uint64(len(projection.Paths)) {
+				return paperMeasuredBlock{}, measuredLines, fmt.Errorf("body[%d] decoration references a missing path", block.bodyIndex)
+			}
+			path := projection.Paths[stroke.Path]
+			lineIndex := 0
+			found := false
+			bestDistance := int64(^uint64(0) >> 1)
+			for candidate, line := range projection.Lines {
+				lineBottom, lineErr := line.Bounds.Bottom()
+				if lineErr != nil {
+					return paperMeasuredBlock{}, measuredLines, fmt.Errorf("body[%d] decoration line bounds: %w", block.bodyIndex, lineErr)
+				}
+				delta := int64(path.Bounds.Y - line.Baseline)
+				if delta < 0 {
+					delta = -delta
+				}
+				if delta < bestDistance {
+					bestDistance = delta
+					lineIndex = candidate
+				}
+				if path.Bounds.Y >= line.Bounds.Y && path.Bounds.Y <= lineBottom {
+					lineIndex, found = candidate, true
+					break
+				}
+			}
+			if !found && len(projection.Lines) == 0 {
+				return paperMeasuredBlock{}, measuredLines, fmt.Errorf("body[%d] decoration has no owning line", block.bodyIndex)
+			}
+			blockPlan.decorations[uint32(lineIndex)] = append(blockPlan.decorations[uint32(lineIndex)], paperMeasuredDecoration{
+				path: path, stroke: stroke, sourceLine: projection.Lines[lineIndex],
+			})
+		}
+	}
+	return blockPlan, measuredLines, nil
 }
 
 func attachPlanSemantics(plan layoutengine.LayoutPlan, measured []paperMeasuredBlock, language string, mapping papercompile.CompileMapping) (layoutengine.LayoutPlan, error) {

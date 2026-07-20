@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/internal/paperformat"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/internal/paperscenario"
+	"github.com/cssbruno/paperrune/internal/paperformat"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperscenario"
 )
 
 // bindingText evaluates a validated primitive binding against the explicitly

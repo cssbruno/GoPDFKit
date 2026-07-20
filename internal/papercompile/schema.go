@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -8,7 +8,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperlang"
 )
 
 type SchemaKind string
@@ -115,11 +115,17 @@ func DefaultSchemaLimits() SchemaLimits {
 }
 
 type schemaAnalysis struct {
-	descriptors []SchemaDescriptor
-	byName      map[string]*SchemaDescriptor
-	diagnostics []paperlang.Diagnostic
-	limits      SchemaLimits
-	fields      uint32
+	descriptors       []SchemaDescriptor
+	byName            map[string]*SchemaDescriptor
+	objectTypes       map[string]*paperlang.Node
+	objectTypeOrder   []string
+	resolvedTypes     map[string][]FieldDescriptor
+	resolvedTypeDepth map[string]uint32
+	resolvingTypes    map[string]bool
+	diagnostics       []paperlang.Diagnostic
+	limits            SchemaLimits
+	fields            uint32
+	expandedFields    uint32
 }
 
 type bindingMetadata struct {
@@ -137,7 +143,14 @@ type bindingAnalysis struct {
 }
 
 func analyzeSchemas(ast paperlang.AST, limits SchemaLimits) schemaAnalysis {
-	analysis := schemaAnalysis{byName: make(map[string]*SchemaDescriptor), limits: limits}
+	analysis := schemaAnalysis{
+		byName:            make(map[string]*SchemaDescriptor),
+		objectTypes:       make(map[string]*paperlang.Node),
+		resolvedTypes:     make(map[string][]FieldDescriptor),
+		resolvedTypeDepth: make(map[string]uint32),
+		resolvingTypes:    make(map[string]bool),
+		limits:            limits,
+	}
 	if limits == (SchemaLimits{}) {
 		analysis.limits = DefaultSchemaLimits()
 	} else if !validSchemaLimits(limits) {
@@ -148,26 +161,60 @@ func analyzeSchemas(ast paperlang.AST, limits SchemaLimits) schemaAnalysis {
 		return analysis
 	}
 	for _, member := range ast.Root.Members {
+		if member.Node == nil || member.Node.Kind != paperlang.NodeObjectType {
+			continue
+		}
+		node := member.Node
+		name := strings.TrimPrefix(node.ID, "@")
+		if name == "" {
+			analysis.add("PAPER_SCHEMA_OBJECT_NAME", "custom object requires a name", "write object Address:", node.HeaderSpan)
+			continue
+		}
+		if _, duplicate := analysis.objectTypes[name]; duplicate {
+			analysis.add("PAPER_SCHEMA_OBJECT_DUPLICATE", fmt.Sprintf("custom object %s is declared more than once", name), "keep one declaration per custom object", node.HeaderSpan)
+			continue
+		}
+		if uint32(len(analysis.objectTypes)) >= analysis.limits.MaxSchemas { // #nosec G115 -- collection length is bounded by the configured schema limit.
+			analysis.add("PAPER_SCHEMA_OBJECT_LIMIT", "custom object count exceeds the configured schema limit", "reduce custom object declarations or raise the bounded limit", node.HeaderSpan)
+			continue
+		}
+		analysis.objectTypes[name] = node
+		analysis.objectTypeOrder = append(analysis.objectTypeOrder, name)
+	}
+	for _, name := range analysis.objectTypeOrder {
+		analysis.ensureObjectType(name, analysis.objectTypes[name].HeaderSpan)
+	}
+	schemaCount := 0
+	for _, member := range ast.Root.Members {
+		if member.Node != nil && member.Node.Kind == paperlang.NodeSchema {
+			schemaCount++
+		}
+	}
+	for _, member := range ast.Root.Members {
 		if member.Node == nil || member.Node.Kind != paperlang.NodeSchema {
 			continue
 		}
 		node := member.Node
-		if node.ID == "" {
-			analysis.add("PAPER_SCHEMA_NAME", "schema requires a readable @name", "write schema @name:", node.HeaderSpan)
-			continue
+		name := node.ID
+		if name == "" {
+			if schemaCount != 1 {
+				analysis.add("PAPER_SCHEMA_NAME", "anonymous schema is only valid when it is the document's sole schema", "give every schema a bare name, for example schema invoice:", node.HeaderSpan)
+				continue
+			}
+			name = "@root"
 		}
-		if _, duplicate := analysis.byName[node.ID]; duplicate {
-			analysis.add("PAPER_SCHEMA_DUPLICATE", fmt.Sprintf("schema %s is declared more than once", node.ID), "keep one declaration per schema", node.HeaderSpan)
+		if _, duplicate := analysis.byName[name]; duplicate {
+			analysis.add("PAPER_SCHEMA_DUPLICATE", fmt.Sprintf("schema %s is declared more than once", strings.TrimPrefix(name, "@")), "keep one declaration per schema", node.HeaderSpan)
 			continue
 		}
 		if uint32(len(analysis.descriptors)) >= analysis.limits.MaxSchemas { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
 			analysis.add("PAPER_SCHEMA_LIMIT", "schema count exceeds the configured limit", "split declarations or raise the bounded limit", node.HeaderSpan)
 			continue
 		}
-		descriptor := SchemaDescriptor{Name: node.ID, Kind: SchemaObject, Source: node.Span}
+		descriptor := SchemaDescriptor{Name: name, Kind: SchemaObject, Source: node.Span}
 		descriptor.Fields = analysis.fieldsFor(node, 1)
 		analysis.descriptors = append(analysis.descriptors, descriptor)
-		analysis.byName[node.ID] = &analysis.descriptors[len(analysis.descriptors)-1]
+		analysis.byName[name] = &analysis.descriptors[len(analysis.descriptors)-1]
 	}
 	// Slice growth can move descriptor values; rebuild stable pointers.
 	analysis.byName = make(map[string]*SchemaDescriptor, len(analysis.descriptors))
@@ -196,12 +243,12 @@ func (a *schemaAnalysis) fieldsFor(parent *paperlang.Node, depth uint32) []Field
 		}
 		node := member.Node
 		if node.ID == "" {
-			a.add("PAPER_FIELD_NAME", "field requires a readable @name", "write field @name:", node.HeaderSpan)
+			a.add("PAPER_FIELD_NAME", "typed schema field requires a name", "write string fieldName", node.HeaderSpan)
 			continue
 		}
 		name := strings.TrimPrefix(node.ID, "@")
 		if seen[name] {
-			a.add("PAPER_FIELD_DUPLICATE", fmt.Sprintf("field %s is declared more than once", node.ID), "keep one field per object scope", node.HeaderSpan)
+			a.add("PAPER_FIELD_DUPLICATE", fmt.Sprintf("field %s is declared more than once", name), "keep one field per object scope", node.HeaderSpan)
 			continue
 		}
 		seen[name] = true
@@ -216,7 +263,7 @@ func (a *schemaAnalysis) fieldsFor(parent *paperlang.Node, depth uint32) []Field
 }
 
 func (a *schemaAnalysis) field(node *paperlang.Node, name string, depth uint32) FieldDescriptor {
-	field := FieldDescriptor{Name: name, Required: true, Source: node.Span}
+	field := FieldDescriptor{Name: name, Required: !node.Optional, Source: node.Span}
 	properties := make(map[string]*paperlang.Property)
 	for _, member := range node.Members {
 		if member.Property == nil {
@@ -229,26 +276,30 @@ func (a *schemaAnalysis) field(node *paperlang.Node, name string, depth uint32) 
 		}
 		properties[property.Name] = property
 	}
-	field.Kind = a.kindProperty(properties["type"], "type", node.HeaderSpan)
-	if property := properties["required"]; property != nil {
-		if property.Value.Kind != paperlang.ScalarBool || property.Value.BoolValue == nil {
-			a.add("PAPER_FIELD_REQUIRED", "required must be boolean", "use required: true or false", property.Value.Span)
-		} else {
-			field.Required = *property.Value.BoolValue
-		}
+	field.Kind = schemaKind(node.FieldType)
+	if node.TypeRef != "" {
+		field.Kind = SchemaObject
 	}
 	children := componentChildNodes(node)
 	switch field.Kind {
 	case SchemaObject:
-		field.Fields = a.fieldsFor(node, depth+1)
+		if node.TypeRef != "" {
+			field.Fields = a.objectTypeFields(node.TypeRef, depth+1, node.HeaderSpan)
+		} else {
+			field.Fields = a.fieldsFor(node, depth+1)
+		}
 		if len(field.Fields) == 0 {
-			a.add("PAPER_FIELD_OBJECT_EMPTY", fmt.Sprintf("object field @%s has no fields", name), "add nested field declarations", node.HeaderSpan)
+			hint := "add nested typed declarations"
+			if node.TypeRef != "" {
+				hint = "declare a non-empty custom object before using it"
+			}
+			a.add("PAPER_FIELD_OBJECT_EMPTY", fmt.Sprintf("object field %s has no fields", name), hint, node.HeaderSpan)
 		}
 	case SchemaList:
 		field.ItemRequired = true
-		field.ItemKind = a.kindProperty(properties["item-type"], "item-type", node.HeaderSpan)
-		if field.ItemKind == SchemaList || field.ItemKind == "" {
-			a.add("PAPER_FIELD_LIST_ITEM", "list item-type must be string, number, bool, or object", "use a supported non-list item type", node.HeaderSpan)
+		field.ItemKind = schemaKind(node.ItemType)
+		if node.ItemTypeRef != "" {
+			field.ItemKind = SchemaObject
 		}
 		if property := properties["max-items"]; property == nil || property.Value.Kind != paperlang.ScalarNumber || property.Value.NumberValue == nil ||
 			*property.Value.NumberValue <= 0 || *property.Value.NumberValue > float64(a.limits.MaxListItems) || math.Trunc(*property.Value.NumberValue) != *property.Value.NumberValue {
@@ -260,38 +311,111 @@ func (a *schemaAnalysis) field(node *paperlang.Node, name string, depth uint32) 
 		} else {
 			field.MaxItems = uint32(*property.Value.NumberValue)
 		}
-		if field.ItemKind == SchemaObject {
-			field.Fields = a.fieldsFor(node, depth+1)
+		if field.ItemKind == SchemaList || field.ItemKind == "" {
+			a.add("PAPER_FIELD_LIST_ITEM", "list item must be string, number, bool, or object", "write the item type after list", node.HeaderSpan)
+		} else if field.ItemKind == SchemaObject {
+			if node.ItemTypeRef != "" {
+				field.Fields = a.objectTypeFields(node.ItemTypeRef, depth+1, node.HeaderSpan)
+				if len(children) != 0 {
+					a.add("PAPER_FIELD_CUSTOM_CHILD", "custom object list cannot redefine item fields", "remove nested fields or use list object for an inline item shape", node.HeaderSpan)
+				}
+			} else {
+				field.Fields = a.fieldsFor(node, depth+1)
+			}
 			if len(field.Fields) == 0 {
-				a.add("PAPER_FIELD_OBJECT_EMPTY", fmt.Sprintf("object-list field @%s has no item fields", name), "add nested field declarations", node.HeaderSpan)
+				a.add("PAPER_FIELD_OBJECT_EMPTY", fmt.Sprintf("object-list field %s has no item fields", name), "add typed fields below the list declaration", node.HeaderSpan)
 			}
 		} else if len(children) != 0 {
-			a.add("PAPER_FIELD_PRIMITIVE_CHILD", "primitive list items cannot have nested fields", "remove nested fields or use item-type: \"object\"", node.HeaderSpan)
+			a.add("PAPER_FIELD_PRIMITIVE_CHILD", "primitive list item cannot have nested fields", "remove the nested fields or use list object", node.HeaderSpan)
 		}
 	default:
 		if len(children) != 0 {
-			a.add("PAPER_FIELD_PRIMITIVE_CHILD", fmt.Sprintf("%s field cannot have nested fields", field.Kind), "use type: \"object\"", node.HeaderSpan)
+			a.add("PAPER_FIELD_PRIMITIVE_CHILD", fmt.Sprintf("%s field cannot have nested fields", field.Kind), "use an object or list field", node.HeaderSpan)
 		}
 	}
 	for name, property := range properties {
-		if name != "type" && name != "required" && name != "item-type" && name != "max-items" {
+		if field.Kind != SchemaList || name != "max-items" {
 			a.add("PAPER_SCHEMA_EXPRESSION_UNSUPPORTED", fmt.Sprintf("field property %q is unsupported", name), "expressions, defaults, and computed fields are not implemented", property.Span)
 		}
 	}
 	return field
 }
 
-func (a *schemaAnalysis) kindProperty(property *paperlang.Property, name string, fallback paperlang.Span) SchemaKind {
-	if property == nil || property.Value.Kind != paperlang.ScalarString || property.Value.StringValue == nil {
-		a.add("PAPER_FIELD_TYPE", fmt.Sprintf("field requires quoted %s", name), "use string, number, bool, object, or list", fallback)
-		return ""
+func (a *schemaAnalysis) ensureObjectType(name string, span paperlang.Span) []FieldDescriptor {
+	if fields, resolved := a.resolvedTypes[name]; resolved {
+		return fields
 	}
-	kind := SchemaKind(strings.ToLower(strings.TrimSpace(*property.Value.StringValue)))
-	if kind != SchemaString && kind != SchemaNumber && kind != SchemaBool && kind != SchemaObject && kind != SchemaList {
-		a.add("PAPER_FIELD_TYPE", fmt.Sprintf("unsupported %s %q", name, kind), "use string, number, bool, object, or list", property.Value.Span)
-		return ""
+	node := a.objectTypes[name]
+	if node == nil {
+		a.add("PAPER_SCHEMA_OBJECT_UNKNOWN", fmt.Sprintf("custom object %s is not declared", name), "declare object "+name+": at document scope", span)
+		return nil
 	}
-	return kind
+	if a.resolvingTypes[name] {
+		a.add("PAPER_SCHEMA_OBJECT_CYCLE", fmt.Sprintf("custom object cycle reaches %s", name), "remove the recursive custom object reference", span)
+		return nil
+	}
+	a.resolvingTypes[name] = true
+	fields := a.fieldsFor(node, 1)
+	delete(a.resolvingTypes, name)
+	a.resolvedTypes[name] = cloneFieldDescriptors(fields)
+	a.resolvedTypeDepth[name] = fieldDescriptorDepth(fields)
+	if len(fields) == 0 {
+		a.add("PAPER_SCHEMA_OBJECT_EMPTY", fmt.Sprintf("custom object %s has no fields", name), "add at least one typed field", node.HeaderSpan)
+	}
+	return a.resolvedTypes[name]
+}
+
+func (a *schemaAnalysis) objectTypeFields(name string, depth uint32, span paperlang.Span) []FieldDescriptor {
+	fields := a.ensureObjectType(name, span)
+	if len(fields) == 0 {
+		return nil
+	}
+	relativeDepth := a.resolvedTypeDepth[name]
+	if relativeDepth != 0 && depth > a.limits.MaxDepth-relativeDepth+1 {
+		a.add("PAPER_SCHEMA_DEPTH", fmt.Sprintf("custom object %s exceeds the configured depth at this field", name), "flatten the custom object graph or raise the bounded depth", span)
+		return nil
+	}
+	count := fieldDescriptorCount(fields)
+	if count > a.limits.MaxFields-a.expandedFields {
+		a.add("PAPER_SCHEMA_FIELD_LIMIT", fmt.Sprintf("expanding custom object %s exceeds the configured field limit", name), "reduce custom object uses or raise the bounded limit", span)
+		return nil
+	}
+	a.expandedFields += count
+	return cloneFieldDescriptors(fields)
+}
+
+func fieldDescriptorDepth(fields []FieldDescriptor) uint32 {
+	var result uint32
+	for _, field := range fields {
+		depth := uint32(1)
+		if nested := fieldDescriptorDepth(field.Fields); nested != 0 {
+			depth += nested
+		}
+		if depth > result {
+			result = depth
+		}
+	}
+	return result
+}
+
+func fieldDescriptorCount(fields []FieldDescriptor) uint32 {
+	var result uint32
+	for _, field := range fields {
+		if result == ^uint32(0) {
+			return result
+		}
+		result++
+		nested := fieldDescriptorCount(field.Fields)
+		if nested > ^uint32(0)-result {
+			return ^uint32(0)
+		}
+		result += nested
+	}
+	return result
+}
+
+func schemaKind(fieldType paperlang.SchemaFieldType) SchemaKind {
+	return SchemaKind(fieldType)
 }
 
 func validateBindings(ast paperlang.AST, provenance map[*paperlang.Node]expansionProvenance, schemas schemaAnalysis, limits SchemaLimits) bindingAnalysis {
@@ -328,7 +452,9 @@ func validateBindings(ast paperlang.AST, provenance map[*paperlang.Node]expansio
 			if node.Kind != paperlang.NodeParagraph && node.Kind != paperlang.NodeHeading {
 				analysis.add("PAPER_BIND_TARGET", fmt.Sprintf("bind is unsupported on %s", node.Kind), "bind paragraphs/headings or component use instances", bind.Span)
 			} else if bind.Value.Kind != paperlang.ScalarString || bind.Value.StringValue == nil {
-				analysis.add("PAPER_BIND_PATH", "bind requires a quoted path", "use @schema.field or a relative component path", bind.Value.Span)
+				analysis.add("PAPER_BIND_PATH", "bind requires a quoted path", "use field.path with one schema, schema.field with several schemas, or a component-relative path", bind.Value.Span)
+			} else if strings.HasPrefix(strings.TrimSpace(*bind.Value.StringValue), "@") {
+				analysis.add("PAPER_BIND_PATH", "bind paths no longer use @schema prefixes", "use a root-relative field path, or schema.field when several schemas are declared", bind.Value.Span)
 			} else {
 				path = combineBindingPath(base, *bind.Value.StringValue)
 				span = bind.Value.Span
@@ -340,7 +466,7 @@ func validateBindings(ast paperlang.AST, provenance map[*paperlang.Node]expansio
 				collection = false
 			}
 			if err != nil {
-				analysis.add("PAPER_BIND_PATH", err.Error(), "use a declared path and [] for list item traversal", span)
+				analysis.add("PAPER_BIND_PATH", err.Error(), "use field.path with one schema, schema.field with several schemas, and [] for list item traversal", span)
 			} else if kind == SchemaObject || kind == SchemaList {
 				analysis.add("PAPER_BIND_TARGET_TYPE", fmt.Sprintf("text binding %s terminates at %s", canonical, kind), "bind to a primitive string, number, or bool field", span)
 			} else if collection {
@@ -377,8 +503,18 @@ type bindingSegment struct {
 
 func resolveBindingPath(path string, schemas schemaAnalysis, limits SchemaLimits) (string, bool, SchemaKind, bool, error) {
 	path = strings.TrimSpace(path)
-	if len(path) == 0 || uint64(len(path)) > uint64(limits.MaxPathBytes) || !strings.HasPrefix(path, "@") || strings.ContainsAny(path, " {}()$+*/") {
+	if len(path) == 0 || uint64(len(path)) > uint64(limits.MaxPathBytes) || strings.ContainsAny(path, " {}()$+*/") {
 		return "", false, "", false, fmt.Errorf("binding %q is not a supported path", path)
+	}
+	if !strings.HasPrefix(path, "@") {
+		var err error
+		path, err = qualifySchemaPath(path, schemas)
+		if err != nil {
+			return "", false, "", false, err
+		}
+	}
+	if uint64(len(path)) > uint64(limits.MaxPathBytes) {
+		return "", false, "", false, fmt.Errorf("binding path exceeds the byte limit")
 	}
 	parts := strings.Split(path, ".")
 	if len(parts) == 0 || uint64(len(parts)-1) > uint64(limits.MaxPathSegments) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
@@ -422,6 +558,25 @@ func resolveBindingPath(path string, schemas schemaAnalysis, limits SchemaLimits
 		}
 	}
 	return path, nullable, current, collection, nil
+}
+
+func qualifySchemaPath(path string, schemas schemaAnalysis) (string, error) {
+	path = strings.TrimSpace(path)
+	if strings.HasPrefix(path, "@") {
+		return path, nil
+	}
+	switch len(schemas.descriptors) {
+	case 0:
+		return "", fmt.Errorf("path %q requires one declared schema", path)
+	case 1:
+		return schemas.descriptors[0].Name + "." + path, nil
+	default:
+		parts := strings.SplitN(path, ".", 2)
+		if len(parts) != 2 || schemas.byName["@"+parts[0]] == nil {
+			return "", fmt.Errorf("path %q is ambiguous across %d schemas", path, len(schemas.descriptors))
+		}
+		return "@" + path, nil
+	}
 }
 
 func findSchemaField(fields []FieldDescriptor, name string) *FieldDescriptor {

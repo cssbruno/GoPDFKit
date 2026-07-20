@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -9,34 +9,31 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/paperedit"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperedit"
+	"github.com/cssbruno/paperrune/internal/paperlang"
 )
 
-const invalidBindingFixFixture = "document @report:\n" +
-	"  schema @invoice:\n" +
-	"    field @subtotal:\n" +
-	"      type: \"number\"\n" +
-	"    field @total:\n" +
-	"      type: \"number\"\n" +
-	"  page @sheet:\n" +
-	"    body @body:\n" +
-	"      paragraph @amount:\n" +
-	"        bind: \"@invoice.missing\"\n" +
-	"        text: \"Amount\"\n"
+const invalidBindingFixFixture = `document @report:
+  schema invoice:
+    number subtotal
+    number total
+  page @sheet:
+    body @body:
+      paragraph @amount:
+        bind: "missing"
+        text: "Amount"
+`
 
-const nullableBindingFixFixture = "document @report:\n" +
-	"  schema @invoice:\n" +
-	"    field @customer:\n" +
-	"      type: \"object\"\n" +
-	"      required: false\n" +
-	"      field @name:\n" +
-	"        type: \"string\"\n" +
-	"  page @sheet:\n" +
-	"    body @body:\n" +
-	"      paragraph @customer-name:\n" +
-	"        bind: \"@invoice.customer.name\"\n" +
-	"        text: \"Name\"\n"
+const nullableBindingFixFixture = `document @report:
+  schema invoice:
+    optional object customer:
+      string name
+  page @sheet:
+    body @body:
+      paragraph @customer-name:
+        bind: "customer.name"
+        text: "Name"
+`
 
 const componentReferenceFixFixture = "document @report:\n" +
 	"  component @known:\n" +
@@ -83,12 +80,12 @@ func diagnosticByCode(t *testing.T, diagnostics []paperlang.Diagnostic, code str
 func TestPaperApplyDiagnosticFixAllowlistedRemediesCompileAtomically(t *testing.T) {
 	t.Run("binding path", func(t *testing.T) {
 		workspace := mustWorkspace(t, Limits{})
-		request, _, _ := diagnosticFixRequest(t, workspace, invalidBindingFixFixture, "@amount", "fix-binding", "PAPER_BIND_PATH", RemedySetBindingPath, PaperDiagnosticFixPayload{Path: "@invoice.total"}, CapabilityEdit)
+		request, _, _ := diagnosticFixRequest(t, workspace, invalidBindingFixFixture, "@amount", "fix-binding", "PAPER_BIND_PATH", RemedySetBindingPath, PaperDiagnosticFixPayload{Path: "total"}, CapabilityEdit)
 		result, err := workspace.PaperApplyDiagnosticFix(request)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !result.Revision.CompileOK || result.Edit.Diff == nil || len(result.Edit.Diff.Patches) != 1 || result.Edit.Diff.Patches[0].Removed != `"@invoice.missing"` || result.Edit.Diff.Patches[0].Replacement != `"@invoice.total"` {
+		if !result.Revision.CompileOK || result.Edit.Diff == nil || len(result.Edit.Diff.Patches) != 1 || result.Edit.Diff.Patches[0].Removed != `"missing"` || result.Edit.Diff.Patches[0].Replacement != `"total"` {
 			t.Fatalf("binding fix = %#v", result)
 		}
 		if result.Semantic.Operation != "apply_fix:set_binding_path" || result.Semantic.Domain != "source" {
@@ -127,7 +124,7 @@ func TestPaperApplyDiagnosticFixAllowlistedRemediesCompileAtomically(t *testing.
 
 func TestPaperApplyDiagnosticFixIsDeterministicAndIdempotent(t *testing.T) {
 	workspace := mustWorkspace(t, Limits{})
-	request, created, _ := diagnosticFixRequest(t, workspace, invalidBindingFixFixture, "@amount", "fix-replay", "PAPER_BIND_PATH", RemedySetBindingPath, PaperDiagnosticFixPayload{Path: "@invoice.total"}, CapabilityEdit)
+	request, created, _ := diagnosticFixRequest(t, workspace, invalidBindingFixFixture, "@amount", "fix-replay", "PAPER_BIND_PATH", RemedySetBindingPath, PaperDiagnosticFixPayload{Path: "total"}, CapabilityEdit)
 	first, err := workspace.PaperApplyDiagnosticFix(request)
 	if err != nil {
 		t.Fatal(err)
@@ -137,7 +134,7 @@ func TestPaperApplyDiagnosticFixIsDeterministicAndIdempotent(t *testing.T) {
 		t.Fatalf("fix replay =\n%#v\n%#v\n%v", first, second, err)
 	}
 	changed := request
-	changed.Payload.Path = "@invoice.subtotal"
+	changed.Payload.Path = "subtotal"
 	if _, err := workspace.PaperApplyDiagnosticFix(changed); !errors.Is(err, ErrRevisionConflict) || errorCode(err) != "IDEMPOTENCY_CONFLICT" {
 		t.Fatalf("fix idempotency conflict = %v", err)
 	}
@@ -159,7 +156,7 @@ func TestPaperApplyDiagnosticFixIsDeterministicAndIdempotent(t *testing.T) {
 
 func TestPaperApplyDiagnosticFixRejectsFuzzyMismatchedAndCrossTargetRequests(t *testing.T) {
 	workspace := mustWorkspace(t, Limits{})
-	request, created, _ := diagnosticFixRequest(t, workspace, invalidBindingFixFixture, "@amount", "reject-fuzzy", "PAPER_BIND_PATH", RemedySetBindingPath, PaperDiagnosticFixPayload{Path: "@invoice.total"}, CapabilityEdit)
+	request, created, _ := diagnosticFixRequest(t, workspace, invalidBindingFixFixture, "@amount", "reject-fuzzy", "PAPER_BIND_PATH", RemedySetBindingPath, PaperDiagnosticFixPayload{Path: "total"}, CapabilityEdit)
 
 	fuzzy := request
 	fuzzy.DiagnosticFingerprint = strings.ToUpper(fuzzy.DiagnosticFingerprint)
@@ -241,7 +238,7 @@ func TestPaperApplyDiagnosticFixRejectsInstanceAndAmbiguousDiagnostics(t *testin
 	}
 
 	ambiguousWorkspace := mustWorkspace(t, Limits{})
-	request, createdAmbiguous, _ := diagnosticFixRequest(t, ambiguousWorkspace, invalidBindingFixFixture, "@amount", "ambiguous-diagnostic", "PAPER_BIND_PATH", RemedySetBindingPath, PaperDiagnosticFixPayload{Path: "@invoice.total"}, CapabilityEdit)
+	request, createdAmbiguous, _ := diagnosticFixRequest(t, ambiguousWorkspace, invalidBindingFixFixture, "@amount", "ambiguous-diagnostic", "PAPER_BIND_PATH", RemedySetBindingPath, PaperDiagnosticFixPayload{Path: "total"}, CapabilityEdit)
 	ambiguousWorkspace.mu.Lock()
 	record := ambiguousWorkspace.revisions[createdAmbiguous.Revision.Handle.value.serial]
 	diagnostic := diagnosticByCode(t, record.compiled.Diagnostics, "PAPER_BIND_PATH")
@@ -254,13 +251,13 @@ func TestPaperApplyDiagnosticFixRejectsInstanceAndAmbiguousDiagnostics(t *testin
 
 func TestPaperApplyDiagnosticFixEnforcesCapabilityRevocationAndBounds(t *testing.T) {
 	readWorkspace := mustWorkspace(t, Limits{})
-	readRequest, _, _ := diagnosticFixRequest(t, readWorkspace, invalidBindingFixFixture, "@amount", "read-fix", "PAPER_BIND_PATH", RemedySetBindingPath, PaperDiagnosticFixPayload{Path: "@invoice.total"}, CapabilityRead)
+	readRequest, _, _ := diagnosticFixRequest(t, readWorkspace, invalidBindingFixFixture, "@amount", "read-fix", "PAPER_BIND_PATH", RemedySetBindingPath, PaperDiagnosticFixPayload{Path: "total"}, CapabilityRead)
 	if _, err := readWorkspace.PaperApplyDiagnosticFix(readRequest); err == nil || errorCode(err) != "CAPABILITY_DENIED" {
 		t.Fatalf("read fix error = %v", err)
 	}
 
 	revokedWorkspace := mustWorkspace(t, Limits{})
-	revokedRequest, _, opened := diagnosticFixRequest(t, revokedWorkspace, invalidBindingFixFixture, "@amount", "revoked-fix", "PAPER_BIND_PATH", RemedySetBindingPath, PaperDiagnosticFixPayload{Path: "@invoice.total"}, CapabilityEdit)
+	revokedRequest, _, opened := diagnosticFixRequest(t, revokedWorkspace, invalidBindingFixFixture, "@amount", "revoked-fix", "PAPER_BIND_PATH", RemedySetBindingPath, PaperDiagnosticFixPayload{Path: "total"}, CapabilityEdit)
 	if err := revokedWorkspace.ClosePaperOpen(opened.Handle); err != nil {
 		t.Fatal(err)
 	}

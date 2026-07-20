@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -10,25 +10,21 @@ import (
 
 const paperJSONDataFixture = `document @report:
   language: "pt-BR"
-  schema @lab:
-    field @patient:
-      type: "string"
-    field @results:
-      type: "list"
-      item-type: "object"
+  schema lab:
+    string patient
+    list object results:
       max-items: 8
-      field @name:
-        type: "string"
+      string name
   page:
     size: "A4"
     margin: 24pt
     body:
       heading @patient:
         level: 1
-        bind: "@lab.patient"
+        bind: "patient"
         text: "Patient"
       repeat @results:
-        source: "@lab.results"
+        source: "results"
         instance-prefix: "results"
         max-items: 8
         paragraph @result:

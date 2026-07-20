@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -8,6 +8,14 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestPlanIndexedErrorPreservesPlanErrorDiagnostic(t *testing.T) {
+	got := planIndexedError("semantic_nodes", 3, ".role", "is invalid")
+	want := planError("semantic_nodes[3].role", "is invalid")
+	if got.Error() != want.Error() {
+		t.Fatalf("indexed error = %q, want %q", got, want)
+	}
+}
 
 func TestLayoutPlanCopiesInputAndReturnedProjection(t *testing.T) {
 	input := testPlanInput()

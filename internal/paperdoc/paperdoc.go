@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 // Package paperdoc defines the self-contained Paper Document interchange
@@ -23,13 +23,13 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cssbruno/gopdfkit/internal/paperassets"
-	"github.com/cssbruno/gopdfkit/internal/paperpkg"
+	"github.com/cssbruno/paperrune/internal/paperassets"
+	"github.com/cssbruno/paperrune/internal/paperpkg"
 )
 
 const (
-	MediaType          = "application/vnd.gopdfkit.paperdoc+zip"
-	Format             = "org.gopdfkit.paperdoc"
+	MediaType          = "application/vnd.paperrune.paperdoc+zip"
+	Format             = "org.paperrune.paperdoc"
 	SchemaVersion      = 1
 	MaxSourceBytes     = 8 << 20
 	MaxManifestBytes   = 1 << 20
@@ -264,7 +264,7 @@ func encodeArchive(files map[string][]byte) ([]byte, error) {
 	writer := zip.NewWriter(&destination)
 	for _, path := range paths {
 		header := &zip.FileHeader{Name: path, Method: zip.Store}
-		header.SetModTime(time.Date(1980, 1, 1, 0, 0, 0, 0, time.UTC))
+		header.Modified = time.Date(1980, 1, 1, 0, 0, 0, 0, time.UTC)
 		header.SetMode(0o600)
 		entry, err := writer.CreateHeader(header)
 		if err != nil {

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -13,9 +13,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/internal/paperd"
-	"github.com/cssbruno/gopdfkit/internal/paperscenario"
+	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/paperrune/internal/paperd"
+	"github.com/cssbruno/paperrune/internal/paperscenario"
 )
 
 func runWorkflow(args []string, stdin io.Reader, stdout, stderr io.Writer) int {

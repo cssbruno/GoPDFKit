@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 // Command paper-studio serves the read-first Paper Studio workspace. Browser
@@ -29,9 +29,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/internal/paperassets"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
+	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/paperrune/internal/paperassets"
+	"github.com/cssbruno/paperrune/internal/paperlang"
 )
 
 const (
@@ -237,8 +237,11 @@ func newStudioStaticHandler(web fs.FS) (http.Handler, error) {
 					decodeErr = openErr
 					return
 				}
-				defer reader.Close()
 				plainWASM, decodeErr = io.ReadAll(reader)
+				closeErr := reader.Close()
+				if decodeErr == nil {
+					decodeErr = closeErr
+				}
 			})
 			if decodeErr != nil {
 				http.Error(w, "paper-studio: compressed WASM is invalid", http.StatusInternalServerError)
@@ -621,7 +624,7 @@ func (s *studioServer) handlePage(w http.ResponseWriter, r *http.Request) {
 			writeStudioError(w, http.StatusUnprocessableEntity, payloadErr)
 			return
 		}
-		w.Header().Set("Content-Type", "application/vnd.gopdfkit.display-render")
+		w.Header().Set("Content-Type", "application/vnd.paperrune.display-render")
 		w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 		w.Header().Set("ETag", `"`+snapshot.revision+`-wasm-`+name+`-`+strconv.FormatUint(uint64(renderRequest.DPI), 10)+`"`)
 		w.WriteHeader(http.StatusOK)

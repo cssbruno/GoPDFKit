@@ -2,29 +2,22 @@ document @lab-report:
   title: "Laudo laboratorial"
   language: "pt-BR"
 
-  schema @lab:
-    field @laboratory:
-      type: "string"
-    field @reportId:
-      type: "string"
-    field @patient:
-      type: "object"
-      field @name:
-        type: "string"
-      field @cpf:
-        type: "string"
-    field @results:
-      type: "list"
-      item-type: "object"
+  object Patient:
+    string name
+    string cpf
+
+  object LabResult:
+    string name
+    number value
+    string unit
+    string reference
+
+  schema:
+    string laboratory
+    string reportId
+    Patient patient
+    list LabResult results:
       max-items: 200
-      field @name:
-        type: "string"
-      field @value:
-        type: "number"
-      field @unit:
-        type: "string"
-      field @reference:
-        type: "string"
 
   style @base:
     font: "body-font"
@@ -58,23 +51,20 @@ document @lab-report:
   page @a4:
     size: "A4"
     margin: 28pt
+    page-numbers: true
+    page-number-format: "Documento demonstrativo | Pagina %d de {pages}"
+    page-total-alias: "{pages}"
 
     header @header:
       paragraph @laboratory:
         style: "@title"
-        bind: "@lab.laboratory"
+        bind: "laboratory"
         text: "Laboratorio"
 
       paragraph @report-id:
         style: "@label"
-        bind: "@lab.reportId"
+        bind: "reportId"
         text: "Laudo"
-
-    footer @footer:
-      paragraph @page-number:
-        style: "@label"
-        align: "center"
-        text: "Documento demonstrativo | Pagina {page} de {pages}"
 
     body @body:
       paragraph @patient-label:
@@ -83,76 +73,72 @@ document @lab-report:
 
       paragraph @patient-name:
         style: "@value"
-        bind: "@lab.patient.name"
+        bind: "patient.name"
         text: "Nome"
 
       paragraph @patient-cpf:
         style: "@value"
-        bind: "@lab.patient.cpf"
+        bind: "patient.cpf"
         text: "CPF"
 
-      row @result-header:
-        gap: 6pt
+      table @results-table:
+        repeat-header: true
+        split: "rows"
 
-        paragraph @header-name:
-          track: "fraction"
-          track-weight: 3
-          style: "@label"
-          text: "EXAME"
+        table-track @name-track:
+          width: 42%
+        table-track @value-track:
+          width: 15%
+        table-track @unit-track:
+          width: 15%
+        table-track @reference-track:
+          width: 28%
 
-        paragraph @header-value:
-          track: "fraction"
-          track-weight: 1
-          style: "@label"
-          text: "RESULTADO"
+        table-header @results-header:
+          table-row @results-header-row:
+            cell @header-name:
+              paragraph @header-name-label:
+                style: "@label"
+                text: "EXAME"
+            cell @header-value:
+              paragraph @header-value-label:
+                style: "@label"
+                text: "RESULTADO"
+            cell @header-unit:
+              paragraph @header-unit-label:
+                style: "@label"
+                text: "UNIDADE"
+            cell @header-reference:
+              paragraph @header-reference-label:
+                style: "@label"
+                text: "REFERENCIA"
 
-        paragraph @header-unit:
-          track: "fraction"
-          track-weight: 1
-          style: "@label"
-          text: "UNIDADE"
+        repeat @result-rows:
+          source: "results"
+          instance-prefix: "results"
+          max-items: 200
 
-        paragraph @header-reference:
-          track: "fraction"
-          track-weight: 2
-          style: "@label"
-          text: "REFERENCIA"
-
-      repeat @result-rows:
-        source: "@lab.results"
-        instance-prefix: "results"
-        max-items: 200
-
-        row @result-row:
-          gap: 6pt
-
-          paragraph @result-name:
-            track: "fraction"
-            track-weight: 3
-            style: "@result"
-            bind: "name"
-            text: "Exame"
-
-          paragraph @result-value:
-            track: "fraction"
-            track-weight: 1
-            style: "@result"
-            bind: "value"
-            format: "decimal"
-            format-min-fraction: 2
-            format-max-fraction: 4
-            text: "0"
-
-          paragraph @result-unit:
-            track: "fraction"
-            track-weight: 1
-            style: "@result"
-            bind: "unit"
-            text: "Unidade"
-
-          paragraph @result-reference:
-            track: "fraction"
-            track-weight: 2
-            style: "@result"
-            bind: "reference"
-            text: "Referencia"
+          table-row @result-row:
+            cell @result-name-cell:
+              paragraph @result-name:
+                style: "@result"
+                bind: "name"
+                text: "Exame"
+            cell @result-value-cell:
+              paragraph @result-value:
+                style: "@result"
+                bind: "value"
+                format: "decimal"
+                format-min-fraction: 2
+                format-max-fraction: 4
+                text: "0"
+            cell @result-unit-cell:
+              paragraph @result-unit:
+                style: "@result"
+                bind: "unit"
+                text: "Unidade"
+            cell @result-reference-cell:
+              paragraph @result-reference:
+                style: "@result"
+                bind: "reference"
+                text: "Referencia"

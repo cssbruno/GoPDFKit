@@ -3,8 +3,8 @@ package papercompile
 import (
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 func TestCompileCanvasAnchorsPreserveReadableConstraints(t *testing.T) {

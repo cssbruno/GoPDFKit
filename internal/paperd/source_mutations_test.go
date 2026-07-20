@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/paperedit"
+	"github.com/cssbruno/paperrune/internal/paperedit"
 )
 
 const richMutationFixture = "document @report:\n" +
@@ -19,14 +19,14 @@ const richMutationFixture = "document @report:\n" +
 	"        text @first: \"Hello\"\n" +
 	"        text @second: \" world\"\n"
 
-const bindingMutationFixture = "document @report:\n" +
-	"  schema @invoice:\n" +
-	"    field @total:\n" +
-	"      type: \"number\"\n" +
-	"  page @sheet:\n" +
-	"    body @body:\n" +
-	"      paragraph @amount:\n" +
-	"        text: \"Amount\"\n"
+const bindingMutationFixture = `document @report:
+  schema invoice:
+    number total
+  page @sheet:
+    body @body:
+      paragraph @amount:
+        text: "Amount"
+`
 
 func mutationGuard(t *testing.T, workspace *Workspace, source, target, key string, mode CapabilityMode) (PaperMutationGuard, PaperCreateResult, PaperOpenSnapshot) {
 	t.Helper()
@@ -118,13 +118,13 @@ func TestPaperSetBindingCompilesBeforePublishing(t *testing.T) {
 	guard, created, _ := mutationGuard(t, workspace, bindingMutationFixture, "@amount", "binding-1", CapabilityEdit)
 	minFraction, maxFraction, required := uint32(2), uint32(2), true
 	result, err := workspace.PaperSetBinding(PaperSetBindingRequest{
-		Guard: guard, Path: "@invoice.total", Required: &required,
+		Guard: guard, Path: "total", Required: &required,
 		Format: "decimal", FormatLocale: "pt-BR", MinFractionDigits: &minFraction, MaxFractionDigits: &maxFraction,
 	})
 	if err != nil {
 		t.Fatalf("PaperSetBinding() error = %v", err)
 	}
-	if !result.Revision.CompileOK || !strings.Contains(result.Revision.Source, `bind: "@invoice.total"`) || !strings.Contains(result.Revision.Source, `format: "decimal"`) || !strings.Contains(result.Revision.Source, `format-locale: "pt-BR"`) || !strings.Contains(result.Revision.Source, "format-min-fraction: 2") || result.Edit.Diff == nil {
+	if !result.Revision.CompileOK || !strings.Contains(result.Revision.Source, `bind: "total"`) || !strings.Contains(result.Revision.Source, `format: "decimal"`) || !strings.Contains(result.Revision.Source, `format-locale: "pt-BR"`) || !strings.Contains(result.Revision.Source, "format-min-fraction: 2") || result.Edit.Diff == nil {
 		t.Fatalf("PaperSetBinding() = %#v", result)
 	}
 	if result.Edit.Diff.Patches[0].Start != result.Edit.Diff.Patches[0].End {
@@ -133,7 +133,7 @@ func TestPaperSetBindingCompilesBeforePublishing(t *testing.T) {
 
 	secondWorkspace := mustWorkspace(t, Limits{})
 	invalidGuard, invalidCreated, _ := mutationGuard(t, secondWorkspace, bindingMutationFixture, "@amount", "binding-invalid", CapabilityEdit)
-	if _, err := secondWorkspace.PaperSetBinding(PaperSetBindingRequest{Guard: invalidGuard, Path: "@invoice.missing"}); !errors.Is(err, ErrInvalidSource) {
+	if _, err := secondWorkspace.PaperSetBinding(PaperSetBindingRequest{Guard: invalidGuard, Path: "missing"}); !errors.Is(err, ErrInvalidSource) {
 		t.Fatalf("PaperSetBinding(invalid path) error = %v", err)
 	}
 	candidate, _ := secondWorkspace.Candidate(invalidCreated.Candidate.Handle)
@@ -160,7 +160,7 @@ func TestPaperSourceMutationsEnforceModeRevocationAndAmbiguity(t *testing.T) {
 	if err := revokedWorkspace.ClosePaperOpen(opened.Handle); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := revokedWorkspace.PaperSetBinding(PaperSetBindingRequest{Guard: revokedGuard, Path: "@invoice.total"}); !errors.Is(err, ErrRevisionNotFound) {
+	if _, err := revokedWorkspace.PaperSetBinding(PaperSetBindingRequest{Guard: revokedGuard, Path: "total"}); !errors.Is(err, ErrRevisionNotFound) {
 		t.Fatalf("PaperSetBinding(revoked) error = %v", err)
 	}
 

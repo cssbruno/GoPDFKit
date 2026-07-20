@@ -30,7 +30,7 @@ ADR, benchmark report, fixture, screenshot bundle, or test result.
 Stage record:
 
 ```text
-Owner: GoPDFKit maintainers
+Owner: PaperRune maintainers
 Start revision: 50b2530 (release: harden PDF processing for v0.14.0)
 Target branch: codex/paper-engine-foundation
 ADR/design links: docs/adr/0001-unified-automatic-layout-engine.md; PAPER_ENGINE_PLAN.md
@@ -3393,7 +3393,8 @@ as completed behavior.
 - [ ] Security review and external fuzzing campaign. Local `gosec`, current
   `govulncheck`, all ten hostile-input fuzz targets, protocol boundaries, and
   browser/WASM checks pass
-  ([local evaluation](docs/security/local-candidate-evaluation-2026-07-18.md));
+  ([local evaluation](docs/security/local-candidate-evaluation-2026-07-19.md),
+  [full analysis](security_full_analysis_report.md));
   the pushed campaign, named reviewer acceptance, and anchored candidate
   evidence remain external release-governance requirements.
 - [x] Protected-content mutation and separate publish, export, attachment,
@@ -3683,8 +3684,12 @@ as completed behavior.
   ([raster v5 evidence](docs/performance/evidence/display-raster-v5-apple-m2.md)).
 - [x] Allocation changes are explained with profiles. The raster v5 evidence
   records both allocation profiles, artifact hashes, the streaming-chunk
-  allocation source, and the net bytes/op reduction
-  ([evidence](docs/performance/evidence/display-raster-v5-apple-m2.md)).
+  allocation source, and the net bytes/op reduction. The compiled-HTML table
+  evidence likewise records the redundant per-cell declaration round trip,
+  temporary property allowlists, eager valid-plan diagnostic formatting,
+  before/after profiles, and the allocation reduction
+  ([raster evidence](docs/performance/evidence/display-raster-v5-apple-m2.md),
+  [table-cell evidence](docs/performance/evidence/html-cell-declarations-apple-m2.md)).
 - [x] No portable or single-sample timing multiplier is used as an acceptance
   gate; the automatic report gate requires at least ten samples and exact
   named host/toolchain matching before applying calibrated upper-median timing
@@ -3844,4 +3849,8 @@ self-certify that governance gate.
 - [x] Typed and HTML APIs work as compatibility adapters.
 - [x] Legacy automatic layout engines are deleted.
 - [x] Performance is faster or materially more efficient than the old HTML path.
-- [ ] Security, privacy, reproducibility, and audit requirements pass.
+- [ ] Security, privacy, reproducibility, and audit requirements pass. Local
+  engineering evidence passes
+  ([security analysis](security_full_analysis_report.md)); immutable external
+  fuzz evidence, named acceptance, and a signed or anchored audit root remain
+  required.

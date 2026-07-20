@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layout
 
-import "github.com/cssbruno/gopdfkit/internal/layoutgeom"
+import "github.com/cssbruno/paperrune/internal/layoutgeom"
 
 // ImageFitResult describes an image fitted inside a target box. Offset values
 // locate the fitted image relative to the target box; callers decide whether a

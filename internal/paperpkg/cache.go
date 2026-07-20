@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperpkg
@@ -166,7 +166,7 @@ func archiveContentDigestFromFiles(files []CacheFile) Digest {
 	projection := struct {
 		Domain string      `json:"domain"`
 		Files  []CacheFile `json:"files"`
-	}{Domain: "gopdfkit.paperpkg.archive-content.v1", Files: files}
+	}{Domain: "paperrune.paperpkg.archive-content.v1", Files: files}
 	encoded, err := json.Marshal(projection)
 	if err != nil {
 		return ""

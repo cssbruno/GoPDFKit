@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -11,7 +11,7 @@ import (
 	"hash"
 )
 
-const anonymousStructuralKeyDomain = "gopdfkit.layout.anonymous-structural-key.v1"
+const anonymousStructuralKeyDomain = "paperrune.layout.anonymous-structural-key.v1"
 
 type AnonymousStructuralKeyInput struct {
 	Revision    SourceRevisionID

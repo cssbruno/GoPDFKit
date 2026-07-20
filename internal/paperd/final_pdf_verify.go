@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -11,8 +11,8 @@ import (
 	"errors"
 	"sort"
 
-	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/internal/pdfverify"
+	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/paperrune/internal/pdfverify"
 )
 
 type FinalPDFVerificationRequest struct {
@@ -103,7 +103,7 @@ func (w *Workspace) FinalPDFVerificationInputHash(request FinalPDFVerificationRe
 	if err != nil {
 		return "", err
 	}
-	return SensitiveOperationInputHash(SensitiveProductionCapture, SensitiveOperationInput{Target: "paperd:final-pdf-verification:" + record.plan.Hash(), MediaType: "application/vnd.gopdfkit.final-pdf-verification+json", Payload: payload})
+	return SensitiveOperationInputHash(SensitiveProductionCapture, SensitiveOperationInput{Target: "paperd:final-pdf-verification:" + record.plan.Hash(), MediaType: "application/vnd.paperrune.final-pdf-verification+json", Payload: payload})
 }
 
 // VerifyFinalPlanPDF independently verifies PDF bytes painted from one exact

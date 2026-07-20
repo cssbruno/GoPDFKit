@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -6,8 +6,8 @@ package main
 import (
 	"log"
 
-	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
+	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/paperrune/examples/internal/outpath"
 )
 
 func main() {
@@ -63,7 +63,7 @@ func main() {
 	pdf.Line(16, 274, 194, 274)
 	pdf.SetFont("Helvetica", "", 9)
 	pdf.SetTextColor(95, 95, 95)
-	pdf.Text(16, 281, "GoPDFKit example - assets/generated/pdf/examples/structured-report.pdf")
+	pdf.Text(16, 281, "PaperRune example - assets/generated/pdf/examples/structured-report.pdf")
 
 	if err := pdf.OutputFileAndClose(outpath.File("structured-report.pdf")); err != nil {
 		log.Fatal(err)

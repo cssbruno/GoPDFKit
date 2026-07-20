@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperlang
@@ -10,7 +10,7 @@ import (
 const (
 	// GrammarVersion pins the accepted source-language contract independently
 	// from the JSON projection schema used by internal tools.
-	GrammarVersion          = "paper/0.1"
+	GrammarVersion          = "paper/0.3"
 	ASTSchemaVersion uint16 = 1
 )
 
@@ -63,22 +63,49 @@ const (
 	NodeRepeat      NodeKind = "repeat"
 	NodeLoop        NodeKind = "loop"
 	NodeSchema      NodeKind = "schema"
-	NodeField       NodeKind = "field"
-	NodeScenario    NodeKind = "scenario"
-	NodeValue       NodeKind = "value"
-	NodeObject      NodeKind = "object"
-	NodeKeyedList   NodeKind = "keyed-list"
-	NodeTheme       NodeKind = "theme"
-	NodeStyle       NodeKind = "style"
-	NodeToken       NodeKind = "token"
-	NodeScope       NodeKind = "scope"
+	// NodeObjectType is the semantic AST node produced by document-scoped
+	// reusable object declarations such as `object Address:`. Its semantic
+	// name is deliberately not a source keyword.
+	NodeObjectType NodeKind = "schema-object-type"
+	// NodeField is the semantic AST node produced by typed schema declarations
+	// such as `string phone`. `schema-field` is deliberately not source syntax.
+	NodeField     NodeKind = "schema-field"
+	NodeScenario  NodeKind = "scenario"
+	NodeValue     NodeKind = "value"
+	NodeObject    NodeKind = "object"
+	NodeKeyedList NodeKind = "keyed-list"
+	NodeTheme     NodeKind = "theme"
+	NodeStyle     NodeKind = "style"
+	NodeToken     NodeKind = "token"
+	NodeScope     NodeKind = "scope"
 )
 
 func parseNodeKind(value string) (NodeKind, bool) {
 	kind := NodeKind(value)
 	switch kind {
-	case NodeDocument, NodePage, NodeBody, NodeHeader, NodeFooter, NodeCanvas, NodeAnchor, NodeHeading, NodeText, NodeParagraph, NodeList, NodeItem, NodePageBreak, NodeRow, NodeColumn, NodeImage, NodeTable, NodeTableRow, NodeTableCell, NodeTableHeader, NodeTableTrack, NodeComponent, NodeProp, NodeSlot, NodeUse, NodeArg, NodeFill, NodeRepeat, NodeLoop, NodeSchema, NodeField, NodeScenario, NodeValue, NodeObject, NodeKeyedList, NodeTheme, NodeStyle, NodeToken, NodeScope:
+	case NodeDocument, NodePage, NodeBody, NodeHeader, NodeFooter, NodeCanvas, NodeAnchor, NodeHeading, NodeText, NodeParagraph, NodeList, NodeItem, NodePageBreak, NodeRow, NodeColumn, NodeImage, NodeTable, NodeTableRow, NodeTableCell, NodeTableHeader, NodeTableTrack, NodeComponent, NodeProp, NodeSlot, NodeUse, NodeArg, NodeFill, NodeRepeat, NodeLoop, NodeSchema, NodeScenario, NodeValue, NodeObject, NodeKeyedList, NodeTheme, NodeStyle, NodeToken, NodeScope:
 		return kind, true
+	default:
+		return "", false
+	}
+}
+
+// SchemaFieldType is the type keyword at the start of a schema declaration.
+type SchemaFieldType string
+
+const (
+	FieldString SchemaFieldType = "string"
+	FieldNumber SchemaFieldType = "number"
+	FieldBool   SchemaFieldType = "bool"
+	FieldObject SchemaFieldType = "object"
+	FieldList   SchemaFieldType = "list"
+)
+
+func parseSchemaFieldType(value string) (SchemaFieldType, bool) {
+	typeName := SchemaFieldType(value)
+	switch typeName {
+	case FieldString, FieldNumber, FieldBool, FieldObject, FieldList:
+		return typeName, true
 	default:
 		return "", false
 	}
@@ -131,12 +158,17 @@ type Member struct {
 // Node is one indentation-delimited .paper component. HeaderSpan covers only
 // its declaration line; Span grows through its last descendant.
 type Node struct {
-	Kind       NodeKind `json:"kind"`
-	ID         string   `json:"id,omitempty"`
-	Value      *Scalar  `json:"value,omitempty"`
-	Members    []Member `json:"members,omitempty"`
-	HeaderSpan Span     `json:"header_span"`
-	Span       Span     `json:"span"`
+	Kind        NodeKind        `json:"kind"`
+	ID          string          `json:"id,omitempty"`
+	FieldType   SchemaFieldType `json:"field_type,omitempty"`
+	TypeRef     string          `json:"type_ref,omitempty"`
+	ItemType    SchemaFieldType `json:"item_type,omitempty"`
+	ItemTypeRef string          `json:"item_type_ref,omitempty"`
+	Optional    bool            `json:"optional,omitempty"`
+	Value       *Scalar         `json:"value,omitempty"`
+	Members     []Member        `json:"members,omitempty"`
+	HeaderSpan  Span            `json:"header_span"`
+	Span        Span            `json:"span"`
 }
 
 // AST is one parsed .paper source. A syntactically damaged input may have no

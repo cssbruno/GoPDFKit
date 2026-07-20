@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
-	"github.com/cssbruno/gopdfkit/internal/papercompile"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
+	"github.com/cssbruno/paperrune/internal/papercompile"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 // ErrLayoutDocumentPlanUnsupported reports that a typed LayoutDocument uses a
@@ -272,7 +272,7 @@ func bindTypedDeterministicInputs(plan layoutengine.LayoutPlan, tree layoutengin
 	if err != nil {
 		return layoutengine.LayoutPlan{}, err
 	}
-	scenarioDigest := sha256.Sum256([]byte("gopdfkit.typed-layout-scenario.v1\x00" + templateHash))
+	scenarioDigest := sha256.Sum256([]byte("paperrune.typed-layout-scenario.v1\x00" + templateHash))
 	scenario, err := layoutengine.ParseScenarioRevisionID(hex.EncodeToString(scenarioDigest[:]))
 	if err != nil {
 		return layoutengine.LayoutPlan{}, err
@@ -536,7 +536,7 @@ func hashTypedLayoutDocumentEnvelope(layoutHash string, envelope typedLayoutDocu
 		}
 	}
 	record := typedLayoutEnvelopeHash{
-		Schema: "gopdfkit/typed-document-envelope/v1", LayoutHash: layoutHash,
+		Schema: "paperrune/typed-document-envelope/v1", LayoutHash: layoutHash,
 		Producer: envelope.producer, Title: envelope.title, Subject: envelope.subject,
 		Author: envelope.author, Keywords: envelope.keywords, Creator: envelope.creator,
 		XMP: append([]byte(nil), envelope.xmp...), Compliance: envelope.compliance,

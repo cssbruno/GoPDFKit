@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperlang
@@ -255,6 +255,10 @@ func classifyCSTLine(file, source string, starts []int, line sourceLine, rawEnd,
 		entry.Kind = CSTNodeStatement
 		return entry
 	}
+	if _, typed := parseSchemaFieldType(entry.Name); typed || entry.Name == "optional" && cstOptionalField(content) || cstCustomField(content) {
+		entry.Kind = CSTNodeStatement
+		return entry
+	}
 	afterName := strings.TrimSpace(content[nameEnd:])
 	unknownHeader := strings.HasPrefix(afterName, "@") || colon >= 0 && strings.TrimSpace(content[colon+1:]) == ""
 	if unknownHeader {
@@ -263,6 +267,22 @@ func classifyCSTLine(file, source string, starts []int, line sourceLine, rawEnd,
 		entry.Kind = CSTProperty
 	}
 	return entry
+}
+
+func cstOptionalField(content string) bool {
+	parts := strings.Fields(content)
+	if len(parts) < 3 || parts[0] != "optional" {
+		return false
+	}
+	if _, builtin := parseSchemaFieldType(parts[1]); builtin {
+		return true
+	}
+	return validSchemaTypeName(parts[1]) && validSchemaFieldName(strings.TrimSuffix(parts[2], ":"))
+}
+
+func cstCustomField(content string) bool {
+	parts := strings.Fields(content)
+	return len(parts) == 2 && validSchemaTypeName(parts[0]) && validSchemaFieldName(parts[1])
 }
 
 func (c *CST) buildOpaqueNodes() {

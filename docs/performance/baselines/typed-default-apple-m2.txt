@@ -1,4 +1,4 @@
-# gopdfkit-paper-engine-benchmark-v3
+# paperrune-paper-engine-benchmark-v3
 # command: go test ./document ./internal/layoutengine -run ^$ -bench ^BenchmarkPaperEngine(Planner|Painter|ProductionDefault|EndToEnd|WarmCompiled|Concurrent|Table) -benchmem -benchtime=250ms -count=10
 # go-version: go version go1.26.5 darwin/arm64
 # goos: darwin
@@ -7,7 +7,7 @@
 # worktree: dirty
 goos: darwin
 goarch: arm64
-pkg: github.com/cssbruno/gopdfkit/document
+pkg: github.com/cssbruno/paperrune/document
 cpu: Apple M2
 BenchmarkPaperEngineProductionDefault-8       	      80	   3613133 ns/op	 5348140 B/op	   16802 allocs/op
 BenchmarkPaperEngineProductionDefault-8       	      79	   3541848 ns/op	 5355411 B/op	   16802 allocs/op
@@ -20,4 +20,4 @@ BenchmarkPaperEngineProductionDefault-8       	      82	   3622309 ns/op	 535252
 BenchmarkPaperEngineProductionDefault-8       	      86	   3537522 ns/op	 5322210 B/op	   16800 allocs/op
 BenchmarkPaperEngineProductionDefault-8       	      78	   3593330 ns/op	 5338303 B/op	   16800 allocs/op
 PASS
-ok  	github.com/cssbruno/gopdfkit/document	33.799s
+ok  	github.com/cssbruno/paperrune/document	33.799s

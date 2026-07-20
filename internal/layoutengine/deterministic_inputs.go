@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -89,7 +89,7 @@ func NewResourceCatalogManifest(resources []ContentAddressedResource) (ResourceC
 		}
 	}
 	digest := sha256.New()
-	writePlanIdentityField(digest, "domain", "gopdfkit.resource-catalog.v1")
+	writePlanIdentityField(digest, "domain", "paperrune.resource-catalog.v1")
 	for _, resource := range canonical {
 		writePlanIdentityField(digest, "kind", resource.Kind)
 		writePlanIdentityField(digest, "name", resource.Name)
@@ -118,7 +118,7 @@ func NewPageProfileManifest(name string, width, height Fixed) (PageProfileManife
 		return PageProfileManifest{}, errors.New("layoutengine: page profile dimensions must be positive and valid")
 	}
 	digest := sha256.New()
-	writePlanIdentityField(digest, "domain", "gopdfkit.page-profile.v1")
+	writePlanIdentityField(digest, "domain", "paperrune.page-profile.v1")
 	writePlanIdentityField(digest, "name", name)
 	writePlanIdentityFixed(digest, "width", width)
 	writePlanIdentityFixed(digest, "height", height)

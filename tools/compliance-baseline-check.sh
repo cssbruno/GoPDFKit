@@ -3,7 +3,7 @@ set -eu
 
 out_dir="${1:-${COMPLIANCE_OUT:-artifacts/compliance}}"
 baseline_dir="${COMPLIANCE_BASELINE_DIR:-testdata/compliance}"
-image="${VERAPDF_DOCKER_IMAGE:-verapdf/cli:v1.30.2}"
+image="${VERAPDF_DOCKER_IMAGE:-verapdf/cli@sha256:d5ee329657cf9bc4b2400392dd54c7d0a0ce9980ff6fa2da5590eebeec007cdb}"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
@@ -75,15 +75,22 @@ verapdf_report() {
 	pdf="$2"
 	report="$3"
 	require_readable_file "$pdf"
+	input_dir="$tmp_dir/verapdf-input"
+	mkdir -p "$input_dir"
+	cp "$pdf" "$input_dir/input.pdf"
 	docker run --rm \
-		-v "$PWD:/work" \
-		-v /tmp:/tmp \
-		-w /work \
+		--network none \
+		--read-only \
+		--cap-drop ALL \
+		--security-opt no-new-privileges \
+		--tmpfs /tmp:rw,noexec,nosuid,size=64m \
+		--mount "type=bind,source=$input_dir,target=/inputs,readonly" \
 		"$image" \
 		--format xml \
 		--verbose \
 		-f "$profile" \
-		"$pdf" > "$report"
+		/inputs/input.pdf > "$report"
+	rm -f "$input_dir/input.pdf"
 }
 
 compare_verapdf() {

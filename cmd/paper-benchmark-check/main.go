@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cssbruno/gopdfkit/internal/perfgate"
+	"github.com/cssbruno/paperrune/internal/perfgate"
 )
 
 func main() {

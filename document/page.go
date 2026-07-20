@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -97,7 +97,7 @@ func (f *Document) SetPageE(pageNum int) error {
 }
 
 // PageCount returns the number of pages currently in the document. Since page
-// numbers in gopdfkit are one-based, the page count is the same as the page
+// numbers in paperrune are one-based, the page count is the same as the page
 // number of the current last page.
 func (f *Document) PageCount() int {
 	return len(f.pages) - 1

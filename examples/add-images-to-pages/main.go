@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -6,9 +6,9 @@ package main
 import (
 	"log"
 
-	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/examples/internal/assets"
-	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
+	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/paperrune/examples/internal/assets"
+	"github.com/cssbruno/paperrune/examples/internal/outpath"
 )
 
 func main() {
@@ -30,7 +30,7 @@ func main() {
 	pdf.AddPage()
 	pdf.SetFont("Helvetica", "B", 16)
 	pdf.Text(18, 22, "Repeated page image")
-	pdf.ImageOptions(assets.File("image", "go_pdf_kit.png"), 18, 36, 174, 0, false, document.ImageOptions{}, 0, "")
+	pdf.ImageOptions(assets.File("image", "paperrune-kit.png"), 18, 36, 174, 0, false, document.ImageOptions{}, 0, "")
 	pdf.SetFont("Helvetica", "", 10)
 	pdf.SetXY(18, 205)
 	pdf.MultiCell(174, 6, "The same ImageOptions API can place registered images on any page. Width or height may be set to zero to preserve aspect ratio.", "", "L", false)

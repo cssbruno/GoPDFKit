@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperlang
@@ -84,7 +84,18 @@ func (p *paperParser) parseNode(depth int) *Node {
 	}
 	node := &Node{Kind: kind}
 	headerStart := name.Span.Start
-	if p.at(TokenReadableID) {
+	if kind == NodeSchema && p.at(TokenIdentifier) {
+		id := p.advance()
+		node.ID = "@" + id.Lexeme
+		if _, exists := p.ids[node.ID]; exists {
+			p.add("PAPER_DUPLICATE_ID", fmt.Sprintf("schema name %s is already used", id.Lexeme), "choose a unique schema name", id.Span)
+		} else {
+			p.ids[node.ID] = id.Span
+		}
+	} else if kind == NodeSchema && p.at(TokenReadableID) {
+		id := p.advance()
+		p.add("PAPER_SCHEMA_LEGACY_NAME", "schema names no longer use @", "write schema "+strings.TrimPrefix(id.Lexeme, "@")+": or schema:", id.Span)
+	} else if p.at(TokenReadableID) {
 		id := p.advance()
 		node.ID = id.Lexeme
 		// Slot/fill/field and fixture names are scoped to their owning block
@@ -130,7 +141,7 @@ func (p *paperParser) parseNode(depth int) *Node {
 				p.advance()
 				continue
 			}
-			member := p.parseMember(depth + 1)
+			member := p.parseMember(depth+1, node)
 			if member.Node != nil || member.Property != nil {
 				node.Members = append(node.Members, member)
 				memberSpan := memberSpan(member)
@@ -145,11 +156,17 @@ func (p *paperParser) parseNode(depth int) *Node {
 	return node
 }
 
-func (p *paperParser) parseMember(depth int) Member {
+func (p *paperParser) parseMember(depth int, parent *Node) Member {
 	if !p.at(TokenIdentifier) {
 		p.add("PAPER_EXPECTED_MEMBER", "expected a child node or property", "start the line with a component or property name", p.current().Span)
 		p.skipLine()
 		return Member{}
+	}
+	if parent.Kind == NodeDocument && p.customObjectTypeAhead() {
+		return Member{Node: p.parseCustomObjectType(depth)}
+	}
+	if (parent.Kind == NodeSchema || parent.Kind == NodeObjectType || parent.Kind == NodeField && (parent.FieldType == FieldObject || parent.FieldType == FieldList)) && p.schemaFieldAhead() {
+		return Member{Node: p.parseSchemaField(depth)}
 	}
 	_, isNode := parseNodeKind(p.current().Lexeme)
 	// `component: "@name"` is the readable reference property inside a use;
@@ -166,6 +183,188 @@ func (p *paperParser) parseMember(depth int) Member {
 		return Member{Node: p.parseNode(depth)}
 	}
 	return Member{Property: p.parseProperty()}
+}
+
+func (p *paperParser) customObjectTypeAhead() bool {
+	return p.current().Kind == TokenIdentifier && p.current().Lexeme == string(NodeObject) &&
+		p.peek(1).Kind == TokenIdentifier && p.peek(2).Kind == TokenColon
+}
+
+func (p *paperParser) parseCustomObjectType(depth int) *Node {
+	headerStart := p.advance().Span.Start // object
+	name := p.advance()
+	node := &Node{Kind: NodeObjectType}
+	if !validSchemaTypeName(name.Lexeme) {
+		p.add("PAPER_SCHEMA_OBJECT_NAME", fmt.Sprintf("%q is not a valid custom object name", name.Lexeme), "use a non-reserved identifier such as Address or Medication", name.Span)
+	} else {
+		node.ID = "@" + name.Lexeme
+		if _, exists := p.ids[node.ID]; exists {
+			p.add("PAPER_DUPLICATE_ID", fmt.Sprintf("schema or custom object name %s is already used", name.Lexeme), "choose a unique name", name.Span)
+		} else {
+			p.ids[node.ID] = name.Span
+		}
+	}
+	if !p.consume(TokenColon) {
+		p.add("PAPER_EXPECTED_COLON", "custom object declaration requires ':'", "add ':' after the custom object name", p.current().Span)
+	}
+	lineEnd := p.current().Span.Start
+	if !p.at(TokenNewline) && !p.at(TokenEOF) {
+		p.add("PAPER_TRAILING_TOKENS", "unexpected tokens after custom object declaration", "keep only object, its name, and ':'", p.current().Span)
+		p.skipLine()
+	} else if p.at(TokenNewline) {
+		lineEnd = p.advance().Span.Start
+	}
+	node.HeaderSpan = Span{File: p.file, Start: headerStart, End: lineEnd}
+	node.Span = node.HeaderSpan
+
+	p.skipNewlines()
+	if p.at(TokenIndent) {
+		p.advance()
+		for !p.at(TokenDedent) && !p.at(TokenEOF) {
+			if p.at(TokenNewline) {
+				p.advance()
+				continue
+			}
+			member := p.parseMember(depth+1, node)
+			if member.Node == nil && member.Property == nil {
+				continue
+			}
+			node.Members = append(node.Members, member)
+			if span := memberSpan(member); span.End.Offset > node.Span.End.Offset {
+				node.Span.End = span.End
+			}
+		}
+		p.consume(TokenDedent)
+	}
+	p.validateNode(node, depth)
+	return node
+}
+
+func (p *paperParser) schemaFieldAhead() bool {
+	offset := 0
+	if p.peek(offset).Kind == TokenIdentifier && p.peek(offset).Lexeme == "optional" {
+		offset++
+	}
+	if p.peek(offset).Kind != TokenIdentifier {
+		return false
+	}
+	if _, builtin := parseSchemaFieldType(p.peek(offset).Lexeme); builtin {
+		return true
+	}
+	return p.peek(offset+1).Kind == TokenIdentifier
+}
+
+func (p *paperParser) parseSchemaField(depth int) *Node {
+	headerStart := p.current().Span.Start
+	optional := false
+	if p.at(TokenIdentifier) && p.current().Lexeme == "optional" {
+		optional = true
+		p.advance()
+	}
+	typeToken := p.advance()
+	fieldType, builtin := parseSchemaFieldType(typeToken.Lexeme)
+	node := &Node{Kind: NodeField, FieldType: fieldType, Optional: optional}
+	if !builtin {
+		if validSchemaTypeName(typeToken.Lexeme) {
+			node.TypeRef = typeToken.Lexeme
+		} else {
+			p.add("PAPER_SCHEMA_FIELD_TYPE", fmt.Sprintf("%q is not a valid schema field type", typeToken.Lexeme), "use string, number, bool, object, list, or a declared custom object", typeToken.Span)
+		}
+	}
+	if fieldType == FieldList {
+		if p.at(TokenIdentifier) {
+			itemType, valid := parseSchemaFieldType(p.current().Lexeme)
+			if valid && itemType != FieldList {
+				node.ItemType = itemType
+				p.advance()
+			} else if !valid && validSchemaTypeName(p.current().Lexeme) {
+				node.ItemTypeRef = p.advance().Lexeme
+			}
+		}
+		if node.ItemType == "" && node.ItemTypeRef == "" {
+			p.add("PAPER_SCHEMA_LIST_ITEM_TYPE", "list field requires an item type", "write list string names:, list object patients:, or list Address addresses:", p.current().Span)
+		}
+	}
+	if !p.at(TokenIdentifier) {
+		p.add("PAPER_SCHEMA_FIELD_NAME", "typed schema field requires a name", "write the type followed by the field name", p.current().Span)
+	} else {
+		name := p.advance()
+		if !validSchemaFieldName(name.Lexeme) {
+			p.add("PAPER_SCHEMA_FIELD_NAME", fmt.Sprintf("%q is not a valid schema field name", name.Lexeme), "start with a letter and use letters, digits, '-' or '_'", name.Span)
+		} else {
+			node.ID = "@" + name.Lexeme
+		}
+	}
+
+	block := fieldType == FieldObject || fieldType == FieldList
+	if block {
+		if !p.consume(TokenColon) {
+			p.add("PAPER_EXPECTED_COLON", fmt.Sprintf("%s field declaration requires ':'", fieldType), "add ':' after the field name", p.current().Span)
+		}
+	} else if p.at(TokenColon) {
+		colon := p.advance()
+		p.add("PAPER_SCHEMA_PRIMITIVE_COLON", "primitive schema fields do not use ':'", "remove ':' from the declaration", colon.Span)
+	}
+
+	lineEnd := p.current().Span.Start
+	if !p.at(TokenNewline) && !p.at(TokenEOF) {
+		p.add("PAPER_TRAILING_TOKENS", "unexpected tokens after schema field declaration", "keep only optional, the type, and the field name", p.current().Span)
+		p.skipLine()
+	} else if p.at(TokenNewline) {
+		lineEnd = p.advance().Span.Start
+	}
+	node.HeaderSpan = Span{File: p.file, Start: headerStart, End: lineEnd}
+	node.Span = node.HeaderSpan
+
+	p.skipNewlines()
+	if !block {
+		if p.at(TokenIndent) {
+			p.add("PAPER_SCHEMA_PRIMITIVE_BLOCK", fmt.Sprintf("%s field cannot contain an indented block", fieldType), "remove the block or use object/list", p.current().Span)
+			p.skipIndentedBlock()
+		}
+		p.validateNode(node, depth)
+		return node
+	}
+	if p.at(TokenIndent) {
+		p.advance()
+		for !p.at(TokenDedent) && !p.at(TokenEOF) {
+			if p.at(TokenNewline) {
+				p.advance()
+				continue
+			}
+			member := p.parseMember(depth+1, node)
+			if member.Node == nil && member.Property == nil {
+				continue
+			}
+			node.Members = append(node.Members, member)
+			if span := memberSpan(member); span.End.Offset > node.Span.End.Offset {
+				node.Span.End = span.End
+			}
+		}
+		p.consume(TokenDedent)
+	}
+	p.validateNode(node, depth)
+	return node
+}
+
+func validSchemaFieldName(value string) bool {
+	if value == "" || !isIdentifierStart(value[0]) || value[0] == '_' {
+		return false
+	}
+	for index := 1; index < len(value); index++ {
+		if !isIdentifierContinue(value[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func validSchemaTypeName(value string) bool {
+	if !validSchemaFieldName(value) || value == "optional" {
+		return false
+	}
+	_, builtin := parseSchemaFieldType(value)
+	return !builtin
 }
 
 func (p *paperParser) peek(offset int) Token {
@@ -276,8 +475,14 @@ func (p *paperParser) validateNode(node *Node, depth int) {
 	} else if node.Value != nil {
 		p.add("PAPER_NODE_VALUE", fmt.Sprintf("%s does not accept an inline scalar", node.Kind), "move the value into a text child or named property", node.Value.Span)
 	}
-	if node.Kind != NodeText && node.Kind != NodeValue && node.Kind != NodeArg && node.Kind != NodePageBreak && node.Kind != NodeScenario && node.Kind != NodeObject && node.Kind != NodeKeyedList && node.Kind != NodeTheme && node.Kind != NodeStyle && node.Kind != NodeScope && len(node.Members) == 0 {
+	if node.Kind != NodeText && node.Kind != NodeValue && node.Kind != NodeArg && node.Kind != NodePageBreak && node.Kind != NodeScenario && node.Kind != NodeObject && node.Kind != NodeKeyedList && node.Kind != NodeTheme && node.Kind != NodeStyle && node.Kind != NodeScope && node.Kind != NodeField && len(node.Members) == 0 {
 		p.add("PAPER_EMPTY_BLOCK", fmt.Sprintf("%s has no indented content", node.Kind), "add an indented child or property", node.HeaderSpan)
+	}
+	if node.Kind == NodeObjectType && node.ID == "" {
+		p.add("PAPER_SCHEMA_OBJECT_NAME", "custom object requires a name", "write object Address:", node.HeaderSpan)
+	}
+	if node.Kind == NodeField && node.ID == "" {
+		p.add("PAPER_SCHEMA_FIELD_NAME", "typed schema field requires a name", "add a field name after its type", node.HeaderSpan)
 	}
 	if (node.Kind == NodeScenario || isFixtureNodeKind(node.Kind)) && node.ID == "" {
 		p.add("PAPER_SCENARIO_NAME", fmt.Sprintf("%s requires a readable @name", node.Kind), "add an @name after the declaration kind", node.HeaderSpan)
@@ -311,7 +516,7 @@ func (p *paperParser) validateNode(node *Node, depth int) {
 func allowedChild(parent, child NodeKind) bool {
 	switch parent {
 	case NodeDocument:
-		return child == NodePage || child == NodeComponent || child == NodeSchema || child == NodeScenario || child == NodeTheme || child == NodeStyle
+		return child == NodePage || child == NodeComponent || child == NodeSchema || child == NodeObjectType || child == NodeScenario || child == NodeTheme || child == NodeStyle
 	case NodePage:
 		return child == NodeBody || child == NodeHeader || child == NodeFooter
 	case NodeHeader, NodeFooter:
@@ -321,7 +526,7 @@ func allowedChild(parent, child NodeKind) bool {
 	case NodeCanvas:
 		return child == NodeAnchor
 	case NodeTable:
-		return child == NodeTableTrack || child == NodeTableHeader || child == NodeTableRow
+		return child == NodeTableTrack || child == NodeTableHeader || child == NodeTableRow || child == NodeRepeat
 	case NodeTableHeader:
 		return child == NodeTableRow
 	case NodeTableRow:
@@ -345,10 +550,10 @@ func allowedChild(parent, child NodeKind) bool {
 	case NodeUse:
 		return child == NodeFill || child == NodeArg
 	case NodeRepeat:
-		return isComponentBodyChild(child) || child == NodeRepeat || child == NodeLoop
+		return isComponentBodyChild(child) || child == NodeTableRow || child == NodeRepeat || child == NodeLoop
 	case NodeLoop:
 		return isComponentBodyChild(child) || child == NodeLoop
-	case NodeSchema, NodeField:
+	case NodeSchema, NodeObjectType, NodeField:
 		return child == NodeField
 	case NodeScenario, NodeObject, NodeKeyedList:
 		return isFixtureNodeKind(child)
@@ -376,7 +581,7 @@ func hierarchyHint(parent NodeKind) string {
 	case NodeCanvas:
 		return "canvas accepts explicit anchor children"
 	case NodeTable:
-		return "table accepts table-track, table-header, and table-row children"
+		return "table accepts table-track, table-header, table-row, and repeated table-row children"
 	case NodeTableHeader:
 		return "table-header accepts table-row children"
 	case NodeTableRow:
@@ -398,11 +603,11 @@ func hierarchyHint(parent NodeKind) string {
 	case NodeUse:
 		return "use accepts named arg and fill children"
 	case NodeRepeat:
-		return "repeat accepts exactly one existing block, component use, or nested repeat template"
+		return "repeat accepts exactly one existing block, table-row, component use, or nested repeat template"
 	case NodeLoop:
 		return "loop accepts exactly one existing block, component use, or nested loop template"
-	case NodeSchema, NodeField:
-		return "schema and object/list fields accept nested field declarations"
+	case NodeSchema, NodeObjectType, NodeField:
+		return "schemas, custom objects, and object/list fields accept nested field declarations"
 	case NodeScenario, NodeObject, NodeKeyedList:
 		return "scenario data accepts value, object, and keyed-list declarations"
 	case NodeTheme, NodeScope:

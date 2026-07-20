@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 // Command compliance-check performs local structural checks for generated
@@ -115,7 +115,7 @@ func checkPDFUA2(path, text string) error {
 		{token: "/Metadata", why: "catalog metadata reference"},
 		{token: "<pdfuaid:part>2</pdfuaid:part>", why: "PDF/UA-2 XMP identifier"},
 		{token: "<pdfuaid:rev>2024</pdfuaid:rev>", why: "PDF/UA-2 revision identifier"},
-		{token: "<gopdfkit:ArlingtonValidationRequired>True</gopdfkit:ArlingtonValidationRequired>", why: "Arlington validation marker"},
+		{token: "<paperrune:ArlingtonValidationRequired>True</paperrune:ArlingtonValidationRequired>", why: "Arlington validation marker"},
 		{token: "/MarkInfo << /Marked true >>", why: "marked catalog flag"},
 		{token: "/Lang", why: "document language"},
 		{token: "/ViewerPreferences << /DisplayDocTitle true >>", why: "display document title preference"},

@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
 	"golang.org/x/image/font/gofont/goregular"
 )
 

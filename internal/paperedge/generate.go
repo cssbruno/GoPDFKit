@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 // Package paperedge generates reproducible, schema-valid JSON cases for
@@ -14,7 +14,7 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/internal/papercompile"
+	"github.com/cssbruno/paperrune/internal/papercompile"
 )
 
 const (
@@ -43,10 +43,16 @@ type Case struct {
 type profile uint8
 
 const (
-	profileMinimal profile = iota
+	profileEmptyText profile = iota
+	profileMinimal
+	profileWhitespaceText
+	profileMultilineText
 	profileLongText
+	profileLongUnbroken
 	profileDenseLists
 	profileUnicode
+	profilePunctuation
+	profileNumericBounds
 	profileRandom
 )
 
@@ -90,15 +96,27 @@ func Generate(schema papercompile.SchemaDescriptor, options Options) ([]Case, er
 func caseProfile(index uint32) (profile, string) {
 	switch index {
 	case 0:
-		return profileMinimal, "minimal"
+		return profileEmptyText, "empty-text"
 	case 1:
-		return profileLongText, "long-text"
+		return profileMinimal, "minimal"
 	case 2:
-		return profileDenseLists, "dense-lists"
+		return profileWhitespaceText, "whitespace-text"
 	case 3:
+		return profileMultilineText, "multiline-text"
+	case 4:
+		return profileLongText, "long-text"
+	case 5:
+		return profileLongUnbroken, "long-unbroken-string"
+	case 6:
+		return profileDenseLists, "dense-lists"
+	case 7:
 		return profileUnicode, "unicode-pt-br"
+	case 8:
+		return profilePunctuation, "punctuation-and-escaping"
+	case 9:
+		return profileNumericBounds, "numeric-bounds"
 	default:
-		return profileRandom, fmt.Sprintf("random-%03d", index-3)
+		return profileRandom, fmt.Sprintf("random-%03d", index-9)
 	}
 }
 
@@ -117,7 +135,8 @@ func includeOptional(mode profile, random *rand.Rand) bool {
 	switch mode {
 	case profileMinimal:
 		return false
-	case profileLongText, profileDenseLists, profileUnicode:
+	case profileEmptyText, profileWhitespaceText, profileMultilineText, profileLongText,
+		profileLongUnbroken, profileDenseLists, profileUnicode, profilePunctuation, profileNumericBounds:
 		return true
 	default:
 		return random.Intn(2) == 0
@@ -156,7 +175,8 @@ func generatedListCount(schemaMax uint32, mode profile, random *rand.Rand, listC
 		return 0
 	}
 	switch mode {
-	case profileLongText, profileUnicode:
+	case profileEmptyText, profileWhitespaceText, profileMultilineText, profileLongText,
+		profileLongUnbroken, profileUnicode, profilePunctuation, profileNumericBounds:
 		if limit > 2 {
 			return 2
 		}
@@ -170,14 +190,34 @@ func generatedListCount(schemaMax uint32, mode profile, random *rand.Rand, listC
 
 func generatedString(mode profile, random *rand.Rand, field string, depth uint32) string {
 	switch mode {
+	case profileEmptyText:
+		return ""
 	case profileMinimal:
 		return "x"
+	case profileWhitespaceText:
+		return "     \n  "
+	case profileMultilineText:
+		return "Linha 1: " + field + "\nLinha 2: valor complementar\n\nLinha 4: após linha vazia"
 	case profileLongText:
-		return strings.Repeat("Long "+field+" value ", 24)
+		repetitions := 4
+		if depth >= 3 {
+			repetitions = 18
+		}
+		return strings.Repeat("Long "+field+" value ", repetitions)
+	case profileLongUnbroken:
+		length := 24
+		if depth >= 3 {
+			length = 256
+		}
+		return strings.Repeat("W", length)
 	case profileDenseLists:
 		return fmt.Sprintf("%s-%08d", field, random.Int31())
 	case profileUnicode:
 		return "João da Conceição — São José, ação clínica nº 123"
+	case profilePunctuation:
+		return `"quoted" \\ slash / percent % parentheses () brackets [] braces {} <>& #;:,.!?`
+	case profileNumericBounds:
+		return field + " boundary value"
 	default:
 		words := []string{"alpha", "beta", "gamma", "delta", "clinic", "laboratory", "result", "patient", "sample", "reference"}
 		count := 1 + random.Intn(12)
@@ -194,14 +234,16 @@ func generatedString(mode profile, random *rand.Rand, field string, depth uint32
 
 func generatedNumber(mode profile, random *rand.Rand) json.Number {
 	switch mode {
-	case profileMinimal:
+	case profileEmptyText, profileMinimal, profileWhitespaceText:
 		return json.Number("0")
 	case profileLongText:
 		return json.Number("-999999.999")
+	case profileMultilineText, profileLongUnbroken, profilePunctuation, profileUnicode:
+		return json.Number("12.5")
 	case profileDenseLists:
 		return json.Number("999999999.9999")
-	case profileUnicode:
-		return json.Number("12.5")
+	case profileNumericBounds:
+		return json.Number("-999999999999.9999")
 	default:
 		whole := random.Int63n(2_000_001) - 1_000_000
 		fraction := random.Intn(10_000)

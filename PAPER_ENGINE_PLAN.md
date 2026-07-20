@@ -8,7 +8,7 @@ Execution companion: [PAPER_ENGINE_CHECKLISTS.md](PAPER_ENGINE_CHECKLISTS.md)
 
 ## 1. Executive decision
 
-GoPDFKit should have one automatic layout engine and three first-class ways to
+PaperRune should have one automatic layout engine and three first-class ways to
 use it:
 
 1. Human-readable `.paper` source.
@@ -232,11 +232,11 @@ document Invoice(invoice: Invoice):
       columns: 2fr 1fr
       gap: 8mm
 
-      field @customer:
+      column @customer:
         label: Customer
         value: ${invoice.customer.name}
 
-      field @due-date:
+      column @due-date:
         label: Due date
         value: ${invoice.due_date | date}
 
@@ -1257,7 +1257,7 @@ planning, page fragmentation, image decode, preview, painting, and export.
 
 Assets are project-root confined, allowlisted, and content-addressed. Remote
 fonts/images are disabled during render. SVG, fonts, images, attachments, links,
-forms, and signing use existing GoPDFKit security limits plus new planner work
+forms, and signing use existing PaperRune security limits plus new planner work
 budgets.
 
 ### 14.2 Audit ledger

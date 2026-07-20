@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 func TestLayoutDocumentPlanTableSpansHeadersPaginationCaptureAndPDF(t *testing.T) {
@@ -599,7 +599,7 @@ func TestTypedTableIntrinsicBoundsAndSpanningMinimumFailuresAreAtomic(t *testing
 		want    error
 	}{
 		{"maximum underfill", []layout.TableColumn{{MaxWidth: 20}, {MaxWidth: 20}}, "x", layoutengine.ErrTableTrackUnresolved},
-		{"spanning minimum overflow", []layout.TableColumn{{MaxWidth: 20}, {MaxWidth: 20}}, "unbreakable-spanning-minimum", layoutengine.ErrTableTrackOverflow},
+		{"spanning glyph minimum overflow", []layout.TableColumn{{MaxWidth: 3}, {MaxWidth: 3}}, "W", layoutengine.ErrTableTrackOverflow},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -797,7 +797,7 @@ func TestTypedTableIntrinsicMeasurementReusesScratchDocumentByResolvedStyle(t *t
 				Segments: []layout.TextSegment{{Text: text}}, Style: style,
 			}}}}
 	}
-	cache := make(map[layout.TextStyle]*Document)
+	cache := make(map[layout.TextStyle]*mixedTextFontMetrics)
 	firstMin, firstPreferred, err := planner.measureTypedTableCellIntrinsic(t.Context(), doc, placement(0, "same style one"), cache)
 	if err != nil {
 		t.Fatal(err)
@@ -808,6 +808,21 @@ func TestTypedTableIntrinsicMeasurementReusesScratchDocumentByResolvedStyle(t *t
 	}
 	if len(cache) != 1 || firstMin <= 0 || firstPreferred < firstMin || secondMin <= 0 || secondPreferred < secondMin {
 		t.Fatalf("intrinsic cache/widths = %d, %v/%v and %v/%v", len(cache), firstMin, firstPreferred, secondMin, secondPreferred)
+	}
+}
+
+func TestTypedTableIntrinsicMeasurementSupportsEmbeddedUTF8Font(t *testing.T) {
+	planner := typedTableTestPlanner()
+	if err := planner.AddUTF8FontFromBytesError("PlanSans", "", readUTF8FontFixture(t)); err != nil {
+		t.Fatal(err)
+	}
+	style := layout.TextStyle{FontFamily: "PlanSans", FontSize: 9, LineHeight: 12}
+	placement := typedTablePlacement{row: 0, column: 0, rowSpan: 1, columnSpan: 1, path: "body[0].rows[0].cells[0]",
+		cell: layout.TableCell{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "João, ação e café"}}, Style: style}}}}
+	cache := make(map[layout.TextStyle]*mixedTextFontMetrics)
+	minimum, preferred, err := planner.measureTypedTableCellIntrinsic(t.Context(), &layout.LayoutDocument{}, placement, cache)
+	if err != nil || minimum <= 0 || preferred < minimum || len(cache) != 1 || cache[style].resource.EmbeddedUTF8 == nil {
+		t.Fatalf("embedded intrinsic metrics = %v/%v, cache=%#v, err=%v", minimum, preferred, cache, err)
 	}
 }
 

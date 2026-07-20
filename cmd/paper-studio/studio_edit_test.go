@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/cssbruno/paperrune/internal/paperlang"
 )
 
 const studioGridFixture = "document @report:\n" +
@@ -237,17 +239,16 @@ func TestPaperStudioPageTemplateBootstrapsParseableDocument(t *testing.T) {
 	}
 }
 
-const studioAuthoringFixture = "document @report:\n" +
-	"  # preserve author note\n" +
-	"  schema @invoice:\n" +
-	"    field @total:\n" +
-	"      type: \"number\"\n" +
-	"    field @customer:\n" +
-	"      type: \"string\"\n" +
-	"  page @sheet:\n" +
-	"    body @body:\n" +
-	"      paragraph @copy:\n" +
-	"        text: \"Invoice\"\n"
+const studioAuthoringFixture = `document @report:
+  # preserve author note
+  schema invoice:
+    number total
+    string customer
+  page @sheet:
+    body @body:
+      paragraph @copy:
+        text: "Invoice"
+`
 
 func TestPaperStudioAuthoringMetadataAndJournaledCreateToConnectFlow(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "authoring.paper")
@@ -290,17 +291,17 @@ func TestPaperStudioAuthoringMetadataAndJournaledCreateToConnectFlow(t *testing.
 		t.Fatalf("schema = %d %s", createdSchema.StatusCode, createdSchema.Body)
 	}
 	afterSchema := fetchStudioWorkspace(t, handler)
-	if !strings.Contains(afterSchema.Source, "schema @receipt:") || !strings.Contains(afterSchema.Source, "field @receipt-value:") {
+	if !strings.Contains(afterSchema.Source, "schema receipt:") || !strings.Contains(afterSchema.Source, "string receipt-value") {
 		t.Fatalf("schema source:\n%s", afterSchema.Source)
 	}
 
-	binding := map[string]any{"source_revision": afterSchema.SourceRevision, "plan_revision": afterSchema.Revision, "operation": "binding", "target": "@copy", "property": "", "path": "@invoice.total", "required": true, "format": "decimal", "format_locale": "pt-BR", "format_min_fraction": 2, "format_max_fraction": 2}
+	binding := map[string]any{"source_revision": afterSchema.SourceRevision, "plan_revision": afterSchema.Revision, "operation": "binding", "target": "@copy", "property": "", "path": "invoice.total", "required": true, "format": "decimal", "format_locale": "pt-BR", "format_min_fraction": 2, "format_max_fraction": 2}
 	bound := postStudioJSON(t, handler, "/api/edit", binding)
 	if bound.StatusCode != http.StatusOK {
 		t.Fatalf("binding = %d %s", bound.StatusCode, bound.Body)
 	}
 	afterBinding := fetchStudioWorkspace(t, handler)
-	if !strings.Contains(afterBinding.Source, "bind: \"@invoice.total\"") || !strings.Contains(afterBinding.Source, "format: \"decimal\"") || !strings.Contains(afterBinding.Source, "format-locale: \"pt-BR\"") {
+	if !strings.Contains(afterBinding.Source, "bind: \"invoice.total\"") || !strings.Contains(afterBinding.Source, "format: \"decimal\"") || !strings.Contains(afterBinding.Source, "format-locale: \"pt-BR\"") {
 		t.Fatalf("binding source:\n%s", afterBinding.Source)
 	}
 
@@ -359,19 +360,21 @@ func TestPaperStudioAuthoringMetadataAndJournaledCreateToConnectFlow(t *testing.
 
 func TestPaperStudioSchemaFieldMatrixAndFixtureValueControls(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "matrix-authoring.paper")
-	source := "document @report:\n" +
-		"  schema @invoice:\n" +
-		"    field @customer:\n" +
-		"      type: \"object\"\n" +
-		"      field @name:\n" +
-		"        type: \"string\"\n" +
-		"  page @sheet:\n" +
-		"    body @body:\n" +
-		"      paragraph @copy:\n" +
-		"        text: \"Invoice\"\n" +
-		"  scenario @review:\n" +
-		"    object @fixture-customer:\n" +
-		"      value @name: \"Ada\"\n"
+	source := `document @report:
+  object Address:
+    string street
+    string city
+  schema invoice:
+    object customer:
+      string name
+  page @sheet:
+    body @body:
+      paragraph @copy:
+        text: "Invoice"
+  scenario @review:
+    object @fixture-customer:
+      value @name: "Ada"
+`
 	if err := os.WriteFile(file, []byte(source), 0o640); err != nil {
 		t.Fatal(err)
 	}
@@ -388,6 +391,19 @@ func TestPaperStudioSchemaFieldMatrixAndFixtureValueControls(t *testing.T) {
 	}
 	if len(metadata.SchemaFields) == 0 || len(metadata.ScenarioValues) != 1 || metadata.ScenarioValues[0].Path != "fixture-customer.name" {
 		t.Fatalf("extended authoring metadata = %+v", metadata)
+	}
+	if len(metadata.Schemas) != 1 || len(metadata.Schemas[0].Fields) != 1 || metadata.Schemas[0].Fields[0].Path != "customer.name" {
+		t.Fatalf("single-schema binding choices = %+v, want root-relative paths", metadata.Schemas)
+	}
+	if len(metadata.ObjectTypes) != 1 || metadata.ObjectTypes[0] != "Address" {
+		t.Fatalf("custom object metadata = %+v", metadata.ObjectTypes)
+	}
+	foundObjectTarget := false
+	for _, target := range metadata.SchemaFields {
+		foundObjectTarget = foundObjectTarget || target.ID == "@Address" && target.Kind == string(paperlang.NodeObjectType)
+	}
+	if !foundObjectTarget {
+		t.Fatalf("custom object field target missing: %+v", metadata.SchemaFields)
 	}
 	field := postStudioJSON(t, handler, "/api/edit", map[string]any{
 		"source_revision": before.SourceRevision, "plan_revision": before.Revision,
@@ -418,10 +434,39 @@ func TestPaperStudioSchemaFieldMatrixAndFixtureValueControls(t *testing.T) {
 		t.Fatalf("scenario value = %d %s", value.StatusCode, value.Body)
 	}
 	after := fetchStudioWorkspace(t, handler)
-	for _, want := range []string{"field @email:", "scenario @empty:", "scenario @stress:", `value @name: "Grace"`} {
+	for _, want := range []string{"string email", "scenario @empty:", "scenario @stress:", `value @name: "Grace"`} {
 		if !strings.Contains(after.Source, want) {
 			t.Fatalf("extended authoring source omitted %q:\n%s", want, after.Source)
 		}
+	}
+}
+
+func TestPaperStudioCreatesCustomObjectType(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "custom-object-authoring.paper")
+	source := "document @report:\n  page @sheet:\n    body @body:\n      text: \"x\"\n"
+	if err := os.WriteFile(file, []byte(source), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	studio, err := newStudioServer(file, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := studio.routes()
+	before := fetchStudioWorkspace(t, handler)
+	created := postStudioJSON(t, handler, "/api/edit", map[string]any{
+		"source_revision": before.SourceRevision,
+		"plan_revision":   before.Revision,
+		"operation":       "schema-object",
+		"target":          "@report",
+		"property":        "",
+		"id":              "@Contact",
+	})
+	if created.StatusCode != http.StatusOK {
+		t.Fatalf("custom object creation = %d %s", created.StatusCode, created.Body)
+	}
+	after := fetchStudioWorkspace(t, handler)
+	if !strings.Contains(after.Source, "object Contact:") || !strings.Contains(after.Source, "string Contact-value") {
+		t.Fatalf("custom object source:\n%s", after.Source)
 	}
 }
 

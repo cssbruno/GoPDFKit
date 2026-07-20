@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -12,7 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cssbruno/gopdfkit/internal/paperscenario"
+	"github.com/cssbruno/paperrune/internal/paperscenario"
 )
 
 var ErrScenarioCandidateNotFound = workspaceError("SCENARIO_CANDIDATE_NOT_FOUND", "scenario candidate handle is not retained", ErrCandidateNotFound)

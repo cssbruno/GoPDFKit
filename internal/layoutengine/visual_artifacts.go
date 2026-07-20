@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -187,7 +187,7 @@ func (bundle AgentVisualBundle) Artifacts() []AgentVisualArtifact {
 	artifacts := make([]AgentVisualArtifact, len(bundle.artifacts))
 	for index, artifact := range bundle.artifacts {
 		artifacts[index] = AgentVisualArtifact{
-			Metadata: cloneAgentVisualMetadata([]AgentVisualArtifactMetadata{artifact.Metadata})[0],
+			Metadata: cloneAgentVisualArtifactMetadata(artifact.Metadata),
 			SVG:      append([]byte(nil), artifact.SVG...),
 		}
 	}
@@ -204,9 +204,14 @@ func cloneAgentVisualMetadata(values []AgentVisualArtifactMetadata) []AgentVisua
 	}
 	result := append([]AgentVisualArtifactMetadata(nil), values...)
 	for index := range result {
-		result[index].PageTransforms = append([]AgentVisualPageTransform(nil), values[index].PageTransforms...) // #nosec G602 -- result and values have identical lengths from the copy above.
+		result[index] = cloneAgentVisualArtifactMetadata(values[index])
 	}
 	return result
+}
+
+func cloneAgentVisualArtifactMetadata(value AgentVisualArtifactMetadata) AgentVisualArtifactMetadata {
+	value.PageTransforms = append([]AgentVisualPageTransform(nil), value.PageTransforms...)
+	return value
 }
 
 type agentVisualPageCapture struct {

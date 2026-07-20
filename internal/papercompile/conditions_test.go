@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -8,20 +8,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/paperexpr"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/paperexpr"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 func TestCompileScenarioEvaluatesVisualWhenWithoutChangingOrdinaryCompile(t *testing.T) {
 	t.Parallel()
 
 	const source = `document @doc:
-  schema @invoice:
-    field @show-title:
-      type: "bool"
-    field @show-note:
-      type: "bool"
+  schema invoice:
+    bool show-title
+    bool show-note
   scenario @sample:
     value @show-title: true
     value @show-note: false
@@ -57,7 +55,7 @@ func TestCompileScenarioEvaluatesVisualWhenWithoutChangingOrdinaryCompile(t *tes
 		t.Fatalf("false node retained mapping: %#v", scenario.Mapping.Nodes)
 	}
 	title := mappingByID(scenario.Mapping, "@title")
-	if title.ID == "" || title.Span.File != "conditions.paper" || title.Span.Start.Line != 12 {
+	if title.ID == "" || title.Span.File != "conditions.paper" || title.Span.Start.Line != 10 {
 		t.Fatalf("true node lost source mapping: %#v", title)
 	}
 
@@ -71,15 +69,11 @@ func TestCompileScenarioEvaluatesRepeatItemRelativeWhen(t *testing.T) {
 	t.Parallel()
 
 	const source = `document @doc:
-  schema @invoice:
-    field @items:
-      type: "list"
-      item-type: "object"
+  schema invoice:
+    list object items:
       max-items: 4
-      field @name:
-        type: "string"
-      field @active:
-        type: "bool"
+      string name
+      bool active
   scenario @sample:
     keyed-list @items:
       object @line-a:
@@ -94,7 +88,7 @@ func TestCompileScenarioEvaluatesRepeatItemRelativeWhen(t *testing.T) {
   page:
     body:
       repeat @lines:
-        source: "@invoice.items"
+        source: "items"
         instance-prefix: "lines"
         max-items: 3
         paragraph @line:
@@ -139,14 +133,10 @@ func TestCompileScenarioDiagnosesWhenPathTypeRuntimeBindingAndLimits(t *testing.
 	t.Parallel()
 
 	const base = `document:
-  schema @invoice:
-    field @active:
-      type: "bool"
-      required: false
-    field @quantity:
-      type: "number"
-    field @name:
-      type: "string"
+  schema invoice:
+    optional bool active
+    number quantity
+    string name
   scenario @sample:
     value @quantity: 2
     value @name: "Ada"

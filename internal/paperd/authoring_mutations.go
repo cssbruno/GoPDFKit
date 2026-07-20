@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/internal/papercompile"
-	"github.com/cssbruno/gopdfkit/internal/paperedit"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/papercompile"
+	"github.com/cssbruno/paperrune/internal/paperedit"
+	"github.com/cssbruno/paperrune/internal/paperlang"
 )
 
 type PaperInsertTemplateRequest struct {
@@ -57,7 +57,18 @@ func (w *Workspace) PaperInsertTemplate(request PaperInsertTemplateRequest) (Pap
 			return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_ID", "schema ID is too long for its starter field ID", ErrInvalidQuery)
 		}
 		node = paperedit.NodeSpec{Kind: paperlang.NodeSchema, ID: request.ID, Children: []paperedit.NodeSpec{
-			{Kind: paperlang.NodeField, ID: "@" + base + "-value", Properties: []paperedit.PropertySpec{{Name: "type", Value: paperedit.StringValue("string")}}},
+			{Kind: paperlang.NodeField, ID: "@" + base + "-value", FieldType: paperlang.FieldString},
+		}}
+	case "schema-object":
+		if parent.Kind != paperlang.NodeDocument {
+			return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_PARENT", "custom object template must target the document", paperedit.ErrInvalidOperation)
+		}
+		base := strings.TrimPrefix(request.ID, "@")
+		if len(base) > 110 {
+			return PaperMutationResult{}, workspaceError("INVALID_TEMPLATE_ID", "custom object ID is too long for its starter field ID", ErrInvalidQuery)
+		}
+		node = paperedit.NodeSpec{Kind: paperlang.NodeObjectType, ID: request.ID, Children: []paperedit.NodeSpec{
+			{Kind: paperlang.NodeField, ID: "@" + base + "-value", FieldType: paperlang.FieldString},
 		}}
 	case "page", "document-preset":
 		if parent.Kind != paperlang.NodeDocument {
@@ -181,11 +192,15 @@ func authoringRepeaterTemplate(ast paperlang.AST, template, id, sourcePath strin
 	var selected *papercompile.FieldDescriptor
 	for schemaIndex := range metadata.Schemas {
 		schema := &metadata.Schemas[schemaIndex]
-		prefix := schema.Name + "."
-		if !strings.HasPrefix(sourcePath, prefix) {
-			continue
+		path := sourcePath
+		if len(metadata.Schemas) > 1 {
+			prefix := strings.TrimPrefix(schema.Name, "@") + "."
+			if !strings.HasPrefix(sourcePath, prefix) {
+				continue
+			}
+			path = strings.TrimPrefix(sourcePath, prefix)
 		}
-		parts := strings.Split(strings.TrimPrefix(sourcePath, prefix), ".")
+		parts := strings.Split(path, ".")
 		fields := schema.Fields
 		for index, part := range parts {
 			selected = nil
@@ -310,16 +325,17 @@ func authoringDocumentPreset(preset, id string) (paperedit.NodeSpec, error) {
 		{Kind: paperlang.NodeParagraph, ID: "@" + base + "-subtitle", Properties: []paperedit.PropertySpec{{Name: "color", Value: paperedit.StringValue("#475569")}, {Name: "text", Value: paperedit.StringValue(subtitle)}}},
 		flow,
 	}
-	if preset == "prescription" {
+	switch preset {
+	case "prescription":
 		medications, _ := authoringFlowTemplate("table", "@"+base+"-medications")
 		children = append(children, paperedit.NodeSpec{Kind: paperlang.NodeHeading, ID: "@" + base + "-medications-title", Properties: []paperedit.PropertySpec{{Name: "level", Value: paperedit.NumberValue(2)}, {Name: "text", Value: paperedit.StringValue("Medication plan")}}}, medications)
-	} else if preset == "invoice" || preset == "table-report" {
+	case "invoice", "table-report":
 		table, _ := authoringFlowTemplate("table", "@"+base+"-items")
 		children = append(children, table)
-	} else if preset == "contract" {
+	case "contract":
 		clause, _ := authoringFlowTemplate("clause", "@"+base+"-clause")
 		children = append(children, clause)
-	} else {
+	default:
 		children = append(children, paperedit.NodeSpec{Kind: paperlang.NodeParagraph, ID: "@" + base + "-content", Properties: []paperedit.PropertySpec{{Name: "text", Value: paperedit.StringValue("Add document content here.")}}})
 	}
 	return paperedit.NodeSpec{Kind: paperlang.NodePage, ID: id, Properties: []paperedit.PropertySpec{{Name: "width", Value: paperedit.UnitValue(595.275590551, "pt")}, {Name: "height", Value: paperedit.UnitValue(841.88976378, "pt")}, {Name: "margin", Value: paperedit.UnitValue(36, "pt")}}, Children: []paperedit.NodeSpec{
@@ -429,8 +445,8 @@ func (w *Workspace) PaperAddSchemaField(request PaperAddSchemaFieldRequest) (Pap
 	if parent == nil || !validAuthorityNodeID(request.ID) {
 		return PaperMutationResult{}, workspaceError("INVALID_SCHEMA_FIELD", "schema field requires an exact schema/field parent and readable @id", ErrInvalidQuery)
 	}
-	if parent.Kind != paperlang.NodeSchema && parent.Kind != paperlang.NodeField {
-		return PaperMutationResult{}, workspaceError("INVALID_SCHEMA_FIELD", "schema field parent must be a schema or object field", paperedit.ErrInvalidOperation)
+	if parent.Kind != paperlang.NodeSchema && parent.Kind != paperlang.NodeObjectType && parent.Kind != paperlang.NodeField {
+		return PaperMutationResult{}, workspaceError("INVALID_SCHEMA_FIELD", "schema field parent must be a schema, custom object, or inline object field", paperedit.ErrInvalidOperation)
 	}
 	if parent.Kind == paperlang.NodeField && !schemaFieldCanContainChildren(parent) {
 		return PaperMutationResult{}, workspaceError("INVALID_SCHEMA_FIELD", "nested fields require an object or object-list parent", paperedit.ErrInvalidOperation)
@@ -439,20 +455,31 @@ func (w *Workspace) PaperAddSchemaField(request PaperAddSchemaFieldRequest) (Pap
 		return PaperMutationResult{}, workspaceError("INVALID_SCHEMA_FIELD", "field ID already exists in the exact source revision", paperedit.ErrInvalidOperation)
 	}
 	fieldKind, ok := papercompile.SchemaKind(request.Type), false
+	typeRef := ""
 	switch fieldKind {
 	case papercompile.SchemaString, papercompile.SchemaNumber, papercompile.SchemaBool, papercompile.SchemaObject, papercompile.SchemaList:
 		ok = true
+	default:
+		if schemaObjectTypeExists(revision.parsed.AST.Root, request.Type) {
+			ok = true
+			typeRef = request.Type
+		}
 	}
 	if !ok {
-		return PaperMutationResult{}, workspaceError("INVALID_SCHEMA_FIELD", "field type must be string, number, bool, object, or list", ErrInvalidQuery)
+		return PaperMutationResult{}, workspaceError("INVALID_SCHEMA_FIELD", "field type must be string, number, bool, object, list, or a declared custom object", ErrInvalidQuery)
 	}
-	properties := []paperedit.PropertySpec{{Name: "type", Value: paperedit.StringValue(string(fieldKind))}}
+	properties := []paperedit.PropertySpec(nil)
+	itemTypeRef := ""
 	if fieldKind == papercompile.SchemaList {
 		itemKind := papercompile.SchemaKind(request.ItemType)
 		switch itemKind {
 		case papercompile.SchemaString, papercompile.SchemaNumber, papercompile.SchemaBool, papercompile.SchemaObject:
 		default:
-			return PaperMutationResult{}, workspaceError("INVALID_SCHEMA_FIELD", "list item type must be string, number, bool, or object", ErrInvalidQuery)
+			if schemaObjectTypeExists(revision.parsed.AST.Root, request.ItemType) {
+				itemTypeRef = request.ItemType
+			} else {
+				return PaperMutationResult{}, workspaceError("INVALID_SCHEMA_FIELD", "list item type must be string, number, bool, object, or a declared custom object", ErrInvalidQuery)
+			}
 		}
 		maxItems := request.MaxItems
 		if maxItems == 0 {
@@ -461,36 +488,48 @@ func (w *Workspace) PaperAddSchemaField(request PaperAddSchemaFieldRequest) (Pap
 		if maxItems > 1_000_000 {
 			return PaperMutationResult{}, workspaceError("INVALID_SCHEMA_FIELD", "list max-items exceeds the schema limit", ErrLimit)
 		}
-		properties = append(properties,
-			paperedit.PropertySpec{Name: "item-type", Value: paperedit.StringValue(string(itemKind))},
-			paperedit.PropertySpec{Name: "max-items", Value: paperedit.NumberValue(float64(maxItems))})
+		properties = append(properties, paperedit.PropertySpec{Name: "max-items", Value: paperedit.NumberValue(float64(maxItems))})
 	}
-	field := paperedit.NodeSpec{Kind: paperlang.NodeField, ID: request.ID, Properties: properties}
-	if fieldKind == papercompile.SchemaObject || fieldKind == papercompile.SchemaList && request.ItemType == string(papercompile.SchemaObject) {
+	field := paperedit.NodeSpec{Kind: paperlang.NodeField, ID: request.ID, FieldType: paperlang.SchemaFieldType(fieldKind), TypeRef: typeRef, ItemType: paperlang.SchemaFieldType(request.ItemType), ItemTypeRef: itemTypeRef, Properties: properties}
+	if typeRef != "" {
+		field.FieldType = ""
+	}
+	if itemTypeRef != "" {
+		field.ItemType = ""
+	}
+	if fieldKind == papercompile.SchemaObject {
 		base := strings.TrimPrefix(request.ID, "@")
 		if len(base) > 110 {
 			return PaperMutationResult{}, workspaceError("INVALID_SCHEMA_FIELD", "object field ID is too long for its starter child", ErrInvalidQuery)
 		}
-		field.Children = []paperedit.NodeSpec{{Kind: paperlang.NodeField, ID: "@" + base + "-value", Properties: []paperedit.PropertySpec{{Name: "type", Value: paperedit.StringValue("string")}}}}
+		field.Children = []paperedit.NodeSpec{{Kind: paperlang.NodeField, ID: "@" + base + "-value", FieldType: paperlang.FieldString}}
+	} else if fieldKind == papercompile.SchemaList && request.ItemType == string(papercompile.SchemaObject) {
+		field.Children = []paperedit.NodeSpec{{Kind: paperlang.NodeField, ID: "@value", FieldType: paperlang.FieldString}}
 	}
 	return w.applyPaperMutation("add_schema_field", request.Guard, opened, revision,
 		[]string{request.Guard.Target}, []paperedit.Operation{paperedit.InsertNode{Parent: request.Guard.Target, Node: field}}, "INVALID_SCHEMA_FIELD")
 }
 
-func schemaFieldCanContainChildren(node *paperlang.Node) bool {
-	typeName, itemType := "", ""
-	for _, member := range node.Members {
-		if member.Property == nil || member.Property.Value.StringValue == nil {
-			continue
-		}
-		switch member.Property.Name {
-		case "type":
-			typeName = *member.Property.Value.StringValue
-		case "item-type":
-			itemType = *member.Property.Value.StringValue
+func schemaObjectTypeExists(root *paperlang.Node, name string) bool {
+	if root == nil || name == "" {
+		return false
+	}
+	for _, member := range root.Members {
+		if member.Node != nil && member.Node.Kind == paperlang.NodeObjectType && strings.TrimPrefix(member.Node.ID, "@") == name {
+			return true
 		}
 	}
-	return typeName == string(papercompile.SchemaObject) || typeName == string(papercompile.SchemaList) && itemType == string(papercompile.SchemaObject)
+	return false
+}
+
+func schemaFieldCanContainChildren(node *paperlang.Node) bool {
+	if node.FieldType == paperlang.FieldObject {
+		return true
+	}
+	if node.FieldType != paperlang.FieldList {
+		return false
+	}
+	return node.ItemType == paperlang.FieldObject
 }
 
 type PaperSetScenarioFixtureValueRequest struct {

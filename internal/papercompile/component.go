@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/internal/paperexpr"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/internal/paperscenario"
+	"github.com/cssbruno/paperrune/internal/paperexpr"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperscenario"
 )
 
 // ExpansionLimits bounds deterministic component instantiation. Zero selects
@@ -141,7 +141,7 @@ func expandComponents(ast paperlang.AST, limits ExpansionLimits, scenario string
 				root.Members = append(root.Members, cloneExpansionProperty(member.Property))
 				continue
 			}
-			if member.Node == nil || member.Node.Kind == paperlang.NodeComponent || member.Node.Kind == paperlang.NodeSchema || member.Node.Kind == paperlang.NodeScenario || member.Node.Kind == paperlang.NodeTheme || member.Node.Kind == paperlang.NodeStyle {
+			if member.Node == nil || member.Node.Kind == paperlang.NodeComponent || member.Node.Kind == paperlang.NodeSchema || member.Node.Kind == paperlang.NodeObjectType || member.Node.Kind == paperlang.NodeScenario || member.Node.Kind == paperlang.NodeTheme || member.Node.Kind == paperlang.NodeStyle {
 				continue
 			}
 			for _, node := range expander.expandNode(member.Node, expansionOrigin{}, 0) {
@@ -254,7 +254,7 @@ func (e *componentExpander) expandNode(source *paperlang.Node, origin expansionO
 	if source.Kind == paperlang.NodeUse {
 		return e.expandUse(source, origin, depth)
 	}
-	if source.Kind == paperlang.NodeComponent || source.Kind == paperlang.NodeProp || source.Kind == paperlang.NodeArg || source.Kind == paperlang.NodeSlot || source.Kind == paperlang.NodeFill || source.Kind == paperlang.NodeSchema || source.Kind == paperlang.NodeField || source.Kind == paperlang.NodeTheme || source.Kind == paperlang.NodeStyle || source.Kind == paperlang.NodeToken || source.Kind == paperlang.NodeScope {
+	if source.Kind == paperlang.NodeComponent || source.Kind == paperlang.NodeProp || source.Kind == paperlang.NodeArg || source.Kind == paperlang.NodeSlot || source.Kind == paperlang.NodeFill || source.Kind == paperlang.NodeSchema || source.Kind == paperlang.NodeObjectType || source.Kind == paperlang.NodeField || source.Kind == paperlang.NodeTheme || source.Kind == paperlang.NodeStyle || source.Kind == paperlang.NodeToken || source.Kind == paperlang.NodeScope {
 		e.add("PAPER_COMPONENT_HIERARCHY", fmt.Sprintf("%s cannot appear in expanded output", source.Kind), "keep definitions at document scope and slots/fills in their owning component/use", source.HeaderSpan)
 		return nil
 	}
@@ -306,7 +306,11 @@ func (e *componentExpander) expandUse(use *paperlang.Node, parent expansionOrigi
 			value := substituteComponentScalar(property.Value, parent.props)
 			if property.Name == "bind" {
 				if value.Kind != paperlang.ScalarString || value.StringValue == nil {
-					e.add("PAPER_BIND_PATH", "bind requires a quoted schema path", "use an absolute @schema.path or relative component path", value.Span)
+					e.add("PAPER_BIND_PATH", "bind requires a quoted schema path", "use field.path with one schema, schema.field with several schemas, or a component-relative path", value.Span)
+					continue
+				}
+				if strings.HasPrefix(strings.TrimSpace(*value.StringValue), "@") {
+					e.add("PAPER_BIND_PATH", "bind paths no longer use @schema prefixes", "remove @ and use a root-relative path", value.Span)
 					continue
 				}
 				bindingBase = combineBindingPath(parent.bindingBase, *value.StringValue)
@@ -636,7 +640,7 @@ func (e *componentExpander) cloneHeader(source *paperlang.Node, origin expansion
 		return nil
 	}
 	e.nodes++
-	clone := &paperlang.Node{Kind: source.Kind, ID: source.ID, HeaderSpan: source.HeaderSpan, Span: source.Span}
+	clone := &paperlang.Node{Kind: source.Kind, ID: source.ID, FieldType: source.FieldType, TypeRef: source.TypeRef, ItemType: source.ItemType, ItemTypeRef: source.ItemTypeRef, Optional: source.Optional, HeaderSpan: source.HeaderSpan, Span: source.Span}
 	if source.Value != nil {
 		value := substituteComponentScalar(*source.Value, origin.props)
 		clone.Value = &value

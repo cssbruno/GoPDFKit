@@ -1,4 +1,4 @@
-GoPDFKit unified HTML rich table-cell characterization
+PaperRune unified HTML rich table-cell characterization
 Date: 2026-07-17
 GOOS: darwin
 GOARCH: arm64

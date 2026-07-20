@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -10,10 +10,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
-	"github.com/cssbruno/gopdfkit/internal/papercompile"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
+	"github.com/cssbruno/paperrune/internal/papercompile"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 type typedTableCellMeasurement struct {
@@ -198,12 +198,12 @@ func (f *Document) planTypedTableBodies(ctx context.Context, doc *layout.LayoutD
 		}
 	}
 	engineCells := make([]layoutengine.TableCell, len(placements))
-	// Intrinsic sizing needs only core-font advances. Constructing a complete
+	// Intrinsic sizing needs only font advances. Constructing a complete
 	// scratch PDF document for every cell dominated large-table allocation
 	// volume, so identical resolved styles share one plan-local read-only metric
 	// context. The cache is deliberately local: callers may plan concurrently
 	// with different font configuration without synchronization or aliasing.
-	intrinsicScratch := make(map[layout.TextStyle]*Document)
+	intrinsicScratch := make(map[layout.TextStyle]*mixedTextFontMetrics)
 	for index, placement := range placements {
 		minimum, preferred, intrinsicErr := f.measureTypedTableCellIntrinsic(ctx, doc, placement, intrinsicScratch)
 		if intrinsicErr != nil {
@@ -447,7 +447,7 @@ func typedTableWithInferredColumns(table layout.TableBlock) layout.TableBlock {
 	return table
 }
 
-func (f *Document) measureTypedTableCellIntrinsic(ctx context.Context, doc *layout.LayoutDocument, placement typedTablePlacement, scratchByStyle map[layout.TextStyle]*Document) (layoutengine.Fixed, layoutengine.Fixed, error) {
+func (f *Document) measureTypedTableCellIntrinsic(ctx context.Context, doc *layout.LayoutDocument, placement typedTablePlacement, metricsByStyle map[layout.TextStyle]*mixedTextFontMetrics) (layoutengine.Fixed, layoutengine.Fixed, error) {
 	if err := layoutengine.ChargePlanningWork(ctx, "typed table intrinsic measurement", 1); err != nil {
 		return 0, 0, err
 	}
@@ -538,27 +538,30 @@ func (f *Document) measureTypedTableCellIntrinsic(ctx context.Context, doc *layo
 		paragraph.Style = layout.MergedTextStyle(cell.EffectiveStyle(), paragraph.EffectiveStyle())
 		paragraph.StyleRef = nil
 		style := layout.MergedTextStyle(plannerDefaultTextStyle(f), paragraph.EffectiveStyle())
-		scratch := scratchByStyle[style]
-		if scratch == nil {
-			scratch = documentNew("P", f.unitStr, "", f.fontDirStr, Size{Wd: f.w, Ht: f.h})
-			scratch.cMargin, scratch.ws = f.cMargin, f.ws
-			scratch.fontFamily, scratch.fontStyle = f.fontFamily, f.fontStyle
-			scratch.fontSizePt, scratch.fontSize = f.fontSizePt, f.fontSizePt/scratch.k
-			applyPlannerTextStyle(scratch, style)
-			if scratch.err == nil && !scratch.isCurrentUTF8 {
-				scratchByStyle[style] = scratch
+		metrics := metricsByStyle[style]
+		if metrics == nil {
+			var metricErr error
+			metrics, metricErr = f.mixedTextFontMetrics(style)
+			if metricErr != nil {
+				return 0, 0, typedTableUnsupported(fmt.Sprintf("%s.blocks[%d]", placement.path, blockIndex), "font metrics could not be resolved for intrinsic sizing: "+metricErr.Error())
 			}
-		}
-		if scratch.err != nil || scratch.isCurrentUTF8 {
-			return 0, 0, typedTableUnsupported(fmt.Sprintf("%s.blocks[%d]", placement.path, blockIndex), "core font metrics could not be resolved for intrinsic sizing")
+			metricsByStyle[style] = metrics
 		}
 		text := normalizeCoreMultiCellText(layout.TextSegmentsPlainText(paragraph.Segments))
 		for _, line := range strings.Split(text, "\n") {
-			if width := scratch.GetStringWidth(line) + base; width > preferred {
+			lineWidth, widthErr := typedTableIntrinsicTextWidth(metrics, line, f.ws)
+			if widthErr != nil {
+				return 0, 0, typedTableUnsupported(fmt.Sprintf("%s.blocks[%d]", placement.path, blockIndex), widthErr.Error())
+			}
+			if width := lineWidth + base; width > preferred {
 				preferred = width
 			}
-			for _, word := range strings.Fields(line) {
-				if width := scratch.GetStringWidth(word) + base; width > minimum {
+			for _, character := range line {
+				glyphWidth, widthOK := metrics.runeWidth(character)
+				if !widthOK || !finiteNumbers(glyphWidth) || glyphWidth < 0 {
+					return 0, 0, typedTableUnsupported(fmt.Sprintf("%s.blocks[%d]", placement.path, blockIndex), "glyph width is not representable for intrinsic sizing")
+				}
+				if width := glyphWidth + base; width > minimum {
 					minimum = width
 				}
 			}
@@ -573,6 +576,24 @@ func (f *Document) measureTypedTableCellIntrinsic(ctx context.Context, doc *layo
 		return 0, 0, typedTableUnsupported(placement.path, "preferred intrinsic width is not representable")
 	}
 	return minimumFixed, preferredFixed, nil
+}
+
+func typedTableIntrinsicTextWidth(metrics *mixedTextFontMetrics, text string, wordSpacing float64) (float64, error) {
+	width := 0.0
+	for _, character := range text {
+		advance, ok := metrics.runeWidth(character)
+		if !ok || !finiteNumbers(advance) || advance < 0 {
+			return 0, errors.New("glyph width is not representable for intrinsic sizing")
+		}
+		width += advance
+		if character == ' ' {
+			width += wordSpacing
+		}
+		if !finiteNumbers(width) {
+			return 0, errors.New("text width is not representable for intrinsic sizing")
+		}
+	}
+	return width, nil
 }
 
 func (f *Document) measureTypedTableCell(ctx context.Context, doc *layout.LayoutDocument, placement typedTablePlacement, width layoutengine.Fixed, tableBackground layout.DocumentColor) (typedTableCellMeasurement, error) {

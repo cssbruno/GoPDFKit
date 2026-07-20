@@ -226,7 +226,7 @@ boundaries explicit. The exact API replacements are summarized below.
 
 ### Removed
 
-- Removed the root `gopdfkit` facade package and all mirrored declarations.
+- Removed the root `paperrune` facade package and all mirrored declarations.
 - Removed `document` aliases for `layout` types, constructors, and measurement
   helpers.
 - Removed legacy string constructors, the exported `document.Options` bridge,
@@ -435,8 +435,8 @@ breaking pre-v1 layout model cleanup.
 
 ### Removed
 
-- Removed GoPDFKit-owned `DocumentKind` values and the named document model
-  builders. This is a breaking pre-v1 API change: GoPDFKit now exposes layout
+- Removed PaperRune-owned `DocumentKind` values and the named document model
+  builders. This is a breaking pre-v1 API change: PaperRune now exposes layout
   primitives and model assembly tools; application-specific document categories
   should live in caller code.
 
@@ -485,7 +485,7 @@ Production-stability release for the pre-v1.0 API contract.
 - Enforced production limits for attachments, image source bytes, estimated
   decoded image bytes, HTML input/generated pages, page count, imported PDF
   source bytes, and imported page referenced objects.
-- Exposed output and production policy helpers through the root `gopdfkit`
+- Exposed output and production policy helpers through the root `paperrune`
   facade.
 - Documented v0.9 production usage, security posture, deterministic output,
   migration guidance, readiness gates, and benchmark budgets.
@@ -617,7 +617,7 @@ rollback.
 ### Changed
 
 - Reverted the experimental PDF hot-path formatting helper extraction while
-  keeping the benchmark suite focused on native GoPDFKit generation throughput.
+  keeping the benchmark suite focused on native PaperRune generation throughput.
 - Expanded fixed 40-worker generation benchmark coverage for text, UTF-8 text,
   compression levels, images, SVG, templates, imported pages, protection, and
   attachments.
@@ -634,7 +634,7 @@ Patch release for native generation throughput and benchmark cleanup.
   image placement, clipping, gradients, transforms, templates, tagged PDF
   references, and attachment output with scratch-buffer append helpers.
 - Kept core generation benchmark reporting focused on fixed 40-worker native
-  GoPDFKit workloads.
+  PaperRune workloads.
 
 ### Removed
 
@@ -791,7 +791,7 @@ Patch release with performance fixes and internal robustness updates.
 
 ## v0.1.0 - 2026-06-03
 
-Initial cssbruno/gopdfkit release.
+Initial cssbruno/paperrune release.
 
 ### Added
 
@@ -811,7 +811,7 @@ Initial cssbruno/gopdfkit release.
 - Removed barcode generation/rendering APIs and the `github.com/boombuler/barcode` dependency.
 - Added runnable examples for text, drawing, headers and footers, HTML fragments, in-memory images, imported pages, protection and attachments, structured reports, signing, templates, thumbnails, UTF-8 fonts, and external QR-code images.
 - Replaced `InitType`/`NewCustom` with `Options`/`NewWithOptions`.
-- Simplified the root `gopdfkit.New` facade to the default constructor only.
+- Simplified the root `paperrune.New` facade to the default constructor only.
 - Removed deprecated image and template compatibility wrappers from the public API.
 - Removed the oversized exported `document.Pdf` interface.
 - Migrated examples and benchmarks to `ImageOptions`, `RegisterImageOptions`, and `RegisterImageOptionsReader`.

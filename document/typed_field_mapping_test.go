@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 // This test is intentionally both a drift detector and an executable mapping

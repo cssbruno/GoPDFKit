@@ -7,11 +7,11 @@ The protocol, privacy, replay, concurrency, and recovery corpus passes on the
 host platform:
 
 ```text
-GOCACHE=/tmp/gopdfkit-go-cache go test ./internal/paperd -count=1
-ok github.com/cssbruno/gopdfkit/internal/paperd 25.681s
+GOCACHE=/tmp/paperrune-go-cache go test ./internal/paperd -count=1
+ok github.com/cssbruno/paperrune/internal/paperd 25.681s
 
-GOCACHE=/tmp/gopdfkit-go-cache go test -race ./internal/paperd -count=1
-ok github.com/cssbruno/gopdfkit/internal/paperd 415.964s
+GOCACHE=/tmp/paperrune-go-cache go test -race ./internal/paperd -count=1
+ok github.com/cssbruno/paperrune/internal/paperd 415.964s
 ```
 
 The Linux peer-credential boundary was executed against a real Linux kernel in
@@ -20,8 +20,8 @@ cross-built as a static Linux arm64 binary, but the test itself ran inside the
 container; this is execution evidence, not merely a cross-compilation check.
 
 ```text
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go test -c ./internal/paperd -o /tmp/gopdfkit-paperd-linux.test
-docker run --rm -v /tmp/gopdfkit-paperd-linux.test:/paperd.test:ro \
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go test -c ./internal/paperd -o /tmp/paperrune-paperd-linux.test
+docker run --rm -v /tmp/paperrune-paperd-linux.test:/paperd.test:ro \
   --entrypoint /paperd.test postgres:16-alpine \
   -test.run '^TestLinuxUnixProtocolUsesKernelPeerCredentials$' -test.v
 === RUN   TestLinuxUnixProtocolUsesKernelPeerCredentials

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -12,8 +12,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 // ErrHTMLPlanUnsupported reports that a compiled HTML fragment cannot be
@@ -753,7 +753,7 @@ func htmlPlanTableRows(ctx context.Context, compiled *CompiledHTML, start, end i
 				hints = append(hints, hint)
 			}
 			if decl := htmlUnifiedFilteredDeclarations(compiled.unifiedResolved[cellIndex].decl, htmlUnifiedTableBoxProperties); len(decl) != 0 {
-				if err := htmlPlanApplyStrictCellStyle(&cell, htmlUnifiedDeclarationString(decl), pointsToUnits); err != nil {
+				if err := htmlPlanApplyStrictCellStyle(&cell, decl, pointsToUnits); err != nil {
 					return nil, nil, htmlPlanUnsupported(cellToken.Str, cellIndex, err.Error())
 				}
 			}
@@ -846,45 +846,14 @@ func htmlPlanTableSpan(raw string, set bool) (int, error) {
 	return n, nil
 }
 
-func htmlPlanStrictTableDeclarations(raw string, allowed map[string]bool) (map[string]string, error) {
-	if strings.TrimSpace(raw) == "" {
-		return nil, errors.New("style is empty")
+func htmlPlanApplyStrictCellStyle(cell *layout.TableCell, decl map[string]string, pointsToUnits func(float64) float64) error {
+	if len(decl) == 0 {
+		return errors.New("style has no declarations")
 	}
-	result := make(map[string]string)
-	for _, part := range strings.Split(raw, ";") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
+	for name, value := range decl {
+		if !htmlPlanStrictCellStyleProperty(name) || strings.TrimSpace(value) == "" {
+			return fmt.Errorf("style property %q is outside the strict table decoration cohort", name)
 		}
-		name, value, ok := strings.Cut(part, ":")
-		name = strings.ToLower(strings.TrimSpace(name))
-		value = strings.TrimSpace(value)
-		if !ok || name == "" || value == "" || !allowed[name] {
-			return nil, fmt.Errorf("style property %q is outside the strict table decoration cohort", name)
-		}
-		if _, exists := result[name]; exists {
-			return nil, fmt.Errorf("style property %q is duplicated", name)
-		}
-		result[name] = value
-	}
-	if len(result) == 0 {
-		return nil, errors.New("style has no declarations")
-	}
-	return result, nil
-}
-
-func htmlPlanApplyStrictCellStyle(cell *layout.TableCell, raw string, pointsToUnits func(float64) float64) error {
-	allowed := map[string]bool{"background-color": true, "padding": true, "padding-top": true, "padding-right": true, "padding-bottom": true, "padding-left": true, "border": true, "text-align": true, "vertical-align": true,
-		"width": true, "min-width": true, "max-width": true}
-	for _, side := range []string{"top", "right", "bottom", "left"} {
-		allowed["border-"+side] = true
-		allowed["border-"+side+"-width"] = true
-		allowed["border-"+side+"-style"] = true
-		allowed["border-"+side+"-color"] = true
-	}
-	decl, err := htmlPlanStrictTableDeclarations(raw, allowed)
-	if err != nil {
-		return err
 	}
 	if value := decl["background-color"]; value != "" {
 		color, ok := parseCSSColor(value)
@@ -987,6 +956,21 @@ func htmlPlanApplyStrictCellStyle(cell *layout.TableCell, raw string, pointsToUn
 		}
 	}
 	return nil
+}
+
+func htmlPlanStrictCellStyleProperty(name string) bool {
+	switch name {
+	case "background-color",
+		"padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
+		"border", "border-top", "border-right", "border-bottom", "border-left",
+		"border-top-width", "border-right-width", "border-bottom-width", "border-left-width",
+		"border-top-style", "border-right-style", "border-bottom-style", "border-left-style",
+		"border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
+		"text-align", "vertical-align", "width", "min-width", "max-width":
+		return true
+	default:
+		return false
+	}
 }
 
 func htmlPlanStrictBorderSide(raw string, pointsToUnits func(float64) float64) (layout.BorderSide, error) {

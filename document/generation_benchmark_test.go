@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document_test
@@ -21,9 +21,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/internal/testsupport/example"
-	"github.com/cssbruno/gopdfkit/sign"
+	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/paperrune/internal/testsupport/example"
+	"github.com/cssbruno/paperrune/sign"
 )
 
 const benchmarkWorkerCount40 = 40
@@ -189,7 +189,7 @@ func benchmarkSignOptions(b *testing.B) sign.Options {
 		Signer:          signer,
 		Certificate:     cert,
 		DigestAlgorithm: crypto.SHA256,
-		Name:            "GoPDFKit benchmark signer",
+		Name:            "PaperRune benchmark signer",
 		Reason:          "PDF generation benchmark",
 		SigningTime:     time.Unix(1_704_067_200, 0).UTC(),
 	}
@@ -205,7 +205,7 @@ func benchmarkTestSigner(tb testing.TB) (*x509.Certificate, crypto.Signer) {
 	now := time.Now().UTC()
 	template := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "GoPDFKit benchmark signer"},
+		Subject:               pkix.Name{CommonName: "PaperRune benchmark signer"},
 		NotBefore:             now.Add(-time.Hour),
 		NotAfter:              now.Add(time.Hour),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageContentCommitment,
@@ -735,8 +735,8 @@ func benchmarkGenerationBaselineNoComplianceBuilder(b *testing.B, imageCache *do
 	return func(pdf *document.Document) {
 		pdf.SetTitle("Baseline no-compliance benchmark", false)
 		pdf.SetSubject("PDF generation without PDF/A, PDF/UA, Arlington, or XMP metadata", false)
-		pdf.SetAuthor("GoPDFKit benchmark", false)
-		pdf.SetCreator("GoPDFKit benchmark", false)
+		pdf.SetAuthor("PaperRune benchmark", false)
+		pdf.SetCreator("PaperRune benchmark", false)
 		pdf.SetKeywords("benchmark baseline no-compliance", false)
 		pdf.SetAttachments([]document.Attachment{{
 			Content:     grid[:min(len(grid), 4096)],
@@ -748,7 +748,7 @@ func benchmarkGenerationBaselineNoComplianceBuilder(b *testing.B, imageCache *do
 			tpl.SetFont("Helvetica", "B", 12)
 			tpl.SetFillColor(235, 239, 244)
 			tpl.Rect(0, 0, 180, 16, "F")
-			tpl.Text(6, 10, "GoPDFKit baseline")
+			tpl.Text(6, 10, "PaperRune baseline")
 		})
 
 		for page := 0; page < 3; page++ {
@@ -789,7 +789,7 @@ func benchmarkGenerationPDFA4FComplianceBuilder(b *testing.B) func(*document.Doc
 			PDFA:       document.PDFAMode4F,
 			Lang:       "en-US",
 			Title:      "PDF/A-4f compliance benchmark",
-			Identifier: "urn:uuid:gopdfkit-benchmark-pdfa4f",
+			Identifier: "urn:uuid:paperrune-benchmark-pdfa4f",
 		})
 		if err := pdf.SetOutputIntent(icc, "sRGB IEC61966-2.1"); err != nil {
 			b.Fatalf("SetOutputIntent() error = %v", err)
@@ -828,7 +828,7 @@ func benchmarkGenerationPDFUA2ArlingtonCompiledHTMLBuilder(b *testing.B) func(*d
 			PDFUA2:     true,
 			Arlington:  true,
 			Lang:       "en-US",
-			Identifier: "urn:uuid:gopdfkit-benchmark-pdfua2-arlington",
+			Identifier: "urn:uuid:paperrune-benchmark-pdfua2-arlington",
 		})
 		pdf.AddUTF8FontFromCache("DejaVu", "", cache)
 		pdf.AddUTF8FontFromCache("DejaVu", "B", cache)
@@ -924,7 +924,7 @@ func benchmarkGenerationPDFA4FPDFUA2ArlingtonXMPBuilder(b *testing.B) func(*docu
 			Arlington:  true,
 			Lang:       "en-US",
 			Title:      "Signed PDF/A-4f PDF/UA-2 Arlington XMP benchmark",
-			Identifier: "urn:uuid:gopdfkit-benchmark-signed-pdfa4f-pdfua2-arlington-xmp",
+			Identifier: "urn:uuid:paperrune-benchmark-signed-pdfa4f-pdfua2-arlington-xmp",
 		})
 		if err := pdf.SetOutputIntent(icc, "sRGB IEC61966-2.1"); err != nil {
 			b.Fatalf("SetOutputIntent() error = %v", err)

@@ -1,0 +1,24 @@
+{
+  "assets": [
+    {
+      "name": "body-font",
+      "media_type": "font/ttf",
+      "sha256": "7d8d06af98a0dff0036eedb7d3a3a013644a7e397c61e8d5948a16881d25553f",
+      "path": "body-font.ttf",
+      "family": "DejaVu Sans Condensed",
+      "weight": 400,
+      "style": "normal",
+      "license": "Bitstream-Vera"
+    },
+    {
+      "name": "body-font-bold",
+      "media_type": "font/ttf",
+      "sha256": "c8f6998ad9d60eca2687296427458b0d2dd6dba3e94ea9706a2f66a4203305fb",
+      "path": "body-font-bold.ttf",
+      "family": "DejaVu Sans Condensed",
+      "weight": 400,
+      "style": "normal",
+      "license": "Bitstream-Vera"
+    }
+  ]
+}

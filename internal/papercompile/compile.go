@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 // Package papercompile lowers the syntax-only paperlang AST into the shared
@@ -14,11 +14,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/internal/paperscenario"
-	"github.com/cssbruno/gopdfkit/internal/papertheme"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperscenario"
+	"github.com/cssbruno/paperrune/internal/papertheme"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 // PageSpec is the point-based physical page selected during compilation.
@@ -299,6 +299,7 @@ var documentProperties = map[string]bool{"title": true, "language": true, "theme
 var pageProperties = map[string]bool{
 	"size": true, "width": true, "height": true, "margin": true,
 	"margin-top": true, "margin-right": true, "margin-bottom": true, "margin-left": true,
+	"page-numbers": true, "page-number-format": true, "page-total-alias": true,
 }
 var pageRegionProperties = func() map[string]bool {
 	properties := map[string]bool{}
@@ -451,6 +452,8 @@ func (c *compiler) compilePage(node *paperlang.Node) {
 			switch strings.ToLower(strings.TrimSpace(name)) {
 			case "a4":
 				c.result.Page = PageSpec{Width: 595.275590551, Height: 841.88976378}
+			case "a5":
+				c.result.Page = PageSpec{Width: 419.527559055, Height: 595.275590551}
 			case "a3":
 				c.result.Page = PageSpec{Width: 841.88976378, Height: 1190.551181102}
 			case "letter":
@@ -458,7 +461,7 @@ func (c *compiler) compilePage(node *paperlang.Node) {
 			case "legal":
 				c.result.Page = PageSpec{Width: 612, Height: 1008}
 			default:
-				c.add("PAPER_COMPILE_PAGE_SIZE", fmt.Sprintf("unsupported page size %q", name), "use A3, A4, Letter, Legal, or explicit width and height", property.Value.Span)
+				c.add("PAPER_COMPILE_PAGE_SIZE", fmt.Sprintf("unsupported page size %q", name), "use A3, A4, A5, Letter, Legal, or explicit width and height", property.Value.Span)
 			}
 		}
 	}
@@ -498,6 +501,20 @@ func (c *compiler) compilePage(node *paperlang.Node) {
 		}
 	}
 	c.result.Document.PageTemplate.Margins = margins
+	if property, ok := properties["page-numbers"]; ok {
+		c.result.Document.PageTemplate.PageNumbers.Enabled, _ = c.boolProperty(property)
+	}
+	if property, ok := properties["page-number-format"]; ok {
+		if value, valid := c.stringProperty(property); valid {
+			c.result.Document.PageTemplate.PageNumbers.Format = value
+			c.result.Document.PageTemplate.PageNumbers.Enabled = true
+		}
+	}
+	if property, ok := properties["page-total-alias"]; ok {
+		if value, valid := c.stringProperty(property); valid {
+			c.result.Document.PageTemplate.PageNumbers.TotalPageAlias = value
+		}
+	}
 
 	var body, header, footer *paperlang.Node
 	for _, child := range children {
@@ -1207,21 +1224,23 @@ func (c *compiler) compileRowColumnSurface(node *paperlang.Node, properties map[
 
 func (c *compiler) compileRowColumnItem(node *paperlang.Node, bodyIndex, itemIndex int) (layout.RowColumnItem, []*paperlang.Node) {
 	allowed := rowColumnChildProperties
-	if node.Kind == paperlang.NodeImage {
+	switch node.Kind {
+	case paperlang.NodeImage:
 		allowed = rowColumnImageProperties
-	} else if node.Kind == paperlang.NodeTable {
+	case paperlang.NodeTable:
 		allowed = rowColumnTableProperties
-	} else if node.Kind == paperlang.NodeRow || node.Kind == paperlang.NodeColumn {
+	case paperlang.NodeRow, paperlang.NodeColumn:
 		allowed = rowColumnNestedProperties
 	}
 	properties, children := c.members(node, allowed)
 	var textNodes []*paperlang.Node
 	var child layout.Block
-	if node.Kind == paperlang.NodeImage {
+	switch node.Kind {
+	case paperlang.NodeImage:
 		child = c.compileImageBlock(node, properties, children)
-	} else if node.Kind == paperlang.NodeTable {
+	case paperlang.NodeTable:
 		child = c.compileTableBlock(node, properties, children)
-	} else if node.Kind == paperlang.NodeRow || node.Kind == paperlang.NodeColumn {
+	case paperlang.NodeRow, paperlang.NodeColumn:
 		nested := c.compileRowColumnSurface(node, properties)
 		for nestedIndex, nestedChild := range children {
 			if nestedChild.Kind == paperlang.NodeRow || nestedChild.Kind == paperlang.NodeColumn {
@@ -1246,7 +1265,7 @@ func (c *compiler) compileRowColumnItem(node *paperlang.Node, bodyIndex, itemInd
 			c.add("PAPER_COMPILE_ROW_COLUMN_ITEMS", fmt.Sprintf("nested %s has no compilable children", node.Kind), "add one or more supported children", node.HeaderSpan)
 		}
 		child = nested
-	} else {
+	default:
 		style := c.compileTextStyle(node, properties)
 		segments, nodes := c.compileTextChildren(node, children)
 		textNodes = nodes

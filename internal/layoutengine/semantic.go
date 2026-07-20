@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -162,37 +162,36 @@ func validateSemantics(nodes []SemanticNode, associations []SemanticFragmentAsso
 		instance InstanceID
 	}]SemanticNodeID, len(nodes))
 	for index, node := range nodes {
-		path := fmt.Sprintf("semantic_nodes[%d]", index)
 		if node.ID != SemanticNodeID(index+1) {
-			return planError(path+".id", "semantic IDs are not consecutive and one-based")
+			return planIndexedError("semantic_nodes", index, ".id", "semantic IDs are not consecutive and one-based")
 		}
 		if !node.Role.valid() {
-			return planError(path+".role", "is not a supported semantic role")
+			return planIndexedError("semantic_nodes", index, ".role", "is not a supported semantic role")
 		}
 		if err := validateTextIdentity("semantic node key", string(node.Key)); err != nil {
-			return planError(path+".key", err.Error())
+			return planIndexedError("semantic_nodes", index, ".key", err.Error())
 		}
 		if err := validateTextIdentity("semantic node instance", string(node.Instance)); err != nil {
-			return planError(path+".instance", err.Error())
+			return planIndexedError("semantic_nodes", index, ".instance", err.Error())
 		}
 		if err := node.Source.Validate(); err != nil {
-			return planError(path+".source", err.Error())
+			return planIndexedError("semantic_nodes", index, ".source", err.Error())
 		}
 		if err := validateSemanticAttributes(node, len(destinations)); err != nil {
-			return planError(path+".attributes", err.Error())
+			return planIndexedError("semantic_nodes", index, ".attributes", err.Error())
 		}
 		identity := struct {
 			key      NodeKey
 			instance InstanceID
 		}{node.Key, node.Instance}
 		if _, duplicate := identities[identity]; duplicate {
-			return planError(path, "duplicates a semantic key and instance")
+			return planIndexedError("semantic_nodes", index, "", "duplicates a semantic key and instance")
 		}
 		identities[identity] = node.ID
 		if !node.Parent.Valid() {
 			roots++
 		} else if uint64(node.Parent) > uint64(len(nodes)) || node.Parent == node.ID {
-			return planError(path+".parent", "references a missing node or itself")
+			return planIndexedError("semantic_nodes", index, ".parent", "references a missing node or itself")
 		}
 	}
 	if roots != 1 {
@@ -235,23 +234,22 @@ func validateSemantics(nodes []SemanticNode, associations []SemanticFragmentAsso
 	}
 	owned := make(map[FragmentID]SemanticNodeID, len(associations))
 	for index, association := range associations {
-		path := fmt.Sprintf("semantic_fragments[%d]", index)
 		if !association.Semantic.Valid() || uint64(association.Semantic) > uint64(len(nodes)) {
-			return planError(path+".semantic", "references a missing semantic node")
+			return planIndexedError("semantic_fragments", index, ".semantic", "references a missing semantic node")
 		}
 		fragment, exists := fragments[association.Fragment]
 		if !exists {
-			return planError(path+".fragment", "references a missing fragment")
+			return planIndexedError("semantic_fragments", index, ".fragment", "references a missing fragment")
 		}
 		if association.Page == 0 || uint64(association.Page) > uint64(len(pages)) || fragment.Page != association.Page {
-			return planError(path+".page", "does not match the fragment page")
+			return planIndexedError("semantic_fragments", index, ".page", "does not match the fragment page")
 		}
 		if _, duplicate := owned[association.Fragment]; duplicate {
-			return planError(path+".fragment", "has duplicate semantic ownership")
+			return planIndexedError("semantic_fragments", index, ".fragment", "has duplicate semantic ownership")
 		}
 		node := nodes[association.Semantic-1]
 		if node.Key != fragment.Key || node.Instance != fragment.Instance || node.Source != fragment.Source {
-			return planError(path, "semantic provenance does not match the owned fragment")
+			return planIndexedError("semantic_fragments", index, "", "semantic provenance does not match the owned fragment")
 		}
 		owned[association.Fragment] = association.Semantic
 	}
@@ -290,36 +288,35 @@ func validateSemantics(nodes []SemanticNode, associations []SemanticFragmentAsso
 	read := make(map[FragmentID]bool, len(occurrences))
 	var previousPage, nextIndex uint32
 	for index, occurrence := range occurrences {
-		path := fmt.Sprintf("reading_order[%d]", index)
 		if !occurrence.Semantic.Valid() || uint64(occurrence.Semantic) > uint64(len(nodes)) {
-			return planError(path+".semantic", "references a missing semantic node")
+			return planIndexedError("reading_order", index, ".semantic", "references a missing semantic node")
 		}
 		fragment, exists := fragments[occurrence.Fragment]
 		if !exists {
-			return planError(path+".fragment", "references a missing fragment")
+			return planIndexedError("reading_order", index, ".fragment", "references a missing fragment")
 		}
 		if occurrence.Page == 0 || uint64(occurrence.Page) > uint64(len(pages)) || fragment.Page != occurrence.Page {
-			return planError(path+".page", "does not match the fragment page")
+			return planIndexedError("reading_order", index, ".page", "does not match the fragment page")
 		}
 		owner := owned[occurrence.Fragment]
 		if !owner.Valid() || owner != occurrence.Semantic {
-			return planError(path, "does not match the fragment semantic owner")
+			return planIndexedError("reading_order", index, "", "does not match the fragment semantic owner")
 		}
 		node := nodes[occurrence.Semantic-1]
 		if node.Role == SemanticRoleArtifact {
-			return planError(path, "artifact fragments must not appear in reading order")
+			return planIndexedError("reading_order", index, "", "artifact fragments must not appear in reading order")
 		}
 		if read[occurrence.Fragment] {
-			return planError(path+".fragment", "appears more than once in reading order")
+			return planIndexedError("reading_order", index, ".fragment", "appears more than once in reading order")
 		}
 		if occurrence.Page < previousPage {
-			return planError(path, "is not in canonical page order")
+			return planIndexedError("reading_order", index, "", "is not in canonical page order")
 		}
 		if occurrence.Page != previousPage {
 			previousPage, nextIndex = occurrence.Page, 0
 		}
 		if occurrence.ReadingIndex != nextIndex {
-			return planError(path+".reading_index", "is not consecutive within the page")
+			return planIndexedError("reading_order", index, ".reading_index", "is not consecutive within the page")
 		}
 		nextIndex++
 		read[occurrence.Fragment] = true

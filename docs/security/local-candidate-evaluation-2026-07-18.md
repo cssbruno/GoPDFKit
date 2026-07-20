@@ -11,9 +11,9 @@ acceptance record required by the Paper Engine checklist.
 
 ## Static and dependency analysis
 
-- `GOCACHE=/tmp/gopdfkit-go-cache make gosec`: pass; 377 files, 127,744
+- `GOCACHE=/tmp/paperrune-go-cache make gosec`: pass; 377 files, 127,744
   lines, 0 issues.
-- `GOCACHE=/tmp/gopdfkit-go-cache make govulncheck`: pass; no known
+- `GOCACHE=/tmp/paperrune-go-cache make govulncheck`: pass; no known
   vulnerabilities reported by the current Go vulnerability database.
 - Findings discovered during the first scan were resolved before this record:
   anonymous structural-key ordinals are explicitly bounded before conversion,

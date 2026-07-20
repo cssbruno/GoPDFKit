@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -10,8 +10,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/cssbruno/gopdfkit/internal/paperedit"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperedit"
+	"github.com/cssbruno/paperrune/internal/paperlang"
 )
 
 // PaperBoxProperty is the closed authored vocabulary exposed to box handles.
@@ -492,9 +492,10 @@ func (w *Workspace) PaperSetGridTrack(request PaperSetGridTrackRequest) (PaperMu
 		value = paperedit.NumberValue(request.Factor)
 	case PaperGridCrossAlign:
 		align := strings.ToLower(strings.TrimSpace(request.Kind))
-		if align == "flex-start" {
+		switch align {
+		case "flex-start":
 			align = "start"
-		} else if align == "flex-end" {
+		case "flex-end":
 			align = "end"
 		}
 		if align != "start" && align != "center" && align != "end" && align != "stretch" || request.Points != 0 || request.Length != "" || request.Weight != 0 || request.Factor != 0 {
@@ -535,7 +536,7 @@ func responsiveLayoutLengthValue(length string, points float64, allowAuto, posit
 		}
 		return paperedit.StringValue("auto"), true
 	}
-	unit := ""
+	var unit string
 	switch {
 	case strings.HasSuffix(length, "%"):
 		unit = "%"

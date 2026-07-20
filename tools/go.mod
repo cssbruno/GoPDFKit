@@ -1,4 +1,4 @@
-module github.com/cssbruno/gopdfkit/tools
+module github.com/cssbruno/paperrune/tools
 
 go 1.26.5
 

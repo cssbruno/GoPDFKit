@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -17,7 +17,7 @@ import (
 )
 
 func TestPlanPaperIdentityExcludesAmbientProcessEnvironment(t *testing.T) {
-	if os.Getenv("GOPDFKIT_PAPER_IDENTITY_HELPER") == "1" {
+	if os.Getenv("PAPERRUNE_PAPER_IDENTITY_HELPER") == "1" {
 		plan, result, err := PlanPaper("deterministic.paper", paperPipelineFixture)
 		if err != nil {
 			t.Fatal(err)
@@ -50,11 +50,11 @@ func TestPlanPaperIdentityExcludesAmbientProcessEnvironment(t *testing.T) {
 	}
 	firstRoot, secondRoot := t.TempDir(), t.TempDir()
 	first := run(firstRoot, map[string]string{
-		"GOPDFKIT_PAPER_IDENTITY_HELPER": "1", "TZ": "Pacific/Kiritimati", "LANG": "tr_TR.UTF-8", "LC_ALL": "tr_TR.UTF-8",
+		"PAPERRUNE_PAPER_IDENTITY_HELPER": "1", "TZ": "Pacific/Kiritimati", "LANG": "tr_TR.UTF-8", "LC_ALL": "tr_TR.UTF-8",
 		"SOURCE_DATE_EPOCH": "1", "HOME": filepath.Join(firstRoot, "home"), "FONTCONFIG_FILE": filepath.Join(firstRoot, "fonts.conf"), "FONTCONFIG_PATH": firstRoot,
 	})
 	second := run(secondRoot, map[string]string{
-		"GOPDFKIT_PAPER_IDENTITY_HELPER": "1", "TZ": "America/Los_Angeles", "LANG": "ja_JP.UTF-8", "LC_ALL": "ja_JP.UTF-8",
+		"PAPERRUNE_PAPER_IDENTITY_HELPER": "1", "TZ": "America/Los_Angeles", "LANG": "ja_JP.UTF-8", "LC_ALL": "ja_JP.UTF-8",
 		"SOURCE_DATE_EPOCH": "4102444800", "HOME": filepath.Join(secondRoot, "home"), "FONTCONFIG_FILE": filepath.Join(secondRoot, "missing-fonts.conf"), "FONTCONFIG_PATH": secondRoot,
 	})
 	if !bytes.Equal(first, second) || !json.Valid(first) {
@@ -66,7 +66,7 @@ func TestPlanPaperIdentityExcludesAmbientProcessEnvironment(t *testing.T) {
 		}
 	}
 	sum := sha256.Sum256(first)
-	const fixtureSHA256 = "d40fdb40f29612f11b876eaca6221c039e51bef4544305a26f9b9cf1f8eca4b9"
+	const fixtureSHA256 = "cdf113949cec477176cc426bf0ec44973c533d72ce68a8bf41f671b0bf9757f5"
 	if got := hex.EncodeToString(sum[:]); got != fixtureSHA256 {
 		t.Fatalf("deterministic paper identity fixture hash = %s", got)
 	}

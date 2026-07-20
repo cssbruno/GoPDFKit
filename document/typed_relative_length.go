@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -6,7 +6,7 @@ package document
 import (
 	"math/big"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
 )
 
 // typedContainerPercent resolves a millionth-of-one-percent ratio in fixed

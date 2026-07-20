@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -6,11 +6,10 @@ package document
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 // htmlUnifiedResolvedElement is the selector-free HTML frontend output used
@@ -257,46 +256,19 @@ func htmlUnifiedDestination(token HTMLSegmentType) string {
 }
 
 func htmlUnifiedValidateResolvedDeclarations(tag string, token int, decl map[string]string) error {
-	allowed := make(map[string]bool, len(htmlUnifiedTextProperties)+len(htmlUnifiedBreakProperties)+len(htmlUnifiedFlowProperties)+len(htmlUnifiedTableBoxProperties))
-	for name := range htmlUnifiedTextProperties {
-		allowed[name] = true
-	}
-	for name := range htmlUnifiedBreakProperties {
-		allowed[name] = true
-	}
-	for name := range htmlUnifiedFlowProperties {
-		allowed[name] = true
-	}
-	for name := range htmlUnifiedFlexProperties {
-		allowed[name] = true
-	}
-	if htmlUnifiedBlockLikeTag(tag, decl) {
-		for name := range htmlUnifiedBlockBoxProperties {
-			allowed[name] = true
-		}
-	}
-	if tag == "img" {
-		for name := range htmlUnifiedImageProperties {
-			allowed[name] = true
-		}
-	}
-	if tag == "table" {
-		allowed["background-color"] = true
-		allowed["border-collapse"] = true
-		allowed["width"] = true
-	}
-	if tag == "th" || tag == "td" {
-		for name := range htmlUnifiedTableBoxProperties {
-			allowed[name] = true
-		}
-		delete(allowed, "border-collapse")
-	}
-	if tag == "ol" || tag == "ul" {
-		allowed["list-style"] = true
-		allowed["list-style-type"] = true
-	}
+	blockLike := htmlUnifiedBlockLikeTag(tag, decl)
+	image := tag == "img"
+	table := tag == "table"
+	tableCell := tag == "th" || tag == "td"
+	list := tag == "ol" || tag == "ul"
 	for name, value := range decl {
-		if !allowed[name] {
+		allowed := htmlUnifiedTextProperties[name] || htmlUnifiedBreakProperties[name] || htmlUnifiedFlowProperties[name] || htmlUnifiedFlexProperties[name]
+		allowed = allowed || blockLike && htmlUnifiedBlockBoxProperties[name]
+		allowed = allowed || image && htmlUnifiedImageProperties[name]
+		allowed = allowed || table && (name == "background-color" || name == "border-collapse" || name == "width")
+		allowed = allowed || tableCell && name != "border-collapse" && htmlUnifiedTableBoxProperties[name]
+		allowed = allowed || list && (name == "list-style" || name == "list-style-type")
+		if !allowed {
 			return htmlPlanUnsupported(tag, token, fmt.Sprintf("resolved CSS property %q is outside the unified cohort", name))
 		}
 		if name == "white-space" {
@@ -405,7 +377,7 @@ func htmlUnifiedResolvedBox(tag string, token int, decl map[string]string, fontS
 		cell := layout.TableCell{}
 		boxDecl := htmlUnifiedFilteredDeclarations(decl, htmlUnifiedTableBoxProperties)
 		if len(boxDecl) != 0 {
-			if err := htmlPlanApplyStrictCellStyle(&cell, htmlUnifiedDeclarationString(boxDecl), pdf.PointConvert); err != nil {
+			if err := htmlPlanApplyStrictCellStyle(&cell, boxDecl, pdf.PointConvert); err != nil {
 				return layout.BoxStyle{}, htmlPlanUnsupported(tag, token, err.Error())
 			}
 		}
@@ -454,22 +426,4 @@ func cloneStringMap(source map[string]string) map[string]string {
 		result[key] = value
 	}
 	return result
-}
-
-func htmlUnifiedDeclarationString(decl map[string]string) string {
-	keys := make([]string, 0, len(decl))
-	for key := range decl {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	var result strings.Builder
-	for _, key := range keys {
-		if result.Len() != 0 {
-			result.WriteByte(';')
-		}
-		result.WriteString(key)
-		result.WriteByte(':')
-		result.WriteString(decl[key])
-	}
-	return result.String()
 }

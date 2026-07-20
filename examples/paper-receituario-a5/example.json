@@ -1,0 +1,30 @@
+{
+  "clinic": "Clínica Aurora",
+  "specialty": "Medicina Integrada - Fortaleza/CE",
+  "clinicAddress": "Rua Exemplo, 120 - CNES 0000000 - dados fictícios",
+  "documentId": "RX-DEMO-0048",
+  "issuedAt": "18/07/2026",
+  "patient": {
+    "name": "Ana Clara Exemplo",
+    "cpf": "000.000.000-00",
+    "address": "Rua Demonstração, 100 - Fortaleza/CE"
+  },
+  "medications": [
+    {
+      "number": "01",
+      "content": "Medicamento Demonstrativo A - 500 mg\n9 (nove) comprimidos\nUso oral. Tomar 1 comprimido a cada 8 horas por 3 dias. Produto inexistente."
+    },
+    {
+      "number": "02",
+      "content": "Solução Demonstrativa B - 0,9%\n1 (um) frasco\nUso tópico. Aplicar conforme orientação profissional demonstrativa."
+    },
+    {
+      "number": "03",
+      "content": "Produto Demonstrativo C - 10 mg/mL\n1 (um) frasco\nUso demonstrativo. Este produto não existe e esta receita não possui validade."
+    }
+  ],
+  "prescriber": {
+    "name": "Dra. Helena Modelo",
+    "registration": "CRM-CE 00000 - assinatura e registro fictícios"
+  }
+}

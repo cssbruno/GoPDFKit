@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 func TestHTMLUnifiedResolvedCSSCascadeInheritanceAndSelectorFreeBoundary(t *testing.T) {
@@ -159,6 +159,33 @@ func TestHTMLUnifiedCapabilityScanRejectsWholeFragmentBeforePlanning(t *testing.
 	plan, err := planner.PlanCompiledHTML(12, compiled)
 	if !errors.Is(err, ErrHTMLPlanUnsupported) || !strings.Contains(err.Error(), `resolved CSS property "float"`) || plan.Hash() != "" || planner.PageCount() != 0 {
 		t.Fatalf("atomic capability scan plan=%#v pages=%d err=%v", plan, planner.PageCount(), err)
+	}
+}
+
+func TestHTMLUnifiedResolvedDeclarationPropertyCohorts(t *testing.T) {
+	tests := []struct {
+		name string
+		tag  string
+		decl map[string]string
+		ok   bool
+	}{
+		{name: "text", tag: "span", decl: map[string]string{"color": "red"}, ok: true},
+		{name: "block box", tag: "div", decl: map[string]string{"margin": "1pt"}, ok: true},
+		{name: "display block box", tag: "span", decl: map[string]string{"display": "block", "margin": "1pt"}, ok: true},
+		{name: "image", tag: "img", decl: map[string]string{"object-fit": "contain"}, ok: true},
+		{name: "table", tag: "table", decl: map[string]string{"border-collapse": "collapse"}, ok: true},
+		{name: "table cell", tag: "td", decl: map[string]string{"padding": "1pt"}, ok: true},
+		{name: "list", tag: "ol", decl: map[string]string{"list-style-type": "decimal"}, ok: true},
+		{name: "inline box", tag: "span", decl: map[string]string{"margin": "1pt"}},
+		{name: "cell collapse", tag: "td", decl: map[string]string{"border-collapse": "collapse"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := htmlUnifiedValidateResolvedDeclarations(test.tag, 0, test.decl)
+			if (err == nil) != test.ok {
+				t.Fatalf("validation error = %v, want accepted=%t", err, test.ok)
+			}
+		})
 	}
 }
 

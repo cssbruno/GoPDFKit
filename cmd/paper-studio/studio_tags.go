@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/internal/pdfverify"
+	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/paperrune/internal/pdfverify"
 )
 
 const studioTaggedPDFLimit = 64 << 20

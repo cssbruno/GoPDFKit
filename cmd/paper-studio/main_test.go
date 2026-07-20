@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
 )
 
 const studioFixture = "document @report:\n" +
@@ -276,7 +276,7 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		}
 	}
 	webRender := studioRequest(t, handler, http.MethodGet, fmt.Sprintf("/api/page/1.render?revision=%s", workspace.Revision), nil, "")
-	if webRender.StatusCode != http.StatusOK || webRender.Header.Get("Content-Type") != "application/vnd.gopdfkit.display-render" {
+	if webRender.StatusCode != http.StatusOK || webRender.Header.Get("Content-Type") != "application/vnd.paperrune.display-render" {
 		t.Fatalf("web render payload = %d %q %s", webRender.StatusCode, webRender.Header, webRender.Body)
 	}
 	artifact, err := layoutengine.RenderWebDisplayPayload(t.Context(), webRender.Body)
@@ -476,16 +476,28 @@ func TestPaperStudioInspectionRetainsRepeatedFragmentEvidence(t *testing.T) {
 }
 
 func TestPaperStudioInspectionShowsBindingAndTokenProvenance(t *testing.T) {
-	source := "document @report:\n" +
-		"  theme: \"@print\"\n" +
-		"  theme @print:\n" +
-		"    token @font:\n      type: \"string\"\n      value: \"Courier\"\n" +
-		"    token @size:\n      type: \"length\"\n      value: 11pt\n" +
-		"  schema @invoice:\n" +
-		"    field @total:\n      type: \"number\"\n" +
-		"  page:\n    width: 160pt\n    height: 80pt\n    margin: 8pt\n" +
-		"    body:\n      paragraph @message:\n" +
-		"        bind: \"@invoice.total\"\n        font-token: \"font\"\n        size-token: \"size\"\n        text: \"Visible\"\n"
+	source := `document @report:
+  theme: "@print"
+  theme @print:
+    token @font:
+      type: "string"
+      value: "Courier"
+    token @size:
+      type: "length"
+      value: 11pt
+  schema invoice:
+    number total
+  page:
+    width: 160pt
+    height: 80pt
+    margin: 8pt
+    body:
+      paragraph @message:
+        bind: "total"
+        font-token: "font"
+        size-token: "size"
+        text: "Visible"
+`
 	file := filepath.Join(t.TempDir(), "provenance.paper")
 	if err := os.WriteFile(file, []byte(source), 0o600); err != nil {
 		t.Fatal(err)

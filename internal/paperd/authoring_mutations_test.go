@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -7,23 +7,21 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/document"
+	"github.com/cssbruno/paperrune/document"
 )
 
-const authoringMutationFixture = "document @report:\n" +
-	"  # schema note must survive\n" +
-	"  schema @invoice:\n" +
-	"    field @total:\n" +
-	"      type: \"number\"\n" +
-	"    field @customer:\n" +
-	"      type: \"object\"\n" +
-	"      field @name:\n" +
-	"        type: \"string\"\n" +
-	"  page @sheet:\n" +
-	"    body @body:\n" +
-	"      # body note must survive\n" +
-	"      paragraph @copy:\n" +
-	"        text: \"Invoice\"\n"
+const authoringMutationFixture = `document @report:
+  # schema note must survive
+  schema invoice:
+    number total
+    object customer:
+      string name
+  page @sheet:
+    body @body:
+      # body note must survive
+      paragraph @copy:
+        text: "Invoice"
+`
 
 func TestPaperInsertTemplateUsesOneJournalPatchAndPreservesTrivia(t *testing.T) {
 	workspace := mustWorkspace(t, Limits{})
@@ -76,7 +74,7 @@ func TestPaperInsertTemplatePaletteCoversTypedPrimitivesAndComponents(t *testing
 	schemaWorkspace := mustWorkspace(t, Limits{})
 	schemaGuard, _, _ := mutationGuard(t, schemaWorkspace, authoringMutationFixture, "@report", "palette-schema", CapabilityEdit)
 	schemaResult, err := schemaWorkspace.PaperInsertTemplate(PaperInsertTemplateRequest{Guard: schemaGuard, Template: "schema", ID: "@receipt"})
-	if err != nil || !schemaResult.Semantic.AfterCompileOK || !strings.Contains(schemaResult.Revision.Source, "schema @receipt:") || !strings.Contains(schemaResult.Revision.Source, "field @receipt-value:") {
+	if err != nil || !schemaResult.Semantic.AfterCompileOK || !strings.Contains(schemaResult.Revision.Source, "schema receipt:") || !strings.Contains(schemaResult.Revision.Source, "string receipt-value") {
 		t.Fatalf("schema template = %v result=%#v\nsource=%s", err, schemaResult, schemaResult.Revision.Source)
 	}
 }
@@ -106,23 +104,21 @@ func TestPaperInsertTemplateCreatesRegionsAndCompleteDocumentPresets(t *testing.
 }
 
 func TestPaperInsertTemplateCreatesBoundedRepeatAndLoop(t *testing.T) {
-	source := "document @report:\n" +
-		"  schema @invoice:\n" +
-		"    field @items:\n" +
-		"      type: \"list\"\n" +
-		"      item-type: \"object\"\n" +
-		"      max-items: 3\n" +
-		"      field @name:\n" +
-		"        type: \"string\"\n" +
-		"  scenario @preview:\n" +
-		"    keyed-list @items:\n" +
-		"      object @first:\n" +
-		"        value @name: \"Alpha\"\n" +
-		"  page @sheet:\n" +
-		"    body @body:\n" +
-		"      paragraph @copy:\n" +
-		"        text: \"Body\"\n"
-	for _, request := range []PaperInsertTemplateRequest{{Template: "repeat", ID: "@lines", Path: "@invoice.items"}, {Template: "loop", ID: "@copies"}} {
+	source := `document @report:
+  schema invoice:
+    list object items:
+      max-items: 3
+      string name
+  scenario @preview:
+    keyed-list @items:
+      object @first:
+        value @name: "Alpha"
+  page @sheet:
+    body @body:
+      paragraph @copy:
+        text: "Body"
+`
+	for _, request := range []PaperInsertTemplateRequest{{Template: "repeat", ID: "@lines", Path: "items"}, {Template: "loop", ID: "@copies"}} {
 		workspace := mustWorkspace(t, Limits{})
 		guard, _, _ := mutationGuard(t, workspace, source, "@body", "repeater-"+request.Template, CapabilityEdit)
 		request.Guard = guard
@@ -160,20 +156,19 @@ func TestPaperCreateScenarioUsesCompilerSchemaAndStressPreset(t *testing.T) {
 }
 
 func TestPaperAuthoringAddsNestedSchemaFieldsAndCreatesAtomicMatrix(t *testing.T) {
-	source := "document @report:\n" +
-		"  schema @invoice:\n" +
-		"    field @customer:\n" +
-		"      type: \"object\"\n" +
-		"      field @name:\n" +
-		"        type: \"string\"\n" +
-		"  page @sheet:\n" +
-		"    body @body:\n" +
-		"      paragraph @copy:\n" +
-		"        text: \"Invoice\"\n"
+	source := `document @report:
+  schema invoice:
+    object customer:
+      string name
+  page @sheet:
+    body @body:
+      paragraph @copy:
+        text: "Invoice"
+`
 	workspace := mustWorkspace(t, Limits{})
 	guard, _, _ := mutationGuard(t, workspace, source, "@customer", "add-nested-field", CapabilityEdit)
 	result, err := workspace.PaperAddSchemaField(PaperAddSchemaFieldRequest{Guard: guard, ID: "@email", Type: "string"})
-	if err != nil || !result.Semantic.AfterCompileOK || !strings.Contains(result.Revision.Source, "field @email:") {
+	if err != nil || !result.Semantic.AfterCompileOK || !strings.Contains(result.Revision.Source, "string email") {
 		t.Fatalf("nested schema field = %v result=%#v\nsource=%s", err, result, result.Revision.Source)
 	}
 
@@ -192,20 +187,54 @@ func TestPaperAuthoringAddsNestedSchemaFieldsAndCreatesAtomicMatrix(t *testing.T
 	}
 }
 
+func TestPaperAuthoringCreatesAndUsesCustomObjects(t *testing.T) {
+	base := `document @report:
+  object Address:
+    string street
+    string city
+  schema invoice:
+    string number
+  page @sheet:
+    body @body:
+      paragraph @copy:
+        text: "Invoice"
+`
+	workspace := mustWorkspace(t, Limits{})
+	guard, _, _ := mutationGuard(t, workspace, base, "@invoice", "custom-field", CapabilityEdit)
+	result, err := workspace.PaperAddSchemaField(PaperAddSchemaFieldRequest{Guard: guard, ID: "@billing", Type: "Address"})
+	if err != nil || !result.Semantic.AfterCompileOK || !strings.Contains(result.Revision.Source, "Address billing") {
+		t.Fatalf("custom object field = %v result=%#v\nsource=%s", err, result, result.Revision.Source)
+	}
+
+	listWorkspace := mustWorkspace(t, Limits{})
+	listGuard, _, _ := mutationGuard(t, listWorkspace, base, "@invoice", "custom-list", CapabilityEdit)
+	list, err := listWorkspace.PaperAddSchemaField(PaperAddSchemaFieldRequest{Guard: listGuard, ID: "@history", Type: "list", ItemType: "Address", MaxItems: 5})
+	if err != nil || !list.Semantic.AfterCompileOK || !strings.Contains(list.Revision.Source, "list Address history:") {
+		t.Fatalf("custom object list = %v result=%#v\nsource=%s", err, list, list.Revision.Source)
+	}
+
+	templateWorkspace := mustWorkspace(t, Limits{})
+	templateSource := "document @report:\n  page @sheet:\n    body @body:\n      text: \"x\"\n"
+	templateGuard, _, _ := mutationGuard(t, templateWorkspace, templateSource, "@report", "custom-template", CapabilityEdit)
+	template, err := templateWorkspace.PaperInsertTemplate(PaperInsertTemplateRequest{Guard: templateGuard, Template: "schema-object", ID: "@Contact"})
+	if err != nil || !template.Semantic.AfterCompileOK || !strings.Contains(template.Revision.Source, "object Contact:") || !strings.Contains(template.Revision.Source, "string Contact-value") {
+		t.Fatalf("custom object template = %v result=%#v\nsource=%s", err, template, template.Revision.Source)
+	}
+}
+
 func TestPaperAuthoringEditsScenarioFixtureValueByRelativePath(t *testing.T) {
-	source := "document @report:\n" +
-		"  schema @invoice:\n" +
-		"    field @customer:\n" +
-		"      type: \"object\"\n" +
-		"      field @name:\n" +
-		"        type: \"string\"\n" +
-		"  page @sheet:\n" +
-		"    body @body:\n" +
-		"      paragraph @copy:\n" +
-		"        text: \"Invoice\"\n" +
-		"  scenario @review:\n" +
-		"    object @customer:\n" +
-		"      value @name: \"Ada\"\n"
+	source := `document @report:
+  schema invoice:
+    object customer:
+      string name
+  page @sheet:
+    body @body:
+      paragraph @copy:
+        text: "Invoice"
+  scenario @review:
+    object @customer:
+      value @name: "Ada"
+`
 	workspace := mustWorkspace(t, Limits{})
 	guard, _, _ := mutationGuard(t, workspace, source, "@review", "fixture-value", CapabilityEdit)
 	result, err := workspace.PaperSetScenarioFixtureValue(PaperSetScenarioFixtureValueRequest{Guard: guard, Path: "customer.name", Kind: "string", Text: "Grace"})
@@ -254,16 +283,16 @@ func TestPaperInsertPageTemplateBootstrapsDocumentWithoutPage(t *testing.T) {
 }
 
 func TestPaperManageScenarioRenamesAndDeletesExactMatrixRows(t *testing.T) {
-	source := "document @report:\n" +
-		"  schema @invoice:\n" +
-		"    field @total:\n" +
-		"      type: \"number\"\n" +
-		"  page @sheet:\n" +
-		"    body @body:\n" +
-		"      paragraph @copy:\n" +
-		"        text: \"Invoice\"\n" +
-		"  scenario @review:\n" +
-		"    value @total: 10\n"
+	source := `document @report:
+  schema invoice:
+    number total
+  page @sheet:
+    body @body:
+      paragraph @copy:
+        text: "Invoice"
+  scenario @review:
+    value @total: 10
+`
 	workspace := mustWorkspace(t, Limits{})
 	guard, _, _ := mutationGuard(t, workspace, source, "@review", "scenario-rename", CapabilityEdit)
 	rename, err := workspace.PaperManageScenario(PaperManageScenarioRequest{Guard: guard, Action: "rename", NewName: "@approved"})

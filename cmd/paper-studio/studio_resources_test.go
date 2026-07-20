@@ -13,9 +13,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/internal/paperassets"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
+	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/paperrune/internal/paperassets"
+	"github.com/cssbruno/paperrune/internal/paperlang"
 )
 
 func TestStudioAssetInventoryIsBoundedDeterministicRevisionBoundAndBytePrivate(t *testing.T) {

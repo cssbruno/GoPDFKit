@@ -1,8 +1,8 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 // Package layoutengine contains the private canonical layout model and planner
-// contracts shared by GoPDFKit's automatic-layout frontends.
+// contracts shared by PaperRune's automatic-layout frontends.
 package layoutengine
 
 import (

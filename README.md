@@ -1,12 +1,12 @@
-# GoPDFKit
+# PaperRune
 
 [![CI][badge-ci]][ci]
 [![Custom license][badge-license]][license]
 [![GoDoc][badge-doc]][godoc]
 
-<img src="https://raw.githubusercontent.com/cssbruno/gopdfkit/main/assets/static/image/gopher_pdf.png" alt="GoPDFKit gopher" width="160">
+<img src="https://raw.githubusercontent.com/cssbruno/paperrune/main/assets/static/image/gopher_pdf.png" alt="PaperRune gopher" width="160">
 
-GoPDFKit is a pure-Go PDF toolkit for Go applications that need to generate,
+PaperRune is a pure-Go PDF toolkit for Go applications that need to generate,
 inspect, sign, import, or sanitize PDF documents without depending on a
 browser. It keeps an FPDF-style API for familiar page, text, and drawing
 workflows, while also providing bounded HTML/CSS rendering and typed document
@@ -22,9 +22,9 @@ models.
 - Use optional typed Go document models for applications that prefer structured
   data over HTML strings.
 
-The main API is `github.com/cssbruno/gopdfkit/document`. The optional typed
+The main API is `github.com/cssbruno/paperrune/document`. The optional typed
 model and measurement primitives live in
-`github.com/cssbruno/gopdfkit/layout`. Ownership rules and public-surface
+`github.com/cssbruno/paperrune/layout`. Ownership rules and public-surface
 policy are documented in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Contents
@@ -42,13 +42,13 @@ policy are documented in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Installation
 
-GoPDFKit requires Go 1.26.5 or newer within the supported Go toolchain. The
+PaperRune requires Go 1.26.5 or newer within the supported Go toolchain. The
 library is pure Go; CI runs on Linux and cross-builds for Windows. Other
 Go-supported platforms may compile but are not part of the compatibility
 guarantee.
 
 ```shell
-go get github.com/cssbruno/gopdfkit@latest
+go get github.com/cssbruno/paperrune@latest
 ```
 
 ## Quick start
@@ -56,7 +56,7 @@ go get github.com/cssbruno/gopdfkit@latest
 ```go
 package main
 
-import "github.com/cssbruno/gopdfkit/document"
+import "github.com/cssbruno/paperrune/document"
 
 func main() {
 	pdf, err := document.NewDocument()
@@ -198,24 +198,78 @@ are device-independent rather than screen pixels.
 
 ### Render application JSON and check generated edge cases
 
-A `.paper` document can declare one typed schema and receive ordinary JSON at
-render time. The JSON adapter rejects unknown fields, missing required fields,
-wrong types, duplicate keys, and lists beyond their declared bounds before any
-PDF state is changed.
+A `.paper` document can declare a typed schema and receive ordinary JSON at
+render time. Types lead each declaration; required fields are the default and
+`optional` is explicit. Reusable custom objects live at document scope and can
+be used directly by fields and bounded lists:
+
+```paper
+object Patient:
+  string name
+
+object Medication:
+  string name
+  string directions
+
+schema:
+  string clinic
+  optional string phone
+  Patient patient
+  optional Patient responsible
+  list Medication medications:
+    max-items: 10
+```
+
+Use inline `object fieldName:` or `list object fieldName:` when the shape is
+local to one field. Custom object names must resolve to a document-scoped
+`object Name:` declaration; unknown names and recursive object graphs are
+compile errors.
+
+The JSON adapter rejects unknown fields, missing required fields, wrong types,
+duplicate keys, and lists beyond their declared bounds before any PDF state is
+changed. A document with one schema uses root-relative paths such as
+`bind: "patient.name"` and `source: "medications"`.
+
+When several schemas are intentionally declared, give them bare names and use
+that name only to disambiguate a path:
+
+```paper
+schema invoice:
+  number total
+
+schema receipt:
+  string reference
+
+paragraph:
+  bind: "invoice.total"
+```
+
+The removed `field @name`, `type:`, `required:` and `@schema.field` forms are
+not accepted by the grammar.
 
 ```shell
 go run ./cmd/paper check --data report.json report.paper
 go run ./cmd/paper render --data report.json -o report.pdf report.paper
 ```
 
-`check --edge-cases` generates fixed boundary cases followed by seeded random
-cases, validates each against the schema, and runs the complete plan/paint/PDF
-output path. A seed makes failures replayable; `--edge-output` keeps the JSON
-and PDF artifacts for inspection.
+`check --edge-cases` generates fixed boundaries for empty text, whitespace,
+multiline text, excessive wrapping, 256-character unbroken strings, dense lists,
+Portuguese Unicode, punctuation/escaping, and numeric extremes before seeded
+random cases. Every case is schema-validated and runs through planning,
+painting, structural PDF parsing, page-count comparison, and text extraction.
+A seed makes failures replayable.
+
+`--edge-output` keeps every input and PDF plus `edge-report.json`. The report
+records empty/whitespace/multiline string counts, the JSON Pointer and size of
+the longest string and largest list, input/PDF hashes, per-page extracted-text
+hashes, exact page summaries, and positioned layout issues. Add `--edge-visual`
+to create SVG contact sheets and a portable `edge-gallery.html` for side-by-side
+human review.
 
 ```shell
 go run ./cmd/paper check --edge-cases 16 --seed 42 report.paper
 go run ./cmd/paper check --edge-cases 16 --seed 42 --edge-output ./edge-artifacts report.paper
+go run ./cmd/paper check --edge-cases 16 --seed 42 --edge-output ./edge-artifacts --edge-visual report.paper
 ```
 
 Use `--schema NAME` when the document declares multiple schemas and
@@ -231,9 +285,9 @@ to `assets/generated/pdf/examples`.
 | --- | --- | --- |
 | Hello world | `go run ./examples/hello-world` | `hello-world.pdf` |
 | Drawing primitives | `go run ./examples/drawing` | `drawing.pdf` |
-| Report | `go run ./examples/report` | `gopdfkit-report.pdf` |
+| Report | `go run ./examples/report` | `paperrune-report.pdf` |
 | Structured report | `go run ./examples/structured-report` | `generated PDF` |
-| Table report | `go run ./examples/table-report` | `gopdfkit-tables.pdf` |
+| Table report | `go run ./examples/table-report` | `paperrune-tables.pdf` |
 | HTML fragment | `go run ./examples/html-fragment` | generated PDF |
 | HTML template | `go run ./examples/html-template` | generated PDF |
 | Images and SVG | `go run ./examples/html-images` | generated PDF |
@@ -476,7 +530,7 @@ Applications can transfer their own failures into the PDF object with
 
 ## License
 
-GoPDFKit is released under the GoPDFKit Health-Sector Restricted License 1.0.
+PaperRune is released under the PaperRune Health-Sector Restricted License 1.0.
 Use, modification, and distribution are free for Non-Health-Sector Use under
 the terms of [`LICENSE`][license]. Health-Sector Organizations and vendors
 acting for them must obtain a separate written commercial license before
@@ -485,11 +539,11 @@ OSI-approved open-source license. For licensing requests, contact the project
 maintainers through the repository's normal project contact channel.
 
 
-[badge-ci]: https://github.com/cssbruno/gopdfkit/actions/workflows/ci.yml/badge.svg
-[badge-doc]: https://img.shields.io/badge/godoc-GoPDFKit-blue.svg
+[badge-ci]: https://github.com/cssbruno/paperrune/actions/workflows/ci.yml/badge.svg
+[badge-doc]: https://img.shields.io/badge/godoc-PaperRune-blue.svg
 [badge-license]: https://img.shields.io/badge/license-custom-orange.svg
-[ci]: https://github.com/cssbruno/gopdfkit/actions/workflows/ci.yml
+[ci]: https://github.com/cssbruno/paperrune/actions/workflows/ci.yml
 [examples]: examples
 [fpdf-site]: http://www.fpdf.org/
-[godoc]: https://pkg.go.dev/github.com/cssbruno/gopdfkit
-[license]: https://raw.githubusercontent.com/cssbruno/gopdfkit/main/LICENSE
+[godoc]: https://pkg.go.dev/github.com/cssbruno/paperrune
+[license]: https://raw.githubusercontent.com/cssbruno/paperrune/main/LICENSE

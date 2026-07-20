@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 func TestCompiledHTMLUnifiedPlanLowersTextHeadingsBreaksAndFlatLists(t *testing.T) {
@@ -339,6 +339,19 @@ func TestCompiledHTMLUnifiedPlanStrictTableDecorations(t *testing.T) {
 	p := plan.plan.Projection()
 	if len(p.Fills) < 2 || len(p.Strokes) < 4 {
 		t.Fatalf("decorated resources fills=%d strokes=%d", len(p.Fills), len(p.Strokes))
+	}
+}
+
+func TestHTMLPlanApplyStrictCellStyleRejectsUnfilteredDeclarations(t *testing.T) {
+	pointsToUnits := func(value float64) float64 { return value }
+	for _, declarations := range []map[string]string{
+		{"float": "left"},
+		{"padding": ""},
+	} {
+		cell := layout.TableCell{}
+		if err := htmlPlanApplyStrictCellStyle(&cell, declarations, pointsToUnits); err == nil {
+			t.Fatalf("declarations %#v unexpectedly accepted", declarations)
+		}
 	}
 }
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperlang
@@ -87,7 +87,7 @@ func TestASTProjectionIsDetachedAndDeterministic(t *testing.T) {
 	}
 	secondJSON, _ := second.AST.CanonicalJSON()
 	if !bytes.Equal(firstJSON, secondJSON) || !bytes.Contains(firstJSON, []byte(`"schema_version":1`)) ||
-		!bytes.Contains(firstJSON, []byte(`"grammar_version":"paper/0.1"`)) {
+		!bytes.Contains(firstJSON, []byte(`"grammar_version":"paper/0.3"`)) {
 		t.Fatalf("canonical JSON differs:\n%s\n%s", firstJSON, secondJSON)
 	}
 	var decoded ASTProjection

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperedit
@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperlang"
 )
 
 func TestApplyCommitsTypedOperationsAtomicallyBackToFront(t *testing.T) {
@@ -116,6 +116,48 @@ func TestApplyInsertsTypedListAndItems(t *testing.T) {
 	}
 	if parsed := paperlang.Parse("invoice.paper", result.Source); !parsed.OK() {
 		t.Fatalf("inserted list diagnostics = %+v", parsed.Diagnostics)
+	}
+}
+
+func TestApplyInsertsCustomObjectAndReferences(t *testing.T) {
+	source := editableFixture()
+	result, err := Apply(Transaction{
+		File: "invoice.paper", Source: source, ExpectedRevision: SourceRevision(source),
+		Operations: []Operation{InsertNodes{Parent: "@doc", Nodes: []NodeSpec{
+			{
+				Kind: paperlang.NodeObjectType, ID: "@Address",
+				Children: []NodeSpec{
+					{Kind: paperlang.NodeField, ID: "@street", FieldType: paperlang.FieldString},
+					{Kind: paperlang.NodeField, ID: "@city", FieldType: paperlang.FieldString},
+				},
+			},
+			{
+				Kind: paperlang.NodeSchema, ID: "@data",
+				Children: []NodeSpec{
+					{Kind: paperlang.NodeField, ID: "@billing", TypeRef: "Address"},
+					{
+						Kind: paperlang.NodeField, ID: "@previous", FieldType: paperlang.FieldList, ItemTypeRef: "Address",
+						Properties: []PropertySpec{{Name: "max-items", Value: NumberValue(5)}},
+					},
+				},
+			},
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("Apply(custom objects) = %v, diagnostics %+v", err, result.Diagnostics)
+	}
+	want := "  object Address:\n" +
+		"    string street\n" +
+		"    string city\n" +
+		"  schema data:\n" +
+		"    Address billing\n" +
+		"    list Address previous:\n" +
+		"      max-items: 5\n"
+	if !strings.Contains(result.Source, want) {
+		t.Fatalf("custom object insertion:\n%s\nwant block:\n%s", result.Source, want)
+	}
+	if parsed := paperlang.Parse("invoice.paper", result.Source); !parsed.OK() {
+		t.Fatalf("custom object candidate diagnostics = %+v", parsed.Diagnostics)
 	}
 }
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
 )
 
 const htmlUnifiedSVGFixture = `<a href="https://example.test/svg"><svg width="40" height="30" viewBox="0 0 40 30" aria-label="Status icon">` +

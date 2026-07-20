@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -83,7 +83,7 @@ func AttachGlyphRunLinksWithDestinations(plan LayoutPlan, destinations []Planned
 			return LayoutPlan{}, fmt.Errorf("%w: spans[%d] run has no planned line", ErrGlyphLinkContract, index)
 		}
 		line := projection.Lines[run.Line]
-		if prefixRun != span.Run {
+		if prefixRun != span.Run || advancePrefix == nil {
 			advancePrefix = make([]Fixed, len(run.Advances)+1)
 			for advanceIndex, advance := range run.Advances {
 				var err error

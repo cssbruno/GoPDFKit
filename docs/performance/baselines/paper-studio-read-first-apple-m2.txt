@@ -3,7 +3,7 @@
 # Source revision: 50b25305eb49389d00f68656c61df92edc9f06e7 (dirty Paper Engine branch)
 # Environment: darwin/arm64, Apple M2, Go 1.26.5
 # Command:
-# GOCACHE=/tmp/gopdfkit-go-cache go test ./cmd/paper-studio -run '^$' \
+# GOCACHE=/tmp/paperrune-go-cache go test ./cmd/paper-studio -run '^$' \
 #   -bench BenchmarkPaperStudioWarmWorkspaceAndVisiblePage \
 #   -benchmem -benchtime=250ms -count=5
 
@@ -20,7 +20,7 @@ BenchmarkPaperStudioWarmWorkspaceAndVisiblePage-8  4510   66441 ns/op  36935 B/o
 
 # Page-rail summary/baseline impact (2026-07-17)
 # Command:
-# GOCACHE=/tmp/gopdfkit-go-cache go test ./cmd/paper-studio -run '^$' \
+# GOCACHE=/tmp/paperrune-go-cache go test ./cmd/paper-studio -run '^$' \
 #   -bench 'BenchmarkPaperStudio(WarmWorkspaceAndVisiblePage|WarmWorkspaceWithPageRailBaseline)$' \
 #   -benchmem -benchtime=250ms -count=5
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -169,7 +169,7 @@ func fileExists(path string) bool {
 
 func (cmd command) printUsage() {
 	_, _ = fmt.Fprintf(cmd.stderr, "Usage: %s [options] font_file [font_file...]\n\n", cmd.name)
-	_, _ = fmt.Fprintln(cmd.stderr, "Generate GoPDFKit JSON font definitions from TrueType, OpenType, or binary Type1 fonts.")
+	_, _ = fmt.Fprintln(cmd.stderr, "Generate PaperRune JSON font definitions from TrueType, OpenType, or binary Type1 fonts.")
 	_, _ = fmt.Fprintln(cmd.stderr, "Type1 fonts require an AFM metrics file with the same base path.")
 	_, _ = fmt.Fprintln(cmd.stderr)
 	_, _ = fmt.Fprintln(cmd.stderr, "Options:")

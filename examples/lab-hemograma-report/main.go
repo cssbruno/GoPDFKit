@@ -1,43 +1,79 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
+// Command lab-hemograma-report draws a polished, single-page Brazilian
+// laboratory report with the low-level Document API. All people, identifiers,
+// results, addresses, and credentials in this example are fictional.
 package main
 
 import (
 	"log"
 	"os"
 
-	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/examples/internal/assets"
-	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
+	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/paperrune/examples/internal/assets"
+	"github.com/cssbruno/paperrune/examples/internal/outpath"
 )
 
-type examRow struct {
-	name   string
-	result string
-	unit   string
-	men    string
-	women  string
+type resultRow struct {
+	name      string
+	result    string
+	unit      string
+	reference string
+	previous  string
+	flag      string
 }
 
-type diffRow struct {
-	name     string
-	percent  string
-	absolute string
-	unit     string
-	ref      string
-}
+var (
+	navy        = color{18, 48, 71}
+	teal        = color{0, 157, 157}
+	tealDark    = color{0, 117, 124}
+	ink         = color{31, 45, 57}
+	muted       = color{96, 117, 130}
+	line        = color{214, 224, 228}
+	pale        = color{244, 248, 249}
+	paleTeal    = color{232, 247, 246}
+	alert       = color{186, 55, 64}
+	paleAlert   = color{252, 238, 239}
+	white       = color{255, 255, 255}
+	erythrogram = []resultRow{
+		{"Hemácias", "4,08", "milhões/µL", "3,90 - 5,20", "4,21", ""},
+		{"Hemoglobina", "11,2", "g/dL", "12,0 - 15,5", "11,7", "BAIXO"},
+		{"Hematócrito", "34,7", "%", "36,0 - 46,0", "36,2", "BAIXO"},
+		{"VCM", "85,0", "fL", "80,0 - 100,0", "86,0", ""},
+		{"HCM", "27,5", "pg", "27,0 - 33,0", "27,8", ""},
+		{"CHCM", "32,3", "g/dL", "31,0 - 36,0", "32,4", ""},
+		{"RDW", "15,6", "%", "11,5 - 14,5", "15,1", "ALTO"},
+	}
+	leukogram = []resultRow{
+		{"Leucócitos", "8.740", "/µL", "4.000 - 10.000", "7.960", ""},
+		{"Neutrófilos  59,8%", "5.227", "/µL", "1.800 - 7.700", "4.744", ""},
+		{"Linfócitos  29,0%", "2.535", "/µL", "1.000 - 4.000", "2.388", ""},
+		{"Monócitos  6,9%", "603", "/µL", "200 - 1.000", "549", ""},
+		{"Eosinófilos  3,6%", "315", "/µL", "20 - 500", "223", ""},
+		{"Basófilos  0,7%", "60", "/µL", "0 - 100", "56", ""},
+	}
+	platelets = []resultRow{
+		{"Plaquetas", "428.000", "/µL", "150.000 - 450.000", "391.000", ""},
+		{"Volume plaquetário médio", "11,8", "fL", "7,5 - 11,5", "11,2", "ALTO"},
+	}
+)
 
 func main() {
 	pdf := document.MustNew()
-	pdf.SetTitle("Hemograma Modelo Brasileiro", false)
+	pdf.SetTitle("Hemograma completo - modelo brasileiro contemporâneo", false)
 	pdf.SetCreator("examples/lab-hemograma-report", false)
 	addUTF8Fonts(pdf)
 	pdf.SetMargins(0, 0, 0)
 	pdf.SetAutoPageBreak(false, 0)
 	pdf.AddPage()
 
-	drawHemograma(pdf)
+	drawHeader(pdf)
+	drawPatientCard(pdf)
+	drawSpecimenCard(pdf)
+	drawResults(pdf)
+	drawSignoff(pdf)
+	drawFooter(pdf)
 
 	if err := pdf.OutputFileAndClose(outpath.File("lab-hemograma-report.pdf")); err != nil {
 		log.Fatal(err)
@@ -60,236 +96,238 @@ func addUTF8Fonts(pdf *document.Document) {
 	}
 }
 
-func drawHemograma(pdf *document.Document) {
-	drawHeader(pdf)
-	drawPatientBand(pdf)
-	drawExamBody(pdf)
-	drawFooter(pdf)
-}
-
 func drawHeader(pdf *document.Document) {
-	blue := color{0, 166, 216}
-	set(pdf, "B", 18, blue)
-	pdf.Text(7, 16, "LAB")
-	set(pdf, "B", 18, blue)
-	pdf.Text(7, 25, "MODELO")
-	set(pdf, "", 4.3, blue)
-	pdf.Text(8, 31, "LABORATÓRIO DE ANÁLISES CLÍNICAS")
+	fill(pdf, navy)
+	pdf.Rect(0, 0, 210, 5, "F")
 
-	pdf.SetFillColor(0, 166, 216)
-	pdf.Polygon([]document.Point{
-		{X: 42, Y: 12}, {X: 48, Y: 8}, {X: 55, Y: 15}, {X: 51, Y: 21}, {X: 43, Y: 20},
-	}, "F")
-	pdf.Circle(51, 20, 4.6, "F")
+	fill(pdf, teal)
+	pdf.Circle(22, 22, 11, "F")
+	set(pdf, "B", 16, white)
+	centerText(pdf, 11, 16.6, 22, 10, "A+")
 
-	pdf.SetDrawColor(0, 135, 170)
-	pdf.SetLineWidth(0.2)
-	pdf.Line(72, 25.4, 198, 25.4)
+	set(pdf, "B", 17.5, navy)
+	pdf.Text(39, 18.5, "AURORA")
+	set(pdf, "", 7.2, tealDark)
+	pdf.Text(39.3, 24.3, "MEDICINA DIAGNÓSTICA")
+	set(pdf, "", 5.8, muted)
+	pdf.Text(39.3, 30.2, "Unidade Fortaleza  |  CNES 0000000 (fictício)")
+	pdf.Text(39.3, 34.7, "(85) 3000-0000  |  laudos@aurora-demo.test")
 
-	set(pdf, "B", 6.8, blue)
-	rightText(pdf, 151, 11, 47, 3.5, "Responsável Técnico:")
-	set(pdf, "", 6.5, blue)
-	rightText(pdf, 151, 16, 47, 3.5, "Dra. Camila Ribeiro")
-	rightText(pdf, 151, 20.5, 47, 3.5, "CRBM 00000")
-	pdf.SetDrawColor(0, 135, 170)
-	pdf.Line(151, 25.4, 198, 25.4)
-	set(pdf, "B", 6.5, blue)
-	rightText(pdf, 151, 31.5, 47, 3.5, "E-mail: laudo@exemplo.test")
-	rightText(pdf, 151, 36, 47, 3.5, "www.laboratorioexemplo.test")
+	fill(pdf, paleTeal)
+	draw(pdf, color{187, 224, 223})
+	pdf.RoundedRect(143, 10, 57, 28, 2.8, "1234", "DF")
+	set(pdf, "B", 5.4, tealDark)
+	pdf.Text(148, 16, "RESULTADO LABORATORIAL")
+	set(pdf, "B", 9.5, navy)
+	pdf.Text(148, 23, "HEMOGRAMA COMPLETO")
+	set(pdf, "", 5.8, muted)
+	pdf.Text(148, 29.5, "Laudo DEMO-2026-0042")
+	pdf.Text(148, 34, "Emitido em 18/07/2026 às 10:14")
+
+	fill(pdf, paleAlert)
+	pdf.Rect(0, 42, 210, 7, "F")
+	set(pdf, "B", 6.1, alert)
+	centerText(pdf, 0, 43.5, 210, 4, "MODELO FICTÍCIO  |  DADOS SINTÉTICOS  |  SEM VALIDADE CLÍNICA")
 }
 
-func drawPatientBand(pdf *document.Document) {
-	pdf.SetDrawColor(30, 30, 30)
-	pdf.SetLineWidth(0.22)
-	pdf.Line(4, 43, 206, 43)
-	pdf.Line(4, 62.5, 206, 62.5)
+func drawPatientCard(pdf *document.Document) {
+	card(pdf, 10, 53, 190, 31, white)
+	field(pdf, 15, 59, "PACIENTE", "ANA CLARA ALMEIDA", 62)
+	field(pdf, 83, 59, "NASCIMENTO / SEXO", "14/03/1988  |  Feminino", 46)
+	field(pdf, 142, 59, "ID DO PACIENTE", "DEMO-260718-0042", 53)
 
-	meta(pdf, 5, 47, "Paciente....:", "ANA CLARA ALMEIDA")
-	meta(pdf, 5, 51.5, "Médico......:", "Dra. Fernanda Matos")
-	meta(pdf, 5, 56, "Convênio....:", "PARTICULAR")
-	meta(pdf, 74, 56, "Destino:", "LABORATÓRIO")
-
-	meta(pdf, 124, 47, "Idade.............:", "38 Ano(s)")
-	meta(pdf, 124, 51.5, "Data Req..........:", "30/06/2026")
-	meta(pdf, 124, 56, "Hora Req..........:", "08:12")
-	meta(pdf, 124, 60.5, "Data Emissão...:", "30/06/2026")
-	drawBarcode(pdf, 181, 44.4, 18, 9.5, "238759")
-
-	set(pdf, "B", 5.7, color{150, 25, 25})
-	centerText(pdf, 4, 66.3, 202, 3.5, "MODELO FICTÍCIO - SEM VALIDADE CLÍNICA OU DIAGNÓSTICA")
+	draw(pdf, line)
+	pdf.Line(15, 69, 195, 69)
+	field(pdf, 15, 74, "SOLICITANTE", "Dra. Helena Modelo  |  CRM-CE 00000", 62)
+	field(pdf, 83, 74, "ATENDIMENTO", "Particular", 46)
+	field(pdf, 142, 74, "UNIDADE", "Fortaleza - CE", 53)
 }
 
-func drawExamBody(pdf *document.Document) {
-	y := 72.0
-	set(pdf, "B", 9, black)
-	pdf.Text(7, y, "Hemograma")
-	set(pdf, "", 6.3, black)
-	pdf.Text(7, y+4.8, "Material: Sangue")
-	pdf.Text(58, y+4.8, "Método: Cell-Dyn 3700.")
-	set(pdf, "I", 5.8, black)
-	pdf.Text(123, y+4.8, "Fonte: Dacie and Lewis - Practical Haematology 2017.")
+func drawSpecimenCard(pdf *document.Document) {
+	card(pdf, 10, 89, 190, 24, pale)
+	field(pdf, 15, 95, "COLETA", "18/07/2026  08:05", 42)
+	field(pdf, 62, 95, "RECEBIMENTO", "18/07/2026  08:31", 42)
+	field(pdf, 109, 95, "LIBERAÇÃO", "18/07/2026  10:14", 42)
+	field(pdf, 156, 95, "AMOSTRA", "Sangue total EDTA", 39)
 
-	y = drawEritrograma(pdf, y+13.5)
-	y = drawLeucograma(pdf, y+4.5)
-	drawPlaquetas(pdf, y+4)
+	set(pdf, "B", 5.2, muted)
+	pdf.Text(15, 106, "MÉTODO ANALÍTICO")
+	set(pdf, "", 6.2, ink)
+	pdf.Text(53, 106, "Impedância, citometria de fluxo e espectrofotometria")
+	set(pdf, "", 5.4, muted)
+	rightText(pdf, 155, 103.8, 40, 3.5, "Amostra íntegra")
 }
 
-func drawEritrograma(pdf *document.Document, y float64) float64 {
-	set(pdf, "BI", 8, black)
-	pdf.Text(7, y, "Eritrograma")
-	set(pdf, "BI", 5.7, black)
-	centerText(pdf, 119, y+3.7, 20, 3, "Homens")
-	centerText(pdf, 160, y+3.7, 20, 3, "Mulheres")
+func drawResults(pdf *document.Document) {
+	set(pdf, "B", 13.5, navy)
+	pdf.Text(10, 121, "Hemograma completo")
+	set(pdf, "", 5.7, muted)
+	rightText(pdf, 128, 117.5, 72, 4, "Intervalos demonstrativos para mulher adulta")
 
-	rows := []examRow{
-		{"Hemácias", "5,78", "milhões/mm³", "4,50 - 5,50 milhões/mm³", "3,80 - 4,80 milhões/mm³"},
-		{"Hemoglobina", "15,0", "g/dL", "13,0 - 17,0 g/dL", "12,0 - 15,0 g/dL"},
-		{"Hematócrito", "46,7", "%", "40,0 - 50,0 %", "36,0 - 46,0 %"},
-		{"R.D.W.", "11,6", "%", "11,6 - 14,0 %", "11,6 - 14,0 %"},
-		{"V.C.M.", "80,8", "fl", "83,0 - 101,0 fl", "83,0 - 101,0 fl"},
-		{"H.C.M.", "26,0", "pg", "27,0 - 32,0 pg", "27,0 - 32,0 pg"},
-		{"C.H.C.M.", "32,1", "g/dL", "31,5 - 34,5 g/dL", "31,5 - 34,5 g/dL"},
+	drawTableHeader(pdf, 126)
+	y := 133.0
+	y = drawSection(pdf, y, "ERITROGRAMA", "Série vermelha")
+	for i, row := range erythrogram {
+		drawResultRow(pdf, y, row, i%2 == 1)
+		y += 5.8
 	}
-	y += 9.5
-	for _, row := range rows {
-		drawExamRow(pdf, y, row)
-		y += 5.4
+	y += 1.4
+	y = drawSection(pdf, y, "LEUCOGRAMA", "Contagem absoluta e diferencial")
+	for i, row := range leukogram {
+		drawResultRow(pdf, y, row, i%2 == 1)
+		y += 5.8
 	}
-	set(pdf, "", 6.2, black)
-	pdf.Text(7, y, "Observações:")
-	set(pdf, "B", 6.2, black)
-	pdf.Text(28, y, "- Discreta Anisocitose: Microcitose (Discreta)")
-	return y + 4.8
-}
-
-func drawLeucograma(pdf *document.Document, y float64) float64 {
-	set(pdf, "BI", 8, black)
-	pdf.Text(7, y, "Leucograma")
-	set(pdf, "BI", 6, black)
-	centerText(pdf, 111, y, 50, 3, "Valores de Referência")
-
-	rows := []diffRow{
-		{"Leucócitos", "", "6.980", "/mm³", "4.000 - 10.000/mm³"},
-		{"Blastos", "0,0", "0", "/mm³", "0 /mm³"},
-		{"Promielócitos", "0,0", "0", "/mm³", "0 /mm³"},
-		{"Mielócitos", "0,0", "0", "/mm³", "0 /mm³"},
-		{"Metamielócitos", "0,0", "0", "/mm³", "0 /mm³"},
-		{"Bastonetes", "0,0", "0", "/mm³", "0 - 400 /mm³"},
-		{"Segmentados", "59,6", "4.160", "/mm³", "1.800 - 7.500 /mm³"},
-		{"Eosinófilos", "4,0", "279", "/mm³", "40 - 450 /mm³"},
-		{"Basófilos", "1,3", "91", "/mm³", "0 - 100 /mm³"},
-		{"Linfócitos Típicos", "28,5", "1.989", "/mm³", "1.200 - 5.200 /mm³"},
-		{"Linfócitos Reativos", "0,0", "0", "/mm³", "0 /mm³"},
-		{"Monócitos", "6,5", "454", "/mm³", "80 - 800 /mm³"},
+	y += 1.4
+	y = drawSection(pdf, y, "PLAQUETAS", "Contagem e volume médio")
+	for i, row := range platelets {
+		drawResultRow(pdf, y, row, i%2 == 1)
+		y += 5.8
 	}
 
-	y += 7
-	for _, row := range rows {
-		drawDiffRow(pdf, y, row)
-		y += 5.3
-	}
-	set(pdf, "", 6.2, black)
-	pdf.Text(7, y, "Observações:")
-	set(pdf, "B", 6.2, black)
-	pdf.Text(28, y, "Normal")
-	return y + 5
+	fill(pdf, paleAlert)
+	draw(pdf, color{239, 199, 202})
+	pdf.RoundedRect(10, y+1.4, 190, 14, 2, "1234", "DF")
+	fill(pdf, alert)
+	pdf.RoundedRectExt(10, y+1.4, 3.2, 14, 2, 0, 0, 2, "F")
+	set(pdf, "B", 5.4, alert)
+	pdf.Text(17, y+6.2, "OBSERVAÇÃO TÉCNICA")
+	set(pdf, "", 6.1, ink)
+	pdf.Text(17, y+11.3, "Discreta anisocitose. Resultados assinalados devem ser interpretados com o contexto clínico.")
+	set(pdf, "I", 5.1, muted)
+	pdf.Text(17, y+15, "Faixas de referência variam conforme método, população e laboratório executor.")
 }
 
-func drawPlaquetas(pdf *document.Document, y float64) {
-	set(pdf, "BI", 8, black)
-	pdf.Text(7, y, "Plaquetas")
-	pdf.Text(42, y, ":")
-	value(pdf, 55, y-3.2, 38, 4, "116.000/mm³", "BI", 8)
-	set(pdf, "", 6.1, black)
-	pdf.Text(113, y, "150.000 - 450.000/mm³")
-	y += 6
-	set(pdf, "", 6.2, black)
-	pdf.Text(7, y, "Observações:")
-	set(pdf, "B", 6.2, black)
-	pdf.Text(28, y, "- Confirmado por microscopia.")
+func drawTableHeader(pdf *document.Document, y float64) {
+	fill(pdf, navy)
+	pdf.RoundedRectExt(10, y, 190, 7, 2, 2, 0, 0, "F")
+	set(pdf, "B", 5.3, white)
+	pdf.Text(14, y+4.7, "ANÁLISE")
+	rightText(pdf, 72, y+1.7, 34, 3, "RESULTADO")
+	pdf.Text(110, y+4.7, "UNIDADE")
+	centerText(pdf, 133, y+1.7, 33, 3, "REFERÊNCIA")
+	centerText(pdf, 169, y+1.7, 18, 3, "ANTERIOR")
+	centerText(pdf, 188, y+1.7, 10, 3, "FLAG")
+}
+
+func drawSection(pdf *document.Document, y float64, title, subtitle string) float64 {
+	fill(pdf, paleTeal)
+	pdf.Rect(10, y, 190, 6.4, "F")
+	set(pdf, "B", 6.4, tealDark)
+	pdf.Text(14, y+4.4, title)
+	set(pdf, "", 5.1, muted)
+	pdf.Text(45, y+4.4, subtitle)
+	return y + 6.4
+}
+
+func drawResultRow(pdf *document.Document, y float64, row resultRow, shaded bool) {
+	if shaded {
+		fill(pdf, pale)
+		pdf.Rect(10, y, 190, 5.8, "F")
+	}
+	draw(pdf, line)
+	pdf.Line(10, y+5.8, 200, y+5.8)
+
+	set(pdf, "", 6.25, ink)
+	pdf.Text(14, y+3.95, row.name)
+	resultColor := ink
+	if row.flag != "" {
+		resultColor = alert
+	}
+	set(pdf, "B", 6.6, resultColor)
+	rightText(pdf, 72, y+1.2, 34, 3.3, row.result)
+	set(pdf, "", 5.7, muted)
+	pdf.Text(110, y+3.95, row.unit)
+	centerText(pdf, 133, y+1.2, 33, 3.3, row.reference)
+	centerText(pdf, 169, y+1.2, 18, 3.3, row.previous)
+	if row.flag != "" {
+		fill(pdf, paleAlert)
+		draw(pdf, color{232, 174, 179})
+		pdf.RoundedRect(188.2, y+1.05, 10.5, 3.8, 1.2, "1234", "DF")
+		set(pdf, "B", 4.2, alert)
+		centerText(pdf, 188.2, y+1.25, 10.5, 2.8, row.flag)
+	} else {
+		fill(pdf, color{204, 224, 218})
+		pdf.Circle(193.5, y+2.9, 1.05, "F")
+	}
+}
+
+func drawSignoff(pdf *document.Document) {
+	set(pdf, "B", 5.2, muted)
+	pdf.Text(12, 266, "RESPONSÁVEL TÉCNICA E PROFISSIONAL SIGNATÁRIA")
+	set(pdf, "B", 7, navy)
+	pdf.Text(12, 272, "Dra. Marina Campos")
+	set(pdf, "", 5.8, ink)
+	pdf.Text(12, 277, "Biomédica  |  CRBM-6 00000 (fictício)")
+	set(pdf, "", 5.1, muted)
+	pdf.Text(12, 282, "Assinatura demonstrativa: 84C2-A7F1-0D42-2026")
+
+	set(pdf, "B", 5.2, muted)
+	pdf.Text(112, 266, "VALIDAÇÃO DO DOCUMENTO")
+	set(pdf, "", 5.6, ink)
+	pdf.Text(112, 272, "aurora-demo.test/validar")
+	pdf.Text(112, 277, "Código: DEMO-2026-0042")
+	set(pdf, "I", 4.9, muted)
+	pdf.Text(112, 282, "QR e endereço sem função real")
+	drawDemoQR(pdf, 181, 263, 17)
 }
 
 func drawFooter(pdf *document.Document) {
-	set(pdf, "", 5.2, black)
-	pdf.Text(12, 272.5, "* O valor preditivo dos testes laboratoriais depende da análise dos seus resultados e dos dados clínicos-epidemiológicos do paciente.")
-	pdf.Text(12, 277, "Unidade Matriz 4136-42-40 | Rua Exemplo, 158 - Centro | Unidade Lapa 4136-2534 | Rua Modelo, 229")
-
-	pdf.SetDrawColor(0, 0, 0)
-	pdf.SetLineWidth(0.22)
-	pdf.Circle(8.5, 281.5, 4, "D")
-	set(pdf, "B", 5.5, black)
-	centerText(pdf, 3.8, 282.5, 9.4, 2.5, "PNCQ")
-
-	pdf.Curve(158, 260, 163, 249, 168, 260, "D")
-	pdf.Curve(165, 260, 171, 252, 177, 260, "D")
-	pdf.Line(157, 260.5, 181, 260.5)
-	set(pdf, "B", 6.2, black)
-	centerText(pdf, 150, 266.5, 40, 3, "Dra. Camila Ribeiro")
-	set(pdf, "", 5.7, black)
-	centerText(pdf, 150, 270.4, 40, 3, "Biomédica")
-	centerText(pdf, 150, 274, 40, 3, "CRBM 00000")
-
-	set(pdf, "B", 5.3, color{145, 25, 25})
-	centerText(pdf, 67, 287, 76, 3, "DOCUMENTO DE EXEMPLO - NÃO UTILIZAR COMO LAUDO REAL")
-	pdf.Circle(198, 281.5, 4, "D")
-	set(pdf, "B", 4.8, black)
-	centerText(pdf, 193.5, 282, 9, 2.5, "ISO")
+	fill(pdf, navy)
+	pdf.Rect(0, 287, 210, 10, "F")
+	set(pdf, "", 5.15, white)
+	pdf.Text(10, 291.5, "AURORA DIAGNÓSTICOS DEMO  |  Rua Exemplo, 120 - Fortaleza/CE  |  CNES 0000000")
+	set(pdf, "B", 5.15, white)
+	rightText(pdf, 172, 288.8, 28, 3.5, "Página 1 de 1")
+	set(pdf, "", 4.8, color{190, 213, 224})
+	pdf.Text(10, 295.2, "Layout inspirado em convenções públicas brasileiras; nenhum dado pertence a paciente ou laboratório real.")
 }
 
-func drawExamRow(pdf *document.Document, y float64, row examRow) {
-	set(pdf, "", 7.2, black)
-	pdf.Text(8, y, row.name)
-	pdf.Text(42, y, ":")
-	value(pdf, 53, y-3.2, 22, 4, row.result, "BI", 7.2)
-	set(pdf, "BI", 6.8, black)
-	pdf.Text(76, y, row.unit)
-	set(pdf, "", 5.7, black)
-	pdf.Text(113, y, row.men)
-	pdf.Text(154, y, row.women)
-}
-
-func drawDiffRow(pdf *document.Document, y float64, row diffRow) {
-	set(pdf, "", 7.2, black)
-	pdf.Text(8, y, row.name)
-	pdf.Text(42, y, ":")
-	if row.percent != "" {
-		value(pdf, 50, y-3.2, 18, 4, row.percent+" %", "BI", 7.2)
+func drawDemoQR(pdf *document.Document, x, y, size float64) {
+	fill(pdf, white)
+	draw(pdf, line)
+	pdf.Rect(x, y, size, size, "DF")
+	module := size / 13
+	pattern := []string{
+		"1111100111111", "1000100100001", "1010100110101", "1000100100001",
+		"1111100111111", "0000000000000", "1011011010110", "0110100101011",
+		"1100111011001", "0000000010100", "1111101110111", "1000100101100", "1111101101011",
 	}
-	value(pdf, 75, y-3.2, 22, 4, row.absolute, "BI", 7.2)
-	set(pdf, "BI", 6.8, black)
-	pdf.Text(98, y, row.unit)
-	set(pdf, "", 5.7, black)
-	centerText(pdf, 112, y-3, 38, 4, row.ref)
-}
-
-func drawBarcode(pdf *document.Document, x, y, w, h float64, label string) {
-	pattern := []float64{0.45, 0.25, 0.8, 0.25, 0.35, 0.6, 0.25, 0.25, 1.0, 0.35, 0.25, 0.7, 0.25, 0.45, 0.25, 0.9, 0.25, 0.35, 0.6, 0.25}
-	pdf.SetFillColor(0, 0, 0)
-	cursor := x
-	for i, bar := range pattern {
-		if i%2 == 0 {
-			pdf.Rect(cursor, y, bar, h, "F")
-		}
-		cursor += bar
-		if cursor > x+w {
-			break
+	fill(pdf, navy)
+	for row, bits := range pattern {
+		for col, bit := range bits {
+			if bit == '1' {
+				pdf.Rect(x+float64(col)*module, y+float64(row)*module, module, module, "F")
+			}
 		}
 	}
-	set(pdf, "", 5.5, black)
-	centerText(pdf, x, y+h+3, w, 3, label)
 }
 
-func meta(pdf *document.Document, x, y float64, label, text string) {
-	set(pdf, "", 5.6, black)
+func card(pdf *document.Document, x, y, w, h float64, background color) {
+	fill(pdf, background)
+	draw(pdf, line)
+	pdf.RoundedRect(x, y, w, h, 2.4, "1234", "DF")
+}
+
+func field(pdf *document.Document, x, y float64, label, value string, width float64) {
+	set(pdf, "B", 5.1, muted)
 	pdf.Text(x, y, label)
-	set(pdf, "B", 5.6, black)
-	pdf.Text(x+18, y, text)
+	set(pdf, "B", 6.4, ink)
+	pdf.SetXY(x, y+1.7)
+	pdf.CellFormat(width, 5, value, "", 0, "L", false, 0, "")
 }
 
-func value(pdf *document.Document, x, y, w, h float64, text, style string, size float64) {
-	set(pdf, style, size, black)
-	pdf.SetXY(x, y)
-	pdf.CellFormat(w, h, text, "", 0, "R", false, 0, "")
+func fill(pdf *document.Document, c color) {
+	pdf.SetFillColor(c.r, c.g, c.b)
+}
+
+func draw(pdf *document.Document, c color) {
+	pdf.SetDrawColor(c.r, c.g, c.b)
+	pdf.SetLineWidth(0.2)
+}
+
+func set(pdf *document.Document, style string, size float64, c color) {
+	pdf.SetFont("dejavu", style, size)
+	pdf.SetTextColor(c.r, c.g, c.b)
 }
 
 func rightText(pdf *document.Document, x, y, w, h float64, text string) {
@@ -306,11 +344,4 @@ type color struct {
 	r int
 	g int
 	b int
-}
-
-var black = color{0, 0, 0}
-
-func set(pdf *document.Document, style string, size float64, c color) {
-	pdf.SetFont("dejavu", style, size)
-	pdf.SetTextColor(c.r, c.g, c.b)
 }

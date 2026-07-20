@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -16,7 +16,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/cssbruno/gopdfkit/internal/paperscenario"
+	"github.com/cssbruno/paperrune/internal/paperscenario"
 )
 
 const (
@@ -279,7 +279,10 @@ func convertJSONDataValue(node *jsonDataValue, descriptor FieldDescriptor, point
 			if err != nil {
 				return paperscenario.Value{}, err
 			}
-			encoded, _ := json.Marshal(value)
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				return paperscenario.Value{}, jsonDataError(pointer, fmt.Sprintf("encode list item %d: %v", index, err))
+			}
 			digest := sha256.Sum256(encoded)
 			base := "item-" + hex.EncodeToString(digest[:8])
 			seen[base]++

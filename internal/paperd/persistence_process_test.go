@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -18,24 +18,24 @@ import (
 )
 
 func TestPersistenceProcessHelper(t *testing.T) {
-	mode := os.Getenv("GOPDFKIT_PERSISTENCE_HELPER")
+	mode := os.Getenv("PAPERRUNE_PERSISTENCE_HELPER")
 	if mode == "" {
 		return
 	}
-	root := os.Getenv("GOPDFKIT_PERSISTENCE_ROOT")
+	root := os.Getenv("PAPERRUNE_PERSISTENCE_ROOT")
 	workspace, err := OpenWorkspace(context.Background(), persistenceOptions(root))
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
 		os.Exit(20)
 	}
-	suffix := os.Getenv("GOPDFKIT_PERSISTENCE_SUFFIX")
+	suffix := os.Getenv("PAPERRUNE_PERSISTENCE_SUFFIX")
 	if _, err := workspace.CreateRevision("child-"+suffix+".paper", "document @child { page { text \""+suffix+"\" } }"); err != nil {
 		fmt.Fprint(os.Stderr, err)
 		os.Exit(21)
 	}
 	switch mode {
 	case "crash":
-		point := os.Getenv("GOPDFKIT_PERSISTENCE_CRASH_POINT")
+		point := os.Getenv("PAPERRUNE_PERSISTENCE_CRASH_POINT")
 		persistenceFaultHook = func(got string) {
 			if got == point {
 				process, _ := os.FindProcess(os.Getpid())
@@ -48,7 +48,7 @@ func TestPersistenceProcessHelper(t *testing.T) {
 		}
 		os.Exit(23) // the requested fault point was not reached
 	case "writer":
-		ready, start := os.Getenv("GOPDFKIT_PERSISTENCE_READY"), os.Getenv("GOPDFKIT_PERSISTENCE_START")
+		ready, start := os.Getenv("PAPERRUNE_PERSISTENCE_READY"), os.Getenv("PAPERRUNE_PERSISTENCE_START")
 		if err := os.WriteFile(ready, []byte("ready"), 0o600); err != nil {
 			os.Exit(24)
 		}
@@ -81,9 +81,9 @@ func TestPersistenceProcessHelper(t *testing.T) {
 func persistenceHelperCommand(root, mode, suffix string, extra ...string) *exec.Cmd {
 	command := exec.Command(os.Args[0], "-test.run=^TestPersistenceProcessHelper$")
 	command.Env = append(os.Environ(),
-		"GOPDFKIT_PERSISTENCE_HELPER="+mode,
-		"GOPDFKIT_PERSISTENCE_ROOT="+root,
-		"GOPDFKIT_PERSISTENCE_SUFFIX="+suffix,
+		"PAPERRUNE_PERSISTENCE_HELPER="+mode,
+		"PAPERRUNE_PERSISTENCE_ROOT="+root,
+		"PAPERRUNE_PERSISTENCE_SUFFIX="+suffix,
 	)
 	command.Env = append(command.Env, extra...)
 	return command
@@ -127,7 +127,7 @@ func TestPersistenceCrashInjectionRecoversLastCommittedGeneration(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			command := persistenceHelperCommand(root, "crash", item.point, "GOPDFKIT_PERSISTENCE_CRASH_POINT="+item.point)
+			command := persistenceHelperCommand(root, "crash", item.point, "PAPERRUNE_PERSISTENCE_CRASH_POINT="+item.point)
 			err = command.Run()
 			if err == nil {
 				t.Fatal("crash helper unexpectedly completed")
@@ -179,7 +179,7 @@ func TestPersistenceCoordinatesIndependentProcessWritersWithGenerationCAS(t *tes
 	children := make([]child, 2)
 	for index := range children {
 		ready := filepath.Join(base, fmt.Sprintf("ready-%d", index))
-		command := persistenceHelperCommand(root, "writer", fmt.Sprintf("%d", index), "GOPDFKIT_PERSISTENCE_READY="+ready, "GOPDFKIT_PERSISTENCE_START="+start)
+		command := persistenceHelperCommand(root, "writer", fmt.Sprintf("%d", index), "PAPERRUNE_PERSISTENCE_READY="+ready, "PAPERRUNE_PERSISTENCE_START="+start)
 		children[index] = child{command: command, ready: ready}
 		command.Stdout, command.Stderr = &children[index].output, &children[index].output
 		if err := command.Start(); err != nil {

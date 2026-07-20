@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 // Package browseroracle drives an external browser only for compatibility
@@ -169,7 +169,7 @@ func startFirefox(ctx context.Context, executable string, width, height int) (*b
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
 	_ = listener.Close()
-	profile, err := os.MkdirTemp("", "gopdfkit-firefox-oracle-")
+	profile, err := os.MkdirTemp("", "paperrune-firefox-oracle-")
 	if err != nil {
 		return nil, err
 	}

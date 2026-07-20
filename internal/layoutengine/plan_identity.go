@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-const planIdentityDomain = "gopdfkit.plan-id.v1"
+const planIdentityDomain = "paperrune.plan-id.v1"
 
 const MaxPlanIdentityCompatibilityFlags = 1024
 
@@ -263,7 +263,7 @@ func DeriveRenderID(input RenderIdentityInputs) (RenderID, error) {
 		}
 	}
 	digest := sha256.New()
-	writePlanIdentityField(digest, "domain", "gopdfkit.render-id.v1")
+	writePlanIdentityField(digest, "domain", "paperrune.render-id.v1")
 	writePlanIdentityField(digest, "plan", input.Plan.String())
 	for _, field := range fields {
 		writePlanIdentityField(digest, field.name, field.value)

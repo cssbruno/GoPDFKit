@@ -1,6 +1,9 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
+// Command lab-hemograma-html renders a patient-friendly Brazilian hemogram
+// from an HTML template. All people, identifiers, results, addresses, and
+// credentials in this example are fictional.
 package main
 
 import (
@@ -10,61 +13,50 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/examples/internal/assets"
-	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
+	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/paperrune/examples/internal/assets"
+	"github.com/cssbruno/paperrune/examples/internal/outpath"
 )
 
 type reportData struct {
 	PatientName string
+	PatientID   string
+	BirthSex    string
 	Doctor      string
-	Plan        string
-	Destination string
-	Age         string
-	RequestDate string
-	RequestTime string
-	IssueDate   string
+	Collection  string
+	Released    string
 	Protocol    string
-	Erythrogram []erythrogramRow
-	Leukogram   []leukogramRow
-	Platelets   plateletRow
+	Erythrogram []resultRow
+	Leukogram   []resultRow
+	Platelets   []resultRow
 }
 
-type erythrogramRow struct {
-	Name   string
-	Result string
-	Unit   string
-	Men    string
-	Women  string
-}
-
-type leukogramRow struct {
-	Name     string
-	Percent  string
-	Absolute string
-	Unit     string
-	Ref      string
-}
-
-type plateletRow struct {
-	Result string
-	Ref    string
-	Note   string
+type resultRow struct {
+	Name      string
+	Result    string
+	Unit      string
+	Reference string
+	Previous  string
+	Flag      string
 }
 
 func main() {
 	pdf := document.MustNew()
-	pdf.SetTitle("Hemograma HTML Modelo Brasileiro", false)
+	pdf.SetTitle("Hemograma HTML - modelo brasileiro contemporâneo", false)
 	pdf.SetCreator("examples/lab-hemograma-html", false)
 	addUTF8Fonts(pdf)
-	pdf.SetMargins(6, 7, 6)
-	pdf.SetAutoPageBreak(true, 5)
+	pdf.SetMargins(10, 10, 10)
+	pdf.SetAutoPageBreak(true, 10)
 	pdf.AddPage()
-	pdf.SetFont("dejavu", "", 6.8)
 
 	data := sampleData()
 	drawLabHeader(pdf, data)
-	pdf.SetY(67.4)
+	drawBodyTitle(pdf)
+	drawSummaryCards(pdf)
+	pdf.SetY(145)
+	// The strict unified HTML table cohort uses core-font metrics for intrinsic
+	// sizing. The drawn page chrome still uses the embedded UTF-8 family.
+	pdf.SetFont("Helvetica", "", 6.4)
 
 	fragment, err := renderHemogramaHTML(data)
 	if err != nil {
@@ -79,6 +71,7 @@ func main() {
 		log.Fatal(err)
 	}
 	html.WriteCompiled(3.05, compiled)
+	drawTechnicalNote(pdf)
 	drawFixedFooter(pdf)
 
 	if err := pdf.OutputFileAndClose(outpath.File("lab-hemograma-html.pdf")); err != nil {
@@ -104,78 +97,64 @@ func addUTF8Fonts(pdf *document.Document) {
 
 func renderHemogramaHTML(data reportData) (string, error) {
 	return document.RenderHTMLTemplate(hemogramaTemplate(), document.HTMLTemplateValues{
-		"erythrogram_rows": document.HTMLTemplateRaw(erythrogramRowsHTML(data.Erythrogram)),
-		"leukogram_rows":   document.HTMLTemplateRaw(leukogramRowsHTML(data.Leukogram)),
-		"platelet_result":  data.Platelets.Result,
-		"platelet_ref":     data.Platelets.Ref,
-		"platelet_note":    data.Platelets.Note,
+		"erythrogram_rows": document.HTMLTemplateRaw(resultRowsHTML(data.Erythrogram)),
+		"leukogram_rows":   document.HTMLTemplateRaw(resultRowsHTML(data.Leukogram)),
+		"platelet_rows":    document.HTMLTemplateRaw(resultRowsHTML(data.Platelets)),
 	})
 }
 
 func sampleData() reportData {
 	return reportData{
 		PatientName: "ANA CLARA ALMEIDA",
-		Doctor:      "Dra. Fernanda Matos",
-		Plan:        "PARTICULAR",
-		Destination: "LABORATÓRIO",
-		Age:         "38 Ano(s)",
-		RequestDate: "30/06/2026",
-		RequestTime: "08:12",
-		IssueDate:   "30/06/2026",
-		Protocol:    "238759",
-		Erythrogram: []erythrogramRow{
-			{"Hemácias", "5,78", "milhões/mm³", "4,50 - 5,50 milhões/mm³", "3,80 - 4,80 milhões/mm³"},
-			{"Hemoglobina", "15,0", "g/dL", "13,0 - 17,0 g/dL", "12,0 - 15,0 g/dL"},
-			{"Hematócrito", "46,7", "%", "40,0 - 50,0 %", "36,0 - 46,0 %"},
-			{"R.D.W.", "11,6", "%", "11,6 - 14,0 %", "11,6 - 14,0 %"},
-			{"V.C.M.", "80,8", "fl", "83,0 - 101,0 fl", "83,0 - 101,0 fl"},
-			{"H.C.M.", "26,0", "pg", "27,0 - 32,0 pg", "27,0 - 32,0 pg"},
-			{"C.H.C.M.", "32,1", "g/dL", "31,5 - 34,5 g/dL", "31,5 - 34,5 g/dL"},
+		PatientID:   "DEMO-260718-0042",
+		BirthSex:    "14/03/1988  |  Feminino",
+		Doctor:      "Dra. Helena Modelo  |  CRM-CE 00000",
+		Collection:  "18/07/2026 às 08:05",
+		Released:    "18/07/2026 às 10:14",
+		Protocol:    "DEMO-2026-0042",
+		Erythrogram: []resultRow{
+			{"Hemacias", "4,08", "milhoes/uL", "3,90 - 5,20", "4,21", ""},
+			{"Hemoglobina", "11,2", "g/dL", "12,0 - 15,5", "11,7", "BAIXO"},
+			{"Hematocrito", "34,7", "%", "36,0 - 46,0", "36,2", "BAIXO"},
+			{"VCM", "85,0", "fL", "80,0 - 100,0", "86,0", ""},
+			{"HCM", "27,5", "pg", "27,0 - 33,0", "27,8", ""},
+			{"CHCM", "32,3", "g/dL", "31,0 - 36,0", "32,4", ""},
+			{"RDW", "15,6", "%", "11,5 - 14,5", "15,1", "ALTO"},
 		},
-		Leukogram: []leukogramRow{
-			{"Leucócitos", "", "6.980", "/mm³", "4.000 - 10.000/mm³"},
-			{"Blastos", "0,0", "0", "/mm³", "0 /mm³"},
-			{"Promielócitos", "0,0", "0", "/mm³", "0 /mm³"},
-			{"Mielócitos", "0,0", "0", "/mm³", "0 /mm³"},
-			{"Metamielócitos", "0,0", "0", "/mm³", "0 /mm³"},
-			{"Bastonetes", "0,0", "0", "/mm³", "0 - 400 /mm³"},
-			{"Segmentados", "59,6", "4.160", "/mm³", "1.800 - 7.500 /mm³"},
-			{"Eosinófilos", "4,0", "279", "/mm³", "40 - 450 /mm³"},
-			{"Basófilos", "1,3", "91", "/mm³", "0 - 100 /mm³"},
-			{"Linfócitos Típicos", "28,5", "1.989", "/mm³", "1.200 - 5.200 /mm³"},
-			{"Linfócitos Reativos", "0,0", "0", "/mm³", "0 /mm³"},
-			{"Monócitos", "6,5", "454", "/mm³", "80 - 800 /mm³"},
+		Leukogram: []resultRow{
+			{"Leucocitos", "8.740", "/uL", "4.000 - 10.000", "7.960", ""},
+			{"Neutrofilos  59,8%", "5.227", "/uL", "1.800 - 7.700", "4.744", ""},
+			{"Linfocitos  29,0%", "2.535", "/uL", "1.000 - 4.000", "2.388", ""},
+			{"Monocitos  6,9%", "603", "/uL", "200 - 1.000", "549", ""},
+			{"Eosinofilos  3,6%", "315", "/uL", "20 - 500", "223", ""},
+			{"Basofilos  0,7%", "60", "/uL", "0 - 100", "56", ""},
 		},
-		Platelets: plateletRow{
-			Result: "116.000/mm³",
-			Ref:    "150.000 - 450.000/mm³",
-			Note:   "- Confirmado por microscopia.",
+		Platelets: []resultRow{
+			{"Plaquetas", "428.000", "/uL", "150.000 - 450.000", "391.000", ""},
+			{"Volume plaquetario medio", "11,8", "fL", "7,5 - 11,5", "11,2", "ALTO"},
 		},
 	}
 }
 
-func erythrogramRowsHTML(rows []erythrogramRow) string {
+func resultRowsHTML(rows []resultRow) string {
 	var b strings.Builder
 	for _, row := range rows {
-		fmt.Fprintf(&b,
-			`<tr><td width="25%%" class="exam-name">%s</td><td width="3%%" class="colon">:</td><td width="16%%" class="result">%s</td><td width="14%%" class="unit">%s</td><td width="21%%" class="ref">%s</td><td width="21%%" class="ref">%s</td></tr>`,
-			esc(row.Name), esc(row.Result), esc(row.Unit), esc(row.Men), esc(row.Women),
-		)
-	}
-	return b.String()
-}
-
-func leukogramRowsHTML(rows []leukogramRow) string {
-	var b strings.Builder
-	for _, row := range rows {
-		percent := row.Percent
-		if percent != "" {
-			percent += " %"
+		resultClass := "result"
+		statusClass := "status normal-status"
+		status := "NA FAIXA"
+		if row.Flag != "" {
+			resultClass += " abnormal-result"
+			statusClass = "status flag-status"
+			status = row.Flag
 		}
-		fmt.Fprintf(&b,
-			`<tr><td width="25%%" class="exam-name">%s</td><td width="3%%" class="colon">:</td><td width="14%%" class="result">%s</td><td width="16%%" class="result">%s</td><td width="10%%" class="unit">%s</td><td width="32%%" class="ref center">%s</td></tr>`,
-			esc(row.Name), esc(percent), esc(row.Absolute), esc(row.Unit), esc(row.Ref),
-		)
+		fmt.Fprintf(&b, `<tr>
+			<td width="29%%" class="exam-name">%s</td>
+			<td width="14%%" class="%s">%s</td>
+			<td width="11%%" class="unit">%s</td>
+			<td width="22%%" class="reference">%s</td>
+			<td width="11%%" class="previous">%s</td>
+			<td width="13%%" class="%s">%s</td>
+		</tr>`, esc(strings.ToUpper(row.Name)), resultClass, esc(row.Result), esc(row.Unit), esc(row.Reference), esc(row.Previous), statusClass, esc(status))
 	}
 	return b.String()
 }
@@ -185,115 +164,204 @@ func esc(s string) string {
 }
 
 func drawLabHeader(pdf *document.Document, data reportData) {
-	blue := color{0, 166, 216}
-	set(pdf, "B", 18, blue)
-	pdf.Text(7, 16, "VOLPI")
-	pdf.Text(7, 25, "BIANCARDI")
-	set(pdf, "", 4.3, blue)
-	pdf.Text(8, 31, "LABORATÓRIO DE ANÁLISES CLÍNICAS")
+	navy := color{18, 48, 71}
+	teal := color{0, 157, 157}
+	muted := color{96, 117, 130}
+	ink := color{31, 45, 57}
+	line := color{214, 224, 228}
+	pale := color{244, 248, 249}
+	paleAlert := color{252, 238, 239}
+	alert := color{186, 55, 64}
+	white := color{255, 255, 255}
 
-	pdf.SetFillColor(0, 166, 216)
-	pdf.Polygon([]document.Point{
-		{X: 48.2, Y: 20.4},
-		{X: 50.2, Y: 10.4},
-		{X: 54.4, Y: 15.1},
-		{X: 58.5, Y: 10.4},
-		{X: 61.0, Y: 20.4},
-		{X: 59.4, Y: 24.0},
-		{X: 55.0, Y: 26.0},
-		{X: 50.6, Y: 24.0},
-	}, "F")
+	fill(pdf, navy)
+	pdf.Rect(0, 0, 210, 5, "F")
+	fill(pdf, teal)
+	pdf.Circle(21, 21, 10, "F")
+	set(pdf, "B", 14.5, white)
+	centerText(pdf, 11, 15.4, 20, 9, "A+")
+	set(pdf, "B", 16, navy)
+	pdf.Text(37, 17.5, "AURORA")
+	set(pdf, "", 6.7, color{0, 117, 124})
+	pdf.Text(37.2, 23.3, "MEDICINA DIAGNÓSTICA")
+	set(pdf, "", 5.4, muted)
+	pdf.Text(37.2, 29, "Unidade Fortaleza  |  CNES 0000000 (fictício)")
+	pdf.Text(37.2, 33.4, "(85) 3000-0000  |  laudos@aurora-demo.test")
 
-	pdf.SetDrawColor(0, 135, 170)
-	pdf.SetLineWidth(0.2)
-	pdf.Line(72, 25.4, 198, 25.4)
-	set(pdf, "B", 6.8, blue)
-	rightText(pdf, 151, 11, 47, 3.5, "Responsáveis Técnicos:")
-	set(pdf, "", 6.5, blue)
-	rightText(pdf, 151, 16, 47, 3.5, "Dra. Camila Ribeiro")
-	rightText(pdf, 151, 20.5, 47, 3.5, "CRBM 00000")
-	pdf.SetDrawColor(0, 135, 170)
-	pdf.Line(151, 25.4, 198, 25.4)
-	set(pdf, "B", 6.5, blue)
-	rightText(pdf, 151, 31.5, 47, 3.5, "E-mail: laudo@exemplo.test")
-	rightText(pdf, 151, 36, 47, 3.5, "www.laboratorioexemplo.test")
+	set(pdf, "B", 5, muted)
+	rightText(pdf, 145, 11, 53, 3.5, "RESULTADO LABORATORIAL")
+	set(pdf, "B", 9.6, navy)
+	rightText(pdf, 132, 17, 66, 5, "HEMOGRAMA COMPLETO")
+	set(pdf, "", 5.4, muted)
+	rightText(pdf, 145, 25, 53, 3.5, "Laudo "+data.Protocol)
+	rightText(pdf, 145, 29.5, 53, 3.5, "Emitido "+data.Released)
 
-	pdf.SetDrawColor(30, 30, 30)
-	pdf.SetLineWidth(0.22)
-	pdf.Line(4, 43, 206, 43)
-	pdf.Line(4, 62.5, 206, 62.5)
+	fill(pdf, paleAlert)
+	pdf.Rect(0, 39, 210, 7, "F")
+	set(pdf, "B", 5.8, alert)
+	centerText(pdf, 0, 40.5, 210, 4, "MODELO FICTÍCIO  |  DADOS SINTÉTICOS  |  SEM VALIDADE CLÍNICA")
 
-	meta(pdf, 5, 47, "Paciente....:", data.PatientName)
-	meta(pdf, 5, 51.5, "Médico......:", data.Doctor)
-	meta(pdf, 5, 56, "Convênio....:", data.Plan)
-	meta(pdf, 74, 56, "Destino:", data.Destination)
-	meta(pdf, 124, 47, "Idade.............:", data.Age)
-	meta(pdf, 124, 51.5, "Data Req..........:", data.RequestDate)
-	meta(pdf, 124, 56, "Hora Req..........:", data.RequestTime)
-	meta(pdf, 124, 60.5, "Data Emissão...:", data.IssueDate)
-	drawBarcode(pdf, 181, 44.4, 18, 9.5, data.Protocol)
+	fill(pdf, white)
+	draw(pdf, line)
+	pdf.RoundedRect(10, 50, 190, 31, 2.4, "1234", "DF")
+	headerField(pdf, 15, 57, "PACIENTE", data.PatientName, 59)
+	headerField(pdf, 79, 57, "NASCIMENTO / SEXO", data.BirthSex, 51)
+	headerField(pdf, 139, 57, "ID DO PACIENTE", data.PatientID, 56)
+	pdf.Line(15, 66.5, 195, 66.5)
+	headerField(pdf, 15, 72, "SOLICITANTE", data.Doctor, 59)
+	headerField(pdf, 79, 72, "COLETA", data.Collection, 51)
+	headerField(pdf, 139, 72, "LIBERAÇÃO", data.Released, 56)
 
-	set(pdf, "", 6.8, black)
+	fill(pdf, pale)
+	pdf.RoundedRect(10, 86, 190, 19, 2.4, "1234", "DF")
+	headerField(pdf, 15, 93, "AMOSTRA", "Sangue total com EDTA", 47)
+	headerField(pdf, 67, 93, "MÉTODO", "Impedância, citometria de fluxo e espectrofotometria", 79)
+	headerField(pdf, 151, 93, "QUALIDADE", "Amostra íntegra", 44)
+	set(pdf, "", 5.2, ink)
 }
 
 func drawFixedFooter(pdf *document.Document) {
+	navy := color{18, 48, 71}
+	muted := color{96, 117, 130}
+	ink := color{31, 45, 57}
+	line := color{214, 224, 228}
+	white := color{255, 255, 255}
+
 	pdf.SetPage(1)
-	pdf.SetTextColor(0, 0, 0)
-	pdf.SetFont("dejavu", "", 5.2)
-	pdf.Text(14, 274.8, "* O valor preditivo dos testes laboratoriais depende da análise dos seus resultados e dos dados clínicos-epidemiológicos do paciente.")
-	pdf.Text(14, 279, "Unidade Matriz 4136-42-40 | Rua Exemplo, 158 - Centro | Unidade Lapa 4136-2534 | Rua Modelo, 229")
+	// Unified HTML requires the standard automatic page-break policy while it
+	// plans. Fixed page chrome below the body is positioned manually.
+	pdf.SetAutoPageBreak(false, 0)
+	draw(pdf, line)
+	pdf.Line(10, 257, 200, 257)
+	set(pdf, "B", 5.1, muted)
+	pdf.Text(12, 263, "RESPONSÁVEL TÉCNICA E PROFISSIONAL SIGNATÁRIA")
+	set(pdf, "B", 7, navy)
+	pdf.Text(12, 269, "Dra. Marina Campos")
+	set(pdf, "", 5.6, ink)
+	pdf.Text(12, 274, "Biomédica  |  CRBM-6 00000 (fictício)")
+	set(pdf, "", 4.9, muted)
+	pdf.Text(12, 279, "Assinatura demonstrativa: 84C2-A7F1-0D42-2026")
 
-	pdf.SetDrawColor(0, 0, 0)
-	pdf.SetLineWidth(0.22)
-	pdf.Circle(8.5, 281.5, 4, "D")
-	pdf.Circle(198, 281.5, 4, "D")
-	pdf.SetFont("dejavu", "B", 5.2)
-	pdf.SetXY(4, 281)
-	pdf.CellFormat(9, 3, "PNCQ", "", 0, "C", false, 0, "")
-	pdf.SetXY(193.5, 281)
-	pdf.CellFormat(9, 3, "ISO", "", 0, "C", false, 0, "")
+	set(pdf, "B", 5.1, muted)
+	pdf.Text(120, 263, "VALIDAÇÃO DO DOCUMENTO")
+	set(pdf, "", 5.5, ink)
+	pdf.Text(120, 269, "aurora-demo.test/validar")
+	pdf.Text(120, 274, "Código DEMO-2026-0042")
+	set(pdf, "I", 4.8, muted)
+	pdf.Text(120, 279, "Endereço sem função real")
 
-	pdf.Curve(158, 238, 163, 227, 168, 238, "D")
-	pdf.Curve(165, 238, 171, 230, 177, 238, "D")
-	pdf.Line(154, 242, 190, 242)
-	pdf.SetFont("dejavu", "B", 6)
-	pdf.SetXY(154, 244)
-	pdf.CellFormat(36, 3.5, "Dra. Camila Ribeiro", "", 1, "C", false, 0, "")
-	pdf.SetFont("dejavu", "", 5.6)
-	pdf.SetX(154)
-	pdf.CellFormat(36, 3.5, "Biomédica", "", 1, "C", false, 0, "")
-	pdf.SetX(154)
-	pdf.CellFormat(36, 3.5, "CRBM 00000", "", 1, "C", false, 0, "")
-
-	pdf.SetTextColor(155, 18, 18)
-	pdf.SetFont("dejavu", "B", 5.4)
-	pdf.SetXY(62, 286)
-	pdf.CellFormat(86, 3.5, "DOCUMENTO DE EXEMPLO - NÃO UTILIZAR COMO LAUDO REAL", "", 0, "C", false, 0, "")
-	pdf.SetTextColor(0, 0, 0)
+	fill(pdf, navy)
+	pdf.Rect(0, 286, 210, 11, "F")
+	set(pdf, "", 5, white)
+	pdf.Text(10, 291, "AURORA DIAGNÓSTICOS DEMO  |  Rua Exemplo, 120 - Fortaleza/CE  |  CNES 0000000")
+	set(pdf, "B", 5, white)
+	rightText(pdf, 170, 288.5, 30, 3.5, "Página 1 de 1")
+	set(pdf, "", 4.7, color{190, 213, 224})
+	pdf.Text(10, 295, "Documento demonstrativo; nenhum dado pertence a paciente ou laboratório real.")
 }
 
-func drawBarcode(pdf *document.Document, x, y, w, h float64, label string) {
-	pattern := []float64{0.45, 0.25, 0.8, 0.25, 0.35, 0.6, 0.25, 0.25, 1.0, 0.35, 0.25, 0.7, 0.25, 0.45, 0.25, 0.9, 0.25, 0.35, 0.6, 0.25}
-	pdf.SetFillColor(0, 0, 0)
-	cursor := x
-	for i, bar := range pattern {
-		if i%2 == 0 {
-			pdf.Rect(cursor, y, bar, h, "F")
-		}
-		cursor += bar
-		if cursor > x+w {
-			break
-		}
+func drawTechnicalNote(pdf *document.Document) {
+	fill(pdf, color{252, 238, 239})
+	draw(pdf, color{239, 199, 202})
+	pdf.RoundedRect(10, 237, 190, 15, 2, "1234", "DF")
+	fill(pdf, color{186, 55, 64})
+	pdf.RoundedRectExt(10, 237, 3, 15, 2, 0, 0, 2, "F")
+	set(pdf, "B", 5.1, color{186, 55, 64})
+	pdf.Text(17, 242.3, "OBSERVAÇÃO TÉCNICA")
+	set(pdf, "", 5.7, color{31, 45, 57})
+	pdf.Text(17, 247.1, "Discreta anisocitose. Resultados sinalizados devem ser interpretados com o contexto clínico.")
+	set(pdf, "I", 4.7, color{96, 117, 130})
+	pdf.Text(17, 250.7, "Faixas de referência variam conforme método, população e laboratório executor.")
+}
+
+func drawBodyTitle(pdf *document.Document) {
+	set(pdf, "B", 13.5, color{18, 48, 71})
+	pdf.Text(10, 116, "Seu hemograma")
+	set(pdf, "", 5.6, color{96, 117, 130})
+	pdf.Text(10, 122, "Leitura visual com resultado atual, faixa de referência e histórico.")
+	rightText(pdf, 122, 118.5, 78, 3.5, "Verde: na faixa  |  Vermelho: sinalizado")
+}
+
+func drawSummaryCards(pdf *document.Document) {
+	drawSummaryCard(pdf, 10, 127, 59, "15 parâmetros analisados", false)
+	drawSummaryCard(pdf, 75.5, 127, 59, "4 resultados sinalizados", true)
+	drawSummaryCard(pdf, 141, 127, 59, "Histórico comparativo", false)
+}
+
+func drawSummaryCard(pdf *document.Document, x, y, w float64, text string, warning bool) {
+	background := color{244, 248, 249}
+	border := color{214, 224, 228}
+	foreground := color{18, 48, 71}
+	if warning {
+		background = color{252, 238, 239}
+		border = color{239, 199, 202}
+		foreground = color{186, 55, 64}
 	}
-	set(pdf, "", 5.5, black)
-	centerText(pdf, x, y+h+3, w, 3, label)
+	fill(pdf, background)
+	draw(pdf, border)
+	pdf.RoundedRect(x, y, w, 13, 2, "1234", "DF")
+	set(pdf, "B", 6.2, foreground)
+	centerText(pdf, x+2, y+4.7, w-4, 3.5, text)
 }
 
-func meta(pdf *document.Document, x, y float64, label, text string) {
-	set(pdf, "", 5.6, black)
+func headerField(pdf *document.Document, x, y float64, label, value string, width float64) {
+	set(pdf, "B", 4.9, color{96, 117, 130})
 	pdf.Text(x, y, label)
-	set(pdf, "B", 5.6, black)
-	pdf.Text(x+18, y, text)
+	set(pdf, "B", 6.1, color{31, 45, 57})
+	pdf.SetXY(x, y+1.5)
+	pdf.CellFormat(width, 4.8, value, "", 0, "L", false, 0, "")
+}
+
+func hemogramaTemplate() string {
+	return `
+		<style>
+			p { margin:0; color:#1f2d39; }
+			table { width:100%; border-collapse:collapse; }
+			th { background-color:#123047; color:#ffffff; border:none; padding:3pt; font-size:5.2pt; text-align:left; }
+			th.center { text-align:center; }
+			td { color:#1f2d39; border:none; border-bottom:1px solid #d6e0e4; padding:2.2pt; font-size:5.9pt; vertical-align:middle; }
+			.section-cell { background-color:#e8f7f6; color:#00757c; font-size:5.9pt; font-weight:bold; padding:3pt; }
+			.exam-name { font-size:5.7pt; }
+			.result { color:#1f2d39; text-align:right; font-size:6.4pt; font-weight:bold; }
+			.abnormal-result { color:#ba3740; }
+			.unit { color:#607582; font-size:5.2pt; }
+			.reference { color:#526b78; font-size:5.4pt; text-align:center; }
+			.previous { color:#607582; font-size:5.3pt; text-align:center; }
+			.status { font-size:4.7pt; text-align:center; font-weight:bold; }
+			.normal-status { color:#4c7e6f; }
+			.flag-status { color:#ba3740; background-color:#fceeed; }
+		</style>
+
+		<table>
+			<thead><tr>
+				<th width="29%">EXAME</th><th width="14%" class="center">SEU RESULTADO</th><th width="11%">UNIDADE</th>
+				<th width="22%" class="center">REFERENCIA</th><th width="11%" class="center">ANTERIOR</th><th width="13%" class="center">STATUS</th>
+			</tr></thead>
+			<tbody>
+				<tr><td colspan="6" class="section-cell">ERITROGRAMA  |  SERIE VERMELHA</td></tr>
+				{{erythrogram_rows}}
+				<tr><td colspan="6" class="section-cell">LEUCOGRAMA  |  CONTAGEM ABSOLUTA E DIFERENCIAL</td></tr>
+				{{leukogram_rows}}
+				<tr><td colspan="6" class="section-cell">PLAQUETAS  |  CONTAGEM E VOLUME MEDIO</td></tr>
+				{{platelet_rows}}
+			</tbody>
+		</table>
+
+	`
+}
+
+func fill(pdf *document.Document, c color) {
+	pdf.SetFillColor(c.r, c.g, c.b)
+}
+
+func draw(pdf *document.Document, c color) {
+	pdf.SetDrawColor(c.r, c.g, c.b)
+	pdf.SetLineWidth(0.2)
+}
+
+func set(pdf *document.Document, style string, size float64, c color) {
+	pdf.SetFont("dejavu", style, size)
+	pdf.SetTextColor(c.r, c.g, c.b)
 }
 
 func rightText(pdf *document.Document, x, y, w, h float64, text string) {
@@ -310,65 +378,4 @@ type color struct {
 	r int
 	g int
 	b int
-}
-
-var black = color{0, 0, 0}
-
-func set(pdf *document.Document, style string, size float64, c color) {
-	pdf.SetFont("dejavu", style, size)
-	pdf.SetTextColor(c.r, c.g, c.b)
-}
-
-func hemogramaTemplate() string {
-	return `
-		<style>
-			p { margin:0; line-height:1.1; color:#000000; }
-			.exam-head { display:flex; flex-direction:row; align-items:flex-end; gap:4mm; margin:0 0 1.4mm 0; }
-			.exam-title { flex:0 0 43mm; color:#000000; font-size:8.9pt; font-weight:bold; }
-			.meta-material { flex:0 0 32mm; color:#000000; font-size:5.85pt; }
-			.meta-method { flex:0 0 43mm; color:#000000; font-size:5.85pt; }
-			.exam-source { flex:1; text-align:right; font-size:5.55pt; font-style:italic; }
-			.label { font-weight:bold; }
-			table { width:100%; border-collapse:collapse; }
-			td { border:0; padding:0.18mm 0.6mm; color:#000000; vertical-align:top; font-size:6.15pt; }
-			.section-cell { font-size:7.4pt; font-weight:bold; font-style:italic; padding:0.75mm 0.6mm 0.45mm 0.6mm; }
-			.ref-head { font-size:5.65pt; font-weight:bold; font-style:italic; text-align:center; padding:0.05mm 0.6mm 0.45mm 0.6mm; }
-			.exam-name { font-size:6.45pt; }
-			.colon { text-align:center; }
-			.result { text-align:right; font-size:6.9pt; font-weight:bold; font-style:italic; }
-			.unit { font-size:6.45pt; font-weight:bold; font-style:italic; }
-			.ref { font-size:5.55pt; text-align:center; }
-			.center { text-align:center; }
-			.obs-cell { font-size:5.75pt; padding:0.65mm 0.6mm 1.1mm 0.6mm; }
-			.platelet-title { font-size:7.4pt; font-weight:bold; font-style:italic; padding-top:0.8mm; }
-			.platelet-value { font-size:7.4pt; font-weight:bold; font-style:italic; text-align:right; padding-top:0.8mm; }
-			.platelet-ref { font-size:5.7pt; text-align:center; padding-top:1mm; }
-		</style>
-
-		<div class="exam-head">
-			<div class="exam-title">Hemograma</div>
-			<div class="meta-material"><span class="label">Material:</span> Sangue</div>
-			<div class="meta-method"><span class="label">Método:</span> Cell-Dyn 3700.</div>
-			<div class="exam-source">Fonte: Dacie and Lewis - Practical Haematology 2017.</div>
-		</div>
-
-		<table>
-			<tr><td colspan="6" class="section-cell">Eritrograma</td></tr>
-			<tr><td width="25%"></td><td width="3%"></td><td width="16%"></td><td width="14%"></td><td width="21%" class="ref-head">Homens</td><td width="21%" class="ref-head">Mulheres</td></tr>
-			{{erythrogram_rows}}
-			<tr><td colspan="6" class="obs-cell">Observações: - Discreta Anisocitose: Microcitose (Discreta)</td></tr>
-			<tr><td colspan="6" class="section-cell">Leucograma</td></tr>
-			<tr><td width="25%"></td><td width="3%"></td><td width="14%"></td><td width="16%"></td><td width="10%"></td><td width="32%" class="ref-head">Valores de Referência</td></tr>
-			{{leukogram_rows}}
-			<tr><td colspan="6" class="obs-cell">Observações: Normal</td></tr>
-			<tr>
-				<td width="25%" class="platelet-title">Plaquetas</td>
-				<td width="3%" class="platelet-title">:</td>
-				<td width="16%" class="platelet-value">{{platelet_result}}</td>
-				<td width="14%"></td>
-				<td width="42%" colspan="2" class="platelet-ref">{{platelet_ref}}</td>
-			</tr>
-			<tr><td colspan="6" class="obs-cell">Observações: {{platelet_note}}</td></tr>
-		</table>
-	`
 }

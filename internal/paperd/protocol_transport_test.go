@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -217,14 +217,14 @@ func TestProtocolHandlerPanicIsContainedAndRedacted(t *testing.T) {
 }
 
 func TestProtocolVersionFixtureIsStableAcrossProcesses(t *testing.T) {
-	if os.Getenv("GOPDFKIT_PROTOCOL_TRANSPORT_FIXTURE") == "1" {
+	if os.Getenv("PAPERRUNE_PROTOCOL_TRANSPORT_FIXTURE") == "1" {
 		encoded, _ := signedProtocolFixture(t, "fixture-transport-v1")
 		_, _ = os.Stdout.Write(encoded)
 		os.Exit(0)
 	}
 	run := func() []byte {
 		command := exec.Command(os.Args[0], "-test.run=^TestProtocolVersionFixtureIsStableAcrossProcesses$")
-		command.Env = append(os.Environ(), "GOPDFKIT_PROTOCOL_TRANSPORT_FIXTURE=1")
+		command.Env = append(os.Environ(), "PAPERRUNE_PROTOCOL_TRANSPORT_FIXTURE=1")
 		output, err := command.Output()
 		if err != nil {
 			t.Fatalf("fixture process: %v", err)

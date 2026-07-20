@@ -458,6 +458,7 @@ function renderAuthoringControls() {
   if (metadata.templateTargets.length) available.push('template');
   if (metadata.documentTarget) available.push('import');
   if (metadata.documentTarget) available.push('schema');
+  if (metadata.documentTarget) available.push('schema-object');
   if (metadata.schemaFields.length) available.push('schema-field');
   if (metadata.bindingTargets.length && metadata.schemas.some(schema => schema.fields.length)) available.push('binding');
   if (metadata.documentTarget && metadata.schemas.length) available.push('scenario-create');
@@ -500,6 +501,9 @@ function renderAuthoringControls() {
   } else if (draft.operation === 'schema') {
     draft.target = metadata.documentTarget; draft.id = draft.id || '@new-schema';
     form.append(authoringInput('Schema ID', draft.id, value => draft.id=value));
+  } else if (draft.operation === 'schema-object') {
+    draft.target = metadata.documentTarget; draft.id = draft.id || '@NewObject';
+    form.append(authoringInput('Custom object ID', draft.id, value => draft.id=value));
   } else if (draft.operation === 'import') {
     draft.target = metadata.documentTarget; draft.importPath = draft.importPath || 'styles/design.paper';
     form.append(authoringInput('Project-relative import', draft.importPath, value => draft.importPath=value));
@@ -523,10 +527,10 @@ function renderAuthoringControls() {
     }
   } else if (draft.operation === 'schema-field') {
     const targets=metadata.schemaFields; const targetIDs=targets.map(item=>item.id); draft.target=targetIDs.includes(draft.target)?draft.target:targetIDs[0];
-    const types=['string','number','bool','object','list']; draft.kind=types.includes(draft.kind)?draft.kind:'string'; draft.id=draft.id||'@new-field';
+    const types=['string','number','bool','object','list',...metadata.objectTypes]; draft.kind=types.includes(draft.kind)?draft.kind:'string'; draft.id=draft.id||'@new-field';
     form.append(authoringSelect('Parent',targetIDs,draft.target,value=>draft.target=value),authoringSelect('Field type',types,draft.kind,value=>{draft.kind=value;renderAuthoringControls();}),authoringInput('Readable ID',draft.id,value=>draft.id=value));
     if (draft.kind === 'list') {
-      const items=['string','number','bool','object']; draft.itemType=items.includes(draft.itemType)?draft.itemType:'string'; draft.maxItems=draft.maxItems||16;
+      const items=['string','number','bool','object',...metadata.objectTypes]; draft.itemType=items.includes(draft.itemType)?draft.itemType:'string'; draft.maxItems=draft.maxItems||16;
       form.append(authoringSelect('List item type',items,draft.itemType,value=>draft.itemType=value),authoringNumberInput('Max items',draft.maxItems,value=>draft.maxItems=value,{max:'1000000'}));
     }
   } else if (draft.operation === 'scenario-value') {

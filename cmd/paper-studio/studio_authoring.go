@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -13,11 +13,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/internal/papercompile"
-	"github.com/cssbruno/gopdfkit/internal/paperedit"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/internal/paperscenario"
+	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/paperrune/internal/papercompile"
+	"github.com/cssbruno/paperrune/internal/paperedit"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperscenario"
 )
 
 type studioBindingChoice struct {
@@ -61,6 +61,7 @@ type studioAuthoringResponse struct {
 	TemplateTargets []studioAuthoringTarget   `json:"template_targets"`
 	BindingTargets  []studioAuthoringTarget   `json:"binding_targets"`
 	Schemas         []studioSchemaChoice      `json:"schemas"`
+	ObjectTypes     []string                  `json:"object_types"`
 	SchemaFields    []studioSchemaFieldTarget `json:"schema_field_targets"`
 	Scenarios       []string                  `json:"scenarios"`
 	ScenarioValues  []studioScenarioValue     `json:"scenario_values"`
@@ -321,7 +322,7 @@ func buildStudioAuthoringResponse(snapshot *studioSnapshot, ast paperlang.AST) s
 	response := studioAuthoringResponse{
 		FormatVersion: 1, Revision: snapshot.revision, SourceRevision: studioSourceRevision(snapshot.source),
 		PlanHash: snapshot.plan.Hash(), Scenario: snapshot.scenario, StressPresets: []string{"empty", "typical", "stress"},
-		TemplateTargets: []studioAuthoringTarget{}, BindingTargets: []studioAuthoringTarget{}, Schemas: []studioSchemaChoice{}, SchemaFields: []studioSchemaFieldTarget{}, Scenarios: []string{}, ScenarioValues: []studioScenarioValue{}, Components: []string{},
+		TemplateTargets: []studioAuthoringTarget{}, BindingTargets: []studioAuthoringTarget{}, Schemas: []studioSchemaChoice{}, ObjectTypes: []string{}, SchemaFields: []studioSchemaFieldTarget{}, Scenarios: []string{}, ScenarioValues: []studioScenarioValue{}, Components: []string{},
 	}
 	hasPage := false
 	var walk func(*paperlang.Node)
@@ -344,6 +345,9 @@ func buildStudioAuthoringResponse(snapshot *studioSnapshot, ast paperlang.AST) s
 		if node.ID != "" && node.Kind == paperlang.NodeComponent {
 			response.Components = append(response.Components, node.ID)
 		}
+		if node.ID != "" && node.Kind == paperlang.NodeObjectType {
+			response.ObjectTypes = append(response.ObjectTypes, strings.TrimPrefix(node.ID, "@"))
+		}
 		for _, member := range node.Members {
 			walk(member.Node)
 		}
@@ -357,7 +361,13 @@ func buildStudioAuthoringResponse(snapshot *studioSnapshot, ast paperlang.AST) s
 	schemas := papercompile.ExtractSchemas(ast)
 	for _, schema := range schemas.Schemas {
 		choice := studioSchemaChoice{Name: schema.Name, Fields: []studioBindingChoice{}}
-		flattenStudioFields(&choice.Fields, schema.Name, schema.Fields, false)
+		prefix := schema.Name
+		if len(schemas.Schemas) == 1 {
+			prefix = ""
+		} else {
+			prefix = strings.TrimPrefix(prefix, "@")
+		}
+		flattenStudioFields(&choice.Fields, prefix, schema.Fields, false)
 		response.Schemas = append(response.Schemas, choice)
 	}
 	collectStudioSchemaFieldTargets(ast.Root, "", "", &response.SchemaFields)
@@ -384,6 +394,7 @@ func buildStudioAuthoringResponse(snapshot *studioSnapshot, ast paperlang.AST) s
 		return response.ScenarioValues[i].Path < response.ScenarioValues[j].Path
 	})
 	sort.Strings(response.Components)
+	sort.Strings(response.ObjectTypes)
 	return response
 }
 
@@ -391,7 +402,7 @@ func collectStudioSchemaFieldTargets(node *paperlang.Node, schema, prefix string
 	if node == nil {
 		return
 	}
-	if node.Kind == paperlang.NodeSchema {
+	if node.Kind == paperlang.NodeSchema || node.Kind == paperlang.NodeObjectType {
 		schema = node.ID
 		prefix = ""
 		if node.ID != "" {
@@ -411,19 +422,13 @@ func collectStudioSchemaFieldTargets(node *paperlang.Node, schema, prefix string
 }
 
 func schemaFieldTargetCanContainChildren(node *paperlang.Node) bool {
-	typeName, itemType := "", ""
-	for _, member := range node.Members {
-		if member.Property == nil || member.Property.Value.StringValue == nil {
-			continue
-		}
-		switch member.Property.Name {
-		case "type":
-			typeName = *member.Property.Value.StringValue
-		case "item-type":
-			itemType = *member.Property.Value.StringValue
-		}
+	if node.FieldType == paperlang.FieldObject {
+		return true
 	}
-	return typeName == "object" || typeName == "list" && itemType == "object"
+	if node.FieldType != paperlang.FieldList {
+		return false
+	}
+	return node.ItemType == paperlang.FieldObject
 }
 
 func collectStudioScenarioValues(root *paperlang.Node, output *[]studioScenarioValue) {
@@ -478,7 +483,7 @@ func studioScenarioScalar(value *paperlang.Scalar) (string, string, bool) {
 
 func flattenStudioFields(output *[]studioBindingChoice, prefix string, fields []papercompile.FieldDescriptor, collection bool) {
 	for _, field := range fields {
-		path := prefix + "." + field.Name
+		path := strings.TrimPrefix(prefix+"."+field.Name, ".")
 		switch field.Kind {
 		case papercompile.SchemaObject:
 			flattenStudioFields(output, path, field.Fields, collection)

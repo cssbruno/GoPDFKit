@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document_test
@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/internal/testsupport/example"
+	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/paperrune/internal/testsupport/example"
 )
 
 func TestSetXmpMetadataReferencedFromCatalog(t *testing.T) {
@@ -46,7 +46,7 @@ func TestComplianceMetadataGeneratesPDFA4AndPDFUA2Identifiers(t *testing.T) {
 		PDFUA2:     true,
 		Arlington:  true,
 		Lang:       "en-US",
-		Identifier: "urn:uuid:gopdfkit-test",
+		Identifier: "urn:uuid:paperrune-test",
 	})
 	if err := pdf.SetOutputIntent([]byte("test-icc-profile"), "sRGB IEC61966-2.1"); err != nil {
 		t.Fatalf("SetOutputIntent() error = %v", err)
@@ -76,8 +76,8 @@ func TestComplianceMetadataGeneratesPDFA4AndPDFUA2Identifiers(t *testing.T) {
 		"<pdfaid:conformance>F</pdfaid:conformance>",
 		"<pdfuaid:part>2</pdfuaid:part>",
 		"<pdfuaid:rev>2024</pdfuaid:rev>",
-		"<gopdfkit:ArlingtonValidationRequired>True</gopdfkit:ArlingtonValidationRequired>",
-		"urn:uuid:gopdfkit-test",
+		"<paperrune:ArlingtonValidationRequired>True</paperrune:ArlingtonValidationRequired>",
+		"urn:uuid:paperrune-test",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("generated PDF does not contain %q", want)
@@ -102,7 +102,7 @@ func TestPDFUA2TaggedPDFStructureTreeAndMarkedContent(t *testing.T) {
 	pdf.CellFormat(0, 8, "External link", "", 1, "L", false, 0, "https://example.com")
 	pdf.ImageOptions(example.ImageFile("logo.png"), 10, 35, 18, 0, false, document.ImageOptions{
 		ImageType: "png",
-		AltText:   "GoPDFKit logo",
+		AltText:   "PaperRune logo",
 	}, 0, "")
 
 	var output bytes.Buffer
@@ -134,7 +134,7 @@ func TestPDFUA2TaggedPDFStructureTreeAndMarkedContent(t *testing.T) {
 		"/Subtype /Link /Rect",
 		"/F 4",
 		"/Alt (",
-		string([]byte{0xfe, 0xff, 0x00, 'G', 0x00, 'o'}),
+		string([]byte{0xfe, 0xff, 0x00, 'P', 0x00, 'a'}),
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("generated tagged PDF does not contain %q", want)

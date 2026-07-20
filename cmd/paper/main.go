@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 // Command paper provides deterministic, bounded tools for .paper documents.
@@ -16,11 +16,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/document"
-	"github.com/cssbruno/gopdfkit/internal/paperassets"
-	"github.com/cssbruno/gopdfkit/internal/papercompile"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/internal/paperscenario"
+	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/paperrune/internal/paperassets"
+	"github.com/cssbruno/paperrune/internal/papercompile"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperscenario"
 )
 
 const (
@@ -207,6 +207,7 @@ func runCheck(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	edgeSeed := set.Int64("seed", 1, "seed for reproducible edge-case data")
 	edgeMaxItems := set.Uint("edge-max-items", 64, "maximum generated items per schema list")
 	edgeOutput := set.String("edge-output", "", "write generated JSON and PDF cases under DIR")
+	edgeVisual := set.Bool("edge-visual", false, "write SVG previews and an HTML gallery under --edge-output")
 	assets := addAssetFlags(set)
 	file, code := parseOneFile(set, args)
 	if code >= 0 {
@@ -227,14 +228,17 @@ func runCheck(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if *scenario != "" || *data.file != "" {
 			return commandError(*jsonMode, stdout, stderr, "check", errors.New("--edge-cases cannot be combined with --scenario or --data"))
 		}
+		if *edgeVisual && *edgeOutput == "" {
+			return commandError(*jsonMode, stdout, stderr, "check", errors.New("--edge-visual requires --edge-output"))
+		}
 		return checkGeneratedEdgeCases(edgeCheckRequest{
 			file: displayFile(file), source: string(source), schema: *data.schema, locale: *data.locale,
-			count: *edgeCases, seed: *edgeSeed, maxItems: *edgeMaxItems, outputDir: *edgeOutput,
+			count: *edgeCases, seed: *edgeSeed, maxItems: *edgeMaxItems, outputDir: *edgeOutput, visual: *edgeVisual,
 			assets: catalog, jsonMode: *jsonMode,
 		}, stdout, stderr)
 	}
-	if *edgeOutput != "" {
-		return commandError(*jsonMode, stdout, stderr, "check", errors.New("--edge-output requires --edge-cases"))
+	if *edgeOutput != "" || *edgeVisual {
+		return commandError(*jsonMode, stdout, stderr, "check", errors.New("--edge-output and --edge-visual require --edge-cases"))
 	}
 	input, err := data.load(file, stdin)
 	if err != nil {

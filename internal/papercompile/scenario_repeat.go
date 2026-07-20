@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -10,10 +10,10 @@ import (
 	"math"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/internal/paperexpr"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/internal/paperrepeat"
-	"github.com/cssbruno/gopdfkit/internal/paperscenario"
+	"github.com/cssbruno/paperrune/internal/paperexpr"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperrepeat"
+	"github.com/cssbruno/paperrune/internal/paperscenario"
 )
 
 // ScenarioCompileLimits bounds fixture resolution, expressions, keyed repeat
@@ -262,7 +262,11 @@ func (e *repeatExpansionContext) expandRepeat(node *paperlang.Node, prior map[*p
 	}
 	source, sourceSpan, ok := repeatStringProperty(properties["source"])
 	if !ok {
-		e.add("PAPER_REPEAT_SOURCE", "repeat source must be a quoted absolute schema list path", "add source: \"@schema.items\"", propertySpan(properties["source"], node.HeaderSpan))
+		e.add("PAPER_REPEAT_SOURCE", "repeat source must be a quoted schema list path", "add source: \"items\"", propertySpan(properties["source"], node.HeaderSpan))
+		return nil
+	}
+	if strings.HasPrefix(strings.TrimSpace(source), "@") {
+		e.add("PAPER_REPEAT_SOURCE", "repeat source paths no longer use @schema prefixes", "use a root-relative path, or schema.items when several schemas are declared", sourceSpan)
 		return nil
 	}
 	prefix, _, ok := repeatStringProperty(properties["instance-prefix"])
@@ -279,10 +283,13 @@ func (e *repeatExpansionContext) expandRepeat(node *paperlang.Node, prior map[*p
 	var itemFields []FieldDescriptor
 	var items []paperscenario.Item
 	var err error
-	if parent == nil || strings.HasPrefix(source, "@") {
-		itemFields, err = repeatSchemaItem(source, e.schemas)
+	if parent == nil {
+		canonicalSource, err = qualifySchemaPath(source, e.schemas)
 		if err == nil {
-			items, err = repeatFixtureItems(e.fixture, source)
+			itemFields, err = repeatSchemaItem(canonicalSource, e.schemas)
+		}
+		if err == nil {
+			items, err = repeatFixtureItems(e.fixture, canonicalSource)
 		}
 	} else {
 		canonicalSource = combineBindingPath(parent.bindingBase, source)
@@ -484,7 +491,7 @@ func (e *repeatExpansionContext) cloneHeader(source *paperlang.Node) *paperlang.
 		return nil
 	}
 	e.nodes++
-	clone := &paperlang.Node{Kind: source.Kind, ID: source.ID, HeaderSpan: source.HeaderSpan, Span: source.Span}
+	clone := &paperlang.Node{Kind: source.Kind, ID: source.ID, FieldType: source.FieldType, TypeRef: source.TypeRef, ItemType: source.ItemType, ItemTypeRef: source.ItemTypeRef, Optional: source.Optional, HeaderSpan: source.HeaderSpan, Span: source.Span}
 	if source.Value != nil {
 		value := cloneExpansionScalar(*source.Value)
 		clone.Value = &value
@@ -495,7 +502,7 @@ func (e *repeatExpansionContext) cloneHeader(source *paperlang.Node) *paperlang.
 func repeatSchemaItem(path string, schemas schemaAnalysis) ([]FieldDescriptor, error) {
 	parts := strings.Split(strings.TrimSpace(path), ".")
 	if len(parts) < 2 || !strings.HasPrefix(parts[0], "@") {
-		return nil, fmt.Errorf("source %q is not an absolute schema path", path)
+		return nil, fmt.Errorf("source %q is not a canonical schema path", path)
 	}
 	schema := schemas.byName[parts[0]]
 	if schema == nil {

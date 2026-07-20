@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package document
 
-import "github.com/cssbruno/gopdfkit/layout"
+import "github.com/cssbruno/paperrune/layout"
 
 // plannerDefaultTextStyle snapshots the receiver's current text defaults for
 // immutable lowering. It does not estimate a block or choose page geometry.

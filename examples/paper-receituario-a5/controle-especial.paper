@@ -1,0 +1,761 @@
+document @controle-especial:
+  title: "Receita de Controle Especial A5"
+  language: "pt-BR"
+  theme: "@grafite"
+
+  theme @foundation:
+    token @body-ink:
+      type: "color"
+      value: "#171717"
+    token @muted-ink:
+      type: "color"
+      value: "#555555"
+    token @accent-ink:
+      type: "color"
+      value: "#444444"
+    token @strong-ink:
+      type: "color"
+      value: "#171717"
+    token @warning-ink:
+      type: "color"
+      value: "#A6242C"
+    token @title-size:
+      type: "length"
+      value: 10.5pt
+    token @title-leading:
+      type: "length"
+      value: 13pt
+    token @issuer-size:
+      type: "length"
+      value: 10pt
+    token @issuer-leading:
+      type: "length"
+      value: 13pt
+    token @section-size:
+      type: "length"
+      value: 7pt
+    token @section-leading:
+      type: "length"
+      value: 9pt
+    token @medication-size:
+      type: "length"
+      value: 9pt
+    token @medication-leading:
+      type: "length"
+      value: 12pt
+
+  theme @grafite:
+    parent: "foundation"
+    token @accent-ink:
+      type: "color"
+      value: "#40464A"
+    token @muted-ink:
+      type: "color"
+      value: "#62676A"
+
+  theme @azul-clinico:
+    parent: "foundation"
+    token @body-ink:
+      type: "color"
+      value: "#172A35"
+    token @muted-ink:
+      type: "color"
+      value: "#5C6C75"
+    token @accent-ink:
+      type: "color"
+      value: "#1E5B7C"
+    token @strong-ink:
+      type: "color"
+      value: "#143D52"
+    token @warning-ink:
+      type: "color"
+      value: "#9E2A32"
+    token @title-size:
+      type: "length"
+      value: 11.2pt
+    token @title-leading:
+      type: "length"
+      value: 14pt
+    token @issuer-size:
+      type: "length"
+      value: 10.3pt
+    token @issuer-leading:
+      type: "length"
+      value: 13.2pt
+
+  theme @verde-institucional:
+    parent: "foundation"
+    token @body-ink:
+      type: "color"
+      value: "#1D2925"
+    token @muted-ink:
+      type: "color"
+      value: "#5B6963"
+    token @accent-ink:
+      type: "color"
+      value: "#2F6557"
+    token @strong-ink:
+      type: "color"
+      value: "#214C40"
+    token @warning-ink:
+      type: "color"
+      value: "#963B34"
+    token @title-size:
+      type: "length"
+      value: 10pt
+    token @title-leading:
+      type: "length"
+      value: 12.5pt
+    token @section-size:
+      type: "length"
+      value: 7.2pt
+    token @section-leading:
+      type: "length"
+      value: 9.2pt
+    token @medication-size:
+      type: "length"
+      value: 8.8pt
+
+  theme @vinho-classico:
+    parent: "foundation"
+    token @body-ink:
+      type: "color"
+      value: "#292122"
+    token @muted-ink:
+      type: "color"
+      value: "#705F62"
+    token @accent-ink:
+      type: "color"
+      value: "#7A303A"
+    token @strong-ink:
+      type: "color"
+      value: "#5C222C"
+    token @warning-ink:
+      type: "color"
+      value: "#A6242C"
+    token @title-size:
+      type: "length"
+      value: 10.8pt
+    token @title-leading:
+      type: "length"
+      value: 13.5pt
+    token @issuer-size:
+      type: "length"
+      value: 10.5pt
+    token @issuer-leading:
+      type: "length"
+      value: 13.4pt
+    token @medication-size:
+      type: "length"
+      value: 9.2pt
+    token @medication-leading:
+      type: "length"
+      value: 12.2pt
+
+  theme @areia-editorial:
+    parent: "foundation"
+    token @body-ink:
+      type: "color"
+      value: "#302923"
+    token @muted-ink:
+      type: "color"
+      value: "#756B61"
+    token @accent-ink:
+      type: "color"
+      value: "#8A6545"
+    token @strong-ink:
+      type: "color"
+      value: "#594433"
+    token @warning-ink:
+      type: "color"
+      value: "#A1483A"
+    token @title-size:
+      type: "length"
+      value: 9.7pt
+    token @title-leading:
+      type: "length"
+      value: 12pt
+    token @issuer-size:
+      type: "length"
+      value: 9.7pt
+    token @issuer-leading:
+      type: "length"
+      value: 12.5pt
+    token @section-size:
+      type: "length"
+      value: 6.8pt
+    token @section-leading:
+      type: "length"
+      value: 8.8pt
+    token @medication-size:
+      type: "length"
+      value: 8.7pt
+    token @medication-leading:
+      type: "length"
+      value: 11.6pt
+
+  schema:
+    string clinic
+    string issuer
+    string clinicAddress
+    string contact
+    string issuedAt
+    object patient:
+      string name
+      string document
+      string address
+    object medication:
+      string name
+      string quantity
+      string directions
+      string note
+    object prescriber:
+      string name
+      string registration
+
+  style @base:
+    font: "body-font"
+    size: 8pt
+    line-height: 11pt
+    color-token: "body-ink"
+
+  style @micro-label:
+    style: "@base"
+    font: "body-font-bold"
+    size: 6.2pt
+    line-height: 8pt
+    color-token: "muted-ink"
+
+  style @issuer-name:
+    font: "body-font-bold"
+    size-token: "issuer-size"
+    line-height-token: "issuer-leading"
+    color-token: "strong-ink"
+
+  style @issuer-detail:
+    style: "@base"
+    size: 7pt
+    line-height: 10pt
+    color-token: "muted-ink"
+
+  style @form-title:
+    font: "body-font-bold"
+    size-token: "title-size"
+    line-height-token: "title-leading"
+    color-token: "strong-ink"
+    align: "right"
+
+  style @via:
+    style: "@base"
+    font: "body-font-bold"
+    size: 7.3pt
+    line-height: 10pt
+    color-token: "accent-ink"
+    align: "right"
+
+  style @warning:
+    style: "@base"
+    font: "body-font-bold"
+    size: 6pt
+    line-height: 8pt
+    align: "right"
+    color-token: "warning-ink"
+
+  style @value:
+    style: "@base"
+    size: 8.3pt
+    line-height: 11pt
+
+  style @section-title:
+    font: "body-font-bold"
+    size-token: "section-size"
+    line-height-token: "section-leading"
+    color-token: "accent-ink"
+
+  style @medication-name-style:
+    font: "body-font-bold"
+    size-token: "medication-size"
+    line-height-token: "medication-leading"
+    color-token: "strong-ink"
+
+  style @medication-quantity-style:
+    style: "@base"
+    font: "body-font-bold"
+    size: 7.2pt
+    line-height: 10pt
+    color-token: "accent-ink"
+    align: "right"
+
+  style @instruction:
+    style: "@base"
+    size: 7.6pt
+    line-height: 11pt
+
+  style @note:
+    style: "@base"
+    size: 6.5pt
+    line-height: 9pt
+    color-token: "muted-ink"
+
+  style @dispensing-copy:
+    style: "@base"
+    size: 6.4pt
+    line-height: 12pt
+    color-token: "muted-ink"
+
+  page @a5:
+    size: "A5"
+    margin: 24pt
+
+    body @body:
+      row @pharmacy-header:
+        gap: 14pt
+        cross-size: 78pt
+
+        column @pharmacy-issuer-block:
+          track-size: 62%
+          gap: 0pt
+
+          paragraph @pharmacy-issuer-label:
+            track-size: 9pt
+            style: "@micro-label"
+            text: "EMITENTE"
+
+          paragraph @pharmacy-clinic:
+            track-size: 15pt
+            style: "@issuer-name"
+            bind: "clinic"
+            text: "Clínica"
+
+          paragraph @pharmacy-issuer:
+            track-size: 13pt
+            style: "@issuer-detail"
+            bind: "issuer"
+            text: "Profissional e registro"
+
+          paragraph @pharmacy-clinic-address:
+            track-size: 13pt
+            style: "@issuer-detail"
+            bind: "clinicAddress"
+            text: "Endereço"
+
+          paragraph @pharmacy-contact:
+            track-size: 17pt
+            style: "@issuer-detail"
+            bind: "contact"
+            text: "Contato"
+
+        column @pharmacy-document-block:
+          track-size: 38%
+          gap: 0pt
+
+          paragraph @pharmacy-document-kicker:
+            track-size: 12pt
+            style: "@micro-label"
+            align: "right"
+            text: "RECEITUÁRIO"
+
+          paragraph @pharmacy-document-title:
+            track-size: 30pt
+            style: "@form-title"
+            text: "CONTROLE\nESPECIAL"
+
+          paragraph @pharmacy-document-via:
+            track-size: 14pt
+            style: "@via"
+            text: "1ª VIA - FARMÁCIA"
+
+          paragraph @pharmacy-document-warning:
+            track-size: 22pt
+            style: "@warning"
+            text: "MODELO FICTÍCIO\nSEM VALIDADE"
+
+      paragraph @pharmacy-header-rule:
+        size: 1pt
+        line-height: 1pt
+        border-bottom-width: 0.6pt
+        border-color: "#888888"
+        text: ""
+
+      paragraph @pharmacy-patient-top-spacer:
+        size: 1pt
+        line-height: 1pt
+        margin-bottom: 9pt
+        text: ""
+
+      row @pharmacy-patient-labels:
+        gap: 12pt
+
+        paragraph @pharmacy-patient-label:
+          track-size: 70%
+          style: "@micro-label"
+          text: "PACIENTE"
+
+        paragraph @pharmacy-patient-document-label:
+          track-size: 30%
+          style: "@micro-label"
+          align: "right"
+          text: "CPF / PASSAPORTE"
+
+      row @pharmacy-patient-values:
+        gap: 12pt
+
+        paragraph @pharmacy-patient-name:
+          track-size: 70%
+          style: "@value"
+          bind: "patient.name"
+          text: "Nome do paciente"
+
+        paragraph @pharmacy-patient-document:
+          track-size: 30%
+          style: "@value"
+          align: "right"
+          bind: "patient.document"
+          text: "Documento"
+
+      row @pharmacy-patient-address-row:
+        gap: 8pt
+
+        paragraph @pharmacy-patient-address-label:
+          track-size: 18%
+          style: "@micro-label"
+          text: "ENDEREÇO"
+
+        paragraph @pharmacy-patient-address:
+          track-size: 82%
+          style: "@value"
+          bind: "patient.address"
+          text: "Endereço do paciente"
+
+      paragraph @pharmacy-patient-rule:
+        size: 1pt
+        line-height: 1pt
+        border-bottom-width: 0.6pt
+        border-color: "#999999"
+        margin-top: 5pt
+        text: ""
+
+      paragraph @pharmacy-prescription-label:
+        style: "@section-title"
+        margin-top: 11pt
+        margin-bottom: 7pt
+        text: "PRESCRIÇÃO"
+
+      row @pharmacy-medication-row:
+        gap: 12pt
+
+        paragraph @pharmacy-medication-name:
+          track-size: 74%
+          style: "@medication-name-style"
+          bind: "medication.name"
+          text: "Produto demonstrativo"
+
+        paragraph @pharmacy-medication-quantity:
+          track-size: 26%
+          style: "@medication-quantity-style"
+          bind: "medication.quantity"
+          text: "Quantidade"
+
+      paragraph @pharmacy-directions:
+        style: "@instruction"
+        bind: "medication.directions"
+        margin-top: 5pt
+        text: "Modo de usar"
+
+      paragraph @pharmacy-medication-note:
+        style: "@note"
+        bind: "medication.note"
+        margin-top: 3pt
+        text: "Nota demonstrativa"
+
+      row @pharmacy-open-prescription-space:
+        cross-size: 210pt
+
+        paragraph @pharmacy-open-space:
+          track-size: 100%
+          text: ""
+
+      paragraph @pharmacy-signature-rule:
+        size: 1pt
+        line-height: 1pt
+        border-bottom-width: 0.6pt
+        border-color: "#999999"
+        margin-bottom: 6pt
+        text: ""
+
+      row @pharmacy-signature-row:
+        gap: 18pt
+
+        paragraph @pharmacy-issue-date:
+          track-size: 38%
+          style: "@value"
+          bind: "issuedAt"
+          text: "Data"
+
+        paragraph @pharmacy-prescriber-name:
+          track-size: 62%
+          style: "@value"
+          align: "right"
+          bind: "prescriber.name"
+          text: "Prescritora"
+
+      paragraph @pharmacy-signature-bottom-spacer:
+        size: 1pt
+        line-height: 1pt
+        margin-bottom: 7pt
+        text: ""
+
+      paragraph @pharmacy-dispensing-heading:
+        style: "@section-title"
+        padding-top: 7pt
+        margin-bottom: 5pt
+        text: "REGISTRO DA DISPENSAÇÃO"
+
+      row @pharmacy-dispensing-identification:
+        gap: 16pt
+        cross-size: 70pt
+
+        paragraph @pharmacy-buyer:
+          track-size: 50%
+          cross-size: 100%
+          style: "@dispensing-copy"
+          text: "IDENTIFICAÇÃO DO COMPRADOR\nNome\nDocumento\nEndereço e telefone"
+
+        paragraph @pharmacy-supplier:
+          track-size: 50%
+          cross-size: 100%
+          style: "@dispensing-copy"
+          text: "IDENTIFICAÇÃO DO FORNECEDOR\nEstabelecimento\nResponsável\nData e assinatura"
+
+      paragraph @pharmacy-copy-warning:
+        style: "@warning"
+        align: "center"
+        margin-top: 8pt
+        text: "MODELO FICTÍCIO - PRODUTO E DADOS INEXISTENTES - NÃO UTILIZAR"
+
+      page-break @patient-copy-break:
+
+      row @patient-header:
+        gap: 14pt
+        cross-size: 78pt
+
+        column @patient-issuer-block:
+          track-size: 62%
+          gap: 0pt
+
+          paragraph @patient-issuer-label:
+            track-size: 9pt
+            style: "@micro-label"
+            text: "EMITENTE"
+
+          paragraph @patient-clinic:
+            track-size: 15pt
+            style: "@issuer-name"
+            bind: "clinic"
+            text: "Clínica"
+
+          paragraph @patient-issuer:
+            track-size: 13pt
+            style: "@issuer-detail"
+            bind: "issuer"
+            text: "Profissional e registro"
+
+          paragraph @patient-clinic-address:
+            track-size: 13pt
+            style: "@issuer-detail"
+            bind: "clinicAddress"
+            text: "Endereço"
+
+          paragraph @patient-contact:
+            track-size: 17pt
+            style: "@issuer-detail"
+            bind: "contact"
+            text: "Contato"
+
+        column @patient-document-block:
+          track-size: 38%
+          gap: 0pt
+
+          paragraph @patient-document-kicker:
+            track-size: 12pt
+            style: "@micro-label"
+            align: "right"
+            text: "RECEITUÁRIO"
+
+          paragraph @patient-document-title:
+            track-size: 30pt
+            style: "@form-title"
+            text: "CONTROLE\nESPECIAL"
+
+          paragraph @patient-document-via:
+            track-size: 14pt
+            style: "@via"
+            text: "2ª VIA - PACIENTE"
+
+          paragraph @patient-document-warning:
+            track-size: 22pt
+            style: "@warning"
+            text: "MODELO FICTÍCIO\nSEM VALIDADE"
+
+      paragraph @patient-header-rule:
+        size: 1pt
+        line-height: 1pt
+        border-bottom-width: 0.6pt
+        border-color: "#888888"
+        text: ""
+
+      paragraph @patient-patient-top-spacer:
+        size: 1pt
+        line-height: 1pt
+        margin-bottom: 9pt
+        text: ""
+
+      row @patient-patient-labels:
+        gap: 12pt
+
+        paragraph @patient-patient-label:
+          track-size: 70%
+          style: "@micro-label"
+          text: "PACIENTE"
+
+        paragraph @patient-patient-document-label:
+          track-size: 30%
+          style: "@micro-label"
+          align: "right"
+          text: "CPF / PASSAPORTE"
+
+      row @patient-patient-values:
+        gap: 12pt
+
+        paragraph @patient-patient-name:
+          track-size: 70%
+          style: "@value"
+          bind: "patient.name"
+          text: "Nome do paciente"
+
+        paragraph @patient-patient-document:
+          track-size: 30%
+          style: "@value"
+          align: "right"
+          bind: "patient.document"
+          text: "Documento"
+
+      row @patient-patient-address-row:
+        gap: 8pt
+
+        paragraph @patient-patient-address-label:
+          track-size: 18%
+          style: "@micro-label"
+          text: "ENDEREÇO"
+
+        paragraph @patient-patient-address:
+          track-size: 82%
+          style: "@value"
+          bind: "patient.address"
+          text: "Endereço do paciente"
+
+      paragraph @patient-patient-rule:
+        size: 1pt
+        line-height: 1pt
+        border-bottom-width: 0.6pt
+        border-color: "#999999"
+        margin-top: 5pt
+        text: ""
+
+      paragraph @patient-prescription-label:
+        style: "@section-title"
+        margin-top: 11pt
+        margin-bottom: 7pt
+        text: "PRESCRIÇÃO"
+
+      row @patient-medication-row:
+        gap: 12pt
+
+        paragraph @patient-medication-name:
+          track-size: 74%
+          style: "@medication-name-style"
+          bind: "medication.name"
+          text: "Produto demonstrativo"
+
+        paragraph @patient-medication-quantity:
+          track-size: 26%
+          style: "@medication-quantity-style"
+          bind: "medication.quantity"
+          text: "Quantidade"
+
+      paragraph @patient-directions:
+        style: "@instruction"
+        bind: "medication.directions"
+        margin-top: 5pt
+        text: "Modo de usar"
+
+      paragraph @patient-medication-note:
+        style: "@note"
+        bind: "medication.note"
+        margin-top: 3pt
+        text: "Nota demonstrativa"
+
+      row @patient-open-prescription-space:
+        cross-size: 210pt
+
+        paragraph @patient-open-space:
+          track-size: 100%
+          text: ""
+
+      paragraph @patient-signature-rule:
+        size: 1pt
+        line-height: 1pt
+        border-bottom-width: 0.6pt
+        border-color: "#999999"
+        margin-bottom: 6pt
+        text: ""
+
+      row @patient-signature-row:
+        gap: 18pt
+
+        paragraph @patient-issue-date:
+          track-size: 38%
+          style: "@value"
+          bind: "issuedAt"
+          text: "Data"
+
+        paragraph @patient-prescriber-name:
+          track-size: 62%
+          style: "@value"
+          align: "right"
+          bind: "prescriber.name"
+          text: "Prescritora"
+
+      paragraph @patient-signature-bottom-spacer:
+        size: 1pt
+        line-height: 1pt
+        margin-bottom: 7pt
+        text: ""
+
+      paragraph @patient-dispensing-heading:
+        style: "@section-title"
+        padding-top: 7pt
+        margin-bottom: 5pt
+        text: "REGISTRO DA DISPENSAÇÃO"
+
+      row @patient-dispensing-identification:
+        gap: 16pt
+        cross-size: 70pt
+
+        paragraph @patient-buyer:
+          track-size: 50%
+          cross-size: 100%
+          style: "@dispensing-copy"
+          text: "IDENTIFICAÇÃO DO COMPRADOR\nNome\nDocumento\nEndereço e telefone"
+
+        paragraph @patient-supplier:
+          track-size: 50%
+          cross-size: 100%
+          style: "@dispensing-copy"
+          text: "IDENTIFICAÇÃO DO FORNECEDOR\nEstabelecimento\nResponsável\nData e assinatura"
+
+      paragraph @patient-copy-warning:
+        style: "@warning"
+        align: "center"
+        margin-top: 8pt
+        text: "MODELO FICTÍCIO - PRODUTO E DADOS INEXISTENTES - NÃO UTILIZAR"

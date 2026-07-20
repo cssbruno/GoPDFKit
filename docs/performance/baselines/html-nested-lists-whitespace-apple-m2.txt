@@ -1,4 +1,4 @@
-GoPDFKit unified HTML nested-list and whitespace characterization
+PaperRune unified HTML nested-list and whitespace characterization
 Date: 2026-07-17
 GOOS: darwin
 GOARCH: arm64

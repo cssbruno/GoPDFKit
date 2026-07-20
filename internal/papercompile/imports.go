@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -8,7 +8,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
+	"github.com/cssbruno/paperrune/internal/paperlang"
 )
 
 // ImportResolver is the explicit source boundary used by .paper imports.
@@ -164,7 +164,7 @@ func (w *importWalker) visit(importer string, root *paperlang.Node, depth uint32
 			switch member.Node.Kind {
 			case paperlang.NodeTheme, paperlang.NodeStyle:
 				w.members = append(w.members, paperlang.Member{Node: cloneImportNode(member.Node)})
-			case paperlang.NodePage, paperlang.NodeComponent, paperlang.NodeSchema, paperlang.NodeScenario:
+			case paperlang.NodePage, paperlang.NodeComponent, paperlang.NodeSchema, paperlang.NodeObjectType, paperlang.NodeScenario:
 				w.add("PAPER_IMPORT_MEMBER", fmt.Sprintf("imported file cannot provide %s", member.Node.Kind), "keep pages and document behavior in the importing file; export themes and styles only", member.Node.HeaderSpan)
 			}
 		}

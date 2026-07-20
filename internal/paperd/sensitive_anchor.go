@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package paperd
@@ -58,7 +58,7 @@ func (w *Workspace) SensitiveAuditAnchorInputHash(limit int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return SensitiveOperationInputHash(SensitiveSign, SensitiveOperationInput{Target: "paperd:sensitive-audit-root:" + statement.RootHash, MediaType: "application/vnd.gopdfkit.sensitive-audit-root+json", Payload: payload})
+	return SensitiveOperationInputHash(SensitiveSign, SensitiveOperationInput{Target: "paperd:sensitive-audit-root:" + statement.RootHash, MediaType: "application/vnd.paperrune.sensitive-audit-root+json", Payload: payload})
 }
 
 func (w *Workspace) AnchorSensitiveAudit(ctx context.Context, request SensitiveAuditAnchorRequest, signer AuditRootSigner) (SensitiveAuditAnchor, error) {
@@ -75,7 +75,7 @@ func (w *Workspace) AnchorSensitiveAudit(ctx context.Context, request SensitiveA
 	if err != nil {
 		return SensitiveAuditAnchor{}, err
 	}
-	inputHash, err := SensitiveOperationInputHash(SensitiveSign, SensitiveOperationInput{Target: "paperd:sensitive-audit-root:" + statement.RootHash, MediaType: "application/vnd.gopdfkit.sensitive-audit-root+json", Payload: payload})
+	inputHash, err := SensitiveOperationInputHash(SensitiveSign, SensitiveOperationInput{Target: "paperd:sensitive-audit-root:" + statement.RootHash, MediaType: "application/vnd.paperrune.sensitive-audit-root+json", Payload: payload})
 	if err != nil {
 		return SensitiveAuditAnchor{}, err
 	}

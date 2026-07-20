@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package papercompile
@@ -7,9 +7,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cssbruno/gopdfkit/internal/layoutengine"
-	"github.com/cssbruno/gopdfkit/internal/paperlang"
-	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/paperrune/internal/layoutengine"
+	"github.com/cssbruno/paperrune/internal/paperlang"
+	"github.com/cssbruno/paperrune/layout"
 )
 
 func TestCompileRowColumnTracksAndSourceMappings(t *testing.T) {
@@ -74,6 +74,13 @@ func TestCompileRowColumnPreservesContainerRelativeAndAutoTrackSizes(t *testing.
 	}
 	if !foundPercent {
 		t.Fatalf("canonical tracks lost 50%% basis: %+v", projection.Tracks)
+	}
+}
+
+func TestTypedTreePercentCoversFullUint32Domain(t *testing.T) {
+	got := typedTreePercent(^uint32(0))
+	if got.Kind != layoutengine.TreeLengthPercent || got.Value != 43_980 {
+		t.Fatalf("typedTreePercent(max uint32) = %#v, want percent 43980", got)
 	}
 }
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-GoPDFKit-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
 // Copyright (c) 2026 cssBruno
 
 package layoutengine
@@ -496,7 +496,7 @@ func rowColumnStateBytes(children []RowColumnChild) (uint64, bool) {
 func resolveRowColumnTracks(input RowColumnPlanInput, available Fixed, budget *rowColumnBudget) ([]Fixed, Fixed, error) {
 	count := len(input.Children)
 	if count == 0 {
-		return nil, 0, nil
+		return []Fixed{}, 0, nil
 	}
 	gapTotal, err := input.Gap.MulInt(int64(count - 1))
 	if err != nil {
