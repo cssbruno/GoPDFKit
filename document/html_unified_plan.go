@@ -16,9 +16,10 @@ import (
 	"github.com/cssbruno/paperrune/layout"
 )
 
-// ErrHTMLPlanUnsupported reports that a compiled HTML fragment cannot be
-// lowered as one unit to the unified planner. Public HTML entry points fail
-// atomically for this error; there is no automatic legacy renderer route.
+// ErrHTMLPlanUnsupported reports that a compiled HTML fragment cannot yet be
+// lowered as one unit to the unified planner. The legacy renderer may be used
+// by an explicit compatibility policy, but this entry point never creates
+// mixed legacy islands inside a unified plan.
 var ErrHTMLPlanUnsupported = errors.New("document: HTML unified plan unsupported")
 
 const htmlUnifiedMaxTextBytes = 4 << 20
@@ -96,7 +97,7 @@ func (f *Document) PlanCompiledHTMLContext(ctx context.Context, lineHeight float
 	plan, err := f.PlanLayoutDocumentContext(withHTMLAuthoredWhitespace(ctx), model)
 	if err != nil {
 		if errors.Is(err, ErrLayoutDocumentPlanUnsupported) {
-			return LayoutDocumentPlan{}, fmt.Errorf("%w: typed lowering: %w", ErrHTMLPlanUnsupported, err)
+			return LayoutDocumentPlan{}, fmt.Errorf("%w: typed lowering: %v", ErrHTMLPlanUnsupported, err)
 		}
 		return LayoutDocumentPlan{}, err
 	}
@@ -1063,7 +1064,7 @@ func htmlPlanTableColumnCount(rows []layout.TableRow) (int, error) {
 		return 0, errors.New("table column count is outside limits")
 	}
 	if _, err := typedTablePlacements(rows, max, 0, "html.table"); err != nil {
-		return 0, fmt.Errorf("table grid is not rectangular: %w", err)
+		return 0, fmt.Errorf("table grid is not rectangular: %v", err)
 	}
 	return max, nil
 }

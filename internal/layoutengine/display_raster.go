@@ -5,27 +5,20 @@ package layoutengine
 
 import (
 	"bytes"
-	"compress/zlib"
 	"context"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hash/crc32"
 	"image"
 	"image/color"
 	"image/draw"
 	_ "image/jpeg"
-	"io"
+	"image/png"
 	"math"
-	"runtime"
 	"sort"
-	"strings"
-	"sync"
 
-	xdraw "golang.org/x/image/draw"
 	xfont "golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
@@ -35,7 +28,7 @@ import (
 
 const (
 	DisplayRasterManifestVersion uint16 = 1
-	DisplayRasterRendererVersion        = "layoutengine/go-display-raster@5"
+	DisplayRasterRendererVersion        = "layoutengine/go-display-raster@2"
 
 	DisplayRasterHardMaxPixels      uint64 = 64 << 20
 	DisplayRasterHardMaxSourceBytes uint64 = 64 << 20
@@ -47,13 +40,6 @@ var (
 	ErrDisplayRasterLimit       = errors.New("layoutengine: display raster limit exceeded")
 	ErrDisplayRasterResource    = errors.New("layoutengine: display raster resource is invalid")
 	ErrDisplayRasterUnsupported = errors.New("layoutengine: display raster operation is unsupported")
-	rasterPNGDeflaterPool       = sync.Pool{New: func() any {
-		writer, err := zlib.NewWriterLevel(io.Discard, zlib.BestSpeed)
-		if err != nil {
-			panic(err)
-		}
-		return writer
-	}}
 )
 
 // DisplayRasterProfile pins every renderer choice which can affect normative
@@ -77,7 +63,7 @@ func DefaultDisplayRasterProfile() DisplayRasterProfile {
 		DPI: 144, ColorSpace: "srgb_8bit", AlphaMode: "opaque", Background: "#ffffff",
 		Antialiasing: "coverage_8bit", CropRounding: "exact_bounds_nearest_pixel_count_half_away_from_zero",
 		CoordinateRound: "26.6_fixed_half_away_from_zero", ImageResampling: "nearest_neighbor",
-		PNGCompression: "zlib_best_speed_filter_none", Renderer: DisplayRasterRendererVersion,
+		PNGCompression: "go_png_best_compression", Renderer: DisplayRasterRendererVersion,
 	}
 }
 
@@ -121,68 +107,6 @@ func (limits DisplayRasterLimits) validate() error {
 type DisplayRasterSources struct {
 	FontPrograms map[CoreFontMetricsDigest][]byte
 	Images       DisplaySVGImageSources
-	cache        *WebDisplayRenderCache
-}
-
-// WebDisplayRenderCache reuses immutable decoded resources while a browser
-// session renders the same validated plan at multiple DPIs. Switching plan
-// identity clears every retained resource, so memory stays bounded by one
-// render payload rather than growing with document history.
-type WebDisplayRenderCache struct {
-	mu       sync.Mutex
-	planHash string
-	fonts    map[string]*opentype.Font
-	images   map[string]image.Image
-}
-
-func (cache *WebDisplayRenderCache) prepare(planHash string) {
-	if cache == nil {
-		return
-	}
-	cache.mu.Lock()
-	defer cache.mu.Unlock()
-	if cache.planHash == planHash {
-		return
-	}
-	cache.planHash = planHash
-	cache.fonts = make(map[string]*opentype.Font)
-	cache.images = make(map[string]image.Image)
-}
-
-func (cache *WebDisplayRenderCache) font(hash string) *opentype.Font {
-	if cache == nil {
-		return nil
-	}
-	cache.mu.Lock()
-	defer cache.mu.Unlock()
-	return cache.fonts[hash]
-}
-
-func (cache *WebDisplayRenderCache) storeFont(hash string, font *opentype.Font) {
-	if cache == nil {
-		return
-	}
-	cache.mu.Lock()
-	defer cache.mu.Unlock()
-	cache.fonts[hash] = font
-}
-
-func (cache *WebDisplayRenderCache) image(hash string) image.Image {
-	if cache == nil {
-		return nil
-	}
-	cache.mu.Lock()
-	defer cache.mu.Unlock()
-	return cache.images[hash]
-}
-
-func (cache *WebDisplayRenderCache) storeImage(hash string, value image.Image) {
-	if cache == nil {
-		return
-	}
-	cache.mu.Lock()
-	defer cache.mu.Unlock()
-	cache.images[hash] = value
 }
 
 type DisplayRasterRequest struct {
@@ -379,12 +303,8 @@ func CaptureDisplayPlanPNGContext(ctx context.Context, plan LayoutPlan, sources 
 	}
 	var encoded bytes.Buffer
 	limited := &rasterLimitWriter{writer: &encoded, remaining: request.Limits.MaxPNGBytes}
-	// The standard encoder evaluates five filters for every scanline. Profiles
-	// show that work dominating interactive Go/WASM preview latency even with
-	// BestSpeed compression. Opaque document pages compress well with direct
-	// scanlines, so pin filter None and preserve deterministic lossless pixels.
-	if err := encodeRasterPNG(limited, canvas); err != nil {
-		return DisplayRasterArtifact{}, fmt.Errorf("%w: PNG: %w", ErrDisplayRasterLimit, err)
+	if err := (&png.Encoder{CompressionLevel: png.BestCompression}).Encode(limited, canvas); err != nil {
+		return DisplayRasterArtifact{}, fmt.Errorf("%w: PNG: %v", ErrDisplayRasterLimit, err)
 	}
 	pngBytes := encoded.Bytes()
 	pngHash := sha256.Sum256(pngBytes)
@@ -405,77 +325,6 @@ func CaptureDisplayPlanPNGContext(ctx context.Context, plan LayoutPlan, sources 
 		return DisplayRasterArtifact{}, err
 	}
 	return DisplayRasterArtifact{manifest: manifest, png: append([]byte(nil), pngBytes...)}, nil
-}
-
-func encodeRasterPNG(output io.Writer, canvas *image.RGBA) error {
-	if canvas == nil || canvas.Bounds().Empty() {
-		return errors.New("empty canvas")
-	}
-	if _, err := output.Write([]byte("\x89PNG\r\n\x1a\n")); err != nil {
-		return err
-	}
-	var header [13]byte
-	binary.BigEndian.PutUint32(header[0:4], uint32(canvas.Bounds().Dx())) // #nosec G115 -- raster dimensions are bounded by the validated pixel limit.
-	binary.BigEndian.PutUint32(header[4:8], uint32(canvas.Bounds().Dy())) // #nosec G115 -- raster dimensions are bounded by the validated pixel limit.
-	header[8], header[9] = 8, 6                                           // 8-bit RGBA.
-	if err := writeRasterPNGChunk(output, [4]byte{'I', 'H', 'D', 'R'}, header[:]); err != nil {
-		return err
-	}
-	var compressed bytes.Buffer
-	var deflater *zlib.Writer
-	if runtime.GOOS == "js" {
-		var err error
-		deflater, err = zlib.NewWriterLevel(&compressed, zlib.BestSpeed)
-		if err != nil {
-			return err
-		}
-	} else {
-		deflater = rasterPNGDeflaterPool.Get().(*zlib.Writer)
-		deflater.Reset(&compressed)
-		defer func() {
-			deflater.Reset(io.Discard)
-			rasterPNGDeflaterPool.Put(deflater)
-		}()
-	}
-	row := make([]byte, 1+canvas.Bounds().Dx()*4)
-	for y := canvas.Bounds().Min.Y; y < canvas.Bounds().Max.Y; y++ {
-		row[0] = 0 // PNG filter None.
-		offset := canvas.PixOffset(canvas.Bounds().Min.X, y)
-		copy(row[1:], canvas.Pix[offset:offset+canvas.Bounds().Dx()*4])
-		if _, err := deflater.Write(row); err != nil {
-			_ = deflater.Close()
-			return err
-		}
-	}
-	if err := deflater.Close(); err != nil {
-		return err
-	}
-	if err := writeRasterPNGChunk(output, [4]byte{'I', 'D', 'A', 'T'}, compressed.Bytes()); err != nil {
-		return err
-	}
-	return writeRasterPNGChunk(output, [4]byte{'I', 'E', 'N', 'D'}, nil)
-}
-
-func writeRasterPNGChunk(output io.Writer, kind [4]byte, payload []byte) error {
-	if uint64(len(payload)) > math.MaxUint32 {
-		return errors.New("invalid PNG chunk")
-	}
-	var length [4]byte
-	binary.BigEndian.PutUint32(length[:], uint32(len(payload))) // #nosec G115 -- length is bounded above.
-	if _, err := output.Write(length[:]); err != nil {
-		return err
-	}
-	if _, err := output.Write(kind[:]); err != nil {
-		return err
-	}
-	if _, err := output.Write(payload); err != nil {
-		return err
-	}
-	checksum := crc32.Update(0, crc32.IEEETable, kind[:])
-	checksum = crc32.Update(checksum, crc32.IEEETable, payload)
-	binary.BigEndian.PutUint32(length[:], checksum)
-	_, err := output.Write(length[:])
-	return err
 }
 
 type rasterPaintState struct {
@@ -536,22 +385,16 @@ func preflightDisplayRaster(ctx context.Context, plan LayoutPlan, sources Displa
 			return nil, nil, nil, fmt.Errorf("%w: missing or over-budget font %s", ErrDisplayRasterResource, resource.MetricsDigest)
 		}
 		total += uint64(len(data))
-		digest := sha256.Sum256(data)
-		contentHash := hex.EncodeToString(digest[:])
-		if resource.EmbeddedUTF8 != nil && (contentHash != string(resource.EmbeddedUTF8.Digest) || uint32(len(data)) != resource.EmbeddedUTF8.ByteLength) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-			return nil, nil, nil, fmt.Errorf("%w: embedded font digest or length mismatch", ErrDisplayRasterResource)
-		}
-		parsed := sources.cache.font(contentHash)
-		if parsed == nil {
-			var parseErr error
-			parsed, parseErr = opentype.Parse(data)
-			if parseErr != nil {
-				return nil, nil, nil, fmt.Errorf("%w: parse font %s: %w", ErrDisplayRasterResource, resource.MetricsDigest, parseErr)
-			}
-			sources.cache.storeFont(contentHash, parsed)
+		parsed, err := opentype.Parse(data)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("%w: parse font %s: %v", ErrDisplayRasterResource, resource.MetricsDigest, err)
 		}
 		fontFaces[resource.ID] = &rasterSizedFace{font: parsed}
-		records = append(records, DisplayRasterResourceDigest{Kind: "font_program", Identity: string(resource.MetricsDigest), SHA256: contentHash, ByteLength: uint64(len(data))})
+		digest := sha256.Sum256(data)
+		if resource.EmbeddedUTF8 != nil && (hex.EncodeToString(digest[:]) != string(resource.EmbeddedUTF8.Digest) || uint32(len(data)) != resource.EmbeddedUTF8.ByteLength) {
+			return nil, nil, nil, fmt.Errorf("%w: embedded font digest or length mismatch", ErrDisplayRasterResource)
+		}
+		records = append(records, DisplayRasterResourceDigest{Kind: "font_program", Identity: string(resource.MetricsDigest), SHA256: hex.EncodeToString(digest[:]), ByteLength: uint64(len(data))})
 	}
 	for _, resource := range plan.imageResources {
 		if !neededImages[resource.ID] {
@@ -569,19 +412,8 @@ func preflightDisplayRaster(ctx context.Context, plan LayoutPlan, sources Displa
 		if hex.EncodeToString(digest[:]) != string(resource.Digest) {
 			return nil, nil, nil, fmt.Errorf("%w: image digest mismatch", ErrDisplayRasterResource)
 		}
-		contentHash := hex.EncodeToString(digest[:])
-		decoded := sources.cache.image(contentHash)
-		if decoded == nil {
-			var decodeErr error
-			decoded, _, decodeErr = image.Decode(bytes.NewReader(data))
-			if decodeErr == nil {
-				sources.cache.storeImage(contentHash, decoded)
-			}
-			if decodeErr != nil {
-				return nil, nil, nil, fmt.Errorf("%w: image dimensions or encoding", ErrDisplayRasterResource)
-			}
-		}
-		if decoded.Bounds().Dx() != int(resource.PixelWidth) || decoded.Bounds().Dy() != int(resource.PixelHeight) {
+		decoded, _, err := image.Decode(bytes.NewReader(data))
+		if err != nil || decoded.Bounds().Dx() != int(resource.PixelWidth) || decoded.Bounds().Dy() != int(resource.PixelHeight) {
 			return nil, nil, nil, fmt.Errorf("%w: image dimensions or encoding", ErrDisplayRasterResource)
 		}
 		decodedImages[resource.ID] = decoded
@@ -603,24 +435,19 @@ func rasterGlyphRun(dst *image.RGBA, face *rasterSizedFace, resource CoreFontRes
 	return face.draw(dst, resource, run, transform, crop, dpi, clip)
 }
 
-type rasterSizedFace struct {
-	font *opentype.Font
-}
+type rasterSizedFace struct{ font *opentype.Font }
 
 func (face *rasterSizedFace) draw(dst *image.RGBA, resource CoreFontResource, run CoreGlyphRun, transform Transform, crop Rect, dpi uint32, clip image.Rectangle) error {
 	actual, err := opentype.NewFace(face.font, &opentype.FaceOptions{Size: float64(run.FontSize) / float64(FixedScale), DPI: float64(dpi), Hinting: xfont.HintingNone})
 	if err != nil {
 		return err
 	}
-	defer func() { _ = actual.Close() }()
+	defer actual.Close()
 	origin, _ := transform.Apply(run.Origin)
 	alpha := rasterOpacityAlpha(255, run.Opacity)
 	colorValue := color.NRGBA{A: alpha}
 	if run.Color.Set {
 		colorValue.R, colorValue.G, colorValue.B = run.Color.R, run.Color.G, run.Color.B
-	}
-	if !resource.IsEmbeddedUTF8() {
-		return drawRasterCoreFontRun(dst, actual, run, transform, crop, colorValue, clip)
 	}
 	x := origin.X
 	var target draw.Image = dst
@@ -629,13 +456,13 @@ func (face *rasterSizedFace) draw(dst *image.RGBA, resource CoreFontResource, ru
 	}
 	index := 0
 	for _, code := range run.Codes {
-		px := pageToRaster26_6(x, crop.X, uint32(dst.Bounds().Dx()), crop.Width)         // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-		py := pageToRaster26_6(origin.Y, crop.Y, uint32(dst.Bounds().Dy()), crop.Height) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		px := pageToRaster26_6(x, crop.X, uint32(dst.Bounds().Dx()), crop.Width)
+		py := pageToRaster26_6(origin.Y, crop.Y, uint32(dst.Bounds().Dy()), crop.Height)
 		drawer := xfont.Drawer{Dst: target, Src: image.NewUniform(colorValue), Face: actual, Dot: fixed.Point26_6{X: px, Y: py}}
 		if resource.IsEmbeddedUTF8() {
 			drawer.DrawString(string(code))
 		} else {
-			drawer.DrawString(string(charmap.Windows1252.DecodeByte(byte(code)))) // #nosec G115 -- low-width representation is explicitly normalized before packing
+			drawer.DrawString(string(charmap.Windows1252.DecodeByte(byte(code))))
 		}
 		x, _ = x.Add(run.Advances[index])
 		index++
@@ -643,128 +470,32 @@ func (face *rasterSizedFace) draw(dst *image.RGBA, resource CoreFontResource, ru
 	return nil
 }
 
-// Standard-14 PDF fonts carry exact metrics but no outline program. Web
-// previews therefore receive a deterministic substitute outline. Painting
-// that substitute one glyph at a time at Standard-14 advances makes its
-// unrelated side bearings collide. Shape the substitute naturally as one run,
-// then fit only its horizontal extent to the already-planned run width. The
-// authoritative baseline, width, pagination, and hit geometry stay unchanged.
-func drawRasterCoreFontRun(dst *image.RGBA, face xfont.Face, run CoreGlyphRun, transform Transform, crop Rect, colorValue color.NRGBA, clip image.Rectangle) error {
-	var text strings.Builder
-	text.Grow(len(run.Codes))
-	for index := 0; index < len(run.Codes); index++ {
-		text.WriteRune(charmap.Windows1252.DecodeByte(run.Codes[index]))
-	}
-	value := text.String()
-	naturalAdvance := xfont.MeasureString(face, value)
-	if naturalAdvance <= 0 {
-		return nil
-	}
-	plannedAdvance := Fixed(0)
-	for _, advance := range run.Advances {
-		var err error
-		plannedAdvance, err = plannedAdvance.Add(advance)
-		if err != nil {
-			return fmt.Errorf("%w: glyph run advance overflow", ErrDisplayRasterUnsupported)
-		}
-	}
-	if plannedAdvance <= 0 {
-		return nil
-	}
-
-	metrics := face.Metrics()
-	sourceWidth := naturalAdvance.Ceil()
-	sourceHeight := (metrics.Ascent + metrics.Descent).Ceil()
-	if sourceWidth <= 0 || sourceHeight <= 0 {
-		return nil
-	}
-	source := image.NewRGBA(image.Rect(0, 0, sourceWidth, sourceHeight))
-	drawer := xfont.Drawer{
-		Dst: source, Src: image.NewUniform(colorValue), Face: face,
-		Dot: fixed.Point26_6{Y: fixed.I(metrics.Ascent.Ceil())},
-	}
-	drawer.DrawString(value)
-
-	origin, _ := transform.Apply(run.Origin)
-	x0 := pageToRaster26_6(origin.X, crop.X, uint32(dst.Bounds().Dx()), crop.Width) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-	xEnd, addErr := origin.X.Add(plannedAdvance)
-	if addErr != nil {
-		return fmt.Errorf("%w: glyph run destination overflow", ErrDisplayRasterUnsupported)
-	}
-	x1 := pageToRaster26_6(xEnd, crop.X, uint32(dst.Bounds().Dx()), crop.Width)            // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-	baseline := pageToRaster26_6(origin.Y, crop.Y, uint32(dst.Bounds().Dy()), crop.Height) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-	destination := image.Rect(x0.Floor(), (baseline - metrics.Ascent).Floor(), x1.Ceil(), (baseline-metrics.Ascent).Floor()+sourceHeight)
-	if destination.Empty() || destination.Intersect(clip).Empty() {
-		return nil
-	}
-	target := dst
-	if clip != dst.Bounds() {
-		target = dst.SubImage(clip).(*image.RGBA)
-	}
-	xdraw.ApproxBiLinear.Scale(target, destination, source, source.Bounds(), draw.Over, nil)
-	return nil
-}
-
 func rasterFillPath(dst *image.RGBA, path PlannedPath, fill PlannedFill, transform Transform, crop Rect, clip image.Rectangle) error {
-	type rasterSegment struct {
-		kind                 PathSegmentKind
-		x, y, x1, y1, x2, y2 float32
-	}
-	segments := make([]rasterSegment, 0, len(path.Segments))
-	minX, minY := math.Inf(1), math.Inf(1)
-	maxX, maxY := math.Inf(-1), math.Inf(-1)
-	include := func(x, y float32) {
-		minX, minY = math.Min(minX, float64(x)), math.Min(minY, float64(y))
-		maxX, maxY = math.Max(maxX, float64(x)), math.Max(maxY, float64(y))
-	}
+	r := vector.NewRasterizer(dst.Bounds().Dx(), dst.Bounds().Dy())
 	for _, segment := range path.Segments {
 		point, _ := transform.Apply(segment.Point)
 		c1, _ := transform.Apply(segment.Control1)
 		c2, _ := transform.Apply(segment.Control2)
 		x, y := pageToRasterFloat(point.X, point.Y, crop, dst.Bounds())
-		item := rasterSegment{kind: segment.Kind, x: x, y: y}
 		switch segment.Kind {
 		case PathMoveTo:
-			include(x, y)
+			r.MoveTo(x, y)
 		case PathLineTo:
-			include(x, y)
+			r.LineTo(x, y)
 		case PathCubicTo:
-			item.x1, item.y1 = pageToRasterFloat(c1.X, c1.Y, crop, dst.Bounds())
-			item.x2, item.y2 = pageToRasterFloat(c2.X, c2.Y, crop, dst.Bounds())
-			include(item.x1, item.y1)
-			include(item.x2, item.y2)
-			include(x, y)
-		}
-		segments = append(segments, item)
-	}
-	if math.IsInf(minX, 1) {
-		return nil
-	}
-	bounds := rasterLocalBounds(minX, minY, maxX, maxY, clip)
-	if bounds.Empty() {
-		return nil
-	}
-	target := rasterLocalRGBA(dst, bounds)
-	ox, oy := float32(bounds.Min.X), float32(bounds.Min.Y)
-	r := newLocalRasterizer(bounds)
-	for _, segment := range segments {
-		switch segment.kind {
-		case PathMoveTo:
-			r.MoveTo(segment.x-ox, segment.y-oy)
-		case PathLineTo:
-			r.LineTo(segment.x-ox, segment.y-oy)
-		case PathCubicTo:
-			r.CubeTo(segment.x1-ox, segment.y1-oy, segment.x2-ox, segment.y2-oy, segment.x-ox, segment.y-oy)
+			x1, y1 := pageToRasterFloat(c1.X, c1.Y, crop, dst.Bounds())
+			x2, y2 := pageToRasterFloat(c2.X, c2.Y, crop, dst.Bounds())
+			r.CubeTo(x1, y1, x2, y2, x, y)
 		case PathClose:
 			r.ClosePath()
 		}
 	}
 	alpha := uint8(255)
 	if fill.Opacity != 0 {
-		alpha = uint8((int64(fill.Opacity)*255 + FixedScale/2) / FixedScale) // #nosec G115 -- low-width representation is explicitly normalized before packing
+		alpha = uint8((int64(fill.Opacity)*255 + FixedScale/2) / FixedScale)
 	}
 	c := color.NRGBA{R: fill.Color.R, G: fill.Color.G, B: fill.Color.B, A: alpha}
-	r.Draw(target, target.Bounds(), image.NewUniform(c), image.Point{})
+	r.Draw(dst, clip, image.NewUniform(c), image.Point{})
 	return nil
 }
 
@@ -773,26 +504,20 @@ func rasterStrokePath(dst *image.RGBA, path PlannedPath, stroke PlannedStroke, t
 	haveCurrent := false
 	alpha := uint8(255)
 	if stroke.Opacity != 0 {
-		alpha = uint8((int64(stroke.Opacity)*255 + FixedScale/2) / FixedScale) // #nosec G115 -- low-width representation is explicitly normalized before packing
+		alpha = uint8((int64(stroke.Opacity)*255 + FixedScale/2) / FixedScale)
 	}
 	colorValue := color.NRGBA{R: stroke.Color.R, G: stroke.Color.G, B: stroke.Color.B, A: alpha}
 	width := float64(stroke.Width) * float64(dst.Bounds().Dx()) / float64(crop.Width)
 	drawDisc := func(x, y, radius float64) {
 		const k = 0.5522847498307936
-		bounds := rasterLocalBounds(x-radius, y-radius, x+radius, y+radius, clip)
-		if bounds.Empty() {
-			return
-		}
-		target := rasterLocalRGBA(dst, bounds)
-		ox, oy := float64(bounds.Min.X), float64(bounds.Min.Y)
-		r := newLocalRasterizer(bounds)
-		r.MoveTo(float32(x+radius-ox), float32(y-oy))
-		r.CubeTo(float32(x+radius-ox), float32(y+k*radius-oy), float32(x+k*radius-ox), float32(y+radius-oy), float32(x-ox), float32(y+radius-oy))
-		r.CubeTo(float32(x-k*radius-ox), float32(y+radius-oy), float32(x-radius-ox), float32(y+k*radius-oy), float32(x-radius-ox), float32(y-oy))
-		r.CubeTo(float32(x-radius-ox), float32(y-k*radius-oy), float32(x-k*radius-ox), float32(y-radius-oy), float32(x-ox), float32(y-radius-oy))
-		r.CubeTo(float32(x+k*radius-ox), float32(y-radius-oy), float32(x+radius-ox), float32(y-k*radius-oy), float32(x+radius-ox), float32(y-oy))
+		r := vector.NewRasterizer(dst.Bounds().Dx(), dst.Bounds().Dy())
+		r.MoveTo(float32(x+radius), float32(y))
+		r.CubeTo(float32(x+radius), float32(y+k*radius), float32(x+k*radius), float32(y+radius), float32(x), float32(y+radius))
+		r.CubeTo(float32(x-k*radius), float32(y+radius), float32(x-radius), float32(y+k*radius), float32(x-radius), float32(y))
+		r.CubeTo(float32(x-radius), float32(y-k*radius), float32(x-k*radius), float32(y-radius), float32(x), float32(y-radius))
+		r.CubeTo(float32(x+k*radius), float32(y-radius), float32(x+radius), float32(y-k*radius), float32(x+radius), float32(y))
 		r.ClosePath()
-		r.Draw(target, target.Bounds(), image.NewUniform(colorValue), image.Point{})
+		r.Draw(dst, clip, image.NewUniform(colorValue), image.Point{})
 	}
 	drawSegment := func(from, to Point, caps bool) {
 		from, _ = transform.Apply(from)
@@ -812,23 +537,13 @@ func rasterStrokePath(dst *image.RGBA, path PlannedPath, stroke PlannedStroke, t
 			length = math.Hypot(dx, dy)
 		}
 		nx, ny := -dy/length*half, dx/length*half
-		ax, ay := float64(x0)+nx, float64(y0)+ny
-		bx, by := float64(x1)+nx, float64(y1)+ny
-		cx, cy := float64(x1)-nx, float64(y1)-ny
-		dpx, dpy := float64(x0)-nx, float64(y0)-ny
-		bounds := rasterLocalBounds(math.Min(math.Min(ax, bx), math.Min(cx, dpx)), math.Min(math.Min(ay, by), math.Min(cy, dpy)), math.Max(math.Max(ax, bx), math.Max(cx, dpx)), math.Max(math.Max(ay, by), math.Max(cy, dpy)), clip)
-		if bounds.Empty() {
-			return
-		}
-		target := rasterLocalRGBA(dst, bounds)
-		ox, oy := float64(bounds.Min.X), float64(bounds.Min.Y)
-		r := newLocalRasterizer(bounds)
-		r.MoveTo(float32(ax-ox), float32(ay-oy))
-		r.LineTo(float32(bx-ox), float32(by-oy))
-		r.LineTo(float32(cx-ox), float32(cy-oy))
-		r.LineTo(float32(dpx-ox), float32(dpy-oy))
+		r := vector.NewRasterizer(dst.Bounds().Dx(), dst.Bounds().Dy())
+		r.MoveTo(float32(float64(x0)+nx), float32(float64(y0)+ny))
+		r.LineTo(float32(float64(x1)+nx), float32(float64(y1)+ny))
+		r.LineTo(float32(float64(x1)-nx), float32(float64(y1)-ny))
+		r.LineTo(float32(float64(x0)-nx), float32(float64(y0)-ny))
 		r.ClosePath()
-		r.Draw(target, target.Bounds(), image.NewUniform(colorValue), image.Point{})
+		r.Draw(dst, clip, image.NewUniform(colorValue), image.Point{})
 		if caps && stroke.LineCap == StrokeCapRound {
 			drawDisc(float64(x0), float64(y0), half)
 			drawDisc(float64(x1), float64(y1), half)
@@ -904,22 +619,6 @@ func rasterStrokePath(dst *image.RGBA, path PlannedPath, stroke PlannedStroke, t
 	return nil
 }
 
-func rasterLocalBounds(minX, minY, maxX, maxY float64, clip image.Rectangle) image.Rectangle {
-	// One guard pixel retains the vector rasterizer's edge coverage when a
-	// fractional path boundary lies immediately outside the geometric bounds.
-	return image.Rect(int(math.Floor(minX))-1, int(math.Floor(minY))-1, int(math.Ceil(maxX))+1, int(math.Ceil(maxY))+1).Intersect(clip)
-}
-
-func rasterLocalRGBA(destination *image.RGBA, bounds image.Rectangle) *image.RGBA {
-	local := destination.SubImage(bounds).(*image.RGBA)
-	local.Rect = image.Rect(0, 0, bounds.Dx(), bounds.Dy())
-	return local
-}
-
-func newLocalRasterizer(bounds image.Rectangle) *vector.Rasterizer {
-	return vector.NewRasterizer(bounds.Dx(), bounds.Dy())
-}
-
 func rasterImage(dst *image.RGBA, source image.Image, placement PlannedImage, transform Transform, crop Rect, clip image.Rectangle) error {
 	if source == nil {
 		return fmt.Errorf("%w: missing image", ErrDisplayRasterResource)
@@ -949,44 +648,24 @@ func rasterImage(dst *image.RGBA, source image.Image, placement PlannedImage, tr
 		sy := sourceBounds.Min.Y + (y-target.Min.Y)*sourceBounds.Dy()/target.Dy()
 		for x := target.Min.X; x < target.Max.X; x++ {
 			sx := sourceBounds.Min.X + (x-target.Min.X)*sourceBounds.Dx()/target.Dx()
-			value := rasterSourceNRGBA(source, sx, sy)
+			value := color.NRGBAModel.Convert(source.At(sx, sy)).(color.NRGBA)
 			alpha := uint32(rasterOpacityAlpha(value.A, placement.Opacity))
 			background := dst.RGBAAt(x, y)
 			dst.SetRGBA(x, y, color.RGBA{
-				R: uint8((uint32(value.R)*alpha + uint32(background.R)*(255-alpha) + 127) / 255),         // #nosec G115 -- low-width representation is explicitly normalized before packing
-				G: uint8((uint32(value.G)*alpha + uint32(background.G)*(255-alpha) + 127) / 255),         // #nosec G115 -- low-width representation is explicitly normalized before packing
-				B: uint8((uint32(value.B)*alpha + uint32(background.B)*(255-alpha) + 127) / 255), A: 255, // #nosec G115 -- low-width representation is explicitly normalized before packing
+				R: uint8((uint32(value.R)*alpha + uint32(background.R)*(255-alpha) + 127) / 255),
+				G: uint8((uint32(value.G)*alpha + uint32(background.G)*(255-alpha) + 127) / 255),
+				B: uint8((uint32(value.B)*alpha + uint32(background.B)*(255-alpha) + 127) / 255), A: 255,
 			})
 		}
 	}
 	return nil
 }
 
-func rasterSourceNRGBA(source image.Image, x, y int) color.NRGBA {
-	switch typed := source.(type) {
-	case *image.YCbCr:
-		yOffset := typed.YOffset(x, y)
-		cOffset := typed.COffset(x, y)
-		r, g, b := color.YCbCrToRGB(typed.Y[yOffset], typed.Cb[cOffset], typed.Cr[cOffset])
-		return color.NRGBA{R: r, G: g, B: b, A: 255}
-	case *image.NRGBA:
-		return typed.NRGBAAt(x, y)
-	case *image.RGBA:
-		value := typed.RGBAAt(x, y)
-		if value.A == 255 {
-			return color.NRGBA{R: value.R, G: value.G, B: value.B, A: 255}
-		}
-		return color.NRGBAModel.Convert(value).(color.NRGBA)
-	default:
-		return color.NRGBAModel.Convert(source.At(x, y)).(color.NRGBA)
-	}
-}
-
 func rasterOpacityAlpha(source uint8, opacity Fixed) uint8 {
 	if opacity == 0 {
 		return source
 	}
-	return uint8((uint32(source)*uint32(opacity) + uint32(FixedScale)/2) / uint32(FixedScale)) // #nosec G115 -- low-width representation is explicitly normalized before packing
+	return uint8((uint32(source)*uint32(opacity) + uint32(FixedScale)/2) / uint32(FixedScale))
 }
 
 func rasterRectangularPath(path PlannedPath) bool {
@@ -1008,9 +687,9 @@ func pageToRaster26_6(value, origin Fixed, pixels uint32, extent Fixed) fixed.In
 	numerator := int64(value-origin) * int64(pixels) * 64
 	denominator := int64(extent)
 	if numerator < 0 {
-		return fixed.Int26_6(-((-numerator + denominator/2) / denominator)) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		return fixed.Int26_6(-((-numerator + denominator/2) / denominator))
 	}
-	return fixed.Int26_6((numerator + denominator/2) / denominator) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	return fixed.Int26_6((numerator + denominator/2) / denominator)
 }
 func rasterPixelExtent(extent Fixed, dpi uint32) (uint32, error) {
 	value := (int64(extent)*int64(dpi) + 36*FixedScale) / (72 * FixedScale)
@@ -1047,6 +726,6 @@ func (w *rasterLimitWriter) Write(p []byte) (int, error) {
 		return 0, ErrDisplayRasterLimit
 	}
 	n, err := w.writer.Write(p)
-	w.remaining -= uint64(n) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	w.remaining -= uint64(n)
 	return n, err
 }

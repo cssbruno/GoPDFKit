@@ -139,7 +139,7 @@ func PlanStack(ctx context.Context, input StackPlanInput, limits StackPlanLimits
 	for index, child := range input.Children {
 		children[index] = indexedStackChild{child: child, index: uint32(index)}
 	}
-	sortCost := uint64(len(children)) * uint64(bits.Len(uint(len(children))+1)+1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	sortCost := uint64(len(children)) * uint64(bits.Len(uint(len(children))+1)+1)
 	if err := budget.charge(sortCost); err != nil {
 		return LayoutPlan{}, err
 	}
@@ -158,7 +158,7 @@ func PlanStack(ctx context.Context, input StackPlanInput, limits StackPlanLimits
 	}
 
 	output := LayoutPlanInput{Pages: []PlannedPage{{Number: 1, Size: input.PageSize,
-		Fragments: IndexRange{Count: uint32(len(children))}}}, Fragments: make([]Fragment, 0, len(children))} // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		Fragments: IndexRange{Count: uint32(len(children))}}}, Fragments: make([]Fragment, 0, len(children))}
 	for index, indexed := range children {
 		if err := budget.charge(1); err != nil {
 			return LayoutPlan{}, err
@@ -222,16 +222,16 @@ func validateStackChildren(children []StackChild, maxState uint64, budget *stack
 			return 0, fmt.Errorf("%w: child %d identity or alignment", ErrStackChildInvalid, index)
 		}
 		if err := validateTextIdentity("stack child node key", string(child.Key)); err != nil {
-			return 0, fmt.Errorf("%w: child %d: %w", ErrStackChildInvalid, index, err)
+			return 0, fmt.Errorf("%w: child %d: %v", ErrStackChildInvalid, index, err)
 		}
 		if err := validateTextIdentity("stack child instance ID", string(child.Instance)); err != nil {
-			return 0, fmt.Errorf("%w: child %d: %w", ErrStackChildInvalid, index, err)
+			return 0, fmt.Errorf("%w: child %d: %v", ErrStackChildInvalid, index, err)
 		}
 		if err := child.Source.Validate(); err != nil {
-			return 0, fmt.Errorf("%w: child %d source: %w", ErrStackChildInvalid, index, err)
+			return 0, fmt.Errorf("%w: child %d source: %v", ErrStackChildInvalid, index, err)
 		}
 		if err := child.Size.Validate(); err != nil {
-			return 0, fmt.Errorf("%w: child %d size: %w", ErrStackChildInvalid, index, err)
+			return 0, fmt.Errorf("%w: child %d size: %v", ErrStackChildInvalid, index, err)
 		}
 		cost := stackChildStateBase + uint64(len(child.Key)) + uint64(len(child.Instance)) + uint64(len(child.Source.File))
 		if cost > maxState-state {

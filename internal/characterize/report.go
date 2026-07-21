@@ -176,7 +176,7 @@ func inspectArtifact(ctx context.Context, artifact Artifact, maxText uint64) (Fi
 			return FixtureEvidence{}, fmt.Errorf("page %d text: %w", page, err)
 		}
 		value = normalizeExtractedText(value)
-		if uint64(text.Len()+len(value)) > maxText { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint64(text.Len()+len(value)) > maxText {
 			return FixtureEvidence{}, ErrLimit
 		}
 		pageText[page-1] = value
@@ -214,10 +214,10 @@ func pdfVersion(data []byte) string {
 func inspectStructure(data []byte) PDFStructure {
 	count := func(token string) uint32 {
 		matches := bytes.Count(data, []byte(token))
-		if uint64(matches) > uint64(^uint32(0)) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		if uint64(matches) > uint64(^uint32(0)) {
 			return ^uint32(0)
 		}
-		return uint32(matches) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		return uint32(matches)
 	}
 	return PDFStructure{
 		LinkAnnotations: count("/Subtype /Link"), URIActions: count("/URI "), Destinations: count("/Dest "),

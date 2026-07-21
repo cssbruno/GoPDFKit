@@ -174,23 +174,10 @@ as completed behavior.
 
 ### Provenance and explainability
 
-- [x] Every persistent source node has a readable stable identity or a
-  deterministic anonymous identity scoped to the exact source revision
-  ([adapter](document/paper.go), [compiler mapping](internal/papercompile/compile.go),
-  [tests](document/paper_provenance_test.go)).
-- [x] Expanded component/repeat instances retain distinct instance paths plus
-  their definition and invocation spans, separately from source identity
-  ([provenance](document/paper_provenance.go),
-  [tests](document/paper_provenance_test.go)).
-- [x] Plan-local fragments have unique plan-local IDs independently from their
-  source key and expanded instance identity, including continuation evidence
-  ([contract](internal/layoutengine/explain.go),
-  [tests](document/paper_provenance_test.go)).
-- [x] `TraceFragment` joins one exact retained fragment to source identity,
-  binding path, computed style/token chain, expansion provenance, semantic
-  owner path, page, region, and fixed geometry through a bounded detached
-  projection ([adapter](document/paper_plan_tools.go),
-  [tests](document/paper_provenance_test.go)).
+- [ ] Every persistent source node has a stable or revision-scoped identity.
+- [ ] Expanded instances are distinguishable from source definitions.
+- [ ] Plan-local fragments are distinguishable from instances.
+- [ ] Every fragment maps to source, data, style, semantics, page, and region.
 - [x] Production plan projections include deterministic, map-free compact
   provenance tables with aligned interned fragment and line IDs
   ([contract](internal/layoutengine/provenance.go),
@@ -206,12 +193,7 @@ as completed behavior.
   ([contract](internal/layoutengine/plan.go),
   [planner](document/paper.go),
   [tests](document/typed_characterization_test.go)).
-- [x] Every retained layout diagnostic has exact page evidence and either an
-  authored source span or a stable generated-node identity; immutable-plan
-  validation rejects unpositioned/global layout diagnostics
-  ([invariant](internal/layoutengine/plan.go),
-  [tests](internal/layoutengine/plan_test.go),
-  [query evidence](internal/layoutengine/query_test.go)).
+- [ ] Every layout diagnostic has source and page evidence.
 
 ## 2. Stage 0 — Characterization and ADR
 
@@ -379,11 +361,7 @@ as completed behavior.
   domains; the HTML inventory test enforces one fixture for every behavior
   class, including malformed, diagnostic, policy, and strict-unified outcomes
   ([typed corpus](document/typed_characterization_test.go), [typed fixtures](document/typed_characterization_fixtures.go), [HTML corpus](document/html_characterization_test.go)).
-- [x] Baseline commands reproduce from a clean checkout. The executable gate
-  archives the exact committed revision, reruns deterministic typed/HTML
-  characterization twice, and executes the documented 250 ms, ten-sample
-  planner/painter/end-to-end/concurrency/table benchmark command in isolation
-  ([gate](tools/verify-clean-checkout.sh), [Make target](Makefile)).
+- [ ] Baseline commands reproduce from a clean checkout.
 - [x] Benchmark comparisons are statistically usable. The report gate requires
   ten samples, exact named host/toolchain matching, upper-median timing, and
   worst-sample allocation ceilings ([gate](internal/perfgate/report.go),
@@ -2690,10 +2668,10 @@ as completed behavior.
   viewport and remain independently collapsible
   ([workspace CSS](cmd/paper-studio/web/studio.css),
   [browser-tested shell](cmd/paper-studio/web/index.html)).
-- [x] Outline, source, inspector, issues, and scenarios are synchronized. The
-  read-first slice synchronizes source selection with exact fragments, pages,
-  causal inspection, diagnostic source focus, and scenario buttons that
-  atomically swap the revision-bound plan with a reversible Default choice
+- [ ] Outline, source, inspector, issues, and scenarios are synchronized. The
+  current read-first slice synchronizes source selection with exact fragments,
+  pages, and causal inspection, and scenario buttons atomically swap the
+  revision-bound plan with a reversible Default choice
   ([controller](cmd/paper-studio/web/studio.js),
   [scenario-aware server/tests](cmd/paper-studio/main.go),
   [tests](cmd/paper-studio/main_test.go)); page-hit-to-outline/source focus and
@@ -2735,14 +2713,12 @@ as completed behavior.
 
 ### Selection and stale-state safety
 
-- [x] Page selection maps to source, outline, instance, style, and semantics.
-  Exact page hits persistently select the outline row, reveal the source line,
-  request the bounded causal projection, and show instance/semantic/
-  reading-order evidence plus exact compiler-computed text/box styles and
-  binding provenance ([controller](cmd/paper-studio/web/studio.js),
-  [computed style mapping](internal/papercompile/compile.go),
-  [provenance projection](document/paper_provenance.go),
-  [hit/explain tests](cmd/paper-studio/main_test.go)).
+- [ ] Page selection maps to source, outline, instance, style, and semantics.
+  Exact page hits now persistently select the outline row, reveal the source
+  line, request the bounded causal projection, and show instance/semantic/
+  reading-order evidence ([controller](cmd/paper-studio/web/studio.js),
+  [hit/explain tests](cmd/paper-studio/main_test.go)); complete computed-style
+  and data-binding provenance remains open.
 - [x] An identified source selection requests its complete bounded causal
   projection, navigates to its first page, draws every selected fragment on the
   active page, and marks every affected page in the rail
@@ -2872,14 +2848,10 @@ as completed behavior.
   structure elements and 23 marked streams (Document/Table/TR/TH/TD/P), plus 9
   reading-order and 18 role marks on page 1 over a 360x192 WASM preview, with
   clean browser logs.
-- [x] Show the break ledger in the page inspector. Exact causal break
-  decisions label their retained triggering or preceding fragment. The bounded
-  compiler-owned typed characterization corpus remains available through its
-  exact-revision test endpoint, but its internal fixture dump is not exposed in
-  the Studio UI ([typed experiment endpoint](cmd/paper-studio/studio_experiments.go),
-  [controller](cmd/paper-studio/web/studio.js),
-  [Go evidence](cmd/paper-studio/main_test.go),
-  [model tests](cmd/paper-studio/js_test/typed_experiment_model_test.cjs)).
+- [ ] Show break ledger and typed experiments. Exact causal break decisions
+  now label their retained triggering or preceding fragment and are also
+  exposed in the inspector ([controller](cmd/paper-studio/web/studio.js));
+  typed experiments remain open.
 - [x] Show data binding and style-token provenance. Explain and Inspect responses
   carry a detached, exact-plan projection of compiler binding paths and full
   resolved token chains; the Studio Inspector filters it by retained fragment
@@ -2905,28 +2877,16 @@ as completed behavior.
 
 ### Stage 8 exit gate
 
-- [x] Any visible content pixel can be traced to its complete causal chain.
-  Revision-bound hit testing returns the exact source fragment, and the Studio
-  immediately follows that identity through outline/source focus and the
-  bounded Explain command/fragment evidence ([hit-to-explain test](cmd/paper-studio/main_test.go),
-  [controller](cmd/paper-studio/web/studio.js)).
-- [x] Normal visible-page updates meet calibrated latency budgets. The backend
-  now exercises the canonical WASM render-payload path with ten-sample stage
-  timings, a calibrated backend/WASM budget checker, and a revision-safe source
-  change stream; the Apple M2 report records cold planning, payload transfer/
-  decode, WASM paint, file notification, and incremental replanning
-  ([benchmark](tools/benchmark-paper-studio-wasm.mjs),
-  [report](docs/performance/baselines/paper-studio-wasm-latency-apple-m2.txt),
-  [budget checker](tools/check-paper-studio-latency-report.mjs),
-  [change stream](cmd/paper-studio/main.go)). A real-browser trace now records
-  cold reload settling, WASM payload decode/canvas compositing, three warm
-  Refresh plan interactions, and the approved <=10,000 ms cold / <=4,000 ms warm
-  visible-page budgets ([browser baseline](docs/performance/baselines/paper-studio-browser-latency-browser-plugin.txt),
+- [ ] Any visible pixel can be traced to its complete causal chain.
+- [ ] Normal visible-page updates meet calibrated latency budgets. The backend
+  benchmark now exercises the canonical WASM render-payload path and the
+  end-to-end smoke executes the real module and rasterizer, but the former SVG
+  baseline predates this cutover and must be recalibrated. Browser startup,
+  payload transfer/decode, WASM paint, cold incremental planning, file
+  notification, and an approved interaction budget remain open
+  ([benchmark](cmd/paper-studio/main_test.go),
   [real WASM smoke](tools/test-paper-studio-wasm.sh)).
-- [x] The internal Plan Viewer contracts remain valid in the real workspace.
-  The real Paper Studio workspace exercises revision-bound page, hit, explain,
-  inspect, provenance, typed-experiment, SVG, and WASM display-payload routes
-  in one integration test ([workspace contract test](cmd/paper-studio/main_test.go)).
+- [ ] The internal Plan Viewer contracts remain valid in the real workspace.
 - [x] Studio uses no substitute browser layout or JavaScript page renderer:
   visible pages and thumbnails use the shared Go display-list rasterizer
   compiled to WASM, while geometry overlays remain immutable diagnostic SVG.
@@ -2940,44 +2900,30 @@ as completed behavior.
 
 ### Create-to-deliver
 
-- [x] New template flow. Studio now supports page-master bootstrap, the typed
-  primitive/component gallery, schema starter creation, explicit project-
-  relative design imports, and preview-to-export delivery through the same
-  authority-bound semantic journal. Each action remains a bounded readable CST
-  patch that preserves source trivia ([mutation](internal/paperd/authoring_mutations.go),
-  [source edit grouping](internal/paperedit/edit.go),
+- [ ] New template flow. Studio now inserts closed paragraph/section starter
+  shapes through an explicit `insert_template` capability and the existing
+  semantic journal, producing one readable CST patch while preserving source
+  trivia ([mutation](internal/paperd/authoring_mutations.go),
   [UI](cmd/paper-studio/web/authoring-model.js),
-  [tests](internal/paperd/authoring_mutations_test.go),
-  [Studio delivery test](cmd/paper-studio/studio_edit_test.go)).
-- [x] Schema connection and binding picker. The compiler now exposes detached
+  [tests](internal/paperd/authoring_mutations_test.go)). The broad item remains
+  open for new-file bootstrap, a full template gallery, import, and proven
+  preview-to-export delivery.
+- [ ] Schema connection and binding picker. The compiler now exposes detached
   schema descriptors from its existing analysis; Studio projects exact
   primitive/list paths and bindable source targets, rejects stale source/plan
   metadata, and commits through `PaperSetBinding` rather than inventing a
-  browser schema parser. Binding transforms now include compiler-validated
-  format kind, locale/currency, requiredness, and bounded decimal precision;
-  the schema starter also creates a valid first field without raw CST input
-  ([metadata](internal/papercompile/schema.go),
+  browser schema parser ([metadata](internal/papercompile/schema.go),
   [server](cmd/paper-studio/studio_authoring.go),
-  [browser model](cmd/paper-studio/web/authoring-model.js)). Nested object/list
-  field insertion is now atomic and compiler-validated, with exact nested
-  field targets exposed to the picker ([mutation](internal/paperd/authoring_mutations.go),
-  [source edit](internal/paperedit/edit.go),
-  [tests](internal/paperd/authoring_mutations_test.go)).
-- [x] Scenario creation and stress matrix. Studio offers bounded empty,
+  [browser model](cmd/paper-studio/web/authoring-model.js)). The item remains
+  open for richer object/list binding UX, transformations, and schema authoring.
+- [ ] Scenario creation and stress matrix. Studio offers bounded empty,
   typical, and stress presets generated from compiler-owned schema metadata;
   one selected case becomes one authority-bound journal insertion with stable
-  keyed-list items and exact stale rejection. Authored scenarios can now also
-  be renamed or deleted through exact-revision lifecycle actions, and the UI
-  exposes those actions beside each matrix row
+  keyed-list items and exact stale rejection
   ([mutation](internal/paperd/authoring_mutations.go),
-  [UI](cmd/paper-studio/web/studio.js),
-  [end-to-end test](cmd/paper-studio/studio_edit_test.go)). Matrix creation now
-  accepts bounded unique `id:preset` cases atomically, and scalar fixture values
-  can be edited by scenario-relative path with exact type preservation
-  ([source edit](internal/paperedit/edit.go),
-  [browser model](cmd/paper-studio/web/authoring-model.js),
-  [tests](internal/paperd/authoring_mutations_test.go),
-  [Studio integration](cmd/paper-studio/studio_edit_test.go)).
+  [end-to-end test](cmd/paper-studio/studio_edit_test.go)). The item remains
+  open for matrix-wide management, rename/delete/edit flows, combinatorial
+  cases, and delivery-status integration.
 - [x] Initial page-master bootstrap creation. A parseable document with no page
   can now receive one exact `page`/`body`/starter-paragraph template through
   the journal, while existing-page documents reject the bootstrap shape;
@@ -2986,23 +2932,9 @@ as completed behavior.
   [Studio metadata/UI](cmd/paper-studio/studio_authoring.go),
   [tests](internal/paperd/authoring_mutations_test.go)). Named/custom
   page-master creation and a full gallery remain open.
-- [x] Typed primitive/component palette. Studio now exposes a typed palette for
-  paragraph, heading, list, row, column, page-break, section, and declared
-  component instances. Each choice lowers through the same authority-bound
-  one-patch journal; component choices are compiler/source-derived and reject
-  unknown references ([mutation](internal/paperd/authoring_mutations.go),
-  [Studio authoring](cmd/paper-studio/studio_authoring.go),
-  [browser model](cmd/paper-studio/web/authoring-model.js),
-  [palette tests](internal/paperd/authoring_mutations_test.go),
-  [Studio integration](cmd/paper-studio/studio_edit_test.go)).
-- [x] Slot-aware target analysis. The internal review model projects body/row/
-  column destinations and unfilled component slots with their declared
-  accepted primitive kinds, never treating an expanded instance as an authored
-  target; the current Studio UI does not expose the editing-contract workflow
-  ([review model](cmd/paper-studio/web/review-model.js),
-  [model tests](cmd/paper-studio/js_test/review_model_test.cjs),
-  [slot authority](internal/paperd/domain_mutations.go)).
-- [x] Resource manager for fonts/assets/licenses/fallback/crop focus. Paper
+- [ ] Typed primitive/component palette.
+- [ ] Slot-aware drop targets.
+- [ ] Resource manager for fonts/assets/licenses/fallback/crop focus. Paper
   Studio now has a bounded read-first resource inventory tied to the exact
   source revision, scenario, and immutable plan. It shows content name, media
   type, SHA-256, byte size, decoded dimensions, alt/decorative usage, crop
@@ -3021,29 +2953,10 @@ as completed behavior.
   [read-first UI model](cmd/paper-studio/web/resource-model.js),
   [tests](cmd/paper-studio/studio_resources_test.go)). Resource responses now
   validate source revision, workspace revision, and plan hash independently.
-  With an explicit manifest, Studio now also supports exact-revision add/remove
-  catalog mutations by project-relative file and metadata; the loader derives
-  digests, revalidates byte/manifest budgets, the enforced font-license policy,
-  and lifecycle relationships, and
-  atomically publishes the manifest before reloading the immutable planning
-  catalog ([catalog editor](internal/paperassets/loader.go), [mutation route
-  and tests](cmd/paper-studio/studio_resource_catalog.go)). The browser still
-  receives no paths or bytes. Production TTF/OTF resources now enter the
-  immutable planner catalog, participate in exact font lookup and metrics, and
-  are passed to the existing UTF-8 subsetter during PDF painting; manifest
-  lifecycle and license admission remain enforced ([catalog](internal/papercompile/asset_catalog.go),
-  [planner/PDF path](document/paper.go),
-  [loader projection](internal/paperassets/loader.go),
-  [embedding test](document/paper_image_test.go)). WOFF2 remains metadata-only
-  until a compatible shaping/subsetting adapter is added.
-- [x] Preflight, explicit PDF verification, export, and publish status. Studio
-  now exposes revision-bound preflight, independent final-PDF tag verification,
-  a verified-PDF export endpoint, and an explicit separate-authorized publish
-  state that cannot be inferred from export
-  ([delivery endpoint](cmd/paper-studio/studio_delivery.go),
-  [export route](cmd/paper-studio/studio_delivery.go),
-  [Studio status UI](cmd/paper-studio/web/studio.js),
-  [integration evidence](cmd/paper-studio/main_test.go)).
+  The broad checkbox remains open for production font embedding/subsetting,
+  enforceable license policy, adding/removing catalog entries in Studio, and
+  complete publish lifecycle management.
+- [ ] Preflight, explicit PDF verification, export, and publish status.
 
 ### Direct manipulation
 
@@ -3068,7 +2981,7 @@ as completed behavior.
   [Studio model/session](cmd/paper-studio/web/edit-model.js),
   [tests](internal/paperd/flow_mutations_test.go)). Real-browser drag/drop
   evidence remains an exit-gate requirement.
-- [x] Grid handles write readable track values. The revision-safe service
+- [ ] Grid handles write readable track values. The revision-safe service
   foundation now exposes a closed typed operation for `track`, `track-size`,
   min/max, grow/shrink, cross-size/min/max/alignment, and fractional weight on
   direct paragraph, heading, image, and table row/column children. It requires
@@ -3081,11 +2994,10 @@ as completed behavior.
   grants both child and parent effects, and exposes deterministic commit/stale
   feedback ([session](cmd/paper-studio/studio_edit.go),
   [controls](cmd/paper-studio/web/studio.js),
-  [tests](cmd/paper-studio/studio_edit_test.go)). The browser inspector now
-  exposes the same closed handle and its source/plan-locked commit state;
-  deterministic server/capture coverage is retained in the Studio interaction
-  corpus.
-- [x] Table handles write tracks, headers, and split policies. The language and
+  [tests](cmd/paper-studio/studio_edit_test.go)). The checkbox remains open
+  until the real browser interaction has deterministic before/after visual
+  evidence.
+- [ ] Table handles write tracks, headers, and split policies. The language and
   production-planner foundation now has distinct lossless `table`,
   `table-track`, `table-header`, `table-row`, and `cell` nodes; bounded fixed,
   minimum, and maximum tracks; captions; row/column spans; header repetition;
@@ -3101,9 +3013,8 @@ as completed behavior.
   ([session](cmd/paper-studio/studio_edit.go),
   [controls](cmd/paper-studio/web/edit-model.js),
   [tests](cmd/paper-studio/studio_edit_test.go)): the richer nested-cell
-  interaction corpus and deterministic browser before/after evidence are
-  retained in the Studio interaction corpus.
-- [x] Box handles write padding/border/radius/background. Paragraphs,
+  interaction corpus and deterministic browser before/after evidence remain.
+- [ ] Box handles write padding/border/radius/background. Paragraphs,
   headings, lists, and row/column text children now lower readable padding,
   per-side border widths, border color, radius, and background properties into
   the unified box contract. A closed revision-safe service operation writes
@@ -3117,10 +3028,9 @@ as completed behavior.
   ([controls](cmd/paper-studio/web/studio.js),
   [session](cmd/paper-studio/studio_edit.go),
   [tests](cmd/paper-studio/studio_edit_test.go)). The checkbox remains open
-  The real Studio inspector has been exercised through selection, exact box
-  handle, one minimal patch, and committed preview refresh; the deterministic
-  interaction/capture corpus remains the repeatable evidence.
-- [x] Image handles write fit, focus, dimensions, and alt text. The language
+  until the real browser interaction has deterministic before/after visual
+  evidence.
+- [ ] Image handles write fit, focus, dimensions, and alt text. The language
   and service foundation now has a lossless `image @name` node with bounded
   deterministic inline PNG/JPEG resources, dimensions, contain/cover fit,
   crop focus, alt text, explicit decorative status, caption, and box styling.
@@ -3134,8 +3044,7 @@ as completed behavior.
   ([session](cmd/paper-studio/studio_edit.go),
   [controls](cmd/paper-studio/web/edit-model.js),
   [tests](cmd/paper-studio/studio_edit_test.go)). The checkbox remains open:
-  Studio controls and the deterministic interaction corpus cover the closed
-  exact-revision operation; human-readable
+  deterministic browser before/after evidence is unavailable. Human-readable
   `source: "asset:name"` references now resolve only through an explicit
   immutable catalog whose mandatory SHA-256 digest matches bounded PNG/JPEG
   bytes; compiler and public planning/rendering APIs never search ambient files
@@ -3144,7 +3053,7 @@ as completed behavior.
   [compiler evidence](internal/papercompile/image_test.go),
   [production evidence](document/paper_image_test.go)). The complete lockfile/
   resource-manager authoring workflow remains open.
-- [x] Canvas handles write explicit anchors/constraints. Human-readable
+- [ ] Canvas handles write explicit anchors/constraints. Human-readable
   `canvas` and `anchor` nodes lower expressions such as
   `left: "@peer.right + 8pt"` into the existing bounded local canvas DAG.
   Production plans retain source identities, positioned fragments, display
@@ -3158,9 +3067,8 @@ as completed behavior.
   [Studio test](cmd/paper-studio/studio_edit_test.go)). Canvas blocks now also
   compose with preceding/following flow content and authored page shells while
   preserving child source/semantic identity and exact display commands. The
-  item remains open for nested canvas text/images; the governing-canvas
-  precondition, exact capture change, and Studio control are complete.
-- [x] Page-master handles write regions and margins. The existing authored
+  item remains open for nested canvas text/images and real-browser evidence.
+- [ ] Page-master handles write regions and margins. The existing authored
   `page` node now has an authority-bound Studio margin handle for the shorthand
   and each physical side. It targets the governing source property, requires
   exact source/plan/instance/fingerprint guards, emits one readable CST patch,
@@ -3174,34 +3082,13 @@ as completed behavior.
   box handles require the governing page precondition
   ([production evidence](document/paper_page_regions_test.go),
   [mutation tests](internal/paperd/semantic_layout_mutations_test.go)). The item
-  remains open for named/custom regions and page-master creation UX.
-- [x] Dynamic text distinguishes binding from fixture editing. The internal
-  review model classifies bound nodes and names the exact fixture path; the
-  current Studio UI does not expose the editing-contract workflow
-  ([review model](cmd/paper-studio/web/review-model.js),
-  [tests](cmd/paper-studio/js_test/review_model_test.cjs)).
-- [x] Repeated rows distinguish template, invocation, slot, and fixture
-  targets. The internal model distinguishes repeated templates, component
-  invocations, slot fills, and scenario fixture nodes
-  ([review model](cmd/paper-studio/web/review-model.js),
-  [tests](cmd/paper-studio/js_test/review_model_test.cjs)).
-- [x] Page-break dragging opens a policy chooser. Addressable page-breaks now
-  expose hard, keep-with-next, and avoid-orphan intent choices alongside the
-  exact semantic destination; the chosen review intent is sent with the
-  revision-bound move request ([Studio controls](cmd/paper-studio/web/studio.js),
-  [request boundary](cmd/paper-studio/studio_edit.go),
-  [browser probe](testdata/paper/studio-demo.paper)).
-- [x] Optimistic feedback is visibly speculative. Pending semantic commits use
-  a distinct speculative tone and copy, disable competing visual mutations,
-  and only switch to committed/stale/rejected after the server response
-  ([Studio controls](cmd/paper-studio/web/studio.js),
-  [styles](cmd/paper-studio/web/studio.css),
-  [model tests](cmd/paper-studio/js_test/review_model_test.cjs)).
-- [x] Shared-edit blast radius is computed. The internal review model enumerates
-  affected component invocations and shared style consumers; the current
-  Studio UI does not expose the editing-contract workflow
-  ([review model](cmd/paper-studio/web/review-model.js),
-  [tests](cmd/paper-studio/js_test/review_model_test.cjs)).
+  remains open for named/custom regions, page-master creation UX, and real-
+  browser evidence.
+- [ ] Dynamic text distinguishes binding from fixture editing.
+- [ ] Repeated rows distinguish template, invocation, slot, and fixture targets.
+- [ ] Page-break dragging opens a policy chooser.
+- [ ] Optimistic feedback is visibly speculative.
+- [ ] Blast radius is shown before shared token/component/master edits.
 
 ### Working copy and review
 
@@ -3240,45 +3127,16 @@ as completed behavior.
   ([implementation](internal/paperd/changeset_review.go),
   [normal/race/adversarial/bounds/recovery tests](internal/paperd/changeset_review_test.go),
   [visual evidence engine](internal/layoutengine/review_bundle.go)).
-- [x] Screenshot/lasso annotations store page coordinates and transforms. The
-  internal review API stores bounded page-space rectangles plus the six-value
-  affine transform in a revision-independent sidecar and projects them back to
-  authored IDs; the current Studio UI does not expose the review-notes workflow
-  ([server](cmd/paper-studio/studio_review.go),
-  [persistence test](cmd/paper-studio/studio_review_test.go)).
-- [x] Reference PDFs/images support bounded, digest-verified artifacts and
-  deterministic raster diffs. Studio stores reference artifacts beside the
-  review sidecar, rasterizes PDF pages through the pinned Poppler verifier, and
-  serves the reference and diff only for the exact current source and plan
-  revisions ([server](cmd/paper-studio/studio_review.go),
-  [image/PDF/artifact tests](cmd/paper-studio/studio_review_test.go)).
-- [x] Comments survive formatting and ordinary movement. Comments are anchored
-  to authored IDs rather than source offsets, persisted atomically beside the
-  source, and reprojected as resolved/unresolved against the current AST after
-  source changes ([server](cmd/paper-studio/studio_review.go),
-  [persistence test](cmd/paper-studio/studio_review_test.go)).
+- [ ] Screenshot/lasso annotations store page coordinates and transforms.
+- [ ] Reference PDFs/images support calibrated overlay and diff.
+- [ ] Comments survive formatting and ordinary movement.
 
 ### Stage 9 exit gate
 
-- [x] Complete create-to-deliver workflow works without source degradation. The
-  journaled template, binding, schema-field, scenario-matrix, fixture-value,
-  preflight, verified-PDF export, and
-  separate publish-status path are exercised as one exact-revision flow while
-  preserving source comments and trivia
-  ([integration test](cmd/paper-studio/studio_edit_test.go)).
-- [x] Common visual edits produce minimal readable diffs. Studio mutations are
-  bounded to readable CST patches and the focused visual-handle tests assert
-  exact capture changes and patch counts
-  ([tests](cmd/paper-studio/studio_edit_test.go)).
-- [x] Every agent edit is reviewable and selectively acceptable. Changeset
-  evidence remains bound to the retained candidate and exact acceptance path
-  ([review implementation](internal/paperd/changeset_review.go),
-  [tests](internal/paperd/changeset_review_test.go)).
-- [x] Accessibility and scenario checks participate in review. Every exact
-  review response carries the selected scenario and an accessibility status
-  derived from independent inspection of the final serialized PDF; Review
-  surfaces both status and bounded failures ([server](cmd/paper-studio/studio_review.go),
-  [UI](cmd/paper-studio/web/studio.js), [scenario/review tests](cmd/paper-studio/studio_review_test.go)).
+- [ ] Complete create-to-deliver workflow works without source degradation.
+- [ ] Common visual edits produce minimal readable diffs.
+- [ ] Every agent edit is reviewable and selectively acceptable.
+- [ ] Accessibility and scenario checks participate in review.
 
 ## 12. Stage 10 — Legacy engine deletion
 
@@ -3319,17 +3177,13 @@ as completed behavior.
   boundaries.
 - [x] All current public compatibility entry points still work
   (`go test ./...`, including typed/HTML adapter and template tests).
-- [x] Fixture, benchmark, security, and compliance gates pass. Local
+- [ ] Fixture, benchmark, security, and compliance gates pass. Local
   `go test ./...`, `go vet ./...`, repository-wide race tests, generation
   benchmark budgets, the Paper Engine calibration gate, Paper Studio
   JavaScript tests, and the pinned external PDF/A, PDF/UA, and Arlington
   validators pass; reports are in `artifacts/compliance-release` and match
-  `testdata/compliance`. Strict `gosec` passes with line-level `G115`
-  justifications for the bounded fixed-width conversions, and the
-  evidence is tied to the clean pushed candidate.
-- [ ] Stabilization-window acceptance record is accepted. The release-window
-  evidence, approved thresholds, rollback closure, named reviewer approvals,
-  and final decision artifact remain release-governance requirements.
+  `testdata/compliance`. Strict `gosec` still reports 650 `G115` findings, and
+  the stabilization-window acceptance record remains open.
 
 ## 13. Stage 11 — Ecosystem and production hardening
 

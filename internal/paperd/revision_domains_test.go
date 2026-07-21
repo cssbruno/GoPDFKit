@@ -123,6 +123,7 @@ func TestRevisionDomainConcurrentCASAndIdempotency(t *testing.T) {
 		errs := make(chan error, 2)
 		var wait sync.WaitGroup
 		for i, content := range []string{"first", "second"} {
+			i, content := i, content
 			wait.Add(1)
 			go func() {
 				defer wait.Done()

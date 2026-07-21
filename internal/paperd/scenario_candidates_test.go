@@ -118,6 +118,7 @@ func TestScenarioCandidateConcurrentCASAndIdempotentRetry(t *testing.T) {
 		results := make(chan error, 2)
 		var wait sync.WaitGroup
 		for i, value := range []string{"first", "second"} {
+			i, value := i, value
 			wait.Add(1)
 			go func() {
 				defer wait.Done()

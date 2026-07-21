@@ -553,11 +553,7 @@ func (f *Document) putLinkAnnotation(pl pageLink, pagesObjectNumbers []int, page
 		if l.page > 0 && l.page < len(pageHeights) {
 			h = pageHeights[l.page]
 		}
-		if l.x == 0 {
-			f.outf("/Dest [%d 0 R /XYZ 0 %.2f null]", pageObj, h-l.y*f.k)
-		} else {
-			f.outf("/Dest [%d 0 R /XYZ %.2f %.2f null]", pageObj, l.x*f.k, h-l.y*f.k)
-		}
+		f.outf("/Dest [%d 0 R /XYZ 0 %.2f null]", pageObj, h-l.y*f.k)
 	}
 	f.endPDFDict()
 	f.endPDFObject()

@@ -131,13 +131,13 @@ func (p LayoutPlan) HitTestPage(pageNumber uint32, point Point) (PageHitTest, er
 			continue
 		}
 		result.CommandMatchCount++
-		if uint32(len(result.Commands)) == HitTestResultLimit { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(result.Commands)) == HitTestResultLimit {
 			result.CommandsTruncated = true
 			continue
 		}
 		hit := CommandHit{
-			Index:      uint64(index),                                       // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-			PageIndex:  uint32(uint64(index) - uint64(page.Commands.Start)), // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+			Index:      uint64(index),
+			PageIndex:  uint32(uint64(index) - uint64(page.Commands.Start)),
 			Kind:       command.Kind,
 			Fragment:   command.Fragment,
 			Bounds:     command.Bounds,
@@ -173,7 +173,7 @@ func (p LayoutPlan) HitTestPage(pageNumber uint32, point Point) (PageHitTest, er
 			continue
 		}
 		result.FragmentMatchCount++
-		if uint32(len(result.Fragments)) == HitTestResultLimit { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(result.Fragments)) == HitTestResultLimit {
 			result.FragmentsTruncated = true
 			continue
 		}
@@ -182,8 +182,8 @@ func (p LayoutPlan) HitTestPage(pageNumber uint32, point Point) (PageHitTest, er
 			area = HitFragmentContent
 		}
 		result.Fragments = append(result.Fragments, FragmentHit{
-			Index:        uint64(index),                                        // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-			PageIndex:    uint32(uint64(index) - uint64(page.Fragments.Start)), // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+			Index:        uint64(index),
+			PageIndex:    uint32(uint64(index) - uint64(page.Fragments.Start)),
 			Fragment:     fragment.ID,
 			Node:         fragment.Node,
 			Key:          fragment.Key,

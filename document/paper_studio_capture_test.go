@@ -46,8 +46,7 @@ func TestPaperPlanPageSVGCaptureRejectsInvalidRequestsAtomically(t *testing.T) {
 	if err != nil || !result.OK() {
 		t.Fatalf("PlanPaper = %+v, %v", result, err)
 	}
-	var nilContext context.Context
-	if capture, err := plan.CaptureDisplayPageSVG(nilContext, 1, nil); err == nil || len(capture.SVG) != 0 {
+	if capture, err := plan.CaptureDisplayPageSVG(nil, 1, nil); err == nil || len(capture.SVG) != 0 {
 		t.Fatalf("nil context capture = %d, %v", len(capture.SVG), err)
 	}
 	canceled, cancel := context.WithCancel(context.Background())

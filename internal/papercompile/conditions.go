@@ -197,6 +197,7 @@ func (e *scenarioConditionEvaluator) conditionEnvironment(node *paperlang.Node) 
 
 	// Scenario fixture fields share the top-level namespace. Merge all declared
 	// schemas deterministically; conflicting field contracts are diagnosed.
+	fields := make([]FieldDescriptor, 0)
 	kinds := make(map[string]paperexpr.Kind)
 	for _, schema := range e.schemas.descriptors {
 		for _, field := range schema.Fields {
@@ -206,6 +207,7 @@ func (e *scenarioConditionEvaluator) conditionEnvironment(node *paperlang.Node) 
 				}
 				kinds[path.Path] = path.Kind
 			}
+			fields = append(fields, field)
 		}
 	}
 	environment := make([]paperexpr.PathKind, 0, len(kinds))

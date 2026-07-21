@@ -254,7 +254,7 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 	}
 	fingerprint, instance, err := studioTargetPrecondition(snapshot.file, snapshot.source, request.Target)
 	if err != nil {
-		return studioEditResponse{}, fmt.Errorf("%w: target precondition: %w", errStudioInvalidEdit, err)
+		return studioEditResponse{}, fmt.Errorf("%w: target precondition: %v", errStudioInvalidEdit, err)
 	}
 	guard := paperd.PaperMutationGuard{
 		Open: opened.Handle, Authority: authority.Handle, Candidate: created.Candidate.Handle,
@@ -262,22 +262,13 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 		Target: request.Target, ExpectedFingerprint: fingerprint, ExpectedInstance: instance,
 		IdempotencyKey: studioEditIdempotencyKey(request),
 	}
-	parentID := ""
-	if parent != nil {
-		parentID = parent.ID
-	}
 	additionalTarget := ""
-	if request.Operation == "grid" || request.Operation == "canvas" || request.Operation == "region" {
-		if parentID == "" {
-			return studioEditResponse{}, fmt.Errorf("%w: operation requires an addressed governing parent", errStudioInvalidEdit)
-		}
-	}
 	if request.Operation == "grid" {
-		additionalTarget = parentID
+		additionalTarget = parent.ID
 	} else if request.Operation == "canvas" {
-		additionalTarget = parentID
+		additionalTarget = parent.ID
 	} else if request.Operation == "region" {
-		additionalTarget = parentID
+		additionalTarget = parent.ID
 	} else if request.Operation == "flow" {
 		additionalTarget = request.NewParent
 	} else if request.Operation == "table" && len(directTargets) == 2 {
@@ -286,7 +277,7 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 	if additionalTarget != "" {
 		parentFingerprint, parentInstance, preconditionErr := studioTargetPrecondition(snapshot.file, snapshot.source, additionalTarget)
 		if preconditionErr != nil {
-			return studioEditResponse{}, fmt.Errorf("%w: parent precondition: %w", errStudioInvalidEdit, preconditionErr)
+			return studioEditResponse{}, fmt.Errorf("%w: parent precondition: %v", errStudioInvalidEdit, preconditionErr)
 		}
 		guard.TargetPreconditions = []paperedit.TargetPrecondition{{
 			Target: additionalTarget, ExpectedFingerprint: parentFingerprint, ExpectedInstance: parentInstance,
@@ -305,10 +296,9 @@ func (s *studioServer) applyStudioEdit(ctx context.Context, request studioEditRe
 	}
 	afterScenario := request.Scenario
 	if request.Operation == "scenario" && normalizeStudioScenario(request.Scenario) == normalizeStudioScenario(request.Target) {
-		switch request.Property {
-		case "rename":
+		if request.Property == "rename" {
 			afterScenario = request.ID
-		case "delete":
+		} else if request.Property == "delete" {
 			afterScenario = ""
 		}
 	}
@@ -388,7 +378,7 @@ func applyStudioSemanticMutation(workspace *paperd.Workspace, guard paperd.Paper
 		})
 	}
 	if request.Operation == "template" {
-		return workspace.PaperInsertTemplate(paperd.PaperInsertTemplateRequest{Guard: guard, Template: request.Template, ID: request.ID, Component: request.Component, Preset: request.Preset, Path: request.Path})
+		return workspace.PaperInsertTemplate(paperd.PaperInsertTemplateRequest{Guard: guard, Template: request.Template, ID: request.ID, Component: request.Component})
 	}
 	if request.Operation == "import" {
 		return workspace.PaperInsertTemplate(paperd.PaperInsertTemplateRequest{Guard: guard, Template: "import", ImportPath: request.ImportPath})
@@ -595,18 +585,12 @@ func studioTargetPrecondition(file, source, target string) (paperedit.NodeFinger
 }
 
 func studioEditIdempotencyKey(request studioEditRequest) string {
-	encoded, err := json.Marshal(request)
-	if err != nil {
-		encoded = []byte(fmt.Sprintf("%#v", request))
-	}
+	encoded, _ := json.Marshal(request)
 	digest := sha256.Sum256(encoded)
 	return "studio-edit-" + hex.EncodeToString(digest[:16])
 }
 
 func writeStudioSourceCAS(file string, expected [32]byte, source string) error {
-	if isStudioPaperDocument(file) {
-		return writeStudioPaperDocumentSourceCAS(file, expected, source)
-	}
 	_, actual, err := readStudioSource(file)
 	if err != nil {
 		return err
@@ -624,17 +608,17 @@ func writeStudioSourceCAS(file string, expected [32]byte, source string) error {
 		return err
 	}
 	temporaryName := temporary.Name()
-	defer func() { _ = os.Remove(temporaryName) }()
+	defer os.Remove(temporaryName)
 	if err := temporary.Chmod(info.Mode().Perm()); err != nil {
-		_ = temporary.Close()
+		temporary.Close()
 		return err
 	}
 	if _, err := temporary.WriteString(source); err != nil {
-		_ = temporary.Close()
+		temporary.Close()
 		return err
 	}
 	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
+		temporary.Close()
 		return err
 	}
 	if err := temporary.Close(); err != nil {
@@ -650,7 +634,7 @@ func writeStudioSourceCAS(file string, expected [32]byte, source string) error {
 	if err := os.Rename(temporaryName, file); err != nil {
 		return err
 	}
-	if directoryHandle, openErr := os.Open(directory); openErr == nil { // #nosec G304 -- directory is the validated source file's parent.
+	if directoryHandle, openErr := os.Open(directory); openErr == nil {
 		_ = directoryHandle.Sync()
 		_ = directoryHandle.Close()
 	}

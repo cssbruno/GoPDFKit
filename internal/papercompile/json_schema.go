@@ -207,10 +207,9 @@ func (b *jsonSchemaBuilder) describe(node *jsonSchemaValue, pointer, paperPath s
 			return FieldDescriptor{}, err
 		}
 		kind := SchemaString
-		switch typeName {
-		case "number", "integer":
+		if typeName == "number" || typeName == "integer" {
 			kind = SchemaNumber
-		case "boolean":
+		} else if typeName == "boolean" {
 			kind = SchemaBool
 		}
 		return FieldDescriptor{Kind: kind, Required: required}, nil
@@ -295,7 +294,7 @@ func (b *jsonSchemaBuilder) checkPaperPath(pointer, path string) error {
 	if path == "$" {
 		return nil
 	}
-	if uint64(strings.Count(path, ".")+1) > uint64(b.limits.MaxPathSegments) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	if uint64(strings.Count(path, ".")+1) > uint64(b.limits.MaxPathSegments) {
 		return jsonSchemaError(pointer, "paper path exceeds the configured segment limit")
 	}
 	return nil

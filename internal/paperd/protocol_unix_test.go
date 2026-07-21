@@ -68,10 +68,7 @@ func TestUnixProtocolSocketFramesAuthenticatedDispatchAndRejectsPeer(t *testing.
 	if err != nil || len(audit) < 2 || audit[len(audit)-1].Allowed || audit[len(audit)-1].Reason != "peer_uid_denied" {
 		t.Fatalf("socket peer-denial audit = %#v, %v", audit, err)
 	}
-	auditJSON, err := json.Marshal(audit[len(audit)-1])
-	if err != nil {
-		t.Fatal(err)
-	}
+	auditJSON, _ := json.Marshal(audit[len(audit)-1])
 	rawPeer := unixProtocolPeer{PID: 7, UID: uint32(os.Geteuid()) + 1, GID: uint32(os.Getegid())}.String()
 	if bytes.Contains(auditJSON, []byte(rawPeer)) || bytes.Contains(auditJSON, []byte(`"uid"`)) {
 		t.Fatalf("socket peer-denial audit leaked raw UID: %s", auditJSON)
@@ -113,7 +110,8 @@ func TestUnixProtocolSocketBoundsPathsAndFrames(t *testing.T) {
 	}
 	replacedPath := filepath.Join(shortProtocolSocketDir(t), "replaced.sock")
 	owned := requireUnixProtocolListener(t, replacedPath, server, UnixProtocolOptions{MaxConcurrent: 1, IOTimeout: time.Second})
-	if err := owned.Close(); err != nil {
+	_ = owned.listener.Close()
+	if err := os.Remove(replacedPath); err != nil {
 		t.Fatal(err)
 	}
 	replacement, err := net.ListenUnix("unix", &net.UnixAddr{Name: replacedPath, Net: "unix"})
@@ -189,7 +187,7 @@ func roundTripUnixProtocol(t *testing.T, path string, request []byte) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = connection.Close() }()
+	defer connection.Close()
 	_ = connection.SetDeadline(time.Now().Add(2 * time.Second))
 	if err := writeProtocolFrame(connection, request, 64<<10); err != nil {
 		t.Fatal(err)

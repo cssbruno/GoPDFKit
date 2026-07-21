@@ -507,8 +507,8 @@ func imageAlignedOffset(container, object Fixed, alignment ImageAxisAlignment) (
 }
 
 func compareImageProducts(a, b, c, d Fixed) int {
-	aHigh, aLow := bits.Mul64(uint64(a), uint64(b)) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-	bHigh, bLow := bits.Mul64(uint64(c), uint64(d)) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	aHigh, aLow := bits.Mul64(uint64(a), uint64(b))
+	bHigh, bLow := bits.Mul64(uint64(c), uint64(d))
 	if aHigh < bHigh || (aHigh == bHigh && aLow < bLow) {
 		return -1
 	}
@@ -531,8 +531,8 @@ func imageMulDivCeil(a, b, divisor Fixed) (Fixed, error) {
 	if err != nil {
 		return 0, err
 	}
-	high, low := bits.Mul64(uint64(a), uint64(b))          // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-	_, remainder := bits.Div64(high, low, uint64(divisor)) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	high, low := bits.Mul64(uint64(a), uint64(b))
+	_, remainder := bits.Div64(high, low, uint64(divisor))
 	if remainder == 0 {
 		return value, nil
 	}

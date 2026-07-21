@@ -80,6 +80,7 @@ type studioReviewReference struct {
 	Calibrated    bool      `json:"calibrated"`
 	DiffStatus    string    `json:"diff_status,omitempty"`
 	ChangedPixels uint64    `json:"changed_pixels"`
+	OverlayDigest string    `json:"overlay_digest,omitempty"`
 	DiffDigest    string    `json:"diff_digest,omitempty"`
 	CreatedAt     string    `json:"created_at"`
 }
@@ -307,12 +308,17 @@ func (s *studioServer) applyReviewMutation(ctx context.Context, snapshot *studio
 			if !bytes.HasPrefix(data, []byte("%PDF-")) {
 				return errors.New("paper-studio: PDF reference does not have a PDF signature")
 			}
-			diff, width, height, changed, err := s.diffReviewPDF(ctx, snapshot, mutation.Page, data)
+			diff, overlay, width, height, changed, err := s.diffReviewPDF(ctx, snapshot, mutation.Page, data)
 			if err != nil {
 				return err
 			}
 			reference.Width, reference.Height, reference.ChangedPixels = width, height, changed
 			reference.DiffStatus = "verified"
+			overlayDigest := sha256.Sum256(overlay)
+			reference.OverlayDigest = hex.EncodeToString(overlayDigest[:])
+			if err := s.writeReviewArtifact(reference.OverlayDigest, overlay); err != nil {
+				return err
+			}
 			diffDigest := sha256.Sum256(diff)
 			reference.DiffDigest = hex.EncodeToString(diffDigest[:])
 			if err := s.writeReviewArtifact(reference.DiffDigest, diff); err != nil {
@@ -325,6 +331,7 @@ func (s *studioServer) applyReviewMutation(ctx context.Context, snapshot *studio
 			}
 			reference.Width, reference.Height, reference.ChangedPixels = width, height, changed
 			reference.DiffStatus = "verified"
+			reference.OverlayDigest = mutation.ReferenceDigest
 			diffDigest := sha256.Sum256(diff)
 			reference.DiffDigest = hex.EncodeToString(diffDigest[:])
 			if err := s.writeReviewArtifact(reference.DiffDigest, diff); err != nil {
@@ -372,7 +379,7 @@ func (s *studioServer) writeReviewArtifact(digest string, data []byte) error {
 		return err
 	}
 	temporaryName := temporary.Name()
-	defer func() { _ = os.Remove(temporaryName) }()
+	defer os.Remove(temporaryName)
 	if err := temporary.Chmod(0o600); err != nil {
 		_ = temporary.Close()
 		return err
@@ -431,46 +438,46 @@ func (s *studioServer) diffReviewImage(ctx context.Context, snapshot *studioSnap
 	return diffReviewImages(ctx, actualImage, referenceImage)
 }
 
-func (s *studioServer) diffReviewPDF(ctx context.Context, snapshot *studioSnapshot, page uint32, reference []byte) ([]byte, uint32, uint32, uint64, error) {
+func (s *studioServer) diffReviewPDF(ctx context.Context, snapshot *studioSnapshot, page uint32, reference []byte) ([]byte, []byte, uint32, uint32, uint64, error) {
 	raster, err := snapshot.plan.CaptureRasterPages(ctx, document.DefaultPaperPlanRasterRequest())
 	if err != nil {
-		return nil, 0, 0, 0, fmt.Errorf("paper-studio: capture plan for PDF reference diff: %w", err)
+		return nil, nil, 0, 0, 0, fmt.Errorf("paper-studio: capture plan for PDF reference diff: %w", err)
 	}
 	if page == 0 || int(page) > len(raster.Pages) {
-		return nil, 0, 0, 0, errors.New("paper-studio: PDF reference page is absent from the exact plan")
+		return nil, nil, 0, 0, 0, errors.New("paper-studio: PDF reference page is absent from the exact plan")
 	}
 	dimensions := make([]image.Point, len(raster.Pages))
 	for index, planPage := range raster.Pages {
 		config, _, err := image.DecodeConfig(bytes.NewReader(planPage.PNG))
 		if err != nil {
-			return nil, 0, 0, 0, fmt.Errorf("paper-studio: decode exact plan raster dimensions: %w", err)
+			return nil, nil, 0, 0, 0, fmt.Errorf("paper-studio: decode exact plan raster dimensions: %w", err)
 		}
 		dimensions[index] = image.Point{X: config.Width, Y: config.Height}
 	}
 	binary, err := exec.LookPath("pdftoppm")
 	if err != nil {
-		return nil, 0, 0, 0, errors.New("paper-studio: PDF reference diff requires pdftoppm")
+		return nil, nil, 0, 0, 0, errors.New("paper-studio: PDF reference diff requires pdftoppm")
 	}
 	limits := pdfverify.DefaultLimits()
 	output, err := (pdfverify.PopplerRasterizer{
 		Binary: binary, Version: "26.05.0", TempRoot: filepath.Dir(s.reviewSidecarPath()),
 	}).Rasterize(ctx, reference, document.DefaultPaperPlanRasterRequest().DPI, dimensions, limits)
 	if err != nil {
-		return nil, 0, 0, 0, fmt.Errorf("paper-studio: rasterize PDF reference with pinned renderer: %w", err)
+		return nil, nil, 0, 0, 0, fmt.Errorf("paper-studio: rasterize PDF reference with pinned renderer: %w", err)
 	}
 	if int(page) > len(output.Pages) {
-		return nil, 0, 0, 0, errors.New("paper-studio: PDF reference raster omitted the requested page")
+		return nil, nil, 0, 0, 0, errors.New("paper-studio: PDF reference raster omitted the requested page")
 	}
 	actualImage, err := png.Decode(bytes.NewReader(raster.Pages[page-1].PNG))
 	if err != nil {
-		return nil, 0, 0, 0, fmt.Errorf("paper-studio: decode exact plan raster for PDF diff: %w", err)
+		return nil, nil, 0, 0, 0, fmt.Errorf("paper-studio: decode exact plan raster for PDF diff: %w", err)
 	}
 	referenceImage, err := png.Decode(bytes.NewReader(output.Pages[page-1]))
 	if err != nil {
-		return nil, 0, 0, 0, fmt.Errorf("paper-studio: decode rasterized PDF reference: %w", err)
+		return nil, nil, 0, 0, 0, fmt.Errorf("paper-studio: decode rasterized PDF reference: %w", err)
 	}
 	diff, width, height, changed, err := diffReviewImages(ctx, actualImage, referenceImage)
-	return diff, width, height, changed, err
+	return diff, output.Pages[page-1], width, height, changed, err
 }
 
 func diffReviewImages(ctx context.Context, actualImage, referenceImage image.Image) ([]byte, uint32, uint32, uint64, error) {
@@ -502,7 +509,7 @@ func diffReviewImages(ctx context.Context, actualImage, referenceImage image.Ima
 	if err := png.Encode(&encoded, diff); err != nil {
 		return nil, 0, 0, 0, err
 	}
-	return encoded.Bytes(), uint32(bounds.Dx()), uint32(bounds.Dy()), changed, nil // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	return encoded.Bytes(), uint32(bounds.Dx()), uint32(bounds.Dy()), changed, nil
 }
 
 func absReviewChannel(left, right uint8) uint8 {
@@ -548,6 +555,15 @@ func (s *studioServer) handleReviewReference(w http.ResponseWriter, r *http.Requ
 	contentType := review.Reference.Kind
 	switch r.URL.Query().Get("artifact") {
 	case "":
+	case "overlay":
+		digest = review.Reference.OverlayDigest
+		if digest == "" {
+			writeStudioError(w, http.StatusNotFound, errors.New("paper-studio: calibrated reference overlay is not available"))
+			return
+		}
+		if contentType == "application/pdf" {
+			contentType = "image/png"
+		}
 	case "diff":
 		digest = review.Reference.DiffDigest
 		if digest == "" {
@@ -669,7 +685,7 @@ func (s *studioServer) writeReviewSidecar(review studioReviewSidecar) error {
 		return err
 	}
 	temporaryName := temporary.Name()
-	defer func() { _ = os.Remove(temporaryName) }()
+	defer os.Remove(temporaryName)
 	if err := temporary.Chmod(0o600); err != nil {
 		_ = temporary.Close()
 		return err

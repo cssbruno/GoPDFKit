@@ -38,14 +38,8 @@ func TestStudioAssetInventoryIsBoundedDeterministicRevisionBoundAndBytePrivate(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	left, err := json.Marshal(first)
-	if err != nil {
-		t.Fatal(err)
-	}
-	right, err := json.Marshal(second)
-	if err != nil {
-		t.Fatal(err)
-	}
+	left, _ := json.Marshal(first)
+	right, _ := json.Marshal(second)
 	if string(left) != string(right) {
 		t.Fatalf("nondeterministic inventory")
 	}
@@ -79,10 +73,7 @@ func TestStudioResourceInventoryProjectsFontLifecycleAndImageDefaultsWithoutByte
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded, err := json.Marshal(inventory)
-	if err != nil {
-		t.Fatal(err)
-	}
+	encoded, _ := json.Marshal(inventory)
 	if bytes.Contains(encoded, fontData) || bytes.Contains(encoded, imageData) || bytes.Contains(encoded, []byte("path")) {
 		t.Fatalf("private resource data leaked: %s", encoded)
 	}

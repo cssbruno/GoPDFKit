@@ -54,13 +54,10 @@ func SensitiveOperationInputHash(operation SensitiveOperation, input SensitiveOp
 	if err != nil {
 		return "", err
 	}
-	payload, err := json.Marshal(struct {
+	payload, _ := json.Marshal(struct {
 		Operation SensitiveOperation      `json:"operation"`
 		Input     SensitiveOperationInput `json:"input"`
 	}{Operation: operation, Input: canonical})
-	if err != nil {
-		return "", err
-	}
 	sum := sha256.Sum256(append([]byte("paperd/sensitive-operation-input/v1\x00"), payload...))
 	return hex.EncodeToString(sum[:]), nil
 }

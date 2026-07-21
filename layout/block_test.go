@@ -43,6 +43,10 @@ func TestNormalizeBlockTreatsTypedNilLikeNil(t *testing.T) {
 	if block, ok := NormalizeBlock(paragraph); ok || block != nil {
 		t.Fatalf("NormalizeBlock(typed nil) = %#v, %v; want nil, false", block, ok)
 	}
+	if measure := MeasureBlock(NewMeasureContext(80, TextStyle{}), paragraph); !reflect.DeepEqual(measure, BlockMeasurement{}) {
+		t.Fatalf("MeasureBlock(typed nil) = %#v, want zero measurement", measure)
+	}
+
 	doc := NewLayoutDocument()
 	doc.AddBlock(paragraph)
 	if len(doc.Body) != 0 {

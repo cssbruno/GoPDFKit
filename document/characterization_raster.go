@@ -51,7 +51,7 @@ func captureCharacterizationRaster(ctx context.Context, fixture string, plan Lay
 	if budget == nil || plan.PageCount() <= 0 {
 		return nil, "", errors.New("document: characterization raster requires a budget and non-empty plan")
 	}
-	if budget.pages > characterizationRasterMaxPages || uint64(plan.PageCount()) > uint64(characterizationRasterMaxPages-budget.pages) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	if budget.pages > characterizationRasterMaxPages || uint64(plan.PageCount()) > uint64(characterizationRasterMaxPages-budget.pages) {
 		return nil, "", errors.New("document: characterization raster page limit exceeded")
 	}
 	if budget.bytes > characterizationRasterMaxPNGBytes {
@@ -85,7 +85,7 @@ func captureCharacterizationRaster(ctx context.Context, fixture string, plan Lay
 		},
 		PageProfile: characterizationDigest("page-profile:stage0-characterization-v1"),
 	}
-	for page := uint32(1); page <= uint32(plan.PageCount()); page++ { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	for page := uint32(1); page <= uint32(plan.PageCount()); page++ {
 		request.Page = page
 		artifact, err := layoutengine.CaptureDisplayPlanPNGContext(ctx, plan.plan, sources, request)
 		if errors.Is(err, layoutengine.ErrDisplayRasterUnsupported) {

@@ -59,7 +59,7 @@ type WebDisplayRenderPayload struct {
 // ordered. The renderer still performs full validation before painting.
 func EncodeWebDisplayRenderPayload(plan LayoutPlan, sources DisplayRasterSources, request DisplayRasterRequest) ([]byte, error) {
 	if err := plan.Validate(); err != nil {
-		return nil, fmt.Errorf("%w: plan: %w", ErrWebDisplayRenderPayload, err)
+		return nil, fmt.Errorf("%w: plan: %v", ErrWebDisplayRenderPayload, err)
 	}
 	if request.Page == 0 || uint64(request.Page) > uint64(len(plan.pages)) || request.Crop != nil {
 		return nil, fmt.Errorf("%w: page is invalid or crop is unsupported", ErrWebDisplayRenderPayload)
@@ -78,7 +78,7 @@ func EncodeWebDisplayRenderPayload(plan LayoutPlan, sources DisplayRasterSources
 	}
 	canonical, err := plan.CanonicalJSON()
 	if err != nil {
-		return nil, fmt.Errorf("%w: canonical plan: %w", ErrWebDisplayRenderPayload, err)
+		return nil, fmt.Errorf("%w: canonical plan: %v", ErrWebDisplayRenderPayload, err)
 	}
 	planHash := sha256.Sum256(canonical)
 	bindings := make([]WebDisplayResourceBinding, 0, len(sources.FontPrograms)+len(sources.Images))
@@ -128,7 +128,7 @@ func EncodeWebDisplayRenderPayload(plan LayoutPlan, sources DisplayRasterSources
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("%w: encode: %w", ErrWebDisplayRenderPayload, err)
+		return nil, fmt.Errorf("%w: encode: %v", ErrWebDisplayRenderPayload, err)
 	}
 	if len(encoded) > WebDisplayRenderMaxPayloadBytes {
 		return nil, fmt.Errorf("%w: payload exceeds %d bytes", ErrWebDisplayRenderPayload, WebDisplayRenderMaxPayloadBytes)
@@ -139,17 +139,6 @@ func EncodeWebDisplayRenderPayload(plan LayoutPlan, sources DisplayRasterSources
 // RenderWebDisplayPayload validates and paints an encoded browser payload with
 // the shared direct display-list rasterizer. It performs no layout operation.
 func RenderWebDisplayPayload(ctx context.Context, encoded []byte) (DisplayRasterArtifact, error) {
-	return renderWebDisplayPayload(ctx, encoded, nil)
-}
-
-// RenderWebDisplayPayloadCached validates and paints an encoded payload while
-// reusing immutable decoded resources from the same plan identity. The cache
-// never bypasses payload, digest, limit, or plan validation.
-func RenderWebDisplayPayloadCached(ctx context.Context, encoded []byte, cache *WebDisplayRenderCache) (DisplayRasterArtifact, error) {
-	return renderWebDisplayPayload(ctx, encoded, cache)
-}
-
-func renderWebDisplayPayload(ctx context.Context, encoded []byte, cache *WebDisplayRenderCache) (DisplayRasterArtifact, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -160,10 +149,10 @@ func renderWebDisplayPayload(ctx context.Context, encoded []byte, cache *WebDisp
 	decoder.DisallowUnknownFields()
 	var payload WebDisplayRenderPayload
 	if err := decoder.Decode(&payload); err != nil {
-		return DisplayRasterArtifact{}, fmt.Errorf("%w: decode: %w", ErrWebDisplayRenderPayload, err)
+		return DisplayRasterArtifact{}, fmt.Errorf("%w: decode: %v", ErrWebDisplayRenderPayload, err)
 	}
 	if err := ensureJSONEOF(decoder); err != nil {
-		return DisplayRasterArtifact{}, fmt.Errorf("%w: %w", ErrWebDisplayRenderPayload, err)
+		return DisplayRasterArtifact{}, fmt.Errorf("%w: %v", ErrWebDisplayRenderPayload, err)
 	}
 	canonicalPayload, err := json.Marshal(payload)
 	if err != nil || !bytes.Equal(canonicalPayload, encoded) {
@@ -194,10 +183,9 @@ func renderWebDisplayPayload(ctx context.Context, encoded []byte, cache *WebDisp
 	if hex.EncodeToString(actualPlanHash[:]) != payload.PlanHash {
 		return DisplayRasterArtifact{}, fmt.Errorf("%w: plan hash mismatch", ErrWebDisplayRenderPayload)
 	}
-	cache.prepare(payload.PlanHash)
 	plan, err := decodeStoredPlan(payload.Plan, PlanHash(actualPlanHash))
 	if err != nil {
-		return DisplayRasterArtifact{}, fmt.Errorf("%w: plan: %w", ErrWebDisplayRenderPayload, err)
+		return DisplayRasterArtifact{}, fmt.Errorf("%w: plan: %v", ErrWebDisplayRenderPayload, err)
 	}
 	blobs := make(map[string][]byte, len(payload.Blobs))
 	var sourceBytes uint64
@@ -218,7 +206,7 @@ func renderWebDisplayPayload(ctx context.Context, encoded []byte, cache *WebDisp
 		sourceBytes += uint64(len(blob.Bytes))
 		blobs[blob.SHA256] = blob.Bytes
 	}
-	sources := DisplayRasterSources{FontPrograms: make(map[CoreFontMetricsDigest][]byte), Images: make(DisplaySVGImageSources), cache: cache}
+	sources := DisplayRasterSources{FontPrograms: make(map[CoreFontMetricsDigest][]byte), Images: make(DisplaySVGImageSources)}
 	seenBindings := make(map[string]bool, len(payload.Bindings))
 	usedBlobs := make(map[string]bool, len(payload.Blobs))
 	for _, binding := range payload.Bindings {

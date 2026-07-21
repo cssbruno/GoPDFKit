@@ -127,6 +127,7 @@ func TestCSTLimitsAreCompleteAndEnforced(t *testing.T) {
 		{name: "indent", limits: func() CSTLimits { value := DefaultCSTLimits(); value.MaxIndentBytes = 2; return value }()},
 	}
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			if _, err := ParseCSTWithLimits("limits.paper", source, test.limits); !errors.Is(err, ErrCSTLimit) {

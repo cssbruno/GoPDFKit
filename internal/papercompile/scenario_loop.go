@@ -86,9 +86,7 @@ func (e *repeatExpansionContext) expandLoop(node *paperlang.Node, prior map[*pap
 		return nil
 	}
 	var predicate *paperexpr.Program
-	predicateSpan := node.HeaderSpan
 	if when := properties["when"]; when != nil {
-		predicateSpan = when.Value.Span
 		expression, _, valid := repeatStringProperty(when)
 		if !valid {
 			e.add("PAPER_LOOP_WHEN", "loop when must be a quoted boolean expression", "use fixture paths and loop.index, loop.first, or loop.last", when.Value.Span)
@@ -139,7 +137,7 @@ func (e *repeatExpansionContext) expandLoop(node *paperlang.Node, prior map[*pap
 		if predicate != nil {
 			bindings, err := loopExpressionBindings(predicate.Paths, root, value, iteration == 1, last)
 			if err != nil {
-				e.add("PAPER_LOOP_BINDING", err.Error(), "make the selected fixture match its schema", predicateSpan)
+				e.add("PAPER_LOOP_BINDING", err.Error(), "make the selected fixture match its schema", properties["when"].Value.Span)
 				return nil
 			}
 			result, err := paperexpr.Evaluate(e.ctx, *predicate, bindings, e.exprLimits.Program)
@@ -150,7 +148,7 @@ func (e *repeatExpansionContext) expandLoop(node *paperlang.Node, prior map[*pap
 				} else if errors.Is(err, paperexpr.ErrLimit) {
 					code = "PAPER_LOOP_LIMIT"
 				}
-				e.add(code, err.Error(), "fix the expression or its explicit bounds", predicateSpan)
+				e.add(code, err.Error(), "fix the expression or its explicit bounds", properties["when"].Value.Span)
 				return nil
 			}
 			include = result.Kind == paperexpr.Bool && result.Bool
@@ -166,7 +164,7 @@ func (e *repeatExpansionContext) expandLoop(node *paperlang.Node, prior map[*pap
 			key := strconv.FormatInt(value, 10)
 			identity := identityPrefix + "[" + key + "]"
 			path := pathPrefix + "[" + key + "]"
-			if uint32(len(identity)) > e.repeatLimits.MaxPathBytes || uint32(len(path)) > e.repeatLimits.MaxPathBytes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			if uint32(len(identity)) > e.repeatLimits.MaxPathBytes || uint32(len(path)) > e.repeatLimits.MaxPathBytes {
 				e.loopLimit("nested loop instance path exceeds the configured byte limit", "shorten instance prefixes or nesting", node.HeaderSpan)
 				return nil
 			}
@@ -336,7 +334,7 @@ func loopNext(value, step int64) (int64, bool) {
 }
 
 func validLoopPrefix(prefix string, maxBytes uint32) bool {
-	if prefix == "" || uint32(len(prefix)) > maxBytes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if prefix == "" || uint32(len(prefix)) > maxBytes {
 		return false
 	}
 	for index, character := range prefix {

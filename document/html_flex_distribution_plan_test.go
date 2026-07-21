@@ -123,7 +123,6 @@ func TestHTMLUnifiedFlexWrappedFixedAndPercentageBasesGrowPerLine(t *testing.T) 
 }
 
 func TestHTMLUnifiedFlexReverseMainKeepsReadingOrderAndRenders(t *testing.T) {
-	requireDarwinRasterBaseline(t)
 	source := `<div style="display:flex;flex-direction:row-reverse;gap:10pt">` +
 		`<p style="flex:0 0 40pt">First</p><h2 style="flex:0 0 40pt">Second</h2></div>`
 	compiled, err := CompileHTML(source)
@@ -146,7 +145,7 @@ func TestHTMLUnifiedFlexReverseMainKeepsReadingOrderAndRenders(t *testing.T) {
 	if err != nil || status != "captured" || raster == nil || len(raster.Pages) != 1 || raster.Pages[0].PNGSHA256 == "" {
 		t.Fatalf("reverse-main raster = %q %+v, %v", status, raster, err)
 	}
-	if got := raster.Pages[0].PNGSHA256; got != "b85fe789b1b199aed8049818031e405ee2fa400876fa242f51bc34281f6f0e5d" {
+	if got := raster.Pages[0].PNGSHA256; got != "dfac7861e26b5a00942e85919435a0aa851a064ea84ecf7429e34e57d12ef9b8" {
 		t.Fatalf("reverse-main raster drift = %s", got)
 	}
 

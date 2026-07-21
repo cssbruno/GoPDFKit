@@ -140,7 +140,7 @@ func PlanVerticalFlowContext(ctx context.Context, input VerticalFlowInput, limit
 	if err != nil {
 		return LayoutPlan{}, err
 	}
-	chunk := uint32(len(input.Blocks)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	chunk := uint32(len(input.Blocks))
 	if chunk == 0 {
 		chunk = 1
 	}
@@ -292,12 +292,12 @@ func (p *verticalFlowPaginator) finishPage() {
 		Number: p.pageNumber,
 		Size:   p.pageSize,
 		Fragments: IndexRange{
-			Start: uint32(p.pageFragmentStart),                          // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-			Count: uint32(len(p.input.Fragments) - p.pageFragmentStart), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			Start: uint32(p.pageFragmentStart),
+			Count: uint32(len(p.input.Fragments) - p.pageFragmentStart),
 		},
 		Commands: IndexRange{
-			Start: uint32(p.pageCommandStart),                         // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-			Count: uint32(len(p.input.Commands) - p.pageCommandStart), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			Start: uint32(p.pageCommandStart),
+			Count: uint32(len(p.input.Commands) - p.pageCommandStart),
 		},
 	})
 }

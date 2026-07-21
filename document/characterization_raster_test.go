@@ -21,7 +21,6 @@ type characterizationRasterPin struct {
 }
 
 func TestCharacterizationRasterPagesArePinnedBoundedAndFailureAtomic(t *testing.T) {
-	requireDarwinRasterBaseline(t)
 	typed, err := RunTypedCharacterization(t.Context(), TypedCharacterizationLimits{})
 	if err != nil {
 		t.Fatal(err)

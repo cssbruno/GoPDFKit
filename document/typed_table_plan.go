@@ -353,29 +353,12 @@ func typedTablePlacements(rows []layout.TableRow, columnCount int, headerRows ui
 			column += columnSpan
 		}
 	}
-	// HTML and authored document tables commonly omit trailing cells. Preserve
-	// a rectangular geometry by materializing those slots as empty cells rather
-	// than rejecting an otherwise unambiguous grid. Rowspan-covered slots are
-	// already marked occupied and are never synthesized.
 	for row := range occupied {
 		for column, used := range occupied[row] {
-			if used {
-				continue
+			if !used {
+				return nil, typedTableUnsupported(path, fmt.Sprintf("grid slot row %d column %d is unoccupied", row, column))
 			}
-			placements = append(placements, typedTablePlacement{
-				cell: layout.TableCell{}, path: fmt.Sprintf("%s.rows[%d].implicit[%d]", path, row, column),
-				row: uint32(row), column: uint32(column), rowSpan: 1, columnSpan: 1, header: uint32(row) < headerRows,
-			})
 		}
-	}
-	sort.SliceStable(placements, func(i, j int) bool {
-		if placements[i].row != placements[j].row {
-			return placements[i].row < placements[j].row
-		}
-		return placements[i].column < placements[j].column
-	})
-	for index := range placements {
-		placements[index].node = layoutengine.NodeID(index + 1) // #nosec G115 -- table cells are bounded by planner limits.
 	}
 	return placements, nil
 }
@@ -1227,7 +1210,7 @@ func typedNestedRowColumnIntrinsicWidth(container layout.RowColumnBlock, base fl
 func typedNestedDecoratedBlockIntrinsicWidth(box layout.BoxStyle, base float64) (float64, float64, error) {
 	insets := box.Margin.Left + box.Margin.Right + box.Border.Left.Width + box.Border.Right.Width + box.Padding.Left + box.Padding.Right
 	minimum := base + insets + 12
-	var preferred float64
+	preferred := minimum
 	if box.Width > 0 {
 		minimum, preferred = base+box.Width, base+box.Width
 	} else {
@@ -2143,7 +2126,7 @@ func typedTableCollapsedBorders(ctx context.Context, projection layoutengine.Lay
 	})
 	result := make(map[layoutengine.FragmentID][]typedCollapsedBorder)
 	for _, winner := range ordered {
-		var start, end layoutengine.Point
+		start, end := layoutengine.Point{}, layoutengine.Point{}
 		line := winner.segment.line
 		if line.vertical {
 			start = layoutengine.Point{X: line.coordinate, Y: winner.segment.start}
@@ -2184,7 +2167,7 @@ func typedTableBorderPath(box layoutengine.Rect, side int) (layoutengine.Planned
 	if err != nil {
 		return layoutengine.PlannedPath{}, err
 	}
-	var start, end layoutengine.Point
+	start, end := layoutengine.Point{}, layoutengine.Point{}
 	switch side {
 	case 0:
 		start = layoutengine.Point{X: box.X, Y: box.Y}

@@ -102,7 +102,7 @@ func ValidateArchiveReaderAt(ctx context.Context, source io.ReaderAt, size int64
 	}
 	reader, err := zip.NewReader(source, size)
 	if err != nil {
-		return ArchivePlan{}, fmt.Errorf("%w: %w", ErrArchiveInvalid, err)
+		return ArchivePlan{}, fmt.Errorf("%w: %v", ErrArchiveInvalid, err)
 	}
 	if uint64(len(reader.File)) > uint64(limits.MaxFiles) {
 		return ArchivePlan{}, fmt.Errorf("%w: too many files", ErrArchiveLimit)
@@ -127,7 +127,7 @@ func ValidateArchiveReaderAt(ctx context.Context, source io.ReaderAt, size int64
 			return ArchivePlan{}, fmt.Errorf("%w: method %d for %q", ErrArchiveCompression, file.Method, file.Name)
 		}
 		if err := validateRelativePath(file.Name, limits.MaxPathBytes); err != nil {
-			return ArchivePlan{}, fmt.Errorf("%w: %q: %w", ErrArchivePath, file.Name, err)
+			return ArchivePlan{}, fmt.Errorf("%w: %q: %v", ErrArchivePath, file.Name, err)
 		}
 		if depth := len(strings.Split(file.Name, "/")); depth > int(limits.MaxPathDepth) {
 			return ArchivePlan{}, fmt.Errorf("%w: %q exceeds path depth", ErrArchiveLimit, file.Name)
@@ -182,7 +182,7 @@ func parseZIPMetadata(ctx context.Context, source io.ReaderAt, size int64, files
 	}
 	tail := make([]byte, tailSize)
 	if err := readArchiveAt(source, tail, size-tailSize); err != nil {
-		return nil, fmt.Errorf("%w: read end record: %w", ErrArchiveInvalid, err)
+		return nil, fmt.Errorf("%w: read end record: %v", ErrArchiveInvalid, err)
 	}
 	signature := []byte{'P', 'K', 5, 6}
 	relativeEOCD := bytes.LastIndex(tail, signature)
@@ -201,13 +201,13 @@ func parseZIPMetadata(ctx context.Context, source io.ReaderAt, size int64, files
 	if entryCount == math.MaxUint16 || centralSize == math.MaxUint32 || centralOffset == math.MaxUint32 || int(entryCount) != len(files) {
 		return nil, fmt.Errorf("%w: ZIP64 or entry count mismatch is unsupported", ErrArchiveInvalid)
 	}
-	absoluteEOCD := uint64(size-tailSize) + uint64(relativeEOCD) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	absoluteEOCD := uint64(size-tailSize) + uint64(relativeEOCD)
 	if centralOffset+centralSize != absoluteEOCD || centralOffset > uint64(size) {
 		return nil, fmt.Errorf("%w: invalid central directory bounds", ErrArchiveInvalid)
 	}
 	central := make([]byte, centralSize)
-	if err := readArchiveAt(source, central, int64(centralOffset)); err != nil { // #nosec G115 -- source offset is bounded by validated input or parser state
-		return nil, fmt.Errorf("%w: read central directory: %w", ErrArchiveInvalid, err)
+	if err := readArchiveAt(source, central, int64(centralOffset)); err != nil {
+		return nil, fmt.Errorf("%w: read central directory: %v", ErrArchiveInvalid, err)
 	}
 	intervals := make([]zipInterval, 0, len(files))
 	cursor := 0
@@ -232,7 +232,7 @@ func parseZIPMetadata(ctx context.Context, source io.ReaderAt, size int64, files
 			return nil, fmt.Errorf("%w: invalid local header offset for %q", ErrArchiveInvalid, file.Name)
 		}
 		local := make([]byte, 30)
-		if err := readArchiveAt(source, local, int64(localOffset)); err != nil || binary.LittleEndian.Uint32(local[:4]) != 0x04034b50 { // #nosec G115 -- source offset is bounded by validated input or parser state
+		if err := readArchiveAt(source, local, int64(localOffset)); err != nil || binary.LittleEndian.Uint32(local[:4]) != 0x04034b50 {
 			return nil, fmt.Errorf("%w: invalid local header for %q", ErrArchiveInvalid, file.Name)
 		}
 		localNameLength := uint64(binary.LittleEndian.Uint16(local[26:28]))
@@ -244,13 +244,13 @@ func parseZIPMetadata(ctx context.Context, source io.ReaderAt, size int64, files
 			return nil, fmt.Errorf("%w: invalid local metadata bounds for %q", ErrArchiveInvalid, file.Name)
 		}
 		localName := make([]byte, localNameLength)
-		if err := readArchiveAt(source, localName, int64(localOffset+30)); err != nil || string(localName) != file.Name { // #nosec G115 -- source offset is bounded by validated input or parser state
+		if err := readArchiveAt(source, localName, int64(localOffset+30)); err != nil || string(localName) != file.Name {
 			return nil, fmt.Errorf("%w: local name mismatch for %q", ErrArchiveInvalid, file.Name)
 		}
 		intervalEnd := dataEnd
 		if file.Flags&8 != 0 {
 			descriptorPrefix := make([]byte, 4)
-			if err := readArchiveAt(source, descriptorPrefix, int64(dataEnd)); err != nil { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+			if err := readArchiveAt(source, descriptorPrefix, int64(dataEnd)); err != nil {
 				return nil, fmt.Errorf("%w: missing data descriptor for %q", ErrArchiveInvalid, file.Name)
 			}
 			descriptorBytes := uint64(12)
@@ -288,13 +288,13 @@ func readArchiveAt(source io.ReaderAt, destination []byte, offset int64) error {
 func readArchiveEntry(ctx context.Context, file *zip.File, maxBytes uint64) ([]byte, Digest, error) {
 	reader, err := file.Open()
 	if err != nil {
-		return nil, "", fmt.Errorf("%w: open %q: %w", ErrArchiveIntegrity, file.Name, err)
+		return nil, "", fmt.Errorf("%w: open %q: %v", ErrArchiveIntegrity, file.Name, err)
 	}
-	defer func() { _ = reader.Close() }()
+	defer reader.Close()
 	hasher := sha256.New()
 	var output bytes.Buffer
 	if file.UncompressedSize64 > 0 {
-		output.Grow(int(file.UncompressedSize64)) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		output.Grow(int(file.UncompressedSize64))
 	}
 	buffer := make([]byte, 32<<10)
 	var total uint64
@@ -315,10 +315,10 @@ func readArchiveEntry(ctx context.Context, file *zip.File, maxBytes uint64) ([]b
 			break
 		}
 		if readErr != nil {
-			return nil, "", fmt.Errorf("%w: read %q: %w", ErrArchiveIntegrity, file.Name, readErr)
+			return nil, "", fmt.Errorf("%w: read %q: %v", ErrArchiveIntegrity, file.Name, readErr)
 		}
 		if read == 0 {
-			return nil, "", fmt.Errorf("%w: read %q: %w", ErrArchiveIntegrity, file.Name, io.ErrNoProgress)
+			return nil, "", fmt.Errorf("%w: read %q: %v", ErrArchiveIntegrity, file.Name, io.ErrNoProgress)
 		}
 	}
 	if total != file.UncompressedSize64 {

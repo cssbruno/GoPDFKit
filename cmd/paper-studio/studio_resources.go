@@ -11,7 +11,6 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"net/http"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -21,12 +20,8 @@ import (
 )
 
 func (s *studioServer) handleResources(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		s.handleResourceCatalogMutation(w, r)
-		return
-	}
 	if r.Method != http.MethodGet {
-		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
+		writeStudioError(w, http.StatusMethodNotAllowed, errors.New("paper-studio: resources requires GET"))
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), studioAPITimeout)
@@ -50,14 +45,24 @@ func (s *studioServer) handleResources(w http.ResponseWriter, r *http.Request) {
 		writeStudioError(w, http.StatusUnprocessableEntity, errors.New("paper-studio: source AST is unavailable"))
 		return
 	}
-	resources, editable := s.resourceSnapshot()
+	s.mu.Lock()
+	resources := append([]paperassets.ProjectResource(nil), s.projectResources...)
+	for i := range resources {
+		resources[i].Data = append([]byte(nil), resources[i].Data...)
+		resources[i].Fallback = append([]string(nil), resources[i].Fallback...)
+	}
+	if len(resources) == 0 {
+		for _, asset := range s.assets {
+			resources = append(resources, paperassets.ProjectResource{Name: asset.Name, MediaType: asset.MediaType, Digest: asset.Digest, Data: append([]byte(nil), asset.Data...)})
+		}
+	}
+	s.mu.Unlock()
 	inventory, err := buildStudioResourceInventory(snapshot.revision, snapshot.plan.Hash(), snapshot.scenario, parsed.AST, resources)
 	if err != nil {
 		writeStudioError(w, http.StatusUnprocessableEntity, err)
 		return
 	}
 	inventory.SourceRevision = studioSourceRevision(snapshot.source)
-	inventory.CatalogEditable = editable
 	writeStudioJSON(w, http.StatusOK, inventory)
 }
 
@@ -68,41 +73,14 @@ func (s *studioServer) setAssetResources(resources []document.PaperAssetResource
 	for i, r := range resources {
 		project[i] = paperassets.ProjectResource{Name: r.Name, MediaType: r.MediaType, Digest: r.Digest, Data: r.Data}
 	}
-	if err := s.setProjectResources(project); err != nil {
-		return err
-	}
-	s.mu.Lock()
-	s.resourceManifest, s.resourceRoot = "", ""
-	s.mu.Unlock()
-	return nil
-}
-
-func (s *studioServer) setProjectManifest(manifestPath, assetRoot string, project []paperassets.ProjectResource) error {
-	manifestPath, err := filepath.Abs(manifestPath)
-	if err != nil {
-		return err
-	}
-	if assetRoot == "" {
-		assetRoot = filepath.Dir(manifestPath)
-	}
-	assetRoot, err = filepath.Abs(assetRoot)
-	if err != nil {
-		return err
-	}
-	if err := s.setProjectResources(project); err != nil {
-		return err
-	}
-	s.mu.Lock()
-	s.resourceManifest, s.resourceRoot = manifestPath, assetRoot
-	s.mu.Unlock()
-	return nil
+	return s.setProjectResources(project)
 }
 
 func (s *studioServer) setProjectResources(project []paperassets.ProjectResource) error {
 	resources := make([]document.PaperAssetResource, 0, len(project))
 	for _, r := range project {
-		if r.MediaType == "image/png" || r.MediaType == "image/jpeg" || r.MediaType == "font/ttf" || r.MediaType == "font/otf" {
-			resources = append(resources, document.PaperAssetResource{Name: r.Name, MediaType: r.MediaType, Digest: r.Digest, Data: r.Data, Family: r.Family, Style: r.Style, Weight: r.Weight, License: r.License})
+		if r.MediaType == "image/png" || r.MediaType == "image/jpeg" {
+			resources = append(resources, document.PaperAssetResource{Name: r.Name, MediaType: r.MediaType, Digest: r.Digest, Data: r.Data})
 		}
 	}
 	catalog, err := document.NewPaperAssetCatalog(resources)
@@ -111,7 +89,7 @@ func (s *studioServer) setProjectResources(project []paperassets.ProjectResource
 	}
 	detached := make([]document.PaperAssetResource, len(resources))
 	for i, resource := range resources {
-		detached[i] = document.PaperAssetResource{Name: resource.Name, MediaType: resource.MediaType, Digest: resource.Digest, Data: append([]byte(nil), resource.Data...), Family: resource.Family, Style: resource.Style, Weight: resource.Weight, License: resource.License}
+		detached[i] = document.PaperAssetResource{Name: resource.Name, MediaType: resource.MediaType, Digest: resource.Digest, Data: append([]byte(nil), resource.Data...)}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -121,44 +99,10 @@ func (s *studioServer) setProjectResources(project []paperassets.ProjectResource
 		s.projectResources[i] = r
 		s.projectResources[i].Data = append([]byte(nil), r.Data...)
 		s.projectResources[i].Fallback = append([]string(nil), r.Fallback...)
-		s.projectResources[i].FocusX = cloneStudioFloat(r.FocusX)
-		s.projectResources[i].FocusY = cloneStudioFloat(r.FocusY)
 	}
 	clear(s.snapshots)
 	s.hasSourceHash = false
 	return nil
-}
-
-func (s *studioServer) resourceSnapshot() ([]paperassets.ProjectResource, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	resources := append([]paperassets.ProjectResource(nil), s.projectResources...)
-	for i := range resources {
-		resources[i].Data = append([]byte(nil), resources[i].Data...)
-		resources[i].Fallback = append([]string(nil), resources[i].Fallback...)
-		resources[i].FocusX = cloneStudioFloat(resources[i].FocusX)
-		resources[i].FocusY = cloneStudioFloat(resources[i].FocusY)
-	}
-	if len(resources) == 0 {
-		for _, asset := range s.assets {
-			resources = append(resources, paperassets.ProjectResource{Name: asset.Name, MediaType: asset.MediaType, Digest: asset.Digest, Data: append([]byte(nil), asset.Data...)})
-		}
-	}
-	return resources, s.resourceManifest != ""
-}
-
-func (s *studioServer) projectManifestConfig() (string, string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.resourceManifest, s.resourceRoot
-}
-
-func cloneStudioFloat(value *float64) *float64 {
-	if value == nil {
-		return nil
-	}
-	copy := *value
-	return &copy
 }
 
 type studioAssetUsage struct {
@@ -190,13 +134,12 @@ type studioAssetInventoryItem struct {
 }
 
 type studioAssetInventory struct {
-	FormatVersion   uint16                     `json:"format_version"`
-	Revision        string                     `json:"revision"`
-	SourceRevision  string                     `json:"source_revision"`
-	PlanHash        string                     `json:"plan_hash"`
-	Scenario        string                     `json:"scenario"`
-	CatalogEditable bool                       `json:"catalog_editable"`
-	Items           []studioAssetInventoryItem `json:"items"`
+	FormatVersion  uint16                     `json:"format_version"`
+	Revision       string                     `json:"revision"`
+	SourceRevision string                     `json:"source_revision"`
+	PlanHash       string                     `json:"plan_hash"`
+	Scenario       string                     `json:"scenario"`
+	Items          []studioAssetInventoryItem `json:"items"`
 }
 
 func buildStudioAssetInventory(revision, planHash, scenario string, ast paperlang.AST, resources []document.PaperAssetResource) (studioAssetInventory, error) {
@@ -221,8 +164,8 @@ func buildStudioResourceInventory(revision, planHash, scenario string, ast paper
 				return studioAssetInventory{}, errors.New("paper-studio: asset dimensions are invalid")
 			}
 			item.Kind = "image"
-			item.Width = uint32(config.Width)   // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-			item.Height = uint32(config.Height) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+			item.Width = uint32(config.Width)
+			item.Height = uint32(config.Height)
 		} else if strings.HasPrefix(resource.MediaType, "font/") {
 			item.Kind = "font"
 		} else {

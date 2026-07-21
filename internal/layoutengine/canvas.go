@@ -201,6 +201,7 @@ func validateCanvasInput(input CanvasPlanInput, limits CanvasPlanLimits, budget 
 	if stringBytes > limits.MaxBytes || bytes > limits.MaxBytes-stringBytes {
 		return nil, 0, canvasResourceError("canvas retained state exceeds its byte limit", len(input.Nodes), edges, bytes+stringBytes)
 	}
+	bytes += stringBytes
 	if err := budget.charge(edges); err != nil {
 		return nil, 0, err
 	}
@@ -435,7 +436,7 @@ func canvasOverdetermined(node CanvasNode, anchor CanvasAnchor, first, second Fi
 }
 
 func buildCanvasPlan(input CanvasPlanInput, positions []Point) (LayoutPlan, error) {
-	planInput := LayoutPlanInput{Pages: []PlannedPage{{Number: 1, Size: input.PageSize, Fragments: IndexRange{Count: uint32(len(input.Nodes))}}}} // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	planInput := LayoutPlanInput{Pages: []PlannedPage{{Number: 1, Size: input.PageSize, Fragments: IndexRange{Count: uint32(len(input.Nodes))}}}}
 	for index, node := range input.Nodes {
 		bounds, err := NewRect(positions[index].X, positions[index].Y, node.Size.Width, node.Size.Height)
 		if err != nil {

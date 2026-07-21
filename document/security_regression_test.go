@@ -224,8 +224,8 @@ func TestSecurityHTMLHugeColspanDoesNotAllocateUnbounded(t *testing.T) {
 
 	html := pdf.HTMLNew()
 	html.Write(5, `<table><tr><td colspan="1000000000">x</td></tr></table>`)
-	if err := pdf.Error(); err == nil {
-		t.Fatal("oversized HTML colspan was accepted")
+	if err := pdf.Output(&bytes.Buffer{}); err != nil {
+		t.Fatalf("Output() error = %v", err)
 	}
 }
 

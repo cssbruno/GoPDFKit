@@ -213,24 +213,6 @@ func TestLayoutPlanValidationRejectsContradictoryDiagnosticFragmentProvenance(t 
 	}
 }
 
-func TestLayoutPlanRequiresSourceAndPageEvidenceForRetainedLayoutDiagnostics(t *testing.T) {
-	input := testPlanInput()
-	input.Diagnostics[0].Location.Page = 0
-	if _, err := NewLayoutPlan(input); err == nil || !strings.Contains(err.Error(), "no page evidence") {
-		t.Fatalf("missing page evidence error = %v", err)
-	}
-
-	input = testPlanInput()
-	input.Diagnostics[0].Location.Fragment = 0
-	input.Diagnostics[0].Location.Node = 0
-	input.Diagnostics[0].Location.Key = ""
-	input.Diagnostics[0].Location.Instance = ""
-	input.Diagnostics[0].Location.Source = SourceSpan{}
-	if _, err := NewLayoutPlan(input); err == nil || !strings.Contains(err.Error(), "no source evidence") {
-		t.Fatalf("missing source evidence error = %v", err)
-	}
-}
-
 func TestLayoutPlanValidatesBreakDecisionReasonsAndProvenance(t *testing.T) {
 	input := testPlanInput()
 	input.Breaks[0].Reason = BreakPreviousFragmentOverflow

@@ -300,7 +300,7 @@ func (w *Workspace) ReviewHeadlessCandidate(ctx context.Context, request Headles
 		request.Selectors = []document.PaperPlanSelector{{Key: request.Candidate.Target, MaxResults: 16}}
 	}
 	if request.MaxExplainBytes == 0 {
-		request.MaxExplainBytes = uint32(min(w.limits.MaxRenderBytes, 1<<20)) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		request.MaxExplainBytes = uint32(min(w.limits.MaxRenderBytes, 1<<20))
 	}
 	explanation, err := w.ExplainPlan(PlanExplainRequest{Plan: request.Candidate.HeadPlan, Selectors: request.Selectors, MaxBytes: request.MaxExplainBytes})
 	if err != nil {
@@ -552,10 +552,7 @@ func (w *Workspace) validateHeadlessCandidate(candidate HeadlessCandidate) error
 }
 
 func hashCanonical(domain string, value any) string {
-	payload, err := json.Marshal(value)
-	if err != nil {
-		return ""
-	}
+	payload, _ := json.Marshal(value)
 	digest := sha256.Sum256(append(append([]byte(domain), 0), payload...))
 	return hex.EncodeToString(digest[:])
 }
@@ -658,7 +655,7 @@ func (review HeadlessReview) CanonicalJSON(maxBytes int) ([]byte, error) {
 	}{1, review.Candidate, review.ExplainSHA256, review.ExplainBytes, review.ReviewManifestHash, review.ReviewManifestBytes,
 		append([]HeadlessArtifactEvidence(nil), review.Artifacts...)})
 	if err != nil {
-		return nil, fmt.Errorf("%w: encode headless review: %w", ErrHeadlessWorkflow, err)
+		return nil, fmt.Errorf("%w: encode headless review: %v", ErrHeadlessWorkflow, err)
 	}
 	if len(payload) > maxBytes {
 		return nil, workspaceError("HEADLESS_RESPONSE_LIMIT", "headless review summary exceeds the caller bound", ErrLimit)

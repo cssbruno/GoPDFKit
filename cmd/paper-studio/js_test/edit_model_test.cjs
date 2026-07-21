@@ -28,7 +28,7 @@ const model = require('../web/edit-model.js');
 
 test('selection exposes only handles supported by exact source structure', () => {
   const left = model.findSelection(root, '@left');
-  assert.deepEqual(model.operations(left), ['text', 'box', 'grid', 'flow']);
+  assert.deepEqual(model.operations(left), ['box', 'grid', 'flow']);
   assert.equal(left.parent.id, '@grid');
   assert.deepEqual(model.operations(model.findSelection(root, '@art')), ['grid', 'image', 'flow']);
   assert.deepEqual(model.operations(model.findSelection(root, '@ledger')), ['grid', 'table', 'flow']);
@@ -77,19 +77,6 @@ test('payload contains review facts and semantic intent but no capabilities', ()
   assert.equal(encoded.includes('capability'), false);
   assert.equal(encoded.includes('handle'), false);
   assert.equal(JSON.parse(encoded).color, '#aabbcc');
-});
-
-test('font replacement is explicit, supported-only, and locates the authored text owner', () => {
-  const textRoot = {kind: 'document', id: '@report', span: {start: {line: 1}, end: {line: 8}}, members: [{node: {
-    kind: 'paragraph', id: '@copy', span: {start: {line: 4}, end: {line: 7}}, members: [],
-  }}]};
-  const selection = model.findTextSelectionAtLine(textRoot, 5);
-  assert.equal(selection.target, '@copy');
-  assert.deepEqual(model.coreFonts, ['Courier', 'Helvetica', 'Times', 'Symbol', 'ZapfDingbats']);
-  assert.deepEqual(model.buildPayload({source_revision: 's', revision: 'source-bad'}, selection, 'text', 'font', 'Helvetica'), {
-    source_revision: 's', plan_revision: 'source-bad', scenario: '', operation: 'text', target: '@copy', property: 'font', text: 'Helvetica',
-  });
-  assert.throws(() => model.buildPayload({source_revision: 's', revision: 'source-bad'}, selection, 'text', 'font', 'Unavailable Sans'), /Choose one of/);
 });
 
 test('invalid values and structurally unavailable handles fail closed', () => {

@@ -467,10 +467,7 @@ func sourceForSpan(source string, span paperlang.Span) (string, bool) {
 }
 
 func stableJSONBytes(value any) int {
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return int(^uint(0) >> 1)
-	}
+	encoded, _ := json.Marshal(value)
 	// Callers keep EncodedBytes at zero until this function returns, so the
 	// encoded form currently contains one digit for that field. Solve the
 	// self-describing length to a fixed point without a second output buffer.

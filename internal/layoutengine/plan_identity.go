@@ -61,7 +61,7 @@ func DerivePlanID(input PlanIdentityInputs) (PlanID, error) {
 	}
 	for _, field := range fields {
 		if err := validateTextIdentity("plan identity "+field.name, field.value); err != nil {
-			return PlanID{}, fmt.Errorf("%w: %w", ErrPlanIdentityInputs, err)
+			return PlanID{}, fmt.Errorf("%w: %v", ErrPlanIdentityInputs, err)
 		}
 	}
 	if !validCanonicalLocale(input.Locale) {
@@ -76,7 +76,7 @@ func DerivePlanID(input PlanIdentityInputs) (PlanID, error) {
 	flags := append([]string(nil), input.CompatibilityFlags...)
 	for index, flag := range flags {
 		if err := validateTextIdentity("plan compatibility flag", flag); err != nil {
-			return PlanID{}, fmt.Errorf("%w: flag %d: %w", ErrPlanIdentityInputs, index, err)
+			return PlanID{}, fmt.Errorf("%w: flag %d: %v", ErrPlanIdentityInputs, index, err)
 		}
 	}
 	sort.Strings(flags)
@@ -154,7 +154,7 @@ func validCanonicalTimezone(value string) bool {
 		}
 		hours := int(value[4]-'0')*10 + int(value[5]-'0')
 		minutes := int(value[7]-'0')*10 + int(value[8]-'0')
-		return hours <= 23 && minutes <= 59 && (value[3] != '-' || hours != 0 || minutes != 0)
+		return hours <= 23 && minutes <= 59 && !(value[3] == '-' && hours == 0 && minutes == 0)
 	}
 	parts := strings.Split(value, "/")
 	if len(parts) < 2 || len(parts) > 8 {
@@ -223,8 +223,8 @@ func asciiAlphaNumeric(value string) bool {
 
 func writePlanIdentityField(destination hash.Hash, name, value string) {
 	var length [8]byte
-	binary.BigEndian.PutUint32(length[:4], uint32(len(name)))  // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-	binary.BigEndian.PutUint32(length[4:], uint32(len(value))) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	binary.BigEndian.PutUint32(length[:4], uint32(len(name)))
+	binary.BigEndian.PutUint32(length[4:], uint32(len(value)))
 	_, _ = destination.Write(length[:])
 	_, _ = destination.Write([]byte(name))
 	_, _ = destination.Write([]byte(value))
@@ -259,7 +259,7 @@ func DeriveRenderID(input RenderIdentityInputs) (RenderID, error) {
 	}
 	for _, field := range fields {
 		if err := validateTextIdentity("render identity "+field.name, field.value); err != nil {
-			return RenderID{}, fmt.Errorf("%w: %w", ErrRenderIdentityInputs, err)
+			return RenderID{}, fmt.Errorf("%w: %v", ErrRenderIdentityInputs, err)
 		}
 	}
 	digest := sha256.New()

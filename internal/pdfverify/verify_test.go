@@ -8,7 +8,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"image"
 	"image/color"
 	"image/draw"
@@ -91,14 +90,12 @@ func TestVerifyReturnsBoundedRasterAndComplianceFailures(t *testing.T) {
 	draw.Draw(canvas, canvas.Bounds(), changed, image.Point{}, draw.Src)
 	canvas.Set(10, 11, color.Black)
 	var encoded bytes.Buffer
-	if err := png.Encode(&encoded, canvas); err != nil {
-		t.Fatal(err)
-	}
+	png.Encode(&encoded, canvas)
 	fake := rasterizerFunc(func(context.Context, []byte, uint32, []image.Point, Limits) (RasterOutput, error) {
 		return RasterOutput{Renderer: "test-raster", Version: "1.0", Pages: [][]byte{encoded.Bytes()}}, nil
 	})
 	report, err := Verify(context.Background(), request, fake)
-	if !errors.Is(err, ErrVerificationFailed) || report.Passed || len(report.Failures) != 2 || report.Pages[0].ChangedPixels != 1 || report.Pages[0].DiffBounds == nil || *report.Pages[0].DiffBounds != (DiffBounds{MinX: 10, MinY: 11, MaxX: 10, MaxY: 11}) {
+	if err != ErrVerificationFailed || report.Passed || len(report.Failures) != 2 || report.Pages[0].ChangedPixels != 1 || report.Pages[0].DiffBounds == nil || *report.Pages[0].DiffBounds != (DiffBounds{MinX: 10, MinY: 11, MaxX: 10, MaxY: 11}) {
 		t.Fatalf("failed verification = %#v, %v", report, err)
 	}
 }

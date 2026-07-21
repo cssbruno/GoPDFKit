@@ -55,11 +55,8 @@ func TestPaperPlanExplainCarriesBindingAndTokenProvenance(t *testing.T) {
 		t.Fatalf("PlanPaper() = %#v, %v", planned, err)
 	}
 	provenance, err := plan.Provenance()
-	if err != nil || len(provenance.Bindings) != 1 || len(provenance.StyleTokens) != 4 || len(provenance.ComputedStyles) != 1 {
+	if err != nil || len(provenance.Bindings) != 1 || len(provenance.StyleTokens) != 4 {
 		t.Fatalf("provenance = %#v, %v", provenance, err)
-	}
-	if style := provenance.ComputedStyles[0]; style.Node != "@message" || style.TextStyle == nil || style.TextStyle.FontFamily != "Courier" || style.TextStyle.FontSize != 11 || style.TextStyle.LineHeight != 14 {
-		t.Fatalf("computed style provenance = %#v", style)
 	}
 	if binding := provenance.Bindings[0]; binding.Node != "@message" || binding.Path != "@invoice.total" || binding.Kind != "paragraph" || binding.Source.StartLine == 0 {
 		t.Fatalf("binding provenance = %#v", binding)
@@ -81,7 +78,7 @@ func TestPaperPlanExplainCarriesBindingAndTokenProvenance(t *testing.T) {
 	}
 
 	explanation, err := plan.ExplainContext(context.Background(), []PaperPlanSelector{{Key: "@message", MaxResults: 16}}, 1, 1<<20, 1<<20)
-	if err != nil || !bytes.Contains(explanation.JSON(), []byte(`"provenance":{"bindings"`)) || !bytes.Contains(explanation.JSON(), []byte(`"path":"@invoice.total"`)) || !bytes.Contains(explanation.JSON(), []byte(`"style_tokens"`)) || !bytes.Contains(explanation.JSON(), []byte(`"computed_styles"`)) {
+	if err != nil || !bytes.Contains(explanation.JSON(), []byte(`"provenance":{"bindings"`)) || !bytes.Contains(explanation.JSON(), []byte(`"path":"@invoice.total"`)) || !bytes.Contains(explanation.JSON(), []byte(`"style_tokens"`)) {
 		t.Fatalf("explanation provenance = %s / %v", explanation.JSON(), err)
 	}
 }

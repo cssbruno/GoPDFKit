@@ -10,9 +10,3 @@ These reports are generated from `cmd/compliance-fixtures` with:
 
 They are fixture baselines for external validation. Regenerate them after
 changing compliance output and keep `REQUIRE_COMPLIANCE_TOOLS=1` passing in CI.
-
-`make compliance-fixtures SRGB_ICC=/path/to/a/real/sRGB.icc` also writes the
-unsigned fixtures' deterministic local structural report to
-`artifacts/compliance/characterization.json`. It records the reproduction
-command and runtime fingerprint. The local report complements these archived
-external reports and is not itself a PDF/A or PDF/UA validator result.

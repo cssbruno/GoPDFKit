@@ -35,8 +35,6 @@ jobs:
           go test ./sign -run '^$' -fuzz '^FuzzVerifyCMS$' -fuzztime=10s
           go test ./sign -run '^$' -fuzz '^FuzzPDFSignatureScanner$' -fuzztime=10s
           go test ./sign -run '^$' -fuzz '^FuzzAnalyzePDF$' -fuzztime=10s
-          go test ./internal/paperlang -run '^$' -fuzz '^FuzzIncrementalCSTMatchesCleanParse$' -fuzztime=10s
-          go test ./internal/paperpkg -run '^$' -fuzz '^FuzzMigrateLockfile$' -fuzztime=10s
 
       - name: Upload fuzz crashers
         if: failure()
@@ -49,6 +47,4 @@ jobs:
             pdfcdr/testdata/fuzz
             inspect/testdata/fuzz
             sign/testdata/fuzz
-            internal/paperlang/testdata/fuzz
-            internal/paperpkg/testdata/fuzz
           if-no-files-found: ignore

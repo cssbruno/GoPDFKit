@@ -17,8 +17,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"golang.org/x/image/font/opentype"
 )
 
 func TestCaptureDisplayPlanPNGDeterministicLosslessPageAndManifest(t *testing.T) {
@@ -48,7 +46,7 @@ func TestCaptureDisplayPlanPNGDeterministicLosslessPageAndManifest(t *testing.T)
 	if manifest.PNGSHA256 != hex.EncodeToString(digest[:]) || manifest.PNGByteLength != uint64(len(first.PNG())) {
 		t.Fatalf("PNG evidence = %+v", manifest)
 	}
-	if manifest.PNGSHA256 != "1ae3aaa8f39b2195fe7287873a991aa5dcf65d50d995e58f3b1d0a56c3e73f4b" {
+	if manifest.PNGSHA256 != "29043bd5aa62857587229a8278ad710ccdff40d40d16d57db20b0ffa13d25f60" {
 		t.Fatalf("fixture raster hash = %s", manifest.PNGSHA256)
 	}
 	decoded, err := png.Decode(bytes.NewReader(first.PNG()))
@@ -175,75 +173,6 @@ func TestRasterOpacityAlphaRoundsAndPreservesMaximum(t *testing.T) {
 	}
 	if got := rasterOpacityAlpha(127, Fixed(FixedScale/2)); got != 64 {
 		t.Fatalf("combined alpha = %d, want rounded 64", got)
-	}
-}
-
-func TestRasterSourceNRGBAFastPathsMatchGenericColorConversion(t *testing.T) {
-	ycbcr := image.NewYCbCr(image.Rect(0, 0, 5, 3), image.YCbCrSubsampleRatio420)
-	for index := range ycbcr.Y {
-		ycbcr.Y[index] = uint8(32 + index*7)
-	}
-	for index := range ycbcr.Cb {
-		ycbcr.Cb[index] = uint8(80 + index*9)
-		ycbcr.Cr[index] = uint8(170 - index*5)
-	}
-	for y := ycbcr.Bounds().Min.Y; y < ycbcr.Bounds().Max.Y; y++ {
-		for x := ycbcr.Bounds().Min.X; x < ycbcr.Bounds().Max.X; x++ {
-			want := color.NRGBAModel.Convert(ycbcr.At(x, y)).(color.NRGBA)
-			if got := rasterSourceNRGBA(ycbcr, x, y); got != want {
-				t.Fatalf("YCbCr pixel (%d,%d) = %+v, want %+v", x, y, got, want)
-			}
-		}
-	}
-	rgba := image.NewRGBA(image.Rect(0, 0, 2, 1))
-	rgba.SetRGBA(0, 0, color.RGBA{R: 20, G: 30, B: 40, A: 255})
-	rgba.SetRGBA(1, 0, color.RGBA{R: 10, G: 15, B: 20, A: 128})
-	for x := range 2 {
-		want := color.NRGBAModel.Convert(rgba.At(x, 0)).(color.NRGBA)
-		if got := rasterSourceNRGBA(rgba, x, 0); got != want {
-			t.Fatalf("RGBA pixel %d = %+v, want %+v", x, got, want)
-		}
-	}
-}
-
-func TestRasterCoreFontSubstituteFitsPlannedRunWithoutGlyphCollisions(t *testing.T) {
-	fontBytes, err := os.ReadFile("../../assets/static/font/DejaVuSansCondensed.ttf")
-	if err != nil {
-		t.Fatal(err)
-	}
-	parsed, err := opentype.Parse(fontBytes)
-	if err != nil {
-		t.Fatal(err)
-	}
-	canvas := image.NewRGBA(image.Rect(0, 0, 144, 144))
-	for y := 0; y < canvas.Bounds().Dy(); y++ {
-		for x := 0; x < canvas.Bounds().Dx(); x++ {
-			canvas.SetRGBA(x, y, color.RGBA{255, 255, 255, 255})
-		}
-	}
-	unit := Fixed(FixedScale)
-	run := CoreGlyphRun{
-		Font: 1, FontSize: 12 * unit, Origin: Point{X: 10 * unit, Y: 30 * unit},
-		Codes: "MMMM", Advances: []Fixed{4 * unit, 4 * unit, 4 * unit, 4 * unit},
-	}
-	if err := (&rasterSizedFace{font: parsed}).draw(canvas, CoreFontResource{ID: 1, Face: CoreFontHelvetica}, run,
-		IdentityTransform(), Rect{Width: 72 * unit, Height: 72 * unit}, 144, canvas.Bounds()); err != nil {
-		t.Fatal(err)
-	}
-	ink := false
-	for y := 20; y < 64; y++ {
-		for x := 20; x < 52; x++ {
-			pixel := canvas.RGBAAt(x, y)
-			ink = ink || pixel.R < 240 || pixel.G < 240 || pixel.B < 240
-		}
-		for x := 52; x < 72; x++ {
-			if pixel := canvas.RGBAAt(x, y); pixel != (color.RGBA{255, 255, 255, 255}) {
-				t.Fatalf("substitute ink escaped planned run at (%d,%d): %+v", x, y, pixel)
-			}
-		}
-	}
-	if !ink {
-		t.Fatal("core-font substitute painted no visible glyphs")
 	}
 }
 

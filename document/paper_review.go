@@ -74,7 +74,7 @@ func (p PaperPlan) CaptureRasterPages(ctx context.Context, request PaperPlanRast
 	}
 	sources := paperReviewSources(p.plan, request.CoreFontProgram, request.FontPrograms, images)
 	bundle := PaperPlanRasterBundle{PlanHash: p.hash, Renderer: layoutengine.DisplayRasterRendererVersion, DPI: request.DPI, Pages: make([]PaperPlanRasterPage, 0, p.pages)}
-	for page := uint32(1); page <= uint32(p.pages); page++ { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	for page := uint32(1); page <= uint32(p.pages); page++ {
 		artifact, err := layoutengine.CaptureDisplayPlanPNGContext(ctx, p.plan, sources, layoutengine.DisplayRasterRequest{Page: page, Profile: profile, Limits: limits, Revisions: p.revisions, PageProfile: pageProfile})
 		if err != nil {
 			return PaperPlanRasterBundle{}, err

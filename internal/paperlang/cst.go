@@ -184,11 +184,11 @@ func ParseCSTWithLimits(file, source string, limits CSTLimits) (*CST, error) {
 	result := &CST{file: file, source: string([]byte(source)), lines: make([]CSTLine, 0, len(physical))}
 	for _, line := range physical {
 		rawEnd := line.startOffset + len(line.text) + line.newlineWidth
-		if uint64(rawEnd-line.startOffset) > uint64(normalized.MaxLineBytes) { // #nosec G115 -- source offset is bounded by validated input or parser state
+		if uint64(rawEnd-line.startOffset) > uint64(normalized.MaxLineBytes) {
 			return nil, &CSTError{Line: line.line, Problem: "physical line exceeds MaxLineBytes", Cause: ErrCSTLimit}
 		}
 		indent := cstIndent(line.text)
-		if uint64(indent) > uint64(normalized.MaxIndentBytes) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		if uint64(indent) > uint64(normalized.MaxIndentBytes) {
 			return nil, &CSTError{Line: line.line, Problem: "indentation exceeds MaxIndentBytes", Cause: ErrCSTLimit}
 		}
 		entry := classifyCSTLine(file, source, starts, line, rawEnd, indent)
@@ -214,7 +214,7 @@ func classifyCSTLine(file, source string, starts []int, line sourceLine, rawEnd,
 	raw := source[line.startOffset:rawEnd]
 	contentEnd := line.startOffset + len(line.text)
 	entry := CSTLine{
-		Kind: CSTBlank, IndentBytes: uint32(indent), Raw: raw, // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		Kind: CSTBlank, IndentBytes: uint32(indent), Raw: raw,
 		Span:        cstSpan(file, source, starts, line.startOffset, rawEnd),
 		ContentSpan: cstSpan(file, source, starts, line.startOffset+indent, contentEnd),
 	}
@@ -302,7 +302,7 @@ func (c *CST) buildOpaqueNodes() {
 			}
 			end = candidate.Span.End.Offset
 		}
-		span := Span{File: c.file, Start: line.Span.Start, End: cstPosition(c.source, starts, int(end))} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		span := Span{File: c.file, Start: line.Span.Start, End: cstPosition(c.source, starts, int(end))}
 		c.opaque = append(c.opaque, CSTOpaqueNode{
 			Name: line.Name, IndentBytes: line.IndentBytes, HeaderSpan: line.ContentSpan, Span: span,
 			Raw: c.source[line.Span.Start.Offset:end],
@@ -333,10 +333,9 @@ func cstCommentOffset(content string) int {
 			}
 			continue
 		}
-		switch character {
-		case '"':
+		if character == '"' {
 			inString = true
-		case '#':
+		} else if character == '#' {
 			return index
 		}
 	}
@@ -358,7 +357,7 @@ func cstPosition(source string, starts []int, offset int) Position {
 	if lineIndex < 0 {
 		lineIndex = 0
 	}
-	return Position{Offset: uint64(offset), Line: uint32(lineIndex + 1), Column: uint32(utf8.RuneCountInString(source[starts[lineIndex]:offset]) + 1)} // #nosec G115 -- source offset is bounded by validated input or parser state
+	return Position{Offset: uint64(offset), Line: uint32(lineIndex + 1), Column: uint32(utf8.RuneCountInString(source[starts[lineIndex]:offset]) + 1)}
 }
 
 // PrintLossless returns a detached byte-identical copy of the CST snapshot.

@@ -64,8 +64,8 @@ func (f *Document) captureHTMLStartFrame() (htmlStartFrame, error) {
 	if f.curRotation != 0 {
 		return htmlStartFrame{}, htmlPlanUnsupported("frame", 0, "rotated current pages are not in the unified cohort")
 	}
-	if f.currentFont.Name == "" || f.fontSizePt <= 0 {
-		return htmlStartFrame{}, htmlPlanUnsupported("frame", 0, "current font context must be selected")
+	if !typedShadowCoreFont(f.coreFonts, f.fontFamily) || f.currentFont.Name == "" || f.fontSizePt <= 0 {
+		return htmlStartFrame{}, htmlPlanUnsupported("frame", 0, "current font context must be a selected core font")
 	}
 	_, body, err := typedShadowFixedGeometry(f, f.lMargin, f.tMargin,
 		f.w-f.lMargin-f.rMargin, f.h-f.tMargin-f.bMargin)
@@ -154,6 +154,9 @@ func (html *HTML) planCompiledHTMLFragmentContext(ctx context.Context, lineHeigh
 	if err != nil {
 		return htmlFragmentPlan{}, err
 	}
+	if htmlModelHasOversizedTableRow(model, availableWidth, html.pdf.PointConvert(frame.body.Height.Points())) {
+		return htmlFragmentPlan{}, fmt.Errorf("%w: structured HTML table row exceeds one page body", ErrHTMLLimitExceeded)
+	}
 	leadingBreak := false
 	for len(model.Body) != 0 {
 		pageBreak, ok := model.Body[0].(layout.PageBreakBlock)
@@ -214,7 +217,7 @@ func (html *HTML) planCompiledHTMLFragmentContext(ctx context.Context, lineHeigh
 	}
 	if err != nil {
 		if errors.Is(err, ErrLayoutDocumentPlanUnsupported) || errors.Is(err, errTypedShadowUnsupported) {
-			return htmlFragmentPlan{}, fmt.Errorf("%w: frame planning: %w", ErrHTMLPlanUnsupported, err)
+			return htmlFragmentPlan{}, fmt.Errorf("%w: frame planning: %v", ErrHTMLPlanUnsupported, err)
 		}
 		return htmlFragmentPlan{}, err
 	}
@@ -255,6 +258,7 @@ func (html *HTML) planCompiledHTMLFragmentContext(ctx context.Context, lineHeigh
 			if err != nil {
 				return htmlFragmentPlan{}, err
 			}
+			projection = planned.Projection()
 		}
 	}
 	if len(svgMetas) != 0 {
@@ -262,15 +266,13 @@ func (html *HTML) planCompiledHTMLFragmentContext(ctx context.Context, lineHeigh
 		if err != nil {
 			return htmlFragmentPlan{}, err
 		}
+		projection = planned.Projection()
 	}
 	planned, err = bindTypedDeterministicInputs(planned, tree, model)
 	if err != nil {
 		return htmlFragmentPlan{}, fmt.Errorf("document: bind HTML fragment deterministic inputs: %w", err)
 	}
 	projection = planned.Projection()
-	if htmlPlanHasOversizedTableRow(compiled, projection) {
-		return htmlFragmentPlan{}, fmt.Errorf("%w: structured HTML table row exceeds one page body", ErrHTMLLimitExceeded)
-	}
 	hash, err := planned.Hash()
 	if err != nil {
 		return htmlFragmentPlan{}, fmt.Errorf("document: hash HTML fragment plan: %w", err)
@@ -293,7 +295,7 @@ func (html *HTML) planCompiledHTMLFragmentContext(ctx context.Context, lineHeigh
 	if generatedPages > html.maxGeneratedPages() {
 		return htmlFragmentPlan{}, fmt.Errorf("%w: HTML rendering exceeded maximum generated pages: %d > %d", ErrHTMLLimitExceeded, generatedPages, html.maxGeneratedPages())
 	}
-	lastPage := uint32(len(projection.Pages)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	lastPage := uint32(len(projection.Pages))
 	finalY := layoutengine.Fixed(0)
 	fragmentPages := make(map[layoutengine.FragmentID]uint32, len(projection.Fragments))
 	for _, fragment := range projection.Fragments {
@@ -327,7 +329,7 @@ func (html *HTML) planCompiledHTMLFragmentContext(ctx context.Context, lineHeigh
 	// A live cursor must never round to a coordinate fractionally before the
 	// exact fixed-point content edge when converted back to document units.
 	finalY++
-	imageSources, err := typedLayoutImageSourcesContext(ctx, model, uint64(html.pdf.imageSourceLimit())) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	imageSources, err := typedLayoutImageSourcesContext(ctx, model, uint64(html.pdf.imageSourceLimit()))
 	if err != nil {
 		return htmlFragmentPlan{}, fmt.Errorf("document: build bounded HTML image resource catalog: %w", err)
 	}
@@ -351,13 +353,27 @@ func htmlBlocksContainKeptTable(blocks []layout.Block) bool {
 	return false
 }
 
-func htmlPlanHasOversizedTableRow(compiled *CompiledHTML, projection layoutengine.LayoutPlanProjection) bool {
-	if !compiledHTMLContainsTable(compiled) {
+func htmlModelHasOversizedTableRow(model *layout.LayoutDocument, width, bodyHeight float64) bool {
+	if model == nil || width <= 0 || bodyHeight <= 0 {
 		return false
 	}
-	for _, diagnostic := range projection.Diagnostics {
-		if diagnostic.Code == layoutengine.DiagnosticUnbreakableTooTall || diagnostic.Code == layoutengine.DiagnosticTableRowspanCrossesPage {
-			return true
+	measure := layout.NewMeasureContext(width, layout.TextStyle{})
+	for _, block := range layout.NormalizeBlocks(model.Body) {
+		table, ok := block.(layout.TableBlock)
+		if !ok {
+			continue
+		}
+		rows := append(append(append([]layout.TableRow(nil), table.Header...), table.Body...), table.Footer...)
+		for _, row := range rows {
+			for _, cell := range row.Cells {
+				height := cell.Box.Padding.Top + cell.Box.Padding.Bottom
+				for _, child := range layout.NormalizeBlocks(cell.Blocks) {
+					height += layout.MeasureBlock(measure, child).Height
+				}
+				if height > bodyHeight {
+					return true
+				}
+			}
 		}
 	}
 	return false
@@ -414,10 +430,6 @@ func (html *HTML) writeCompiledUnifiedFragmentContext(ctx context.Context, lineH
 	withDisplay := len(projection.ImageResources) != 0 || len(projection.Links) != 0 || len(projection.Destinations) != 0 ||
 		len(projection.Paths) != 0 || len(projection.Fills) != 0 || len(projection.Strokes) != 0 || len(projection.Clips) != 0 || len(projection.Transforms) != 0
 	withDisplay = withDisplay || layoutPlanHasMultipleGlyphRunsPerLine(projection)
-	// The compact core painter emits positioned glyphs only. PDF/UA fragments
-	// must use the display-list painter so their semantic structure tree and
-	// marked-content bindings are replayed together with the text.
-	withDisplay = withDisplay || html.pdf.compliance.PDFUA2
 	if withDisplay {
 		prepared, preflightErr := html.pdf.preflightDisplayLayoutPlanPDFContextForTarget(ctx, fragment.plan.plan, fragment.plan.imageSources, true)
 		if preflightErr != nil {
@@ -467,6 +479,28 @@ func (html *HTML) writeCompiledUnifiedFragmentContext(ctx context.Context, lineH
 		return true, errors.New("document: HTML fragment painter changed the captured font context")
 	}
 	return true, html.pdf.Error()
+}
+
+func htmlUnifiedFallbackCategory(compiled *CompiledHTML, err error) string {
+	if compiled != nil && len(compiled.recovery) != 0 {
+		return "malformed-recovery"
+	}
+	detail := ""
+	if err != nil {
+		detail = err.Error()
+	}
+	switch {
+	case strings.Contains(detail, "<frame>"):
+		return "frame-contract"
+	case compiled != nil && len(compiled.inlineSVGs) != 0:
+		return "svg-contract"
+	case compiled != nil && len(compiled.cssRules) != 0:
+		return "stylesheet-contract"
+	case compiledHTMLContainsTable(compiled):
+		return "table-contract"
+	default:
+		return "unsupported-layout-contract"
+	}
 }
 
 func compiledHTMLContainsTable(compiled *CompiledHTML) bool {

@@ -186,10 +186,7 @@ func (w *Workspace) SaveSnapshot(ctx context.Context) error {
 	manifest := persistenceManifest{Version: persistenceVersion, Generation: currentManifest.Generation + 1, Project: w.projectID, PolicyRevision: w.policyRevision,
 		DisclosureDomain: w.disclosureDomain, Snapshot: name, SHA256: digest, Bytes: len(encoded)}
 	manifest.Authentication = persistenceManifestAuthentication(manifest, w.persistenceAuthenticationKey)
-	manifestBytes, err := json.Marshal(manifest)
-	if err != nil {
-		return workspaceError("PERSISTENCE_WRITE", "manifest cannot be encoded", ErrPersistence)
-	}
+	manifestBytes, _ := json.Marshal(manifest)
 	if err := ctx.Err(); err != nil {
 		return workspaceError("PERSISTENCE_CANCELLED", "snapshot was cancelled before commit", err)
 	}
@@ -207,9 +204,6 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 	revisionIndexes := make(map[RevisionHandle]int, len(revisionSerials))
 	for _, serial := range revisionSerials {
 		record := w.revisions[serial]
-		if record == nil {
-			return persistentWorkspace{}, workspaceError("PERSISTENCE_REVISION", "retained source revision is missing", ErrPersistenceCorrupt)
-		}
 		if !w.ownsPartition(record.partition) {
 			return persistentWorkspace{}, workspaceError("PERSISTENCE_PARTITION", "retained state has an invalid cache partition", ErrPersistenceCorrupt)
 		}
@@ -218,9 +212,6 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 	}
 	for _, serial := range sortedRecordKeys(w.candidates) {
 		record := w.candidates[serial]
-		if record == nil {
-			return persistentWorkspace{}, workspaceError("PERSISTENCE_CANDIDATE", "retained candidate is missing", ErrPersistenceCorrupt)
-		}
 		head, ok := revisionIndexes[record.head]
 		if !w.ownsPartition(record.partition) {
 			return persistentWorkspace{}, workspaceError("PERSISTENCE_HEAD", "candidate head is not retained in its partition", ErrPersistenceCorrupt)
@@ -241,9 +232,6 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 	scenarioIndexes := make(map[ScenarioRevisionHandle]int, len(scenarioSerials))
 	for _, serial := range scenarioSerials {
 		record := w.scenarioRevisions[serial]
-		if record == nil {
-			return persistentWorkspace{}, workspaceError("PERSISTENCE_SCENARIO", "retained scenario revision is missing", ErrPersistenceCorrupt)
-		}
 		if !w.ownsPartition(record.partition) {
 			return persistentWorkspace{}, workspaceError("PERSISTENCE_PARTITION", "retained state has an invalid cache partition", ErrPersistenceCorrupt)
 		}
@@ -252,9 +240,6 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 	}
 	for _, serial := range sortedRecordKeys(w.scenarioCandidates) {
 		record := w.scenarioCandidates[serial]
-		if record == nil {
-			return persistentWorkspace{}, workspaceError("PERSISTENCE_SCENARIO_CANDIDATE", "retained scenario candidate is missing", ErrPersistenceCorrupt)
-		}
 		head, ok := scenarioIndexes[record.head]
 		if !w.ownsPartition(record.partition) {
 			return persistentWorkspace{}, workspaceError("PERSISTENCE_HEAD", "scenario candidate head is not retained in its partition", ErrPersistenceCorrupt)
@@ -268,9 +253,6 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 	semanticIndexes := make(map[SemanticTemplateRevisionHandle]int, len(semanticSerials))
 	for _, serial := range semanticSerials {
 		record := w.semanticTemplateRevisions[serial]
-		if record == nil {
-			return persistentWorkspace{}, workspaceError("PERSISTENCE_SEMANTIC_TEMPLATE", "retained semantic-template revision is missing", ErrPersistenceCorrupt)
-		}
 		if !w.ownsPartition(record.partition) {
 			return persistentWorkspace{}, workspaceError("PERSISTENCE_PARTITION", "retained semantic-template state has an invalid cache partition", ErrPersistenceCorrupt)
 		}
@@ -279,9 +261,6 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 	}
 	for _, serial := range sortedRecordKeys(w.semanticTemplateCandidates) {
 		record := w.semanticTemplateCandidates[serial]
-		if record == nil {
-			return persistentWorkspace{}, workspaceError("PERSISTENCE_SEMANTIC_TEMPLATE_CANDIDATE", "retained semantic-template candidate is missing", ErrPersistenceCorrupt)
-		}
 		head, ok := semanticIndexes[record.head]
 		if !w.ownsPartition(record.partition) {
 			return persistentWorkspace{}, workspaceError("PERSISTENCE_HEAD", "semantic-template candidate partition is invalid", ErrPersistenceCorrupt)
@@ -294,9 +273,6 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 	policyIndexes := make(map[PolicyRevisionHandle]int, len(policySerials))
 	for _, serial := range policySerials {
 		record := w.policyRevisions[serial]
-		if record == nil {
-			return persistentWorkspace{}, workspaceError("PERSISTENCE_POLICY", "retained policy revision is missing", ErrPersistenceCorrupt)
-		}
 		if !w.ownsPartition(record.partition) {
 			return persistentWorkspace{}, workspaceError("PERSISTENCE_PARTITION", "retained policy state has an invalid cache partition", ErrPersistenceCorrupt)
 		}
@@ -305,9 +281,6 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 	}
 	for _, serial := range sortedRecordKeys(w.policyCandidates) {
 		record := w.policyCandidates[serial]
-		if record == nil {
-			return persistentWorkspace{}, workspaceError("PERSISTENCE_POLICY_CANDIDATE", "retained policy candidate is missing", ErrPersistenceCorrupt)
-		}
 		head, ok := policyIndexes[record.head]
 		if !w.ownsPartition(record.partition) {
 			return persistentWorkspace{}, workspaceError("PERSISTENCE_HEAD", "policy candidate partition is invalid", ErrPersistenceCorrupt)
@@ -330,9 +303,6 @@ func (w *Workspace) persistentStateLocked() (persistentWorkspace, error) {
 }
 
 func (w *Workspace) restoreCandidateJournal(head *revisionRecord, persisted *paperedit.JournalState) (*paperedit.Journal, error) {
-	if head == nil {
-		return nil, workspaceError("PERSISTENCE_JOURNAL", "persisted candidate head is missing", ErrPersistenceCorrupt)
-	}
 	if persisted == nil {
 		journal, err := paperedit.NewJournal(head.file, head.source, w.journalLimits())
 		if err != nil {
@@ -367,10 +337,7 @@ func persistenceManifestAuthentication(manifest persistenceManifest, key []byte)
 		return ""
 	}
 	manifest.Authentication = ""
-	encoded, err := json.Marshal(manifest)
-	if err != nil {
-		return ""
-	}
+	encoded, _ := json.Marshal(manifest)
 	mac := hmac.New(sha256.New, key)
 	_, _ = mac.Write(append([]byte("paperd/persistence-manifest/v1\x00"), encoded...))
 	return hex.EncodeToString(mac.Sum(nil))
@@ -660,21 +627,15 @@ func (w *Workspace) validatePersistedFixtures(fixtures []paperscenario.Fixture) 
 		input[index] = paperscenario.Scenario{Name: fixture.Name, Locale: fixture.Locale, Values: cloneScenarioFields(fixture.Values)}
 	}
 	limits := paperscenario.DefaultLimits()
-	limits.MaxNodes = uint32(w.limits.MaxScenarioValueNodes)    // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-	limits.MaxPathBytes = uint32(w.limits.MaxScenarioPathBytes) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-	limits.MaxWork = uint64(w.limits.MaxScenarioWork)           // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	limits.MaxNodes = uint32(w.limits.MaxScenarioValueNodes)
+	limits.MaxPathBytes = uint32(w.limits.MaxScenarioPathBytes)
+	limits.MaxWork = uint64(w.limits.MaxScenarioWork)
 	resolved, err := paperscenario.Resolve(input, limits)
 	if err != nil {
 		return nil, err
 	}
-	want, err := json.Marshal(fixtures)
-	if err != nil {
-		return nil, ErrPersistenceCorrupt
-	}
-	got, err := json.Marshal(resolved)
-	if err != nil {
-		return nil, ErrPersistenceCorrupt
-	}
+	want, _ := json.Marshal(fixtures)
+	got, _ := json.Marshal(resolved)
 	if !bytes.Equal(want, got) {
 		return nil, ErrPersistenceCorrupt
 	}
@@ -723,7 +684,7 @@ func readSecureFile(root, name string, limit int) ([]byte, bool, error) {
 	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 || info.Size() > int64(limit) {
 		return nil, false, workspaceError("PERSISTENCE_FILE", "persisted file type, permissions, or size is invalid", ErrPersistenceCorrupt)
 	}
-	encoded, err := os.ReadFile(path) // #nosec G304 -- name is validated and rooted under the authenticated persistence directory.
+	encoded, err := os.ReadFile(path)
 	if err != nil {
 		return nil, false, workspaceError("PERSISTENCE_READ", "persisted file cannot be read", ErrPersistence)
 	}
@@ -773,7 +734,7 @@ func writeImmutable(root, name string, encoded []byte) error {
 		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
 			return workspaceError("PERSISTENCE_FILE", "snapshot path is unsafe", ErrPersistence)
 		}
-		existing, readErr := os.ReadFile(path) // #nosec G304 -- name is validated and rooted under the authenticated persistence directory.
+		existing, readErr := os.ReadFile(path)
 		if readErr != nil || !bytes.Equal(existing, encoded) {
 			return workspaceError("PERSISTENCE_COLLISION", "immutable snapshot content does not match its digest name", ErrPersistenceCorrupt)
 		}
@@ -804,9 +765,9 @@ func atomicWrite(root, name string, encoded []byte, noReplace bool) error {
 		return workspaceError("PERSISTENCE_WRITE", "temporary snapshot cannot be created", ErrPersistence)
 	}
 	temporaryName := temporary.Name()
-	defer func() { _ = os.Remove(temporaryName) }()
+	defer os.Remove(temporaryName)
 	if err := temporary.Chmod(0o600); err != nil {
-		_ = temporary.Close()
+		temporary.Close()
 		return workspaceError("PERSISTENCE_PERMISSIONS", "snapshot permissions cannot be restricted", ErrPersistence)
 	}
 	if _, err := temporary.Write(encoded); err != nil {
@@ -834,7 +795,7 @@ func atomicWrite(root, name string, encoded []byte, noReplace bool) error {
 		return workspaceError("PERSISTENCE_COMMIT", "snapshot cannot be atomically committed", ErrPersistence)
 	}
 	persistenceFault("after_" + kind + "_replace")
-	directory, err := os.Open(root) // #nosec G304 -- root is the authenticated persistence directory.
+	directory, err := os.Open(root)
 	if err == nil {
 		err = directory.Sync()
 		_ = directory.Close()

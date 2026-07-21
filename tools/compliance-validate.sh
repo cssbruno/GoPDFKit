@@ -7,9 +7,9 @@ mkdir -p "$out_dir"
 
 if [ "${COMPLIANCE_GENERATE:-1}" != "0" ]; then
 	if [ -n "${SRGB_ICC:-}" ]; then
-		go run ./cmd/compliance-fixtures -out "$out_dir" -icc "$SRGB_ICC" -report "$out_dir/characterization.json"
+		go run ./cmd/compliance-fixtures -out "$out_dir" -icc "$SRGB_ICC"
 	else
-		go run ./cmd/compliance-fixtures -out "$out_dir" -report "$out_dir/characterization.json"
+		go run ./cmd/compliance-fixtures -out "$out_dir"
 	fi
 fi
 

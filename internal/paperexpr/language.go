@@ -79,7 +79,7 @@ func Parse(source string, limits LanguageLimits) (Expression, error) {
 		return Expression{}, expressionError(normalized.MaxSourceBytes, boundedSourceOffset(len(source)), "source exceeds MaxSourceBytes", ErrLimit)
 	}
 	if !utf8.ValidString(source) {
-		return Expression{}, expressionError(0, uint32(len(source)), "source is not valid UTF-8", ErrInvalid) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		return Expression{}, expressionError(0, uint32(len(source)), "source is not valid UTF-8", ErrInvalid)
 	}
 	tokens, err := lexExpression(source, normalized)
 	if err != nil {
@@ -96,7 +96,7 @@ func Parse(source string, limits LanguageLimits) (Expression, error) {
 	return Expression{
 		root:       root,
 		source:     source,
-		tokenCount: uint32(len(tokens) - 1), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		tokenCount: uint32(len(tokens) - 1),
 		nodeCount:  parser.nodes,
 		maxDepth:   parser.peakDepth,
 	}, nil
@@ -136,15 +136,15 @@ func CompileExpression(expression Expression, environment []PathKind, limits Lan
 		return Program{}, Null, err
 	}
 	compiler.indexInputs(expression.root)
-	if uint32(len(compiler.constants)) > normalized.Program.MaxConstants { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if uint32(len(compiler.constants)) > normalized.Program.MaxConstants {
 		return Program{}, Null, expressionError(expression.root.start, expression.root.end, "constant count exceeds MaxConstants", ErrLimit)
 	}
-	if uint32(len(compiler.paths)) > normalized.Program.MaxPaths { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if uint32(len(compiler.paths)) > normalized.Program.MaxPaths {
 		return Program{}, Null, expressionError(expression.root.start, expression.root.end, "path count exceeds MaxPaths", ErrLimit)
 	}
 	program := Program{Constants: compiler.constants, Paths: compiler.paths}
 	compiler.emit(expression.root, &program.Code)
-	if uint32(len(program.Code)) > normalized.Program.MaxInstructions { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if uint32(len(program.Code)) > normalized.Program.MaxInstructions {
 		return Program{}, Null, expressionError(expression.root.start, expression.root.end, "instruction count exceeds MaxInstructions", ErrLimit)
 	}
 	if _, err := validateProgram(program, normalized.Program); err != nil {
@@ -263,20 +263,20 @@ func lexExpression(source string, limits LanguageLimits) ([]expressionToken, err
 				}
 			} else {
 				_, size := utf8.DecodeRuneInString(source[offset:])
-				return nil, expressionError(uint32(start), uint32(start+size), fmt.Sprintf("unexpected character %q", source[start:start+size]), ErrInvalid) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+				return nil, expressionError(uint32(start), uint32(start+size), fmt.Sprintf("unexpected character %q", source[start:start+size]), ErrInvalid)
 			}
 		}
 		tokens = append(tokens, token)
-		if uint32(len(tokens)) > limits.MaxTokens { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(tokens)) > limits.MaxTokens {
 			return nil, expressionError(token.start, token.end, "token count exceeds MaxTokens", ErrLimit)
 		}
 	}
-	tokens = append(tokens, expressionToken{kind: tokenEOF, start: uint32(len(source)), end: uint32(len(source))}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	tokens = append(tokens, expressionToken{kind: tokenEOF, start: uint32(len(source)), end: uint32(len(source))})
 	return tokens, nil
 }
 
 func simpleToken(kind tokenKind, source string, start, end int) expressionToken {
-	return expressionToken{kind: kind, start: uint32(start), end: uint32(end), text: source[start:end]} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	return expressionToken{kind: kind, start: uint32(start), end: uint32(end), text: source[start:end]}
 }
 
 func lexExpressionInteger(source string, start int) (expressionToken, int, error) {
@@ -284,7 +284,7 @@ func lexExpressionInteger(source string, start int) (expressionToken, int, error
 	if source[offset] == '-' {
 		offset++
 		if offset >= len(source) || source[offset] < '0' || source[offset] > '9' {
-			return expressionToken{}, offset, expressionError(uint32(start), uint32(offset), "minus must begin an integer literal", ErrInvalid) // #nosec G115 -- source offset is bounded by validated input or parser state
+			return expressionToken{}, offset, expressionError(uint32(start), uint32(offset), "minus must begin an integer literal", ErrInvalid)
 		}
 	}
 	for offset < len(source) && source[offset] >= '0' && source[offset] <= '9' {
@@ -293,13 +293,13 @@ func lexExpressionInteger(source string, start int) (expressionToken, int, error
 	raw := source[start:offset]
 	digits := strings.TrimPrefix(raw, "-")
 	if len(digits) > 1 && digits[0] == '0' || raw == "-0" {
-		return expressionToken{}, offset, expressionError(uint32(start), uint32(offset), "integer must use canonical base-10 notation", ErrInvalid) // #nosec G115 -- source offset is bounded by validated input or parser state
+		return expressionToken{}, offset, expressionError(uint32(start), uint32(offset), "integer must use canonical base-10 notation", ErrInvalid)
 	}
 	integer, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil {
-		return expressionToken{}, offset, expressionError(uint32(start), uint32(offset), "integer is outside int64 range", ErrInvalid) // #nosec G115 -- source offset is bounded by validated input or parser state
+		return expressionToken{}, offset, expressionError(uint32(start), uint32(offset), "integer is outside int64 range", ErrInvalid)
 	}
-	return expressionToken{kind: tokenInteger, start: uint32(start), end: uint32(offset), text: raw, value: Value{Kind: Integer, Integer: integer}}, offset, nil // #nosec G115 -- source offset is bounded by validated input or parser state
+	return expressionToken{kind: tokenInteger, start: uint32(start), end: uint32(offset), text: raw, value: Value{Kind: Integer, Integer: integer}}, offset, nil
 }
 
 func lexExpressionString(source string, start int) (expressionToken, int, error) {
@@ -310,16 +310,16 @@ func lexExpressionString(source string, start int) (expressionToken, int, error)
 			offset++
 			raw := source[start:offset]
 			if err := validateJSONStringEscapes(raw); err != nil {
-				return expressionToken{}, offset, expressionError(uint32(start), uint32(offset), err.Error(), ErrInvalid) // #nosec G115 -- source offset is bounded by validated input or parser state
+				return expressionToken{}, offset, expressionError(uint32(start), uint32(offset), err.Error(), ErrInvalid)
 			}
 			var decoded string
 			if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
-				return expressionToken{}, offset, expressionError(uint32(start), uint32(offset), "invalid quoted UTF-8 string", ErrInvalid) // #nosec G115 -- source offset is bounded by validated input or parser state
+				return expressionToken{}, offset, expressionError(uint32(start), uint32(offset), "invalid quoted UTF-8 string", ErrInvalid)
 			}
-			return expressionToken{kind: tokenString, start: uint32(start), end: uint32(offset), text: raw, value: Value{Kind: String, String: decoded}}, offset, nil // #nosec G115 -- source offset is bounded by validated input or parser state
+			return expressionToken{kind: tokenString, start: uint32(start), end: uint32(offset), text: raw, value: Value{Kind: String, String: decoded}}, offset, nil
 		}
 		if character < 0x20 {
-			return expressionToken{}, offset, expressionError(uint32(offset), uint32(offset+1), "unescaped control character in string", ErrInvalid) // #nosec G115 -- source offset is bounded by validated input or parser state
+			return expressionToken{}, offset, expressionError(uint32(offset), uint32(offset+1), "unescaped control character in string", ErrInvalid)
 		}
 		if character == '\\' {
 			offset += 2
@@ -328,7 +328,7 @@ func lexExpressionString(source string, start int) (expressionToken, int, error)
 		_, size := utf8.DecodeRuneInString(source[offset:])
 		offset += size
 	}
-	return expressionToken{}, offset, expressionError(uint32(start), uint32(len(source)), "unterminated string literal", ErrInvalid) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	return expressionToken{}, offset, expressionError(uint32(start), uint32(len(source)), "unterminated string literal", ErrInvalid)
 }
 
 func validateJSONStringEscapes(raw string) error {
@@ -609,7 +609,7 @@ type expressionCompiler struct {
 func (c *expressionCompiler) check(node *expressionNode) (Kind, error) {
 	switch node.kind {
 	case nodeLiteral:
-		if node.value.Kind == String && uint32(len(node.value.String)) > c.limits.MaxStringBytes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if node.value.Kind == String && uint32(len(node.value.String)) > c.limits.MaxStringBytes {
 			return Null, expressionError(node.start, node.end, "string literal exceeds MaxStringBytes", ErrLimit)
 		}
 		node.inferred = node.value.Kind
@@ -646,7 +646,7 @@ func (c *expressionCompiler) check(node *expressionNode) (Kind, error) {
 			return Null, expressionError(node.opOffset, node.opOffset+7, "matches requires two strings", ErrType)
 		}
 		if node.right.kind == nodeLiteral {
-			if uint32(len(node.right.value.String)) > c.limits.MaxPatternBytes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			if uint32(len(node.right.value.String)) > c.limits.MaxPatternBytes {
 				return Null, expressionError(node.right.start, node.right.end, "match pattern exceeds MaxPatternBytes", ErrLimit)
 			}
 			work := uint64(0)
@@ -716,10 +716,9 @@ func (c *expressionCompiler) indexInputs(root *expressionNode) {
 		if node == nil {
 			return
 		}
-		switch node.kind {
-		case nodeLiteral:
+		if node.kind == nodeLiteral {
 			constantSet[node.value] = true
-		case nodePath:
+		} else if node.kind == nodePath {
 			pathSet[node.path] = true
 		}
 		walk(node.left)
@@ -800,7 +799,7 @@ func lessExpressionValue(left, right Value) bool {
 func normalizePathKinds(environment []PathKind, limits Limits) (map[string]Kind, error) {
 	result := make(map[string]Kind, len(environment))
 	for _, entry := range environment {
-		if !validPath(entry.Path) || uint32(len(entry.Path)) > limits.MaxStringBytes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if !validPath(entry.Path) || uint32(len(entry.Path)) > limits.MaxStringBytes {
 			return nil, expressionError(0, 0, fmt.Sprintf("invalid environment path %q", entry.Path), ErrBinding)
 		}
 		if entry.Kind > String {
@@ -838,8 +837,8 @@ func expressionError(start, end uint32, problem string, cause error) error {
 }
 
 func boundedSourceOffset(offset int) uint32 {
-	if uint64(offset) > uint64(^uint32(0)) { // #nosec G115 -- source offset is bounded by validated input or parser state
+	if uint64(offset) > uint64(^uint32(0)) {
 		return ^uint32(0)
 	}
-	return uint32(offset) // #nosec G115 -- source offset is bounded by validated input or parser state
+	return uint32(offset)
 }

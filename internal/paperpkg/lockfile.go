@@ -245,14 +245,14 @@ func DecodeWithLimits(encoded []byte, limits Limits) (Lockfile, error) {
 	decoder.DisallowUnknownFields()
 	var lockfile Lockfile
 	if err := decoder.Decode(&lockfile); err != nil {
-		return Lockfile{}, fmt.Errorf("%w: %w", ErrInvalidLockfile, err)
+		return Lockfile{}, fmt.Errorf("%w: %v", ErrInvalidLockfile, err)
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		if err == nil {
 			err = errors.New("additional JSON value")
 		}
-		return Lockfile{}, fmt.Errorf("%w: trailing data: %w", ErrInvalidLockfile, err)
+		return Lockfile{}, fmt.Errorf("%w: trailing data: %v", ErrInvalidLockfile, err)
 	}
 	if err := lockfile.ValidateWithLimits(limits); err != nil {
 		return Lockfile{}, err
@@ -298,7 +298,7 @@ func validateDigest(digest Digest) error {
 		return errors.New("digest must contain exactly 64 lowercase hexadecimal characters")
 	}
 	for _, character := range digest {
-		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
+		if !(character >= '0' && character <= '9') && !(character >= 'a' && character <= 'f') {
 			return errors.New("digest must contain exactly 64 lowercase hexadecimal characters")
 		}
 	}
@@ -337,7 +337,7 @@ func invalidAt(path string, err error) error {
 	if errors.Is(err, ErrLockfileLimit) {
 		return fmt.Errorf("%w: %s: %w", ErrInvalidLockfile, path, err)
 	}
-	return fmt.Errorf("%w: %s: %w", ErrInvalidLockfile, path, err)
+	return fmt.Errorf("%w: %s: %v", ErrInvalidLockfile, path, err)
 }
 
 func cloneLockfile(lockfile Lockfile) Lockfile {

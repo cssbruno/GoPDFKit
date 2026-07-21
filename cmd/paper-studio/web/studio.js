@@ -6,15 +6,9 @@ const state = {
   loadedScenario: '',
   page: 1,
   zoom: 1,
-  zoomMode: 'fit-page',
   zoomRender: 0,
-  zoomTimer: null,
-  resizeTimer: null,
-  thumbnailRender: 0,
-  detailRender: 0,
   activePageMeta: null,
   pageMeta: new Map(),
-  wasmCacheKeys: [],
   inspections: new Map(),
   objectURLs: new Set(),
   selectionFragments: [],
@@ -32,7 +26,6 @@ const state = {
   pageSetupDraft: null,
   pageSetupFeedback: null,
   loading: false,
-  refreshPromise: null,
   pdfTags: null,
   pdfTagsRevision: '',
   tagsLoading: false,
@@ -90,21 +83,7 @@ async function api(path, options = {}) {
 }
 
 async function refresh({quiet = false} = {}) {
-  if (state.refreshPromise) {
-    await state.refreshPromise;
-    if (quiet) return;
-  }
-  if (state.refreshPromise) return state.refreshPromise;
-  const pending = performRefresh({quiet});
-  state.refreshPromise = pending;
-  try {
-    return await pending;
-  } finally {
-    if (state.refreshPromise === pending) state.refreshPromise = null;
-  }
-}
-
-async function performRefresh({quiet = false} = {}) {
+  if (state.loading) return;
   state.loading = true;
   if (!quiet) setPreviewStale(true);
   try {
@@ -360,19 +339,20 @@ function renderPageSetup() {
     target.innerHTML = '<span class="quiet">Add one addressed page master to enable page setup.</span>';
     return;
   }
-  if (!state.pageSetupDraft || state.pageSetupDraft.target !== current.target || state.pageSetupDraft.revision !== state.revision) {
+  $('#page-size-summary').textContent = `${current.preset} · ${current.orientation}`;
+  if (!state.pageSetupDraft || state.pageSetupDraft.target !== current.target) {
     state.pageSetupDraft = {
-      target: current.target, revision: state.revision, preset: current.preset, orientation: current.orientation, unit: 'mm',
+      target: current.target, preset: current.preset, orientation: current.orientation, unit: 'mm',
       width: Number((current.width * 25.4 / 72).toFixed(2)), height: Number((current.height * 25.4 / 72).toFixed(2)),
     };
   }
   const draft = state.pageSetupDraft;
-  $('#page-size-summary').textContent = `${draft.preset} · ${draft.orientation}`;
   const form = document.createElement('form');
   form.className = 'page-setup-form';
   form.addEventListener('submit', event => event.preventDefault());
   const preset = authoringSelect('Preset', [...Object.keys(PaperStudioPageSetupModel.presets), 'Custom'], draft.preset, value => {
     draft.preset = value;
+    if (value !== 'Custom') draft.orientation = 'portrait';
     renderPageSetup();
     if (value !== 'Custom') commitPageSetup({...draft});
   });
@@ -472,31 +452,12 @@ function renderAuthoringControls() {
   if (draft.operation === 'template') {
     const targets=metadata.templateTargets.map(item=>item.id); draft.target=targets.includes(draft.target)?draft.target:targets[0];
     const targetKind=metadata.templateTargets.find(item=>item.id===draft.target)?.kind;
-    const repeatPaths=metadata.schemas.flatMap(schema=>schema.fields.filter(field=>field.kind==='list').map(field=>field.path));
-    const flowChoices=['paragraph','heading','list','image','table','canvas','row','column','page-break','note-box','metadata-grid','signature-row','qr-verification','clause','styled-container',...(repeatPaths.length?['repeat']:[]),...(state.scenario?['loop']:[]),...(metadata.components.length?['component']:[]),'section'];
-    const choices=targetKind==='document'?['document-preset','page']:targetKind==='page'?['header','footer']:flowChoices;
+    const choices=targetKind==='document'?['page']:targetKind==='body'?['paragraph','heading','list','row','column','page-break',...(metadata.components.length?'component':[]),'section']:['paragraph','heading',...(metadata.components.length?'component':[])];
     draft.template=choices.includes(draft.template)?draft.template:choices[0]; draft.id=draft.id|| (draft.template==='page'?'@sheet':'@new-content');
     form.append(authoringSelect('Inside',targets,draft.target,value=>{draft.target=value;renderAuthoringControls();}),authoringSelect('Palette',choices,draft.template,value=>{draft.template=value;renderAuthoringControls();}),authoringInput('Readable ID',draft.id,value=>draft.id=value));
-    if (draft.template === 'document-preset') {
-      const presets=['blank','letter','prescription','medical-report','invoice','contract','certificate','table-report'];
-      draft.preset=presets.includes(draft.preset)?draft.preset:'prescription';
-      form.append(authoringSelect('Document design',presets,draft.preset,value=>draft.preset=value));
-      const note=document.createElement('p');note.className='quiet';note.textContent='Creates one complete page master with header, footer, body hierarchy, metadata, and preset-specific content.';form.append(note);
-    }
-    if (draft.template === 'repeat') {
-      draft.path=repeatPaths.includes(draft.path)?draft.path:repeatPaths[0];
-      form.append(authoringSelect('Bounded list',repeatPaths,draft.path,value=>draft.path=value));
-    }
     if (draft.template === 'component') {
       draft.component=metadata.components.includes(draft.component)?draft.component:metadata.components[0];
-      form.append(authoringSelect('Component',metadata.components,draft.component,value=>{draft.component=value;renderAuthoringControls();}));
-      const gallery=document.createElement('figure');gallery.className='component-gallery';
-      const preview=document.createElement('div');preview.className='component-gallery-preview';
-      const image=document.createElement('img');image.loading='lazy';image.alt=`${draft.component} exact current-theme preview`;
-      const query=new URLSearchParams({preview_format:'2',revision:metadata.revision,source_revision:metadata.sourceRevision,component:draft.component});
-      if(state.scenario)query.set('scenario',state.scenario);image.src=`/api/component-preview.svg?${query}`;preview.append(image);
-      const caption=document.createElement('figcaption');caption.textContent=`${draft.component} · exact planner geometry · current theme`;
-      gallery.append(preview,caption);form.append(gallery);
+      form.append(authoringSelect('Component',metadata.components,draft.component,value=>{draft.component=value;}));
     }
   } else if (draft.operation === 'schema') {
     draft.target = metadata.documentTarget; draft.id = draft.id || '@new-schema';
@@ -935,6 +896,7 @@ function renderThumbnails(count, summaries) {
     }
     item.append(badges);
     target.append(item);
+    loadWASMPage(page, 72).then((rendered) => paintWASMCanvas(button.querySelector('canvas'), rendered)).catch(() => {});
   }
 }
 
@@ -983,11 +945,7 @@ async function loadSVG(page, kind) {
 
 async function loadWASMPage(page, dpi = renderDPIForZoom()) {
   const key = `${state.revision}:wasm:${page}:${dpi}`;
-  if (state.pageMeta.has(key)) {
-    state.wasmCacheKeys = state.wasmCacheKeys.filter((candidate) => candidate !== key);
-    state.wasmCacheKeys.push(key);
-    return state.pageMeta.get(key);
-  }
+  if (state.pageMeta.has(key)) return state.pageMeta.get(key);
   const revision = state.revision;
   const scenario = state.scenario ? `&scenario=${encodeURIComponent(state.scenario)}` : '';
   const response = await api(`/api/page/${page}.render?revision=${encodeURIComponent(revision)}&dpi=${dpi}${scenario}`);
@@ -999,13 +957,6 @@ async function loadWASMPage(page, dpi = renderDPIForZoom()) {
     throw error;
   }
   state.pageMeta.set(key, result);
-  state.wasmCacheKeys.push(key);
-  while (state.wasmCacheKeys.length > 6) {
-    const expired = state.wasmCacheKeys.shift();
-    const cached = state.pageMeta.get(expired);
-    state.pageMeta.delete(expired);
-    cached?.bitmap?.close?.();
-  }
   return result;
 }
 
@@ -1018,63 +969,10 @@ function paintWASMCanvas(canvas, rendered) {
   context.drawImage(rendered.bitmap, 0, 0);
 }
 
-function paintWASMThumbnail(page, rendered) {
-  const canvas = document.querySelector(`.thumbnail-page[data-page="${CSS.escape(String(page))}"] canvas`);
-  if (!canvas) return;
-  const width = Math.max(1, Math.min(96, rendered.pixelWidth));
-  const height = Math.max(1, Math.round(width * rendered.pixelHeight / rendered.pixelWidth));
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext('2d', {alpha: false});
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = 'high';
-  context.clearRect(0, 0, width, height);
-  context.drawImage(rendered.bitmap, 0, 0, width, height);
-}
-
-function queueWASMThumbnails(activePage) {
-  const serial = ++state.thumbnailRender;
-  const revision = state.revision;
-  const pages = Array.from(document.querySelectorAll('.thumbnail-page'), (button) => Number(button.dataset.page))
-    .filter((page) => page !== activePage);
-  const idle = () => new Promise((resolve) => {
-    if (typeof requestIdleCallback === 'function') requestIdleCallback(resolve, {timeout: 250});
-    else setTimeout(resolve, 0);
-  });
-  (async () => {
-    for (const page of pages) {
-      await idle();
-      if (serial !== state.thumbnailRender || revision !== state.revision) return;
-      const rendered = await loadWASMPage(page, 36);
-      if (serial !== state.thumbnailRender || revision !== state.revision) return;
-      paintWASMThumbnail(page, rendered);
-    }
-  })().catch((error) => { if (error.status === 409) refresh({quiet: true}); });
-}
-
-function queueWASMPageDetail(page) {
-  const serial = ++state.detailRender;
-  const revision = state.revision;
-  const dpi = renderDPIForZoom();
-  if ((state.activePageMeta?.manifest?.profile?.dpi || 0) >= dpi) return;
-  const idle = (callback) => {
-    if (typeof requestIdleCallback === 'function') requestIdleCallback(callback, {timeout: 400});
-    else setTimeout(callback, 0);
-  };
-  idle(() => {
-    loadWASMPage(page, dpi).then((rendered) => {
-      if (serial !== state.detailRender || revision !== state.revision || page !== state.page) return;
-      paintWASMPage(rendered);
-      renderInspectionOverlays();
-      renderSelectionRects();
-    }).catch((error) => { if (error.status === 409) refresh({quiet: true}); });
-  });
-}
-
 function paintWASMPage(rendered) {
   paintWASMCanvas(pageImage, rendered);
   state.activePageMeta = rendered;
-  applyPageStageSize(rendered);
+  applyPageStageWidth(rendered);
 }
 
 async function loadInspection(page) {
@@ -1104,13 +1002,11 @@ async function showPage(page) {
   }
   setPreviewStale(true);
   try {
-    const [display, geometry] = await Promise.all([loadWASMPage(page, previewDPIForZoom()), loadSVG(page, 'geometry'), loadInspection(page)]);
+    const [display, geometry] = await Promise.all([loadWASMPage(page, renderDPIForZoom()), loadSVG(page, 'geometry'), loadInspection(page)]);
     if (revision !== state.revision) return;
     state.page = page;
     paintWASMPage(display);
-    paintWASMThumbnail(page, display);
-    queueWASMPageDetail(page);
-    queueWASMThumbnails(page);
+    loadReviewOverlay(revision, page);
     geometryImage.src = geometry.url;
     $('#page-label').textContent = `Page ${page} of ${state.workspace.pages}`;
     document.querySelectorAll('.thumbnail-page').forEach((button) => {
@@ -1511,9 +1407,6 @@ function renderInspectorRows(rows, kind) {
 
 function selectEditableTarget(target) {
   state.editSelection = target ? PaperStudioEditModel.findSelection(state.workspace?.ast?.root, target) : null;
-  if (target && state.authoring?.templateTargets?.some(item => item.id === target)) {
-    state.authoringDraft.target = target;
-  }
   state.editDraft = null;
   state.editFeedback = null;
   renderEditControls();
@@ -1690,6 +1583,7 @@ function flatten(value, prefix = '', result = []) {
 function focusSourceLine(line) {
   const source = $('#source');
   const lineHeight = parseFloat(getComputedStyle(source).lineHeight) || 19.8;
+  if (!['source', 'split'].includes(app.dataset.mode)) setMode('split');
   const row = source.querySelector(`.source-line[data-line="${Number(line)}"]`);
   source.querySelectorAll('.source-line.is-focused').forEach(item => item.classList.remove('is-focused'));
   document.querySelectorAll('.issue.is-selected').forEach(item => item.classList.remove('is-selected'));
@@ -1725,109 +1619,33 @@ function setMode(mode) {
 }
 
 function renderDPIForZoom() {
-  return PaperStudioViewportModel.renderDPI(state.zoom, window.devicePixelRatio);
+  return Math.max(72, Math.min(600, Math.round(144 * Math.max(1, state.zoom))));
 }
 
-function previewDPIForZoom() {
-  return PaperStudioViewportModel.previewDPI(state.zoom, window.devicePixelRatio);
+function applyPageStageWidth(rendered = state.activePageMeta) {
+  if (!rendered) return;
+  const naturalWidth = rendered.pixelWidth * 72 / rendered.manifest.profile.dpi;
+  $('#page-stage').style.width = `${Math.max(1, naturalWidth * state.zoom)}px`;
 }
 
-function renderedPageSize(rendered = state.activePageMeta) {
-  if (!rendered?.manifest?.profile?.dpi) return null;
-  return {
-    width: rendered.pixelWidth * 72 / rendered.manifest.profile.dpi,
-    height: rendered.pixelHeight * 72 / rendered.manifest.profile.dpi,
-  };
-}
-
-function viewportPadding() {
-  const style = getComputedStyle(canvasScroll);
-  const number = (property) => Number.parseFloat(style[property]) || 0;
-  return {
-    inline: number('paddingLeft') + number('paddingRight'),
-    block: number('paddingTop') + number('paddingBottom'),
-  };
-}
-
-function fittedZoom(mode = state.zoomMode, rendered = state.activePageMeta) {
-  const page = renderedPageSize(rendered);
-  if (!page || canvasScroll.clientWidth <= 0 || canvasScroll.clientHeight <= 0) return state.zoom;
-  const padding = viewportPadding();
-  return PaperStudioViewportModel.fitZoom({
-    pageWidth: page.width,
-    pageHeight: page.height,
-    viewportWidth: canvasScroll.clientWidth,
-    viewportHeight: canvasScroll.clientHeight,
-    paddingInline: padding.inline,
-    paddingBlock: padding.block,
-    mode: mode === 'fit-width' ? 'width' : 'page',
-  });
-}
-
-function syncZoomControls() {
+function setZoom(next) {
+  if (!Number.isFinite(next)) {
+    $('#zoom-value').value = String(Math.round(state.zoom * 100));
+    return;
+  }
+  state.zoom = Math.max(.25, Math.min(4, Math.round(next * 100) / 100));
   $('#zoom-value').value = String(Math.round(state.zoom * 100));
-  $('#zoom-mode').value = state.zoomMode;
-}
-
-function applyPageStageSize(rendered = state.activePageMeta) {
-  const page = renderedPageSize(rendered);
-  if (!page) return;
-  if (state.zoomMode !== 'custom') state.zoom = fittedZoom(state.zoomMode, rendered);
-  $('#page-stage').style.width = `${Math.max(1, page.width * state.zoom)}px`;
-  syncZoomControls();
-}
-
-function scheduleZoomRender() {
+  applyPageStageWidth();
   const serial = ++state.zoomRender;
-  ++state.detailRender;
   const page = state.page;
   const revision = state.revision;
   const dpi = renderDPIForZoom();
-  clearTimeout(state.zoomTimer);
-  state.zoomTimer = null;
-  if ((state.activePageMeta?.manifest?.profile?.dpi || 0) >= dpi) return;
-  state.zoomTimer = setTimeout(() => {
-    state.zoomTimer = null;
-    loadWASMPage(page, dpi).then(rendered => {
-      if (serial !== state.zoomRender || page !== state.page || revision !== state.revision) return;
-      paintWASMPage(rendered);
-      renderInspectionOverlays();
-      renderSelectionRects();
-    }).catch(error => { if (error.status === 409) refresh(); else showFailure(error); });
-  }, 140);
-}
-
-function setZoom(next, mode = 'custom') {
-  if (!Number.isFinite(next)) {
-    syncZoomControls();
-    return;
-  }
-  state.zoomMode = mode;
-  state.zoom = PaperStudioViewportModel.zoom(next);
-  applyPageStageSize();
-  scheduleZoomRender();
-}
-
-function setZoomMode(mode) {
-  if (mode === 'custom') {
-    state.zoomMode = mode;
-    syncZoomControls();
-    return;
-  }
-  if (mode !== 'fit-page' && mode !== 'fit-width') return;
-  setZoom(fittedZoom(mode), mode);
-}
-
-function resizeViewportProjection() {
-  clearTimeout(state.resizeTimer);
-  if (!state.activePageMeta) return;
-  applyPageStageSize();
-  renderInspectionOverlays();
-  renderSelectionRects();
-  state.resizeTimer = setTimeout(() => {
-    state.resizeTimer = null;
-    scheduleZoomRender();
-  }, 160);
+  loadWASMPage(page, dpi).then(rendered => {
+    if (serial !== state.zoomRender || page !== state.page || revision !== state.revision) return;
+    paintWASMPage(rendered);
+    renderInspectionOverlays();
+    renderSelectionRects();
+  }).catch(error => { if (error.status === 409) refresh(); else showFailure(error); });
 }
 
 function renderStatus() {
@@ -1867,12 +1685,9 @@ function showFailure(error) {
 }
 
 function clearObjectURLs() {
-  clearTimeout(state.zoomTimer);
-  state.zoomTimer = null;
   for (const url of state.objectURLs) URL.revokeObjectURL(url);
   state.objectURLs.clear();
   for (const value of state.pageMeta.values()) value.bitmap?.close?.();
-  state.wasmCacheKeys = [];
 }
 
 document.querySelectorAll('.mode').forEach((button) => button.addEventListener('click', () => setMode(button.dataset.mode)));
@@ -1900,7 +1715,6 @@ $('#refresh').addEventListener('click', () => refresh());
 $('#resource-add')?.addEventListener('click', addResource);
 $('#zoom-in').addEventListener('click', () => setZoom(state.zoom + .1));
 $('#zoom-out').addEventListener('click', () => setZoom(state.zoom - .1));
-$('#zoom-mode').addEventListener('change', event => setZoomMode(event.currentTarget.value));
 $('#zoom-value').addEventListener('change', event => setZoom(Number(event.currentTarget.value) / 100));
 $('#zoom-value').addEventListener('keydown', event => {
   if (event.key !== 'Enter') return;
@@ -1927,8 +1741,6 @@ window.addEventListener('keydown', (event) => {
   }
 });
 window.addEventListener('beforeunload', () => { state.changeStream?.close?.(); clearObjectURLs(); });
-if (typeof ResizeObserver === 'function') new ResizeObserver(resizeViewportProjection).observe(canvasScroll);
-else window.addEventListener('resize', resizeViewportProjection);
 
-syncZoomControls();
+setZoom(1);
 refresh().finally(connectChangeStream);

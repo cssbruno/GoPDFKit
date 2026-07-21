@@ -226,13 +226,13 @@ func (p ParagraphLinePlan) FragmentContext(ctx context.Context, space ParagraphF
 		ctx = context.Background()
 	}
 	workAmount := uint64(1)
-	if token.nextLine < uint32(len(p.lines)) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if token.nextLine < uint32(len(p.lines)) {
 		workAmount += uint64(len(p.lines)) - uint64(token.nextLine)
 	}
 	if err := ChargePlanningWork(ctx, "paragraph fragmentation", workAmount); err != nil {
 		return ParagraphFragmentResult{}, err
 	}
-	if token.fingerprint != p.fingerprint || token.nextLine >= uint32(len(p.lines)) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if token.fingerprint != p.fingerprint || token.nextLine >= uint32(len(p.lines)) {
 		return ParagraphFragmentResult{}, ErrParagraphToken
 	}
 	if space.Available < 0 || space.NextRegionCapacity <= 0 {
@@ -318,15 +318,15 @@ func (p ParagraphLinePlan) FragmentContext(ctx context.Context, space ParagraphF
 		return ParagraphFragmentResult{}, err
 	}
 	widowsApplied := p.widows
-	if relaxedLeading && uint32(selected) < widowsApplied { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-		widowsApplied = uint32(selected) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	if relaxedLeading && uint32(selected) < widowsApplied {
+		widowsApplied = uint32(selected)
 	}
 	if !widowOK {
 		widowsApplied = 1
 	}
 	orphansApplied := p.orphans
 	if relaxedOrphans {
-		orphansApplied = uint32(selected) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		orphansApplied = uint32(selected)
 	}
 	return p.placedResult(token, selected, height, false, relaxedOrphans, relaxedWidows || relaxedLeading,
 		widowOK, orphansApplied, widowsApplied, selected < fitCount, required), nil
@@ -403,8 +403,8 @@ func (p ParagraphLinePlan) lineHeight(start, count int) (Fixed, error) {
 
 func (p ParagraphLinePlan) placedResult(token ParagraphBreakToken, count int, height Fixed, oversized, relaxedOrphans, relaxedWidows, preserveNextWidows bool, orphansApplied, widowsApplied uint32, policyBreak bool, required Fixed) ParagraphFragmentResult {
 	start := token.nextLine
-	end := start + uint32(count)        // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-	done := end == uint32(len(p.lines)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	end := start + uint32(count)
+	done := end == uint32(len(p.lines))
 	continuation := ContinuationMiddle
 	switch {
 	case start == 0 && done:
@@ -415,7 +415,7 @@ func (p ParagraphLinePlan) placedResult(token ParagraphBreakToken, count int, he
 		continuation = ContinuationEnd
 	}
 	result := ParagraphFragmentResult{
-		Action: ParagraphPlace, Lines: IndexRange{Start: start, Count: uint32(count)}, // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		Action: ParagraphPlace, Lines: IndexRange{Start: start, Count: uint32(count)},
 		Height: height, Continuation: continuation, Done: done, OversizedLine: oversized,
 		RelaxedOrphans: relaxedOrphans, RelaxedWidows: relaxedWidows,
 		OrphansApplied: orphansApplied, WidowsApplied: widowsApplied,
@@ -480,7 +480,7 @@ func PlanParagraphFlowContext(ctx context.Context, input ParagraphFlowInput) (La
 			var planning *PlanningError
 			if errors.As(err, &planning) && errors.Is(err, ErrParagraphConstraintUnsatisfiable) {
 				diagnostic := cloneDiagnostic(planning.Diagnostic)
-				diagnostic.Location.Page = uint32(len(planInput.Pages) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				diagnostic.Location.Page = uint32(len(planInput.Pages) + 1)
 				diagnostic.Location.Bounds = input.Body
 				diagnostic.Location.HasBounds = true
 				return LayoutPlan{}, newPlanningError(ErrParagraphConstraintUnsatisfiable, diagnostic)
@@ -491,8 +491,8 @@ func PlanParagraphFlowContext(ctx context.Context, input ParagraphFlowInput) (La
 			return LayoutPlan{}, errors.New("layoutengine: paragraph made no progress on an empty body")
 		}
 
-		pageNumber := uint32(len(planInput.Pages) + 1)         // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-		fragmentID := FragmentID(len(planInput.Fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		pageNumber := uint32(len(planInput.Pages) + 1)
+		fragmentID := FragmentID(len(planInput.Fragments) + 1)
 		box, err := NewRect(input.Body.X, input.Body.Y, input.Body.Width, result.Height)
 		if err != nil {
 			return LayoutPlan{}, fmt.Errorf("layoutengine: paragraph fragment box: %w", err)
@@ -528,8 +528,8 @@ func PlanParagraphFlowContext(ctx context.Context, input ParagraphFlowInput) (La
 		})
 		planInput.Pages = append(planInput.Pages, PlannedPage{
 			Number: pageNumber, Size: input.PageSize,
-			Fragments: IndexRange{Start: uint32(len(planInput.Fragments) - 1), Count: 1}, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-			Lines:     IndexRange{Start: uint32(lineStart), Count: result.Lines.Count},   // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+			Fragments: IndexRange{Start: uint32(len(planInput.Fragments) - 1), Count: 1},
+			Lines:     IndexRange{Start: uint32(lineStart), Count: result.Lines.Count},
 		})
 
 		if previous != nil {

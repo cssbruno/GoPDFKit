@@ -201,16 +201,16 @@ type DocumentColor struct {
 // TextStyle describes common text styling independent of a renderer.
 type TextStyle struct {
 	FontFamily    string        // Font family name.
-	FontSize      float64       // Font size in points.
-	Bold          bool          // Whether text is bold.
-	Italic        bool          // Whether text is italic.
-	Underline     bool          // Whether text is underlined.
-	StrikeThrough bool          // Whether text has a strike-through line.
-	Color         DocumentColor // Optional text color.
-	Align         string        // Horizontal alignment, such as L, C, R, or J.
-	LineHeight    float64       // Line height in document units.
-	WhiteSpace    string        // Optional resolved whitespace mode: normal, nowrap, pre, pre-wrap, pre-line, or break-spaces.
-	TabSize       uint8         // Number of spaces per tab stop; zero uses 8.
+	FontSize         float64       // Font size in points.
+	Bold             bool          // Whether text is bold.
+	Italic           bool          // Whether text is italic.
+	Underline        bool          // Whether text is underlined.
+	StrikeThrough    bool          // Whether text has a strike-through line.
+	Color            DocumentColor // Optional text color.
+	Align            string        // Horizontal alignment, such as L, C, R, or J.
+	LineHeight       float64       // Line height in document units.
+	WhiteSpace       string        // Optional resolved whitespace mode: normal, nowrap, pre, pre-wrap, pre-line, or break-spaces.
+	TabSize          uint8         // Number of spaces per tab stop; zero uses 8.
 }
 
 // BoxStyle describes common block styling independent of a renderer.
@@ -482,7 +482,6 @@ type TableRow struct {
 type TableCell struct {
 	Blocks        []Block    // Cell content blocks.
 	Header        bool       // Whether this cell carries header semantics.
-	Scope         string     // Optional header scope: row, column, or both.
 	ColSpan       int        // Number of columns spanned by the cell.
 	RowSpan       int        // Number of rows spanned by the cell.
 	Align         string     // Horizontal cell alignment.

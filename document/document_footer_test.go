@@ -89,7 +89,7 @@ func TestWriteDocumentRendersExtractedHTMLFooterBlock(t *testing.T) {
 	if err := pdf.Output(&out); err != nil {
 		t.Fatalf("Output() error = %v", err)
 	}
-	if !strings.Contains(extractedDocumentText(t, out.Bytes()), "Extracted footer") {
+	if !strings.Contains(out.String(), "Extracted footer") {
 		t.Fatal("PDF output missing extracted footer")
 	}
 }

@@ -153,14 +153,9 @@ func (w *Workspace) PaperSetRichText(request PaperSetRichTextRequest) (PaperMuta
 }
 
 type PaperSetBindingRequest struct {
-	Guard             PaperMutationGuard `json:"guard"`
-	Path              string             `json:"path"`
-	Required          *bool              `json:"required,omitempty"`
-	Format            string             `json:"format,omitempty"`
-	FormatLocale      string             `json:"format-locale,omitempty"`
-	FormatCurrency    string             `json:"format-currency,omitempty"`
-	MinFractionDigits *uint32            `json:"format-min-fraction,omitempty"`
-	MaxFractionDigits *uint32            `json:"format-max-fraction,omitempty"`
+	Guard    PaperMutationGuard `json:"guard"`
+	Path     string             `json:"path"`
+	Required *bool              `json:"required,omitempty"`
 }
 
 // PaperSetBinding authors a typed binding property on a supported semantic
@@ -172,23 +167,6 @@ func (w *Workspace) PaperSetBinding(request PaperSetBindingRequest) (PaperMutati
 	}
 	if len(request.Path) == 0 || len(request.Path) > w.limits.MaxQueryBytes || !validBindingPath(request.Path) {
 		return PaperMutationResult{}, workspaceError("INVALID_BINDING", "binding path must be a bounded root-relative or schema-qualified dotted path without @", paperedit.ErrInvalidOperation)
-	}
-	if request.Format != "" {
-		switch request.Format {
-		case "string", "bool", "integer", "decimal", "currency":
-		default:
-			return PaperMutationResult{}, workspaceError("INVALID_BINDING_FORMAT", "binding format must be string, bool, integer, decimal, or currency", paperedit.ErrInvalidOperation)
-		}
-	}
-	for _, value := range []string{request.FormatLocale, request.FormatCurrency} {
-		if len(value) > w.limits.MaxQueryBytes || !utf8.ValidString(value) {
-			return PaperMutationResult{}, workspaceError("INVALID_BINDING_FORMAT", "binding format metadata is not valid UTF-8 within the configured limit", paperedit.ErrInvalidOperation)
-		}
-	}
-	for name, value := range map[string]*uint32{"format-min-fraction": request.MinFractionDigits, "format-max-fraction": request.MaxFractionDigits} {
-		if value != nil && *value > 18 {
-			return PaperMutationResult{}, workspaceError("INVALID_BINDING_FORMAT", name+" must be between 0 and 18", paperedit.ErrInvalidOperation)
-		}
 	}
 	node := findNodeByID(revision.parsed.AST.Root, request.Guard.Target)
 	if node == nil || (node.Kind != paperlang.NodeParagraph && node.Kind != paperlang.NodeHeading && node.Kind != paperlang.NodeUse) {
@@ -203,26 +181,10 @@ func (w *Workspace) PaperSetBinding(request PaperSetBindingRequest) (PaperMutati
 	if bindCount > 1 {
 		return PaperMutationResult{}, workspaceError("AMBIGUOUS_TARGET", "binding target has more than one bind property", paperedit.ErrInvalidOperation)
 	}
-	properties := []paperedit.PropertySpec{{Name: "bind", Value: paperedit.StringValue(request.Path)}}
+	operations := []paperedit.Operation{paperedit.SetProperty{Target: request.Guard.Target, Name: "bind", Value: paperedit.StringValue(request.Path)}}
 	if request.Required != nil {
-		properties = append(properties, paperedit.PropertySpec{Name: "bind-required", Value: paperedit.BoolValue(*request.Required)})
+		operations = append(operations, paperedit.SetProperty{Target: request.Guard.Target, Name: "bind-required", Value: paperedit.BoolValue(*request.Required)})
 	}
-	if request.Format != "" {
-		properties = append(properties, paperedit.PropertySpec{Name: "format", Value: paperedit.StringValue(request.Format)})
-	}
-	if request.FormatLocale != "" {
-		properties = append(properties, paperedit.PropertySpec{Name: "format-locale", Value: paperedit.StringValue(request.FormatLocale)})
-	}
-	if request.FormatCurrency != "" {
-		properties = append(properties, paperedit.PropertySpec{Name: "format-currency", Value: paperedit.StringValue(request.FormatCurrency)})
-	}
-	if request.MinFractionDigits != nil {
-		properties = append(properties, paperedit.PropertySpec{Name: "format-min-fraction", Value: paperedit.NumberValue(float64(*request.MinFractionDigits))})
-	}
-	if request.MaxFractionDigits != nil {
-		properties = append(properties, paperedit.PropertySpec{Name: "format-max-fraction", Value: paperedit.NumberValue(float64(*request.MaxFractionDigits))})
-	}
-	operations := []paperedit.Operation{paperedit.SetProperties{Target: request.Guard.Target, Properties: properties}}
 	return w.applyPaperMutation("set_binding", request.Guard, opened, revision, []string{request.Guard.Target}, operations, "INVALID_BINDING")
 }
 
@@ -388,7 +350,7 @@ func literalOperation(node *paperlang.Node, target, text string) (paperedit.Oper
 		return nil, nil, workspaceError("AMBIGUOUS_TARGET", "literal target has more than one text representation", paperedit.ErrInvalidOperation)
 	}
 	if children == 1 {
-		if child == nil || child.ID == "" || child.Value == nil {
+		if child.ID == "" || child.Value == nil {
 			return nil, nil, workspaceError("AMBIGUOUS_TARGET", "literal child must have a readable ID and inline value", paperedit.ErrInvalidOperation)
 		}
 		return paperedit.ReplaceText{Target: child.ID, Text: text}, []string{target, child.ID}, nil

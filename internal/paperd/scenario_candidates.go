@@ -227,7 +227,7 @@ func (w *Workspace) validateScenarioApplyRequest(request ScenarioApplyRequest) (
 		return nil, nil, scenarioRevisionConflict("expected scenario digest is malformed")
 	}
 
-	budget := &scenarioEditBudget{limit: uint64(w.limits.MaxScenarioWork)} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	budget := &scenarioEditBudget{limit: uint64(w.limits.MaxScenarioWork)}
 	operations := make([]ScenarioOperation, len(request.Operations))
 	valueNodes := 0
 	for i, operation := range request.Operations {
@@ -330,7 +330,7 @@ func validScenarioName(value string) bool {
 		return false
 	}
 	for i, r := range value {
-		if r != '_' && r != '-' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (i == 0 || r < '0' || r > '9') {
+		if !(r == '_' || r == '-' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || i > 0 && r >= '0' && r <= '9') {
 			return false
 		}
 	}
@@ -476,8 +476,8 @@ func (w *Workspace) prepareScenarioEdit(fixtures []paperscenario.Fixture, budget
 		input[i] = paperscenario.Scenario{Name: fixtures[i].Name, Locale: fixtures[i].Locale, Values: cloneScenarioFields(fixtures[i].Values)}
 	}
 	limits := paperscenario.DefaultLimits()
-	limits.MaxNodes = uint32(w.limits.MaxScenarioValueNodes)    // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-	limits.MaxPathBytes = uint32(w.limits.MaxScenarioPathBytes) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	limits.MaxNodes = uint32(w.limits.MaxScenarioValueNodes)
+	limits.MaxPathBytes = uint32(w.limits.MaxScenarioPathBytes)
 	limits.MaxWork = remainingWork
 	resolved, err := paperscenario.Resolve(input, limits)
 	if err != nil {
@@ -522,7 +522,7 @@ func scenarioCachedResult(cached scenarioIdempotencyRecord, fingerprint string) 
 }
 
 func scenarioRequestFingerprint(request ScenarioApplyRequest, operations []ScenarioOperation) string {
-	encoded, err := json.Marshal(struct {
+	encoded, _ := json.Marshal(struct {
 		CandidateScope uint64              `json:"candidate_scope"`
 		Candidate      uint64              `json:"candidate"`
 		HeadScope      uint64              `json:"head_scope"`
@@ -537,9 +537,6 @@ func scenarioRequestFingerprint(request ScenarioApplyRequest, operations []Scena
 		Digest:         request.ExpectedDigest,
 		Operations:     operations,
 	})
-	if err != nil {
-		return ""
-	}
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
 }

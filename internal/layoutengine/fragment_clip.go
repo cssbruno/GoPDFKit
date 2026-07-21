@@ -32,7 +32,7 @@ func AttachFragmentClips(plan LayoutPlan, bounds map[FragmentID]Rect) (LayoutPla
 	for pageIndex := range projection.Pages {
 		page := &projection.Pages[pageIndex]
 		end, _ := page.Commands.end(len(projection.Commands))
-		start := uint32(len(commands)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		start := uint32(len(commands))
 		for index := int(page.Commands.Start); index < end; index++ {
 			command := projection.Commands[index]
 			box, selected := bounds[command.Fragment]
@@ -43,8 +43,8 @@ func AttachFragmentClips(plan LayoutPlan, bounds map[FragmentID]Rect) (LayoutPla
 					return LayoutPlan{}, err
 				}
 				projection.Paths = append(projection.Paths, path)
-				clip := uint32(len(projection.Clips))                                                                                                            // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-				projection.Clips = append(projection.Clips, PlannedClip{Path: uint32(len(projection.Paths) - 1), Rule: FillNonZero, Fragment: command.Fragment}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				clip := uint32(len(projection.Clips))
+				projection.Clips = append(projection.Clips, PlannedClip{Path: uint32(len(projection.Paths) - 1), Rule: FillNonZero, Fragment: command.Fragment})
 				commands = append(commands, DisplayCommand{Kind: CommandSaveState}, DisplayCommand{Kind: CommandClip, Fragment: command.Fragment, Bounds: bounds[command.Fragment], Payload: clip})
 			}
 			commands = append(commands, command)
@@ -52,7 +52,7 @@ func AttachFragmentClips(plan LayoutPlan, bounds map[FragmentID]Rect) (LayoutPla
 				commands = append(commands, DisplayCommand{Kind: CommandRestoreState})
 			}
 		}
-		page.Commands = IndexRange{Start: start, Count: uint32(len(commands)) - start} // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		page.Commands = IndexRange{Start: start, Count: uint32(len(commands)) - start}
 	}
 	return NewLayoutPlan(LayoutPlanInput{
 		DeterministicInputs: projection.DeterministicInputs,

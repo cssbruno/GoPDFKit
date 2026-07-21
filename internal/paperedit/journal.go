@@ -231,7 +231,7 @@ func validJournalStateDiff(before, after string, diff SourceDiff) bool {
 	patches := append([]SourcePatch(nil), diff.Patches...)
 	sort.Slice(patches, func(i, j int) bool { return patches[i].Start > patches[j].Start })
 	result := before
-	previousStart := uint32(len(before) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	previousStart := uint32(len(before) + 1)
 	for _, patch := range patches {
 		if patch.Start > patch.End || uint64(patch.End) > uint64(len(result)) || patch.End > previousStart ||
 			!utf8.ValidString(patch.Target) || len(patch.Target) > MaxJournalGroupBytes ||
@@ -447,7 +447,7 @@ func minimalSourceDiff(before, after string) SourceDiff {
 		endAfter -= utf8.RuneLen(value)
 	}
 	return SourceDiff{BeforeRevision: SourceRevision(before), AfterRevision: SourceRevision(after), Patches: []SourcePatch{{
-		Start: uint32(prefixBefore), End: uint32(endBefore), Removed: before[prefixBefore:endBefore], Replacement: after[prefixAfter:endAfter], // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		Start: uint32(prefixBefore), End: uint32(endBefore), Removed: before[prefixBefore:endBefore], Replacement: after[prefixAfter:endAfter],
 	}}}
 }
 

@@ -98,10 +98,7 @@ func cloneScenarioSnapshot(snapshot ScenarioRevisionSnapshot) ScenarioRevisionSn
 }
 
 func scenarioDigest(fixtures []paperscenario.Fixture) string {
-	encoded, err := json.Marshal(fixtures)
-	if err != nil {
-		return ""
-	}
+	encoded, _ := json.Marshal(fixtures)
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
 }

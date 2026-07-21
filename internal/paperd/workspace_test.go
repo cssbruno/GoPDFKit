@@ -134,6 +134,7 @@ func TestWorkspaceConcurrentApplyUsesHeadCompareAndSwap(t *testing.T) {
 	wait.Add(2)
 	errorsSeen := make(chan error, 2)
 	for _, text := range []string{"first", "second"} {
+		text := text
 		go func() {
 			defer wait.Done()
 			<-start

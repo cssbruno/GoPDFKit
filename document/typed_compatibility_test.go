@@ -13,7 +13,7 @@ import (
 )
 
 // TestTypedCanonicalPlanPreservesSimpleCompatibilityBaselines is deliberately
-// an output-level compatibility test. It compares the public lowering adapter
+// an output-level compatibility test. It compares the legacy typed renderer
 // with the canonical plan/painter path after both have produced real PDFs; a
 // plan projection alone cannot prove that PDF text extraction remains usable.
 func TestTypedCanonicalPlanPreservesSimpleCompatibilityBaselines(t *testing.T) {
@@ -70,23 +70,23 @@ func TestTypedCanonicalPlanPreservesSimpleCompatibilityBaselines(t *testing.T) {
 
 	for _, fixture := range fixtures {
 		t.Run(fixture.name, func(t *testing.T) {
-			adapted := renderAdaptedTypedCompatibilityPDF(t, fixture.document)
+			legacy := renderLegacyTypedCompatibilityPDF(t, fixture.document)
 			planned, planPages := renderPlannedTypedCompatibilityPDF(t, fixture.document)
 
-			adaptedPages := compatibilityPDFPageCount(t, adapted)
+			legacyPages := compatibilityPDFPageCount(t, legacy)
 			plannedPages := compatibilityPDFPageCount(t, planned)
-			if adaptedPages != fixture.wantPages || plannedPages != fixture.wantPages || planPages != fixture.wantPages {
-				t.Fatalf("page counts = adapted %d plan %d painted %d, want %d",
-					adaptedPages, planPages, plannedPages, fixture.wantPages)
+			if legacyPages != fixture.wantPages || plannedPages != fixture.wantPages || planPages != fixture.wantPages {
+				t.Fatalf("page counts = legacy %d plan %d painted %d, want %d",
+					legacyPages, planPages, plannedPages, fixture.wantPages)
 			}
 
-			adaptedOrder := compatibilityExtractedTokenOrder(t, adapted, fixture.wantText)
+			legacyOrder := compatibilityExtractedTokenOrder(t, legacy, fixture.wantText)
 			plannedOrder := compatibilityExtractedTokenOrder(t, planned, fixture.wantText)
 			wantOrder := strings.Join(fixture.wantText, "|")
-			if adaptedOrder != wantOrder || plannedOrder != wantOrder || plannedOrder != adaptedOrder {
-				t.Fatalf("extracted order = adapted %q planned %q, want %q", adaptedOrder, plannedOrder, wantOrder)
+			if legacyOrder != wantOrder || plannedOrder != wantOrder || plannedOrder != legacyOrder {
+				t.Fatalf("extracted order = legacy %q planned %q, want %q", legacyOrder, plannedOrder, wantOrder)
 			}
-			compatibilityAssertPageText(t, adapted, fixture.wantByPage)
+			compatibilityAssertPageText(t, legacy, fixture.wantByPage)
 			compatibilityAssertPageText(t, planned, fixture.wantByPage)
 		})
 	}
@@ -105,12 +105,12 @@ func newTypedCompatibilityPDF() *Document {
 	)
 }
 
-func renderAdaptedTypedCompatibilityPDF(t *testing.T, model *layout.LayoutDocument) []byte {
+func renderLegacyTypedCompatibilityPDF(t *testing.T, model *layout.LayoutDocument) []byte {
 	t.Helper()
 	pdf := newTypedCompatibilityPDF()
-	pdf.WriteDocument(model)
+	pdf.writeDocumentLegacy(model)
 	if err := pdf.Error(); err != nil {
-		t.Fatalf("WriteDocument: %v", err)
+		t.Fatalf("legacy WriteDocument: %v", err)
 	}
 	return outputTypedCompatibilityPDF(t, pdf)
 }

@@ -318,7 +318,7 @@ func PlanRowColumn(ctx context.Context, input RowColumnPlanInput, limits RowColu
 	}
 
 	planInput := LayoutPlanInput{Pages: []PlannedPage{{
-		Number: 1, Size: input.PageSize, Fragments: IndexRange{Count: uint32(len(input.Children))}, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		Number: 1, Size: input.PageSize, Fragments: IndexRange{Count: uint32(len(input.Children))},
 	}}}
 	planInput.Fragments = make([]Fragment, 0, len(input.Children))
 	if err := budget.charge(uint64(len(input.Children)) + 1); err != nil {
@@ -382,7 +382,7 @@ func PlanRowColumn(ctx context.Context, input RowColumnPlanInput, limits RowColu
 	}
 	lines := []RowColumnLine(nil)
 	if len(input.Children) != 0 {
-		lines = []RowColumnLine{{Children: IndexRange{Count: uint32(len(input.Children))}, CrossStart: crossOrigin, CrossSize: crossAvailable, UsedMain: usedMain}} // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		lines = []RowColumnLine{{Children: IndexRange{Count: uint32(len(input.Children))}, CrossStart: crossOrigin, CrossSize: crossAvailable, UsedMain: usedMain}}
 	}
 	return RowColumnPlanResult{Plan: plan, mainSizes: mainSizes, lines: lines, UsedMain: usedMain}, nil
 }
@@ -525,7 +525,7 @@ func resolveRowColumnTracks(input RowColumnPlanInput, available Fixed, budget *r
 		}
 		minimum, constraintErr := resolveRowColumnMinimum(child.Track, available)
 		if constraintErr != nil {
-			return nil, 0, fmt.Errorf("%w: child %d: %w", ErrRowColumnTrack, index, constraintErr)
+			return nil, 0, fmt.Errorf("%w: child %d: %v", ErrRowColumnTrack, index, constraintErr)
 		}
 		if child.MinMain > minimum {
 			minimum = child.MinMain
@@ -558,12 +558,12 @@ func resolveRowColumnTracks(input RowColumnPlanInput, available Fixed, budget *r
 			}
 			basis, basisErr := resolveRowColumnFlexBasis(child.Track, available, child.ContentMain)
 			if basisErr != nil {
-				return nil, 0, fmt.Errorf("%w: child %d: %w", ErrRowColumnTrack, index, basisErr)
+				return nil, 0, fmt.Errorf("%w: child %d: %v", ErrRowColumnTrack, index, basisErr)
 			}
 			flexBases[index] = basis
 			maximum, maxErr := resolveRowColumnMaximum(child.Track, available)
 			if maxErr != nil {
-				return nil, 0, fmt.Errorf("%w: child %d: %w", ErrRowColumnTrack, index, maxErr)
+				return nil, 0, fmt.Errorf("%w: child %d: %v", ErrRowColumnTrack, index, maxErr)
 			}
 			sizes[index] = clampRowColumnFlexSize(basis, minimum, maximum)
 			flexes = append(flexes, index)
@@ -867,13 +867,13 @@ func validateRowColumnChild(child RowColumnChild, index int) error {
 		return fmt.Errorf("%w: child %d has an absent identity", ErrRowColumnTrack, index)
 	}
 	if err := validateTextIdentity("row or column child key", string(child.Key)); err != nil {
-		return fmt.Errorf("%w: child %d: %w", ErrRowColumnTrack, index, err)
+		return fmt.Errorf("%w: child %d: %v", ErrRowColumnTrack, index, err)
 	}
 	if err := validateTextIdentity("row or column child instance", string(child.Instance)); err != nil {
-		return fmt.Errorf("%w: child %d: %w", ErrRowColumnTrack, index, err)
+		return fmt.Errorf("%w: child %d: %v", ErrRowColumnTrack, index, err)
 	}
 	if err := child.Source.Validate(); err != nil {
-		return fmt.Errorf("%w: child %d source: %w", ErrRowColumnTrack, index, err)
+		return fmt.Errorf("%w: child %d source: %v", ErrRowColumnTrack, index, err)
 	}
 	if child.Track.Min < 0 || child.Track.Max < 0 || child.Track.Size < 0 || child.Track.Basis < 0 || child.MinMain < 0 || child.ContentMain < 0 || child.CrossSize < 0 || child.CrossMin < 0 || child.CrossMax < 0 ||
 		(child.Track.Max > 0 && child.Track.Max < child.Track.Min) {
@@ -932,7 +932,7 @@ func distributeRowColumnRemainder(sizes []Fixed, indexes []int, weights []uint32
 func resolveCrossAxis(child RowColumnChild, align CrossAlignment, origin, available Fixed, region Rect, index int) (Fixed, Fixed, error) {
 	extent, err := resolveRowColumnCrossExtent(child, available, align == CrossStretch)
 	if err != nil {
-		return 0, 0, fmt.Errorf("%w: child %d: %w", ErrRowColumnTrack, index, err)
+		return 0, 0, fmt.Errorf("%w: child %d: %v", ErrRowColumnTrack, index, err)
 	}
 	if align == CrossStretch {
 		return origin, extent, nil

@@ -215,7 +215,6 @@ func parseLayoutBlockImplementations(t *testing.T) []string {
 }
 
 func TestTypedCharacterizationCorpusIsCompleteBoundedAndDeterministic(t *testing.T) {
-	requireDarwinRasterBaseline(t)
 	inventory := TypedLayoutInventory()
 	covered := map[layout.BlockKind]bool{}
 	categories := map[string]bool{}

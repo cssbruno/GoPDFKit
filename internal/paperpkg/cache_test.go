@@ -15,7 +15,7 @@ import (
 func TestPackageCacheAtomicInstallLookupReadAndIdempotence(t *testing.T) {
 	root := t.TempDir()
 	cache := newTestPackageCache(t, root, DefaultCacheLimits())
-	defer func() { _ = cache.Close() }()
+	defer cache.Close()
 	plan := cacheTestPlan(t, "first")
 	project := digest('e')
 	content, err := ArchiveContentDigest(plan)
@@ -62,7 +62,7 @@ func TestPackageCacheAtomicInstallLookupReadAndIdempotence(t *testing.T) {
 
 func TestPackageCacheConcurrentInstallIsIdempotent(t *testing.T) {
 	cache := newTestPackageCache(t, t.TempDir(), DefaultCacheLimits())
-	defer func() { _ = cache.Close() }()
+	defer cache.Close()
 	plan := cacheTestPlan(t, "concurrent")
 	content, _ := ArchiveContentDigest(plan)
 	project := digest('d')
@@ -94,9 +94,9 @@ func TestPackageCacheConcurrentInstallIsIdempotent(t *testing.T) {
 func TestPackageCacheConcurrentInstallAcrossHandlesPublishesOneCompleteTree(t *testing.T) {
 	root := t.TempDir()
 	first := newTestPackageCache(t, root, DefaultCacheLimits())
-	defer func() { _ = first.Close() }()
+	defer first.Close()
 	second := newTestPackageCache(t, root, DefaultCacheLimits())
-	defer func() { _ = second.Close() }()
+	defer second.Close()
 	plan := cacheTestPlan(t, "multi-handle")
 	content, _ := ArchiveContentDigest(plan)
 	project := digest('7')
@@ -133,7 +133,7 @@ func TestPackageCacheConcurrentInstallAcrossHandlesPublishesOneCompleteTree(t *t
 func TestPackageCacheInstallLockCancellationAndStaleStageRecovery(t *testing.T) {
 	root := t.TempDir()
 	cache := newTestPackageCache(t, root, DefaultCacheLimits())
-	defer func() { _ = cache.Close() }()
+	defer cache.Close()
 	plan := cacheTestPlan(t, "recovery")
 	content, _ := ArchiveContentDigest(plan)
 	project := digest('6')
@@ -167,7 +167,7 @@ func TestPackageCacheInstallLockCancellationAndStaleStageRecovery(t *testing.T) 
 func TestPackageCacheCancellationPreventsPublication(t *testing.T) {
 	root := t.TempDir()
 	cache := newTestPackageCache(t, root, DefaultCacheLimits())
-	defer func() { _ = cache.Close() }()
+	defer cache.Close()
 	plan := cacheTestPlan(t, "cancel")
 	content, _ := ArchiveContentDigest(plan)
 	project := digest('c')
@@ -184,7 +184,7 @@ func TestPackageCacheCancellationPreventsPublication(t *testing.T) {
 func TestPackageCacheNeverOverwritesCorruptExistingContent(t *testing.T) {
 	root := t.TempDir()
 	cache := newTestPackageCache(t, root, DefaultCacheLimits())
-	defer func() { _ = cache.Close() }()
+	defer cache.Close()
 	plan := cacheTestPlan(t, "original")
 	content, _ := ArchiveContentDigest(plan)
 	project := digest('b')
@@ -210,7 +210,7 @@ func TestPackageCacheNeverOverwritesCorruptExistingContent(t *testing.T) {
 func TestPackageCacheDiagnosesMissingManifestExtraFilesAndUnsafeModes(t *testing.T) {
 	root := t.TempDir()
 	cache := newTestPackageCache(t, root, DefaultCacheLimits())
-	defer func() { _ = cache.Close() }()
+	defer cache.Close()
 	project := digest('a')
 	content := digest('b')
 	partial := filepath.Join(root, string(project), string(content))
@@ -248,7 +248,7 @@ func TestPackageCacheDiagnosesMissingManifestExtraFilesAndUnsafeModes(t *testing
 
 func TestPackageCacheValidatesAddressPlanAndEveryLimit(t *testing.T) {
 	cache := newTestPackageCache(t, t.TempDir(), DefaultCacheLimits())
-	defer func() { _ = cache.Close() }()
+	defer cache.Close()
 	plan := cacheTestPlan(t, "limits")
 	content, _ := ArchiveContentDigest(plan)
 	project := digest('9')
@@ -271,7 +271,7 @@ func TestPackageCacheValidatesAddressPlanAndEveryLimit(t *testing.T) {
 	limits := DefaultCacheLimits()
 	limits.MaxFiles = 1
 	limited := newTestPackageCache(t, t.TempDir(), limits)
-	defer func() { _ = limited.Close() }()
+	defer limited.Close()
 	if err := limited.Install(context.Background(), project, content, plan); !errors.Is(err, ErrCacheLimit) {
 		t.Fatalf("file-limited Install() = %v", err)
 	}
@@ -279,7 +279,7 @@ func TestPackageCacheValidatesAddressPlanAndEveryLimit(t *testing.T) {
 	limits.MaxFileBytes = 4
 	limits.MaxTotalBytes = 16
 	limitedBytes := newTestPackageCache(t, t.TempDir(), limits)
-	defer func() { _ = limitedBytes.Close() }()
+	defer limitedBytes.Close()
 	if err := limitedBytes.Install(context.Background(), project, content, plan); !errors.Is(err, ErrCacheLimit) {
 		t.Fatalf("byte-limited Install() = %v", err)
 	}

@@ -31,12 +31,9 @@ type ScenarioCompileLimits struct {
 }
 
 type scenarioCompileRequest struct {
-	name        string
-	limits      ScenarioCompileLimits
-	fixture     *paperscenario.Fixture
-	data        []byte
-	dataSet     bool
-	dataOptions JSONDataOptions
+	name    string
+	limits  ScenarioCompileLimits
+	fixture *paperscenario.Fixture
 }
 
 // CompileScenario compiles one explicitly selected source fixture. It is the
@@ -66,19 +63,6 @@ func CompileScenarioWithAssetsAndResolver(ast paperlang.AST, scenario string, as
 // CompileScenarioWithLimits is CompileScenario with explicit bounded policies.
 func CompileScenarioWithLimits(ast paperlang.AST, scenario string, limits ScenarioCompileLimits) Result {
 	return compilePipeline(ast, limits.Components, limits.Schemas, &scenarioCompileRequest{name: scenario, limits: limits}, AssetCatalog{}, nil)
-}
-
-// CompileJSONData compiles one strict JSON object against a declared .paper
-// schema. The normalized data uses the same bounded fixture path as authored
-// scenarios, including repeat expansion and binding validation.
-func CompileJSONData(ast paperlang.AST, data []byte, options JSONDataOptions) Result {
-	return compilePipeline(ast, ExpansionLimits{}, SchemaLimits{}, &scenarioCompileRequest{data: data, dataSet: true, dataOptions: options}, AssetCatalog{}, nil)
-}
-
-// CompileJSONDataWithAssetsAndResolver combines strict JSON data with the
-// explicit resource and source boundaries used by the other compilers.
-func CompileJSONDataWithAssetsAndResolver(ast paperlang.AST, data []byte, options JSONDataOptions, assets AssetCatalog, resolver ImportResolver) Result {
-	return compilePipeline(ast, ExpansionLimits{}, SchemaLimits{}, &scenarioCompileRequest{data: data, dataSet: true, dataOptions: options}, assets, resolver)
 }
 
 type repeatExpansionContext struct {
@@ -123,41 +107,31 @@ type repeatFrame struct {
 
 func expandSelectedScenario(ast paperlang.AST, schemas schemaAnalysis, components componentExpansionResult, request *scenarioCompileRequest) componentExpansionResult {
 	result := components
+	source := ExtractScenariosWithLimits(ast, request.limits.Scenarios)
+	result.diagnostics = append(result.diagnostics, source.Diagnostics...)
+	if !source.OK() {
+		return result
+	}
+	fixtures, err := paperscenario.Resolve(source.Scenarios, request.limits.Scenarios)
+	if err != nil {
+		result.diagnostics = append(result.diagnostics, repeatDiagnostic("PAPER_REPEAT_SCENARIO", err.Error(), "fix the selected scenario fixture", rootSpan(ast)))
+		return result
+	}
+	selected := strings.TrimPrefix(strings.TrimSpace(request.name), "@")
+	if selected == "" {
+		result.diagnostics = append(result.diagnostics, repeatDiagnostic("PAPER_REPEAT_SCENARIO_REQUIRED", "CompileScenario requires an explicit scenario name", "select a declared @scenario", rootSpan(ast)))
+		return result
+	}
 	var fixture *paperscenario.Fixture
-	if request.dataSet {
-		generated, err := FixtureFromJSONData(request.data, schemas.descriptors, request.dataOptions)
-		if err != nil {
-			result.diagnostics = append(result.diagnostics, repeatDiagnostic("PAPER_DATA_JSON", err.Error(), "make the JSON object match the selected .paper schema", rootSpan(ast)))
-			return result
+	for index := range fixtures {
+		if fixtures[index].Name == selected {
+			fixture = &fixtures[index]
+			break
 		}
-		fixture = &generated
-		request.name = generated.Name
-	} else {
-		source := ExtractScenariosWithLimits(ast, request.limits.Scenarios)
-		result.diagnostics = append(result.diagnostics, source.Diagnostics...)
-		if !source.OK() {
-			return result
-		}
-		fixtures, err := paperscenario.Resolve(source.Scenarios, request.limits.Scenarios)
-		if err != nil {
-			result.diagnostics = append(result.diagnostics, repeatDiagnostic("PAPER_REPEAT_SCENARIO", err.Error(), "fix the selected scenario fixture", rootSpan(ast)))
-			return result
-		}
-		selected := strings.TrimPrefix(strings.TrimSpace(request.name), "@")
-		if selected == "" {
-			result.diagnostics = append(result.diagnostics, repeatDiagnostic("PAPER_REPEAT_SCENARIO_REQUIRED", "CompileScenario requires an explicit scenario name", "select a declared @scenario", rootSpan(ast)))
-			return result
-		}
-		for index := range fixtures {
-			if fixtures[index].Name == selected {
-				fixture = &fixtures[index]
-				break
-			}
-		}
-		if fixture == nil {
-			result.diagnostics = append(result.diagnostics, repeatDiagnostic("PAPER_REPEAT_SCENARIO_UNKNOWN", fmt.Sprintf("scenario @%s is not declared", selected), "select one declared scenario", rootSpan(ast)))
-			return result
-		}
+	}
+	if fixture == nil {
+		result.diagnostics = append(result.diagnostics, repeatDiagnostic("PAPER_REPEAT_SCENARIO_UNKNOWN", fmt.Sprintf("scenario @%s is not declared", selected), "select one declared scenario", rootSpan(ast)))
+		return result
 	}
 	request.fixture = fixture
 	repeatLimits := request.limits.Repeats

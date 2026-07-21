@@ -17,7 +17,6 @@ type resourceStore struct {
 	importedTplObjs map[string]string
 	importedPages   map[int]*importedPDFPage
 	images          map[string]*ImageInfo
-	imageAliases    map[string]string
 	objects         resourceObjectNumbers
 	attachments     attachmentResourceStore
 }
@@ -43,7 +42,6 @@ func newResourceStore() *resourceStore {
 		importedTplObjs: make(map[string]string),
 		importedPages:   make(map[int]*importedPDFPage),
 		images:          make(map[string]*ImageInfo),
-		imageAliases:    make(map[string]string),
 		objects: resourceObjectNumbers{
 			templates:         make(map[string]int),
 			importedTemplates: make(map[string]int),
@@ -69,24 +67,11 @@ func (state *resourceOwnershipState) ensureResourceStore() *resourceStore {
 
 func (s *resourceStore) image(name string) (*ImageInfo, bool) {
 	info, ok := s.images[name]
-	if !ok && s.imageAliases != nil {
-		info, ok = s.images[s.imageAliases[name]]
-	}
 	return info, ok
 }
 
 func (s *resourceStore) setImage(name string, info *ImageInfo) {
 	s.images[name] = info
-}
-
-func (s *resourceStore) setImageAlias(alias, name string) {
-	if alias == "" || name == "" || alias == name {
-		return
-	}
-	if s.imageAliases == nil {
-		s.imageAliases = make(map[string]string)
-	}
-	s.imageAliases[alias] = name
 }
 
 func (s *resourceStore) font(key string) (fontDefinition, bool) {

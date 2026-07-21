@@ -107,7 +107,7 @@ func Resolve(input []Scenario, limits Limits) ([]Fixture, error) {
 	if !validLimits(limits) {
 		return nil, fmt.Errorf("%w: invalid limits", ErrLimit)
 	}
-	if uint32(len(input)) > limits.MaxScenarios { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if uint32(len(input)) > limits.MaxScenarios {
 		return nil, fmt.Errorf("%w: scenario count", ErrLimit)
 	}
 	r := resolver{input: input, byName: make(map[string]int, len(input)), state: make([]uint8, len(input)), output: make([]Fixture, len(input)), limits: limits}
@@ -242,7 +242,7 @@ func (r *resolver) normalizeValue(value Value, depth uint32) (Value, error) {
 		if value.String != "" || value.Number != "" || value.Bool || len(value.Object) != 0 {
 			return Value{}, fmt.Errorf("%w: list contains incompatible data", ErrInvalid)
 		}
-		if uint32(len(value.List)) > r.limits.MaxListItems { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(value.List)) > r.limits.MaxListItems {
 			return Value{}, fmt.Errorf("%w: list items", ErrLimit)
 		}
 		seen := make(map[string]bool, len(value.List))
@@ -267,7 +267,7 @@ func (r *resolver) normalizeValue(value Value, depth uint32) (Value, error) {
 }
 
 func (r *resolver) mutate(fields *[]Field, mutation Mutation) error {
-	if mutation.Path == "" || uint32(len(mutation.Path)) > r.limits.MaxPathBytes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if mutation.Path == "" || uint32(len(mutation.Path)) > r.limits.MaxPathBytes {
 		return fmt.Errorf("%w: invalid mutation path", ErrInvalid)
 	}
 	parts := strings.Split(mutation.Path, ".")
@@ -339,7 +339,7 @@ func validName(value string) bool {
 		return false
 	}
 	for i, r := range value {
-		if r != '_' && r != '-' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (i == 0 || r < '0' || r > '9') {
+		if !(r == '_' || r == '-' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || i > 0 && r >= '0' && r <= '9') {
 			return false
 		}
 	}
@@ -376,7 +376,7 @@ func canonicalNumber(value string) bool {
 	if len(parts) == 2 && parts[1][len(parts[1])-1] == '0' {
 		return false
 	}
-	return !negative || parts[0] != "0" || len(parts) != 1
+	return !(negative && parts[0] == "0" && len(parts) == 1)
 }
 
 func cloneFields(input []Field) []Field {

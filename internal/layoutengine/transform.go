@@ -214,14 +214,14 @@ func fixedScalarProduct(left, right Fixed) (Fixed, error) {
 		if quotient == uint64(MaxFixed)+1 {
 			return MinFixed, nil
 		}
-		return -Fixed(quotient), nil // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		return -Fixed(quotient), nil
 	}
-	return Fixed(quotient), nil // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	return Fixed(quotient), nil
 }
 
 func fixedAbsUint64(value Fixed) uint64 {
 	if value >= 0 {
 		return uint64(value)
 	}
-	return uint64(-(value + 1)) + 1 // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	return uint64(-(value + 1)) + 1
 }

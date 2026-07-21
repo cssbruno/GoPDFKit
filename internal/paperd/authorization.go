@@ -23,27 +23,23 @@ var (
 type MutationOperation string
 
 const (
-	MutationSetLiteral           MutationOperation = "set_literal"
-	MutationSetRichText          MutationOperation = "set_rich_text"
-	MutationSetBinding           MutationOperation = "set_binding"
-	MutationFillSlot             MutationOperation = "fill_slot"
-	MutationApplyFix             MutationOperation = "apply_fix"
-	MutationSetBoxProperty       MutationOperation = "set_box_property"
-	MutationSetTextProperty      MutationOperation = "set_text_property"
-	MutationSetGridTrack         MutationOperation = "set_grid_track"
-	MutationSetImageProperty     MutationOperation = "set_image_property"
-	MutationSetTableProperty     MutationOperation = "set_table_property"
-	MutationSetPageMargin        MutationOperation = "set_page_margin"
-	MutationSetPageSize          MutationOperation = "set_page_size"
-	MutationSetCanvasAnchor      MutationOperation = "set_canvas_anchor"
-	MutationSetPageRegion        MutationOperation = "set_page_region"
-	MutationMoveNode             MutationOperation = "move_node"
-	MutationInsertTemplate       MutationOperation = "insert_template"
-	MutationCreateScenario       MutationOperation = "create_scenario"
-	MutationCreateScenarioMatrix MutationOperation = "create_scenario_matrix"
-	MutationSetScenarioValue     MutationOperation = "set_scenario_value"
-	MutationAddSchemaField       MutationOperation = "add_schema_field"
-	MutationManageScenario       MutationOperation = "manage_scenario"
+	MutationSetLiteral       MutationOperation = "set_literal"
+	MutationSetRichText      MutationOperation = "set_rich_text"
+	MutationSetBinding       MutationOperation = "set_binding"
+	MutationFillSlot         MutationOperation = "fill_slot"
+	MutationApplyFix         MutationOperation = "apply_fix"
+	MutationSetBoxProperty   MutationOperation = "set_box_property"
+	MutationSetTextProperty  MutationOperation = "set_text_property"
+	MutationSetGridTrack     MutationOperation = "set_grid_track"
+	MutationSetImageProperty MutationOperation = "set_image_property"
+	MutationSetTableProperty MutationOperation = "set_table_property"
+	MutationSetPageMargin    MutationOperation = "set_page_margin"
+	MutationSetPageSize      MutationOperation = "set_page_size"
+	MutationSetCanvasAnchor  MutationOperation = "set_canvas_anchor"
+	MutationSetPageRegion    MutationOperation = "set_page_region"
+	MutationMoveNode         MutationOperation = "move_node"
+	MutationInsertTemplate   MutationOperation = "insert_template"
+	MutationCreateScenario   MutationOperation = "create_scenario"
 )
 
 func (operation MutationOperation) valid() bool {
@@ -51,7 +47,7 @@ func (operation MutationOperation) valid() bool {
 	case MutationSetLiteral, MutationSetRichText, MutationSetBinding, MutationFillSlot, MutationApplyFix,
 		MutationSetBoxProperty, MutationSetTextProperty, MutationSetGridTrack, MutationSetImageProperty, MutationSetTableProperty, MutationSetPageMargin, MutationSetPageSize, MutationSetCanvasAnchor, MutationSetPageRegion:
 		return true
-	case MutationMoveNode, MutationInsertTemplate, MutationCreateScenario, MutationCreateScenarioMatrix, MutationSetScenarioValue, MutationAddSchemaField, MutationManageScenario:
+	case MutationMoveNode, MutationInsertTemplate, MutationCreateScenario:
 		return true
 	default:
 		return false
@@ -252,13 +248,10 @@ func (w *Workspace) authorizeMutation(guard PaperMutationGuard, operation Mutati
 	}
 	w.mu.RLock()
 	record, lookupErr := w.mutationAuthorityLocked(guard.Authority)
-	if lookupErr != nil || record == nil {
-		if lookupErr == nil {
-			lookupErr = workspaceError("AUTHORITY_NOT_FOUND", "mutation authority is unavailable", ErrMutationAuthorityDenied)
-		}
-	} else if record.open != guard.Open || record.candidate != guard.Candidate {
+	if lookupErr == nil && (record.open != guard.Open || record.candidate != guard.Candidate) {
 		lookupErr = workspaceError("AUTHORITY_BINDING", "mutation authority does not bind the exact open and candidate", ErrMutationAuthorityDenied)
-	} else {
+	}
+	if lookupErr == nil {
 		evidence.Explicit, evidence.Actor = true, record.actor
 		if _, allowed := record.operations[operation]; !allowed {
 			lookupErr = workspaceError("AUTHORITY_OPERATION_DENIED", "mutation operation is outside the granted capability", ErrMutationAuthorityDenied)

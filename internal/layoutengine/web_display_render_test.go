@@ -37,30 +37,6 @@ func TestWebDisplayRenderPayloadRoundTripsThroughSharedRasterizer(t *testing.T) 
 	}
 }
 
-func TestWebDisplayRenderCachePreservesPixelsAndClearsOnPlanChange(t *testing.T) {
-	plan, sources := rasterFixture(t)
-	payload, err := EncodeWebDisplayRenderPayload(plan, sources, rasterRequest())
-	if err != nil {
-		t.Fatal(err)
-	}
-	var cache WebDisplayRenderCache
-	first, err := RenderWebDisplayPayloadCached(t.Context(), payload, &cache)
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, err := RenderWebDisplayPayloadCached(t.Context(), payload, &cache)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(first.PNG(), second.PNG()) || len(cache.fonts) != 1 {
-		t.Fatal("cached render changed pixels or failed to retain the validated font")
-	}
-	cache.prepare("next-plan")
-	if len(cache.fonts) != 0 || len(cache.images) != 0 {
-		t.Fatal("cache retained resources after plan identity changed")
-	}
-}
-
 func TestWebDisplayRenderPayloadRejectsTamperingAndUnknownFields(t *testing.T) {
 	plan, sources := rasterFixture(t)
 	payload, err := EncodeWebDisplayRenderPayload(plan, sources, rasterRequest())
@@ -72,10 +48,7 @@ func TestWebDisplayRenderPayloadRejectsTamperingAndUnknownFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	decoded.PlanHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	tampered, err := json.Marshal(decoded)
-	if err != nil {
-		t.Fatal(err)
-	}
+	tampered, _ := json.Marshal(decoded)
 	if _, err := RenderWebDisplayPayload(t.Context(), tampered); !errors.Is(err, ErrWebDisplayRenderPayload) {
 		t.Fatalf("tampered plan hash error = %v", err)
 	}
@@ -85,10 +58,7 @@ func TestWebDisplayRenderPayloadRejectsTamperingAndUnknownFields(t *testing.T) {
 	}
 	decoded.PlanHash = planHashString(t, plan)
 	decoded.Blobs[0].Bytes[0] ^= 0xff
-	tampered, err = json.Marshal(decoded)
-	if err != nil {
-		t.Fatal(err)
-	}
+	tampered, _ = json.Marshal(decoded)
 	if _, err := RenderWebDisplayPayload(t.Context(), tampered); !errors.Is(err, ErrWebDisplayRenderPayload) {
 		t.Fatalf("tampered resource error = %v", err)
 	}

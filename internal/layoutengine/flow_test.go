@@ -329,7 +329,7 @@ func TestPlanVerticalFlowNoBodySpaceReturnsStructuredPlanningError(t *testing.T)
 	if !errors.As(err, &planning) {
 		t.Fatalf("errors.As(%T, *PlanningError) = false", err)
 	}
-	if !errors.Is(planning.Unwrap(), ErrFlowBodyEmpty) {
+	if planning.Unwrap() != ErrFlowBodyEmpty {
 		t.Fatalf("PlanningError.Unwrap() = %v, want %v", planning.Unwrap(), ErrFlowBodyEmpty)
 	}
 	diagnostic := planning.Diagnostic

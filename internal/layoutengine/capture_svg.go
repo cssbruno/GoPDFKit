@@ -135,8 +135,8 @@ func (p LayoutPlan) CaptureDebugGeometrySVGPage(pageNumber uint32) (DebugGeometr
 		Page:             page.Number,
 		PageBounds:       pageBounds,
 		CanvasBounds:     canvasBounds,
-		FragmentCount:    uint32(len(fragments)), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-		BreakMarkerCount: uint32(len(breaks)),    // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		FragmentCount:    uint32(len(fragments)),
+		BreakMarkerCount: uint32(len(breaks)),
 		FixedScale:       FixedScale,
 		SVG:              svg,
 	}, nil

@@ -245,7 +245,7 @@ func (f *Document) PlanLayoutDocumentContext(ctx context.Context, doc *layout.La
 	if pages == 0 {
 		return LayoutDocumentPlan{}, newTypedShadowUnsupported(typedShadowDocumentEnvelope, "typed layout produced no pages")
 	}
-	imageSources, err := typedLayoutImageSourcesContext(ctx, &working, uint64(f.imageSourceLimit())) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	imageSources, err := typedLayoutImageSourcesContext(ctx, &working, uint64(f.imageSourceLimit()))
 	if err != nil {
 		return LayoutDocumentPlan{}, fmt.Errorf("document: build bounded image resource catalog: %w", err)
 	}
