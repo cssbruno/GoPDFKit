@@ -23,7 +23,6 @@ import (
 // manage multiple columns.
 func (f *Document) SetAcceptPageBreakFunc(fnc func() bool) {
 	f.acceptPageBreak = fnc
-	f.acceptPageBreakSet = true
 }
 
 // CellFormat prints a rectangular cell with optional borders, background color

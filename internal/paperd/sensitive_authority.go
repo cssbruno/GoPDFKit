@@ -365,7 +365,7 @@ func (w *Workspace) appendSensitiveAuditLocked(actor string, operation Sensitive
 }
 
 func sensitiveAuditEventHash(entry SensitiveAuditEntry) string {
-	payload, err := json.Marshal(struct {
+	payload, _ := json.Marshal(struct {
 		Sequence  uint64             `json:"sequence"`
 		At        int64              `json:"at"`
 		Actor     string             `json:"actor"`
@@ -377,9 +377,6 @@ func sensitiveAuditEventHash(entry SensitiveAuditEntry) string {
 		Reason    string             `json:"reason"`
 		Previous  string             `json:"previous"`
 	}{entry.Sequence, entry.At.UnixNano(), entry.Actor, entry.Operation, entry.CandidateSerial, entry.PolicyRevision, entry.EvidenceHash, entry.Allowed, entry.Reason, entry.PreviousHash})
-	if err != nil {
-		return ""
-	}
 	sum := sha256.Sum256(append([]byte("paperd/sensitive-audit/v1\x00"), payload...))
 	return hex.EncodeToString(sum[:])
 }
@@ -434,10 +431,7 @@ func canonicalSensitiveEvidence(evidence SensitiveEvidence, limit int) (Sensitiv
 	if hasDuplicateStrings(result.RequiredScenarios) || hasDuplicateJSON(result.Validators) || hasDuplicateJSON(result.ReviewArtifacts) {
 		return SensitiveEvidence{}, "", workspaceError("INVALID_APPROVAL_EVIDENCE", "approval evidence contains duplicate identities", ErrInvalidQuery)
 	}
-	payload, err := json.Marshal(result)
-	if err != nil {
-		return SensitiveEvidence{}, "", workspaceError("INVALID_APPROVAL_EVIDENCE", "approval evidence cannot be canonicalized", err)
-	}
+	payload, _ := json.Marshal(result)
 	sum := sha256.Sum256(append([]byte("paperd/approval-evidence/v1\x00"), payload...))
 	return result, hex.EncodeToString(sum[:]), nil
 }

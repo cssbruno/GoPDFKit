@@ -92,7 +92,7 @@ type scenarioSourceMetadata struct {
 }
 
 func (a *scenarioSourceAnalysis) scenario(node *paperlang.Node) {
-	if uint32(len(a.result.Scenarios)) >= a.limits.MaxScenarios { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if uint32(len(a.result.Scenarios)) >= a.limits.MaxScenarios {
 		a.add("PAPER_SCENARIO_LIMIT", "scenario count exceeds the configured limit", "split declarations or raise the bounded limit", node.HeaderSpan)
 		return
 	}
@@ -287,10 +287,9 @@ func (a *scenarioSourceAnalysis) validateParents() {
 		state[index] = 1
 		parentName := a.result.Scenarios[index].Parent
 		if parent, exists := a.byName[parentName]; exists && parentName != "" {
-			switch state[parent] {
-			case 1:
+			if state[parent] == 1 {
 				a.add("PAPER_SCENARIO_PARENT_CYCLE", fmt.Sprintf("scenario inheritance cycle reaches @%s", parentName), "remove one parent edge from the cycle", a.metadata[index].parentSpan)
-			case 0:
+			} else if state[parent] == 0 {
 				visit(parent)
 			}
 		}
@@ -320,7 +319,7 @@ func validSourceName(name string) bool {
 		return false
 	}
 	for index, character := range name {
-		if character != '_' && character != '-' && (character < 'a' || character > 'z') && (character < 'A' || character > 'Z') && (index == 0 || character < '0' || character > '9') {
+		if !(character == '_' || character == '-' || character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || index > 0 && character >= '0' && character <= '9') {
 			return false
 		}
 	}
@@ -333,9 +332,9 @@ func isScenarioValueNode(kind paperlang.NodeKind) bool {
 
 func pathSize(parent uint32, name string) uint32 {
 	if parent == 0 {
-		return uint32(len(name)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		return uint32(len(name))
 	}
-	return parent + 1 + uint32(len(name)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	return parent + 1 + uint32(len(name))
 }
 
 func validScenarioSourceLimits(limits paperscenario.Limits) bool {

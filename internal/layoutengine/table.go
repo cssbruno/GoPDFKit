@@ -175,12 +175,6 @@ type tableRowGroup struct {
 	policy string
 }
 
-type tableUnitGeometry struct {
-	rowOffsets    []Fixed
-	columnOffsets []Fixed
-	height        Fixed
-}
-
 // PlanTable builds a canonical geometry-only LayoutPlan. Cells are emitted in
 // row/column order, independent of input slice order. Rowspans derive the
 // smallest indivisible body row groups. A group that cannot fit below repeated
@@ -226,7 +220,7 @@ func resolveTable(input TablePlanInput, limits TablePlanLimits, budget *tableBud
 	if err := validateTableSurface(input); err != nil {
 		return tableResolved{}, err
 	}
-	columns := uint32(len(input.Columns)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	columns := uint32(len(input.Columns))
 	if input.Rows > limits.MaxRows || columns > limits.MaxColumns || uint64(len(input.Cells)) > uint64(limits.MaxCells) {
 		return tableResolved{}, tableResourceLimit("table dimensions exceed retained-state limits", limits, input)
 	}
@@ -264,7 +258,7 @@ func resolveTable(input TablePlanInput, limits TablePlanLimits, budget *tableBud
 		for row := cell.Row; row < cell.Row+cell.RowSpan; row++ {
 			base := uint64(row) * uint64(columns)
 			for column := cell.Column; column < cell.Column+cell.ColumnSpan; column++ {
-				slot := int(base + uint64(column)) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+				slot := int(base + uint64(column))
 				if occupancy[slot] >= 0 {
 					return tableResolved{}, tableSpanError(cell, "table cells overlap after expanding row and column spans")
 				}
@@ -531,7 +525,7 @@ func ResolveTableColumnWidths(ctx context.Context, width Fixed, columns []TableC
 	if err != nil {
 		return nil, err
 	}
-	if width <= 0 || len(columns) == 0 || uint32(len(columns)) > limits.MaxColumns || uint64(len(cells)) > uint64(limits.MaxCells) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if width <= 0 || len(columns) == 0 || uint32(len(columns)) > limits.MaxColumns || uint64(len(cells)) > uint64(limits.MaxCells) {
 		return nil, ErrTableDimensionsInvalid
 	}
 	input := TablePlanInput{Width: width, Columns: cloneSlice(columns)}
@@ -823,19 +817,16 @@ type tablePaginator struct {
 	rows    []Fixed
 	groups  []tableRowGroup
 
-	output              LayoutPlanInput
-	page                uint32
-	pageFragmentStart   int
-	cursor              Fixed
-	lastBodyFragment    FragmentID
-	lastBodyOverflow    bool
-	headerHeight        Fixed
-	headerGeometry      tableUnitGeometry
-	headerGeometryReady bool
-	headerGeometryPlans uint32
-	headerTooTallAdded  bool
-	body                Rect
-	gridGroup           uint32
+	output             LayoutPlanInput
+	page               uint32
+	pageFragmentStart  int
+	cursor             Fixed
+	lastBodyFragment   FragmentID
+	lastBodyOverflow   bool
+	headerHeight       Fixed
+	headerTooTallAdded bool
+	body               Rect
+	gridGroup          uint32
 }
 
 func (p *tablePaginator) plan() (LayoutPlan, error) {
@@ -933,7 +924,7 @@ func (p *tablePaginator) startPage() error {
 		if err != nil {
 			return err
 		}
-		id := FragmentID(len(p.output.Fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		id := FragmentID(len(p.output.Fragments) + 1)
 		p.output.Fragments = append(p.output.Fragments, Fragment{ID: id, Node: caption.Node, Key: caption.Key, Instance: caption.Instance, Page: p.page, Region: RegionBody, BorderBox: box, ContentBox: box, Source: caption.Source, Continuation: ContinuationWhole})
 		p.cursor, err = p.cursor.Add(caption.MinHeight)
 		if err != nil {
@@ -965,7 +956,7 @@ func (p *tablePaginator) startPage() error {
 func (p *tablePaginator) finishPage() {
 	p.output.Pages = append(p.output.Pages, PlannedPage{
 		Number: p.page, Size: p.input.PageSize,
-		Fragments: IndexRange{Start: uint32(p.pageFragmentStart), Count: uint32(len(p.output.Fragments) - p.pageFragmentStart)}, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		Fragments: IndexRange{Start: uint32(p.pageFragmentStart), Count: uint32(len(p.output.Fragments) - p.pageFragmentStart)},
 	})
 }
 
@@ -988,13 +979,6 @@ func (p *tablePaginator) remaining() (Fixed, error) {
 // range because header-boundary validation and rowspan-derived groups ensure
 // every repeated or paginated unit is closed under rowspans.
 func (p *tablePaginator) placeRows(start, end uint32, header bool) (FragmentID, FragmentID, error) {
-	if header {
-		geometry, err := p.repeatedHeaderGeometry(start, end)
-		if err != nil {
-			return 0, 0, err
-		}
-		return p.placeRowsWithGeometry(start, end, true, geometry.rowOffsets, geometry.columnOffsets, geometry.height)
-	}
 	rowOffsets := make([]Fixed, end-start+1)
 	for row := start; row < end; row++ {
 		next, err := rowOffsets[row-start].Add(p.rows[row])
@@ -1011,10 +995,7 @@ func (p *tablePaginator) placeRows(start, end uint32, header bool) (FragmentID, 
 		}
 		columnOffsets[column+1] = next
 	}
-	return p.placeRowsWithGeometry(start, end, false, rowOffsets, columnOffsets, rowOffsets[len(rowOffsets)-1])
-}
-
-func (p *tablePaginator) placeRowsWithGeometry(start, end uint32, header bool, rowOffsets, columnOffsets []Fixed, unitHeight Fixed) (FragmentID, FragmentID, error) {
+	unitHeight := rowOffsets[len(rowOffsets)-1]
 	p.gridGroup++
 	for column, width := range p.columns {
 		x, err := p.body.X.Add(columnOffsets[column])
@@ -1068,7 +1049,7 @@ func (p *tablePaginator) placeRowsWithGeometry(start, end uint32, header bool, r
 		if err != nil {
 			return 0, 0, err
 		}
-		id := FragmentID(len(p.output.Fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		id := FragmentID(len(p.output.Fragments) + 1)
 		p.output.Fragments = append(p.output.Fragments, Fragment{
 			ID: id, Node: cell.Node, Key: cell.Key, Instance: cell.Instance,
 			Page: p.page, Region: RegionBody, BorderBox: box, ContentBox: box,
@@ -1093,32 +1074,6 @@ func (p *tablePaginator) placeRowsWithGeometry(start, end uint32, header bool, r
 		p.lastBodyOverflow = p.cursor > bodyBottom
 	}
 	return first, last, nil
-}
-
-func (p *tablePaginator) repeatedHeaderGeometry(start, end uint32) (tableUnitGeometry, error) {
-	if p.headerGeometryReady {
-		return p.headerGeometry, nil
-	}
-	geometry := tableUnitGeometry{rowOffsets: make([]Fixed, end-start+1), columnOffsets: make([]Fixed, len(p.columns)+1)}
-	for row := start; row < end; row++ {
-		next, err := geometry.rowOffsets[row-start].Add(p.rows[row])
-		if err != nil {
-			return tableUnitGeometry{}, err
-		}
-		geometry.rowOffsets[row-start+1] = next
-	}
-	for column, width := range p.columns {
-		next, err := geometry.columnOffsets[column].Add(width)
-		if err != nil {
-			return tableUnitGeometry{}, err
-		}
-		geometry.columnOffsets[column+1] = next
-	}
-	geometry.height = geometry.rowOffsets[len(geometry.rowOffsets)-1]
-	p.headerGeometry = geometry
-	p.headerGeometryReady = true
-	p.headerGeometryPlans++
-	return geometry, nil
 }
 
 func (p *tablePaginator) noteOversize(group tableRowGroup, first FragmentID) error {

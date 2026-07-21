@@ -82,22 +82,11 @@ catalog access.
 ## Plan preview and Studio boundary
 
 The immutable layout plan is the authority for both PDF painting and visual
-inspection. `document.PaperPlan` exposes a bounded, self-verifying web-render
-payload plus geometry, hit-test, query, and explain projections without
-exposing mutable IR. Paper Studio renders visible pages and thumbnails with the
-shared Go direct display-list rasterizer compiled to WebAssembly. JavaScript
-only loads revision-bound payloads and presents the returned pixels on canvas;
-the retained SVG path is diagnostic geometry. Browser CSS may arrange workspace
-chrome but must never substitute for page measurement, wrapping, positioning,
-pagination, or display-list painting.
-
-The web-render payload contains canonical plan JSON, an exact plan hash,
-renderer profile and limits, revision identities, and content-addressed resource
-bindings to deduplicated font/image blobs. WASM rejects unknown fields, schema
-or renderer mismatches, stale/tampered plan hashes, invalid blobs, and resource
-budget violations before painting. It invokes the same rasterizer used by
-headless review evidence and therefore is a deployment of the shared renderer,
-not a second browser layout implementation.
+inspection. `document.PaperPlan` exposes bounded page SVG, geometry, hit-test,
+query, and explain projections without exposing the evolving private IR. Paper
+Studio consumes those projections; browser CSS may arrange workspace chrome
+but must never substitute for page measurement, wrapping, positioning, or
+pagination.
 
 Every Studio page, overlay, hit, and explanation request is bound to the exact
 plan revision. A revision mismatch fails instead of mixing evidence, and the
@@ -105,16 +94,9 @@ canvas is visibly stale and non-interactive while a replacement is loading.
 The page inspector is another bounded retained-plan projection: border/content
 rectangles, fragment region membership, causal breaks, semantic roles, and
 reading indexes are plan facts. Studio does not synthesize unavailable margin,
-padding, baseline, or final-PDF verification evidence. Unsupported authored
-fonts remain compile errors; Studio may offer an explicit supported-font
-replacement but never substitutes one automatically. Overlap
+padding, baseline, font-fallback, or final-PDF verification evidence. Overlap
 selection follows the deterministic reverse fragment order returned by the
 plan hit-test contract.
-Accessibility inspection keeps two evidence domains separate: numbered reading
-order and semantic-role overlays are retained-plan facts, while the displayed
-tag tree is parsed from a newly serialized, hash-bound final PDF. The final-byte
-tag verifier validates structure and marked-content linkage and never projects
-plan semantics into missing PDF tags.
 The development Studio server accepts only explicit loopback hosts because it
 serves local source and plan evidence without a remote authentication boundary.
 Scenario snapshots and page artifacts are immutable, bounded, and discarded

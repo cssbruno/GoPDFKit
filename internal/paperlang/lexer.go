@@ -134,10 +134,9 @@ indentationDone:
 			}
 			lexeme := line.text[start:cursor]
 			kind := TokenIdentifier
-			switch lexeme {
-			case "true", "false":
+			if lexeme == "true" || lexeme == "false" {
 				kind = TokenBool
-			case "null":
+			} else if lexeme == "null" {
 				kind = TokenNull
 			}
 			l.emitOffsets(kind, lexeme, line.startOffset+start, line.startOffset+cursor)
@@ -286,7 +285,7 @@ func (l *paperLexer) position(offset int) Position {
 		}
 	}
 	lineStart := l.lineStarts[lineIndex]
-	column := uint32(utf8.RuneCountInString(l.source[lineStart:offset]) + 1) // #nosec G115 -- source offset is bounded by validated input or parser state
+	column := uint32(utf8.RuneCountInString(l.source[lineStart:offset]) + 1)
 	return Position{Offset: uint64(offset), Line: uint32(lineIndex + 1), Column: column}
 }
 

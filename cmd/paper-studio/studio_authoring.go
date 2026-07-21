@@ -141,7 +141,7 @@ func (s *studioServer) handleComponentPreview(w http.ResponseWriter, r *http.Req
 	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 	w.Header().Set("ETag", `"`+planHash+`-component-v`+studioComponentPreviewFormat+`"`)
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(preview) // #nosec G705 -- preview is emitted only by the bounded display-list SVG serializer, which XML-escapes authored text and attributes.
+	_, _ = w.Write(preview)
 }
 
 func (s *studioServer) componentPreview(ctx context.Context, snapshot *studioSnapshot, component string) ([]byte, string, error) {
@@ -336,7 +336,7 @@ func buildStudioAuthoringResponse(snapshot *studioSnapshot, ast paperlang.AST) s
 		if node.Kind == paperlang.NodePage {
 			hasPage = true
 		}
-		if node.ID != "" && (node.Kind == paperlang.NodePage || node.Kind == paperlang.NodeBody || node.Kind == paperlang.NodeHeader || node.Kind == paperlang.NodeFooter || node.Kind == paperlang.NodeRow || node.Kind == paperlang.NodeColumn) {
+		if node.ID != "" && (node.Kind == paperlang.NodeBody || node.Kind == paperlang.NodeRow || node.Kind == paperlang.NodeColumn) {
 			response.TemplateTargets = append(response.TemplateTargets, studioAuthoringTarget{ID: node.ID, Kind: string(node.Kind)})
 		}
 		if node.ID != "" && (node.Kind == paperlang.NodeParagraph || node.Kind == paperlang.NodeHeading || node.Kind == paperlang.NodeUse) {

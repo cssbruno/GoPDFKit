@@ -89,7 +89,7 @@ func NewSignatureVerifier(keys []TrustedKey, limits SignatureLimits) (*Signature
 	verifier := &SignatureVerifier{limits: limits, keys: make(map[string]ed25519.PublicKey, len(keys))}
 	for index, key := range keys {
 		if err := validateKeyID(key.ID, limits.MaxKeyIDBytes); err != nil {
-			return nil, fmt.Errorf("%w: trusted_keys[%d]: %w", ErrSignatureInvalid, index, err)
+			return nil, fmt.Errorf("%w: trusted_keys[%d]: %v", ErrSignatureInvalid, index, err)
 		}
 		if len(key.PublicKey) != ed25519.PublicKeySize {
 			return nil, fmt.Errorf("%w: trusted key %q is not an Ed25519 public key", ErrSignatureInvalid, key.ID)
@@ -112,7 +112,7 @@ func EncodeSignatureEnvelopeWithLimits(envelope SignatureEnvelope, limits Signat
 	}
 	encoded, err := json.Marshal(envelope)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrSignatureInvalid, err)
+		return nil, fmt.Errorf("%w: %v", ErrSignatureInvalid, err)
 	}
 	if uint64(len(encoded)) > limits.MaxEnvelopeBytes {
 		return nil, fmt.Errorf("%w: envelope exceeds its byte budget", ErrSignatureLimit)
@@ -135,7 +135,7 @@ func DecodeSignatureEnvelopeWithLimits(encoded []byte, limits SignatureLimits) (
 	decoder.DisallowUnknownFields()
 	var envelope SignatureEnvelope
 	if err := decoder.Decode(&envelope); err != nil {
-		return SignatureEnvelope{}, fmt.Errorf("%w: %w", ErrSignatureInvalid, err)
+		return SignatureEnvelope{}, fmt.Errorf("%w: %v", ErrSignatureInvalid, err)
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
@@ -158,7 +158,7 @@ func SignEntry(lockfile Lockfile, importPath, keyID string, privateKey ed25519.P
 		return EntrySignature{}, fmt.Errorf("%w: private key is not Ed25519", ErrSignatureInvalid)
 	}
 	if err := validateKeyID(keyID, HardMaxKeyIDBytes); err != nil {
-		return EntrySignature{}, fmt.Errorf("%w: %w", ErrSignatureInvalid, err)
+		return EntrySignature{}, fmt.Errorf("%w: %v", ErrSignatureInvalid, err)
 	}
 	if expiresUnix < 0 {
 		return EntrySignature{}, fmt.Errorf("%w: expiry must be non-negative", ErrSignatureInvalid)
@@ -182,7 +182,7 @@ func (verifier *SignatureVerifier) VerifyEntry(lockfile Lockfile, importPath str
 		return fmt.Errorf("%w: lockfile entry %q was not found", ErrSignatureInvalid, importPath)
 	}
 	if err := lockfile.Validate(); err != nil {
-		return fmt.Errorf("%w: %w", ErrSignatureInvalid, err)
+		return fmt.Errorf("%w: %v", ErrSignatureInvalid, err)
 	}
 	present := envelope != nil
 	switch entry.SignaturePolicy {
@@ -230,7 +230,6 @@ type canonicalSignaturePayload struct {
 	LockfileSchemaVersion uint16          `json:"lockfile_schema_version"`
 	ProjectDigest         Digest          `json:"project_digest"`
 	ImportPath            string          `json:"import_path"`
-	Version               string          `json:"version"`
 	ContentDigest         Digest          `json:"content_digest"`
 	Assets                []Asset         `json:"assets,omitempty"`
 	SignaturePolicy       SignaturePolicy `json:"signature_policy"`
@@ -241,7 +240,7 @@ type canonicalSignaturePayload struct {
 
 func signaturePayload(lockfile Lockfile, importPath, keyID string, expiresUnix int64) ([]byte, error) {
 	if err := lockfile.Validate(); err != nil {
-		return nil, fmt.Errorf("%w: lockfile: %w", ErrSignatureInvalid, err)
+		return nil, fmt.Errorf("%w: lockfile: %v", ErrSignatureInvalid, err)
 	}
 	entry, found := lockfile.Lookup(importPath)
 	if !found {
@@ -252,7 +251,7 @@ func signaturePayload(lockfile Lockfile, importPath, keyID string, expiresUnix i
 		return nil, err
 	}
 	payload := canonicalSignaturePayload{Domain: signaturePayloadDomain, LockfileSchemaVersion: lockfile.SchemaVersion,
-		ProjectDigest: projectDigest, ImportPath: entry.ImportPath, Version: entry.Version, ContentDigest: entry.ContentDigest,
+		ProjectDigest: projectDigest, ImportPath: entry.ImportPath, ContentDigest: entry.ContentDigest,
 		Assets: append([]Asset(nil), entry.Assets...), SignaturePolicy: entry.SignaturePolicy,
 		OfflinePolicy: entry.OfflinePolicy, KeyID: keyID, ExpiresUnix: expiresUnix}
 	return json.Marshal(payload)
@@ -274,7 +273,7 @@ func validateSignatureEnvelope(envelope SignatureEnvelope, limits SignatureLimit
 	previous := ""
 	for index, signature := range envelope.Signatures {
 		if err := validateKeyID(signature.KeyID, limits.MaxKeyIDBytes); err != nil {
-			return fmt.Errorf("%w: signatures[%d]: %w", ErrSignatureInvalid, index, err)
+			return fmt.Errorf("%w: signatures[%d]: %v", ErrSignatureInvalid, index, err)
 		}
 		if index > 0 && signature.KeyID <= previous {
 			return fmt.Errorf("%w: signatures must be strictly sorted and unique", ErrSignatureInvalid)
@@ -299,8 +298,8 @@ func validateKeyID(value string, maxBytes uint32) error {
 		return errors.New("key ID is empty or exceeds its byte limit")
 	}
 	for _, character := range value {
-		if (character < 'a' || character > 'z') && (character < '0' || character > '9') &&
-			character != '.' && character != '_' && character != '-' {
+		if !((character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') ||
+			character == '.' || character == '_' || character == '-') {
 			return errors.New("key ID must use lowercase ASCII letters, digits, dot, underscore, or hyphen")
 		}
 	}

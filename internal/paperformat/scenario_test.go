@@ -58,6 +58,7 @@ func TestFormatValueCoversClosedScalarFormats(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			first, err := FormatValue(test.value, test.spec)
@@ -120,6 +121,7 @@ func TestFormatValueRequiresExactKindsAndValidScenarioScalars(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			_, err := FormatValue(test.value, test.spec)
@@ -155,6 +157,7 @@ func TestFormatValueRequiresExplicitRelevantSpecFields(t *testing.T) {
 		{name: "string locale", spec: FormatSpec{Kind: ValueFormatString, Locale: "en-US"}, cause: ErrInvalid, problem: "do not accept"},
 	}
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			_, err := FormatValue(number, test.spec)

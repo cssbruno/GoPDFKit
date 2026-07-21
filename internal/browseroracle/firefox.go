@@ -10,7 +10,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/sha1" // #nosec G505 -- RFC 6455 requires SHA-1 for the WebSocket accept key.
+	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -29,7 +29,7 @@ import (
 
 var ErrBrowserUnavailable = errors.New("browseroracle: Firefox is unavailable")
 
-const PinnedFirefoxVersion = "Mozilla Firefox 152.0.6"
+const PinnedFirefoxVersion = "Mozilla Firefox 152.0.5"
 
 type Capture struct {
 	Version   string
@@ -63,9 +63,9 @@ func CaptureFirefox(ctx context.Context, source, rectExpression string, options 
 	if err != nil {
 		return Capture{}, err
 	}
-	versionBytes, err := exec.CommandContext(ctx, executable, "--version").CombinedOutput() // #nosec G204 -- executable is selected by bounded Firefox discovery; no shell is used.
+	versionBytes, err := exec.CommandContext(ctx, executable, "--version").CombinedOutput()
 	if err != nil {
-		return Capture{}, fmt.Errorf("%w: version probe: %w", ErrBrowserUnavailable, err)
+		return Capture{}, fmt.Errorf("%w: version probe: %v", ErrBrowserUnavailable, err)
 	}
 	version := strings.TrimSpace(string(versionBytes))
 	expected := options.Version
@@ -73,7 +73,7 @@ func CaptureFirefox(ctx context.Context, source, rectExpression string, options 
 		expected = PinnedFirefoxVersion
 	}
 	if version != expected {
-		return Capture{}, fmt.Errorf("%w: Firefox version %q does not match pinned %q", ErrBrowserUnavailable, version, expected)
+		return Capture{}, fmt.Errorf("browseroracle: Firefox version %q does not match pinned %q", version, expected)
 	}
 	runCtx, cancel := context.WithTimeout(ctx, options.Timeout)
 	defer cancel()
@@ -165,7 +165,7 @@ type bidiSession struct {
 func startFirefox(ctx context.Context, executable string, width, height int) (*bidiSession, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return nil, fmt.Errorf("%w: allocate localhost BiDi port: %w", ErrBrowserUnavailable, err)
+		return nil, fmt.Errorf("%w: allocate localhost BiDi port: %v", ErrBrowserUnavailable, err)
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
 	_ = listener.Close()
@@ -173,12 +173,12 @@ func startFirefox(ctx context.Context, executable string, width, height int) (*b
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, executable, "--headless", "--no-remote", "--remote-debugging-port", strconv.Itoa(port), "--profile", profile, "--width", strconv.Itoa(width), "--height", strconv.Itoa(height), "about:blank") // #nosec G204 -- executable is selected by bounded Firefox discovery and all arguments are generated locally.
+	cmd := exec.CommandContext(ctx, executable, "--headless", "--no-remote", "--remote-debugging-port", strconv.Itoa(port), "--profile", profile, "--width", strconv.Itoa(width), "--height", strconv.Itoa(height), "about:blank")
 	var diagnostic boundedBuffer
 	cmd.Stdout, cmd.Stderr = &diagnostic, &diagnostic
 	if err := cmd.Start(); err != nil {
 		_ = os.RemoveAll(profile)
-		return nil, fmt.Errorf("%w: start: %w", ErrBrowserUnavailable, err)
+		return nil, fmt.Errorf("%w: start: %v", ErrBrowserUnavailable, err)
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait(); _ = os.RemoveAll(profile) }()
@@ -187,7 +187,7 @@ func startFirefox(ctx context.Context, executable string, width, height int) (*b
 	for {
 		select {
 		case waitErr := <-done:
-			return nil, fmt.Errorf("%w: Firefox exited before BiDi startup: %w: %s", ErrBrowserUnavailable, waitErr, diagnostic.String())
+			return nil, fmt.Errorf("%w: Firefox exited before BiDi startup: %v: %s", ErrBrowserUnavailable, waitErr, diagnostic.String())
 		default:
 		}
 		conn, err = dialWebSocket(ctx, address, "/session")
@@ -197,7 +197,7 @@ func startFirefox(ctx context.Context, executable string, width, height int) (*b
 		select {
 		case <-ctx.Done():
 			_ = cmd.Process.Kill()
-			return nil, fmt.Errorf("%w: BiDi startup: %w: %s", ErrBrowserUnavailable, ctx.Err(), diagnostic.String())
+			return nil, fmt.Errorf("%w: BiDi startup: %v: %s", ErrBrowserUnavailable, ctx.Err(), diagnostic.String())
 		case <-time.After(40 * time.Millisecond):
 		}
 	}
@@ -218,10 +218,7 @@ func (session *bidiSession) call(ctx context.Context, method string, params any)
 	defer session.mu.Unlock()
 	session.next++
 	id := session.next
-	payload, err := json.Marshal(map[string]any{"id": id, "method": method, "params": params})
-	if err != nil {
-		return nil, fmt.Errorf("browseroracle: encode BiDi request: %w", err)
-	}
+	payload, _ := json.Marshal(map[string]any{"id": id, "method": method, "params": params})
 	if err := writeFrame(session.conn, payload); err != nil {
 		return nil, err
 	}
@@ -283,10 +280,7 @@ func dialWebSocket(ctx context.Context, address, path string) (net.Conn, error) 
 		_ = conn.Close()
 		return nil, err
 	}
-	if response.Body != nil {
-		_ = response.Body.Close()
-	}
-	want := sha1.Sum([]byte(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")) // #nosec G401 -- RFC 6455 mandates SHA-1 for Sec-WebSocket-Accept; this is not password hashing.
+	want := sha1.Sum([]byte(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
 	if response.StatusCode != http.StatusSwitchingProtocols || response.Header.Get("Sec-WebSocket-Accept") != base64.StdEncoding.EncodeToString(want[:]) {
 		_ = conn.Close()
 		return nil, errors.New("browseroracle: WebSocket upgrade rejected")
@@ -298,9 +292,9 @@ func writeFrame(writer io.Writer, payload []byte) error {
 	header := []byte{0x81}
 	switch {
 	case len(payload) < 126:
-		header = append(header, 0x80|byte(len(payload))) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		header = append(header, 0x80|byte(len(payload)))
 	case len(payload) <= 65535:
-		header = append(header, 0x80|126, byte(len(payload)>>8), byte(len(payload))) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		header = append(header, 0x80|126, byte(len(payload)>>8), byte(len(payload)))
 	default:
 		header = append(header, 0x80|127)
 		var size [8]byte
@@ -330,14 +324,13 @@ func readFrame(reader io.Reader) ([]byte, error) {
 	}
 	opcode := first[0] & 0x0f
 	length := uint64(first[1] & 0x7f)
-	switch length {
-	case 126:
+	if length == 126 {
 		var size [2]byte
 		if _, err := io.ReadFull(reader, size[:]); err != nil {
 			return nil, err
 		}
 		length = uint64(binary.BigEndian.Uint16(size[:]))
-	case 127:
+	} else if length == 127 {
 		var size [8]byte
 		if _, err := io.ReadFull(reader, size[:]); err != nil {
 			return nil, err

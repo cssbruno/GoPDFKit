@@ -131,14 +131,8 @@ func assertEquivalentFrontendPlans(t *testing.T, paperSource string, typedBlocks
 	for name, candidate := range map[string]layoutengine.LayoutPlan{"typed": typedPlan.plan, "html": htmlPlan.plan} {
 		got := normalizedFrontendPlan(candidate)
 		if !reflect.DeepEqual(got, want) {
-			wantJSON, err := json.MarshalIndent(want, "", "  ")
-			if err != nil {
-				t.Fatal(err)
-			}
-			gotJSON, err := json.MarshalIndent(got, "", "  ")
-			if err != nil {
-				t.Fatal(err)
-			}
+			wantJSON, _ := json.MarshalIndent(want, "", "  ")
+			gotJSON, _ := json.MarshalIndent(got, "", "  ")
 			t.Fatalf("%s plan differs from .paper:\nwant %s\ngot  %s", name, wantJSON, gotJSON)
 		}
 	}

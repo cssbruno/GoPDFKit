@@ -30,21 +30,15 @@ type paperMeasuredCanvas struct {
 }
 
 func paperCanvasMappingForBody(mapping papercompile.CompileMapping, bodyIndex int) papercompile.CompileMapping {
-	result := papercompile.CompileMapping{SourceRevision: mapping.SourceRevision, ThemeProperties: append([]papercompile.ThemePropertyMapping(nil), mapping.ThemeProperties...)}
-	filterNodes := func(nodes []papercompile.NodeMapping) []papercompile.NodeMapping {
-		filtered := make([]papercompile.NodeMapping, 0, len(nodes))
-		for _, node := range nodes {
-			if node.Kind == paperlang.NodeDocument || node.BodyIndex == bodyIndex {
-				if node.BodyIndex == bodyIndex {
-					node.BodyIndex = 0
-				}
-				filtered = append(filtered, node)
+	result := papercompile.CompileMapping{ThemeProperties: append([]papercompile.ThemePropertyMapping(nil), mapping.ThemeProperties...)}
+	for _, node := range mapping.Nodes {
+		if node.Kind == paperlang.NodeDocument || node.BodyIndex == bodyIndex {
+			if node.BodyIndex == bodyIndex {
+				node.BodyIndex = 0
 			}
+			result.Nodes = append(result.Nodes, node)
 		}
-		return filtered
 	}
-	result.Nodes = filterNodes(mapping.Nodes)
-	result.AnonymousNodes = filterNodes(mapping.AnonymousNodes)
 	return result
 }
 
@@ -154,10 +148,7 @@ func (f *Document) planPaperCanvas(ctx context.Context, doc *layout.LayoutDocume
 		rootSource = paperLayoutSourceSpan(mapped.Span)
 		break
 	}
-	// The container and its first child used the same fallback identity when a
-	// typed CanvasBlock had no source mapping. Keep the container outside the
-	// child fallback range so every semantic key/instance pair stays unique.
-	canvasIdentity := paperBlockIdentity(mapping, 0, -1, -1, len(block.Items))
+	canvasIdentity := paperBlockIdentity(mapping, 0, -1, -1, 0)
 	semanticNodes := []layoutengine.SemanticNode{
 		{ID: 1, Role: layoutengine.SemanticRoleDocument, Key: rootKey, Instance: rootInstance, Source: rootSource,
 			Attributes: layoutengine.SemanticAttributes{Language: strings.TrimSpace(doc.Language)}},
@@ -179,7 +170,7 @@ func (f *Document) planPaperCanvas(ctx context.Context, doc *layout.LayoutDocume
 			Key: identity.Key, Instance: identity.Instance, Source: identity.Source, Attributes: attributes})
 		associations = append(associations, layoutengine.SemanticFragmentAssociation{Semantic: semantic, Page: 1, Fragment: fragment})
 		if role != layoutengine.SemanticRoleArtifact {
-			reading = append(reading, layoutengine.ReadingOccurrence{Semantic: semantic, Page: 1, Fragment: fragment, ReadingIndex: uint32(len(reading))}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			reading = append(reading, layoutengine.ReadingOccurrence{Semantic: semantic, Page: 1, Fragment: fragment, ReadingIndex: uint32(len(reading))})
 		}
 	}
 	return layoutengine.AttachSemantics(plan, semanticNodes, associations, reading)

@@ -149,7 +149,7 @@ func EncodeBreakDetailSet(ctx context.Context, details []BreakDetail, limits Bre
 			return nil, err
 		}
 		work += uint64(len(detail.Steps) + 1)
-		if work > limits.MaxWork || uint32(len(detail.Steps)) > limits.MaxSteps { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if work > limits.MaxWork || uint32(len(detail.Steps)) > limits.MaxSteps {
 			return nil, ErrBreakDetailLimit
 		}
 		if err := validateBreakDetail(detail); err != nil {
@@ -200,7 +200,7 @@ func DecodeBreakDetailSet(ctx context.Context, encoded []byte, limits BreakDetai
 			return BreakDetailSet{}, err
 		}
 		work += uint64(len(detail.Steps) + 1)
-		if work > limits.MaxWork || uint32(len(detail.Steps)) > limits.MaxSteps { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if work > limits.MaxWork || uint32(len(detail.Steps)) > limits.MaxSteps {
 			return BreakDetailSet{}, ErrBreakDetailLimit
 		}
 		if err := validateBreakDetail(detail); err != nil {

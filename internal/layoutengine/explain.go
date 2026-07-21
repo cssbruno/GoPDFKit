@@ -318,7 +318,7 @@ func (p LayoutPlan) explainLayoutTarget(selector StructuralQuery, query Structur
 			fragmentIndexes[p.fragments[index].ID] = struct {
 				index     uint64
 				pageIndex uint32
-			}{uint64(index), uint32(index - int(page.Fragments.Start))} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+			}{uint64(index), uint32(index - int(page.Fragments.Start))}
 		}
 	}
 	for _, fragment := range p.fragments {
@@ -347,7 +347,7 @@ func (p LayoutPlan) explainLayoutTarget(selector StructuralQuery, query Structur
 				continue
 			}
 			target.Selection.PageRegions.Matches++
-			if uint32(len(target.PageRegions)) < selector.MaxResults { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			if uint32(len(target.PageRegions)) < selector.MaxResults {
 				target.PageRegions = append(target.PageRegions, ExplainPageRegion{Index: uint64(index), Region: region})
 			}
 		}
@@ -357,7 +357,7 @@ func (p LayoutPlan) explainLayoutTarget(selector StructuralQuery, query Structur
 				continue
 			}
 			target.Selection.GridTracks.Matches++
-			if uint32(len(target.GridTracks)) < selector.MaxResults { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			if uint32(len(target.GridTracks)) < selector.MaxResults {
 				target.GridTracks = append(target.GridTracks, ExplainGridTrack{Index: uint64(index), Track: track})
 			}
 		}
@@ -409,7 +409,7 @@ func (p LayoutPlan) explainLayoutTarget(selector StructuralQuery, query Structur
 		chainIdentities[identity] = context
 		target.Evidence.ContinuationFragments.Matches++
 		chainIDs[fragment.ID] = struct{}{}
-		if uint32(len(target.ContinuationFragments)) < selector.MaxResults { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(target.ContinuationFragments)) < selector.MaxResults {
 			position := fragmentIndexes[fragment.ID]
 			target.ContinuationFragments = append(target.ContinuationFragments,
 				explainFragment(position.index, position.pageIndex, pageSizes[fragment.Page], fragment,
@@ -435,7 +435,7 @@ func (p LayoutPlan) explainLayoutTarget(selector StructuralQuery, query Structur
 			continue
 		}
 		target.Evidence.Breaks.Matches++
-		if uint32(len(target.Breaks)) < selector.MaxResults { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(target.Breaks)) < selector.MaxResults {
 			target.Breaks = append(target.Breaks, ExplainBreak{Index: uint64(index), Decision: decision})
 		}
 	}
@@ -447,7 +447,7 @@ func (p LayoutPlan) explainLayoutTarget(selector StructuralQuery, query Structur
 			continue
 		}
 		target.Evidence.Diagnostics.Matches++
-		if uint32(len(target.Diagnostics)) < selector.MaxResults { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(target.Diagnostics)) < selector.MaxResults {
 			target.Diagnostics = append(target.Diagnostics, ExplainDiagnostic{
 				Index: uint64(index), Diagnostic: cloneDiagnostic(diagnostic),
 			})
@@ -475,16 +475,16 @@ func explainSelectionSummary(summary StructuralQuerySummary) ExplainSelectionSum
 }
 
 func explainCount(count StructuralQueryCount) ExplainLayoutCount {
-	return ExplainLayoutCount(count)
+	return ExplainLayoutCount{Matches: count.Matches, Returned: count.Returned, Truncated: count.Truncated}
 }
 
 func exactExplainCount(count int) ExplainLayoutCount {
-	return ExplainLayoutCount{Matches: uint64(count), Returned: uint32(count)} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	return ExplainLayoutCount{Matches: uint64(count), Returned: uint32(count)}
 }
 
 func finalizeExplainCount(count *ExplainLayoutCount, returned int) {
-	count.Returned = uint32(returned)                  // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-	count.Truncated = uint64(returned) < count.Matches // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	count.Returned = uint32(returned)
+	count.Truncated = uint64(returned) < count.Matches
 }
 
 func explainFragment(index uint64, pageIndex uint32, pageSize Size, fragment Fragment, semantic *ExplainSemanticOwnership) ExplainFragment {

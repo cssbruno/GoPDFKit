@@ -34,24 +34,18 @@ type typedPageShellKey struct {
 }
 
 func paperMappingForRegion(mapping papercompile.CompileMapping, region layoutengine.RegionID) papercompile.CompileMapping {
-	filtered := papercompile.CompileMapping{SourceRevision: mapping.SourceRevision, ThemeProperties: append([]papercompile.ThemePropertyMapping(nil), mapping.ThemeProperties...)}
-	filterNodes := func(nodes []papercompile.NodeMapping) []papercompile.NodeMapping {
-		result := make([]papercompile.NodeMapping, 0, len(nodes))
-		for _, node := range nodes {
-			if region == layoutengine.RegionBody {
-				if node.Region != "" && node.Region != layoutengine.RegionBody {
-					continue
-				}
-			} else if node.Region != region {
+	filtered := papercompile.CompileMapping{ThemeProperties: append([]papercompile.ThemePropertyMapping(nil), mapping.ThemeProperties...)}
+	for _, node := range mapping.Nodes {
+		if region == layoutengine.RegionBody {
+			if node.Region != "" && node.Region != layoutengine.RegionBody {
 				continue
 			}
-			node.Region = ""
-			result = append(result, node)
+		} else if node.Region != region {
+			continue
 		}
-		return result
+		node.Region = ""
+		filtered.Nodes = append(filtered.Nodes, node)
 	}
-	filtered.Nodes = filterNodes(mapping.Nodes)
-	filtered.AnonymousNodes = filterNodes(mapping.AnonymousNodes)
 	return filtered
 }
 
@@ -122,7 +116,7 @@ func (f *Document) planTypedPageTemplate(ctx context.Context, doc *layout.Layout
 		if err != nil {
 			return layoutengine.LayoutPlan{}, err
 		}
-		pages := uint32(len(bodyPlan.Projection().Pages)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		pages := uint32(len(bodyPlan.Projection().Pages))
 		if pages == 0 {
 			return layoutengine.LayoutPlan{}, errors.New("document: typed page template body produced no pages")
 		}
@@ -513,7 +507,7 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 		if id := fontIDs[key]; id != 0 {
 			return id
 		}
-		id := layoutengine.FontResourceID(len(fonts) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		id := layoutengine.FontResourceID(len(fonts) + 1)
 		font.ID = id
 		fonts = append(fonts, font)
 		fontIDs[key] = id
@@ -567,8 +561,8 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 	}
 	for page := uint32(1); page <= pages; page++ {
 		pagePlan := layoutengine.PlannedPage{Number: page, Size: body.Pages[page-1].Size,
-			Fragments: layoutengine.IndexRange{Start: uint32(len(input.Fragments))}, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-			Lines:     layoutengine.IndexRange{Start: uint32(len(input.Lines))}}     // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			Fragments: layoutengine.IndexRange{Start: uint32(len(input.Fragments))},
+			Lines:     layoutengine.IndexRange{Start: uint32(len(input.Lines))}}
 		for regionIndex, region := range regions {
 			if region.page != page {
 				continue
@@ -624,7 +618,7 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 					fragment.Node = shellNodes[oldNode]
 					shellOwner = shellOwners[oldNode]
 					if !shellOwner.Valid() {
-						shellOwner = layoutengine.SemanticNodeID(len(input.SemanticNodes) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+						shellOwner = layoutengine.SemanticNodeID(len(input.SemanticNodes) + 1)
 						identity := layoutengine.NodeKey(fmt.Sprintf("@page-%d-%s-node-%d", page, region.region, oldNode))
 						input.SemanticNodes = append(input.SemanticNodes, layoutengine.SemanticNode{ID: shellOwner, Parent: 1,
 							Role: layoutengine.SemanticRoleArtifact, Key: identity, Instance: layoutengine.InstanceID(identity), Source: fragment.Source})
@@ -633,7 +627,7 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 					owner := input.SemanticNodes[shellOwner-1]
 					fragment.Key, fragment.Instance = owner.Key, owner.Instance
 				}
-				fragment.ID = layoutengine.FragmentID(len(input.Fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				fragment.ID = layoutengine.FragmentID(len(input.Fragments) + 1)
 				fragment.Page, fragment.Region = page, region.region
 				var err error
 				fragment.MarginBox, err = translateTypedRect(fragment.MarginBox, region.dx, region.dy)
@@ -672,12 +666,12 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 				if err != nil {
 					return layoutengine.LayoutPlan{}, err
 				}
-				lineMap[uint32(oldIndex)] = uint32(len(input.Lines)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				lineMap[uint32(oldIndex)] = uint32(len(input.Lines))
 				input.Lines = append(input.Lines, line)
 			}
 		}
-		pagePlan.Fragments.Count = uint32(len(input.Fragments)) - pagePlan.Fragments.Start // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-		pagePlan.Lines.Count = uint32(len(input.Lines)) - pagePlan.Lines.Start             // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		pagePlan.Fragments.Count = uint32(len(input.Fragments)) - pagePlan.Fragments.Start
+		pagePlan.Lines.Count = uint32(len(input.Lines)) - pagePlan.Lines.Start
 		input.Pages = append(input.Pages, pagePlan)
 	}
 
@@ -708,7 +702,7 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 			}
 			return id, nil
 		}
-		id := layoutengine.ImageResourceID(len(imageResources) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		id := layoutengine.ImageResourceID(len(imageResources) + 1)
 		resource.ID = id
 		imageResources = append(imageResources, resource)
 		imageResourceIDs[resource.Digest] = id
@@ -737,7 +731,7 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 					return layoutengine.LayoutPlan{}, errors.New("document: page-shell destination references a non-local page")
 				}
 				oldID := destination.ID
-				destination.ID = layoutengine.DestinationID(len(destinations) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				destination.ID = layoutengine.DestinationID(len(destinations) + 1)
 				destination.Page = region.page
 				if destination.Fragment.Valid() {
 					destination.Fragment = fragmentMap[destination.Fragment]
@@ -766,7 +760,7 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 			if err != nil {
 				return 0, err
 			}
-			mapped := uint32(len(paths)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			mapped := uint32(len(paths))
 			paths = append(paths, path)
 			pathMap[old] = mapped
 			return mapped, nil
@@ -787,7 +781,7 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 				run.Origin = origin
 				run.Advances = append([]layoutengine.Fixed(nil), run.Advances...)
 				input.GlyphRuns = append(input.GlyphRuns, run)
-				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(input.GlyphRuns) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(input.GlyphRuns) - 1)})
 			case layoutengine.CommandImage:
 				image := region.projection.Images[command.Payload]
 				image.Fragment = fragmentMap[image.Fragment]
@@ -809,7 +803,7 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 					image.Crop = &crop
 				}
 				input.Images = append(input.Images, image)
-				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(input.Images) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(input.Images) - 1)})
 			case layoutengine.CommandLink:
 				link := region.projection.Links[command.Payload]
 				link.Fragment = fragmentMap[link.Fragment]
@@ -825,7 +819,7 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 					return layoutengine.LayoutPlan{}, err
 				}
 				links = append(links, link)
-				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(links) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(links) - 1)})
 			case layoutengine.CommandFillPath:
 				fill := region.projection.Fills[command.Payload]
 				path, err := mapPath(fill.Path)
@@ -834,7 +828,7 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 				}
 				fill.Path, fill.Fragment = path, fragmentMap[fill.Fragment]
 				fills = append(fills, fill)
-				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(fills) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(fills) - 1)})
 			case layoutengine.CommandStrokePath:
 				stroke := region.projection.Strokes[command.Payload]
 				path, err := mapPath(stroke.Path)
@@ -843,7 +837,7 @@ func composeTypedPageShells(bodyPlan layoutengine.LayoutPlan, cache map[typedPag
 				}
 				stroke.Path, stroke.Fragment = path, fragmentMap[stroke.Fragment]
 				strokes = append(strokes, stroke)
-				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(strokes) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(strokes) - 1)})
 			default:
 				return layoutengine.LayoutPlan{}, fmt.Errorf("document: unsupported page-shell command %q", command.Kind)
 			}

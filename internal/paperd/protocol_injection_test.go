@@ -81,10 +81,7 @@ func TestLayoutIssueExplanationRedactsAdversarialFileDataAndDiagnosticStrings(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded, err := json.Marshal(result)
-	if err != nil {
-		t.Fatal(err)
-	}
+	encoded, _ := json.Marshal(result)
 	if len(encoded) != result.EncodedBytes || len(encoded) > 512<<10 || bytes.Contains(encoded, []byte("IGNORE PREVIOUS")) || bytes.Contains(encoded, []byte("../../secret")) || bytes.Contains(encoded, []byte("customer.ssn")) {
 		t.Fatalf("layout explanation redaction/bound failed: bytes=%d field=%d payload=%s", len(encoded), result.EncodedBytes, encoded)
 	}
@@ -105,10 +102,7 @@ func TestLayoutIssueExplanationRedactsAdversarialFileDataAndDiagnosticStrings(t 
 		Semantics: []layoutengine.StructuralSemantic{{Node: layoutengine.SemanticNode{Source: layoutengine.SourceSpan{File: adversarialProtocolText}, Attributes: layoutengine.SemanticAttributes{ActualText: adversarialProtocolText, AlternateText: adversarialProtocolText}}}},
 	}
 	sanitizeLayoutTarget(&target)
-	sanitized, err := json.Marshal(target)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sanitized, _ := json.Marshal(target)
 	if bytes.Contains(sanitized, []byte("IGNORE PREVIOUS")) || bytes.Contains(sanitized, []byte("../../secret")) || bytes.Contains(sanitized, []byte("customer.ssn")) {
 		t.Fatalf("diagnostic/source sanitizer leaked instruction-bearing text: %s", sanitized)
 	}

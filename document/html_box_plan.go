@@ -289,7 +289,7 @@ func htmlUnifiedApplyBoxSpacing(target *layout.Spacing, prefix string, decl map[
 		for index, part := range parts {
 			length, err := htmlPlanStrictTableLength(part, pointsToUnits)
 			if err != nil {
-				return fmt.Errorf("resolved %s %q %w", prefix, value, err)
+				return fmt.Errorf("resolved %s %q %v", prefix, value, err)
 			}
 			values[index] = length
 		}
@@ -318,7 +318,7 @@ func htmlUnifiedApplyBoxSpacing(target *layout.Spacing, prefix string, decl map[
 			}
 			length, err := htmlPlanStrictTableLength(value, pointsToUnits)
 			if err != nil {
-				return fmt.Errorf("resolved %s %q %w", side.name, value, err)
+				return fmt.Errorf("resolved %s %q %v", side.name, value, err)
 			}
 			*side.target = length
 		}
@@ -351,7 +351,7 @@ func htmlUnifiedResolveBlockBox(compiled *CompiledHTML, token int, availableWidt
 		}
 		value, err := htmlPlanStrictTableLength(raw, pointsToUnits)
 		if err != nil {
-			return 0, fmt.Errorf("resolved %s %q %w", property, raw, err)
+			return 0, fmt.Errorf("resolved %s %q %v", property, raw, err)
 		}
 		return value, nil
 	}

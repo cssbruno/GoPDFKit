@@ -48,10 +48,7 @@ func PaperDiagnosticFingerprint(revision paperedit.Revision, diagnostic paperlan
 		Revision   paperedit.Revision   `json:"revision"`
 		Diagnostic paperlang.Diagnostic `json:"diagnostic"`
 	}{revision, diagnostic}
-	encoded, err := json.Marshal(payload)
-	if err != nil {
-		return ""
-	}
+	encoded, _ := json.Marshal(payload)
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
 }

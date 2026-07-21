@@ -27,7 +27,6 @@ var (
 
 type taggedPDFState struct {
 	enabled           bool
-	documentLanguage  string
 	structTreeRootObj int
 	parentTreeObj     int
 	documentElemObj   int
@@ -46,33 +45,22 @@ type taggedPDFState struct {
 }
 
 type taggedElement struct {
-	ObjNum     int
-	Page       int
-	MCID       int
-	Role       string
-	Alt        string
-	ActualText string
-	Lang       string
-	ObjRef     int
-	Parent     *taggedElement
-	Table      taggedTableAttributes
-	Marked     []taggedMarkedContent
-	Children   []*taggedElement
+	ObjNum   int
+	Page     int
+	MCID     int
+	Role     string
+	Alt      string
+	ObjRef   int
+	Parent   *taggedElement
+	Table    taggedTableAttributes
+	Marked   []taggedMarkedContent
+	Children []*taggedElement
 }
 
 type taggedTableAttributes struct {
 	Scope   string
-	RowSpan uint32
-	ColSpan uint32
-}
-
-// TableCellStructureOptions describes the PDF/UA table attributes attached to
-// a direct table-cell structure. Scope is meaningful only for TH and accepts
-// row, column, or both (case-insensitive through the normalizer).
-type TableCellStructureOptions struct {
-	Scope   string
-	RowSpan uint32
-	ColSpan uint32
+	RowSpan int
+	ColSpan int
 }
 
 type taggedMarkedContent struct {
@@ -132,13 +120,6 @@ func (f *Document) BeginStructure(role string) {
 	}
 	f.tagged.elems = append(f.tagged.elems, elem)
 	f.tagged.stack = append(f.tagged.stack, elem)
-}
-
-// BeginTableCellStructure starts a tagged TH or TD structure and attaches its
-// validated PDF/UA scope and span attributes. Call EndStructure after writing
-// the cell's content.
-func (f *Document) BeginTableCellStructure(role string, options TableCellStructureOptions) {
-	f.beginTableCellStructure(role, taggedTableAttributes(options))
 }
 
 func (f *Document) beginTableCellStructure(role string, attrs taggedTableAttributes) {
@@ -300,43 +281,6 @@ func (f *Document) beginTaggedContent(tag taggedContentOptions) []byte {
 	return out
 }
 
-// registerPreparedSemanticElement attaches a new marked-content reference to
-// an already materialized plan semantic element. Unlike registerTaggedElement,
-// this keeps one structure element for a semantic node even when its content
-// is split across glyph runs, fragments, or pages.
-func (f *Document) registerPreparedSemanticElement(elem *taggedElement) int {
-	if !f.tagged.enabled || elem == nil || f.page <= 0 {
-		return -1
-	}
-	f.tagged.pageStructParents = ensureIntSliceLen(f.tagged.pageStructParents, f.page+1)
-	f.tagged.pageElems = ensureTaggedPageElemsLen(f.tagged.pageElems, f.page+1)
-	if f.tagged.pageStructParents[f.page] < 0 && len(f.tagged.pageElems[f.page]) == 0 {
-		f.tagged.pageStructParents[f.page] = f.tagged.nextStructParent
-		f.tagged.nextStructParent++
-	}
-	mcid := len(f.tagged.pageElems[f.page])
-	elem.Marked = append(elem.Marked, taggedMarkedContent{Page: f.page, MCID: mcid})
-	f.tagged.pageElems[f.page] = append(f.tagged.pageElems[f.page], elem)
-	return mcid
-}
-
-func (f *Document) beginPreparedTaggedContent(role string, mcid int) []byte {
-	if !f.tagged.enabled || mcid < 0 {
-		return nil
-	}
-	role = normalizeTaggedRole(role)
-	if role == "" {
-		role = taggedRoleP
-	}
-	out := make([]byte, 0, len(role)+32)
-	out = append(out, '/')
-	out = append(out, role...)
-	out = append(out, " <</MCID "...)
-	out = appendPDFInt(out, mcid)
-	out = append(out, ">> BDC\n"...)
-	return out
-}
-
 func (f *Document) registerTaggedElement(role, alt string) (*taggedElement, int) {
 	page := f.page
 	if page <= 0 {
@@ -433,14 +377,6 @@ func (f *Document) putTaggedElement(elem *taggedElement) {
 		buf := f.appendUTF16TextString([]byte("/Alt "), elem.Alt)
 		f.outbytes(buf)
 	}
-	if elem.ActualText != "" {
-		buf := f.appendUTF16TextString([]byte("/ActualText "), elem.ActualText)
-		f.outbytes(buf)
-	}
-	if elem.Lang != "" {
-		buf := f.appendUTF16TextString([]byte("/Lang "), elem.Lang)
-		f.outbytes(buf)
-	}
 	if attr := f.taggedTableAttributeString(elem); attr != "" {
 		f.outf("/A %s", attr)
 	} else if elem.Role == taggedRoleL {
@@ -478,11 +414,11 @@ func (f *Document) taggedTableAttributeString(elem *taggedElement) string {
 	}
 	if elem.Table.RowSpan > 1 {
 		out = append(out, " /RowSpan "...)
-		out = appendPDFUint(out, elem.Table.RowSpan)
+		out = appendPDFInt(out, elem.Table.RowSpan)
 	}
 	if elem.Table.ColSpan > 1 {
 		out = append(out, " /ColSpan "...)
-		out = appendPDFUint(out, elem.Table.ColSpan)
+		out = appendPDFInt(out, elem.Table.ColSpan)
 	}
 	out = append(out, " >>"...)
 	return string(out)
@@ -493,10 +429,10 @@ func normalizeTaggedTableAttributes(role string, attrs taggedTableAttributes) ta
 	if role != taggedRoleTH && role != taggedRoleTD {
 		return taggedTableAttributes{}
 	}
-	if attrs.RowSpan == 0 {
+	if attrs.RowSpan < 1 {
 		attrs.RowSpan = 1
 	}
-	if attrs.ColSpan == 0 {
+	if attrs.ColSpan < 1 {
 		attrs.ColSpan = 1
 	}
 	scope := normalizeTaggedRole(attrs.Scope)
@@ -568,10 +504,6 @@ func (f *Document) putTaggedDocumentElement() {
 	f.out("/Type /StructElem")
 	f.out("/S /Document")
 	f.outf("/P %d 0 R", f.tagged.structTreeRootObj)
-	if language := firstNonEmpty(f.tagged.documentLanguage, f.compliance.Lang); language != "" {
-		buf := f.appendUTF16TextString([]byte("/Lang "), language)
-		f.outbytes(buf)
-	}
 	if f.tagged.namespaceObj > 0 {
 		f.outf("/NS %d 0 R", f.tagged.namespaceObj)
 	}

@@ -89,14 +89,14 @@ func (b *typedTreeBuilder) add(parent int, key, kind, text string, style *layout
 	if err := b.ctx.Err(); err != nil {
 		return 0, err
 	}
-	if uint32(len(b.nodes)) >= b.maxNodes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if uint32(len(b.nodes)) >= b.maxNodes {
 		return 0, layoutengine.ErrCanonicalTreeLimit
 	}
 	if err := layoutengine.ChargePlanningWork(b.ctx, "typed canonical tree lowering", 1); err != nil {
 		return 0, err
 	}
 	index := len(b.nodes)
-	b.nodes = append(b.nodes, layoutengine.TreeNodeInput{ID: layoutengine.NodeID(index + 1), Key: layoutengine.NodeKey(key), // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	b.nodes = append(b.nodes, layoutengine.TreeNodeInput{ID: layoutengine.NodeID(index + 1), Key: layoutengine.NodeKey(key),
 		Kind: kind, Parent: int64(parent), Text: typedTreeText(text), Style: style, Track: track, Resource: resource,
 		Semantic: &layoutengine.TreeSemanticInput{Role: role, Label: key}, Flags: flags})
 	return index, nil
@@ -153,7 +153,7 @@ func (b *typedTreeBuilder) block(parent int, key string, candidate layout.Block)
 		_, err := b.add(parent, key, "paragraph", layout.TextSegmentsPlainText(block.Segments), typedTreeBoxStyle(block.EffectiveBox(), block.EffectiveStyle()), nil, nil, layoutengine.SemanticRoleParagraph, typedTreeBoxFlags(block.EffectiveBox()))
 		return err
 	case layout.HeadingBlock:
-		_, err := b.add(parent, key, "heading", layout.TextSegmentsPlainText(block.Segments), typedTreeBoxStyle(block.EffectiveBox(), block.EffectiveStyle()), nil, nil, layoutengine.SemanticRoleHeading, typedTreeBoxFlags(block.EffectiveBox())|uint32(block.Level)<<16) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		_, err := b.add(parent, key, "heading", layout.TextSegmentsPlainText(block.Segments), typedTreeBoxStyle(block.EffectiveBox(), block.EffectiveStyle()), nil, nil, layoutengine.SemanticRoleHeading, typedTreeBoxFlags(block.EffectiveBox())|uint32(block.Level)<<16)
 		return err
 	case layout.ListBlock:
 		list, err := b.add(parent, key, "list", block.MarkerStyle, typedTreeBoxStyle(block.EffectiveBox(), block.EffectiveStyle()), nil, nil, layoutengine.SemanticRoleList, typedTreeBoxFlags(block.EffectiveBox()))

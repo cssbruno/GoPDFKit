@@ -271,7 +271,7 @@ func htmlTrimSpace(s string) string {
 
 func internHTMLName(name string) string {
 	switch name {
-	case "a", "abbr", "align", "alt", "aria-label", "article", "b", "body", "border", "bordercolor", "br", "caption", "cellpadding", "center", "class", "code", "color", "colspan", "data-pdf-footer", "dd", "del", "dir", "div", "dl", "dt", "em", "figcaption", "figure", "footer", "h1", "h2", "h3", "h4", "h5", "h6", "head", "headers", "header", "height", "href", "hr", "i", "id", "img", "ins", "kbd", "lang", "li", "ol", "p", "pre", "rel", "right", "role", "rowspan", "s", "samp", "scope", "script", "section", "size", "src", "strike", "strong", "style", "sub", "sup", "svg", "table", "target", "tbody", "td", "tfoot", "th", "thead", "title", "tr", "u", "ul", "valign", "width":
+	case "a", "abbr", "align", "alt", "aria-label", "article", "b", "body", "border", "br", "caption", "cellpadding", "center", "class", "code", "color", "colspan", "data-pdf-footer", "dd", "del", "dir", "div", "dl", "dt", "em", "figcaption", "figure", "footer", "h1", "h2", "h3", "h4", "h5", "h6", "head", "headers", "header", "height", "href", "hr", "i", "id", "img", "ins", "kbd", "lang", "li", "ol", "p", "pre", "rel", "right", "role", "rowspan", "s", "samp", "scope", "script", "section", "size", "src", "strike", "strong", "style", "sub", "sup", "svg", "table", "target", "tbody", "td", "tfoot", "th", "thead", "title", "tr", "u", "ul", "valign", "width":
 		return name
 	default:
 		return name

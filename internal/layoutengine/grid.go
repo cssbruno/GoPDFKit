@@ -157,7 +157,7 @@ func PlanGridContext(ctx context.Context, input GridPlanInput) (GridPlanResult, 
 	}
 
 	items := append([]GridItem(nil), input.Items...)
-	if err := validateAndSortGridItems(items, uint32(len(input.Rows)), uint32(len(input.Columns)), cells, budget); err != nil { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if err := validateAndSortGridItems(items, uint32(len(input.Rows)), uint32(len(input.Columns)), cells, budget); err != nil {
 		return GridPlanResult{}, err
 	}
 	columnContributions := make([]gridSpanContribution, 0, len(items))
@@ -187,7 +187,7 @@ func PlanGridContext(ctx context.Context, input GridPlanInput) (GridPlanResult, 
 	}
 
 	planInput := LayoutPlanInput{Pages: []PlannedPage{{
-		Number: 1, Size: input.PageSize, Fragments: IndexRange{Count: uint32(len(items))}, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		Number: 1, Size: input.PageSize, Fragments: IndexRange{Count: uint32(len(items))},
 	}}, PageRegions: []PlannedPageRegion{{Page: 1, Region: RegionBody, Bounds: input.Region}}}
 	for index, width := range columns {
 		bounds, boundsErr := NewRect(columnOffsets[index], input.Region.Y, width, usedHeight)
@@ -268,21 +268,21 @@ func validateAndSortGridItems(items []GridItem, rows, columns uint32, cells uint
 			return fmt.Errorf("%w: item %d", ErrGridPlacement, index)
 		}
 		if err := validateTextIdentity("grid item key", string(item.Key)); err != nil {
-			return fmt.Errorf("%w: item %d: %w", ErrGridPlacement, index, err)
+			return fmt.Errorf("%w: item %d: %v", ErrGridPlacement, index, err)
 		}
 		if err := validateTextIdentity("grid item instance", string(item.Instance)); err != nil {
-			return fmt.Errorf("%w: item %d: %w", ErrGridPlacement, index, err)
+			return fmt.Errorf("%w: item %d: %v", ErrGridPlacement, index, err)
 		}
 		if err := item.Source.Validate(); err != nil {
-			return fmt.Errorf("%w: item %d source: %w", ErrGridPlacement, index, err)
+			return fmt.Errorf("%w: item %d source: %v", ErrGridPlacement, index, err)
 		}
 		rowEnd := uint64(item.Row) + uint64(item.RowSpan)
 		columnEnd := uint64(item.Column) + uint64(item.ColumnSpan)
 		if rowEnd > uint64(rows) || columnEnd > uint64(columns) {
 			return fmt.Errorf("%w: item %d exceeds grid", ErrGridPlacement, index)
 		}
-		for row := item.Row; row < uint32(rowEnd); row++ { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-			for column := item.Column; column < uint32(columnEnd); column++ { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		for row := item.Row; row < uint32(rowEnd); row++ {
+			for column := item.Column; column < uint32(columnEnd); column++ {
 				if err := budget.charge(1); err != nil {
 					return err
 				}
@@ -294,7 +294,7 @@ func validateAndSortGridItems(items []GridItem, rows, columns uint32, cells uint
 			}
 		}
 	}
-	sortWork := uint64(len(items)) * uint64(bits.Len(uint(len(items))+1)+1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	sortWork := uint64(len(items)) * uint64(bits.Len(uint(len(items))+1)+1)
 	if err := budget.charge(sortWork); err != nil {
 		return err
 	}
@@ -456,7 +456,7 @@ func distributeGridUnits(sizes []Fixed, indexes []int, amount Fixed, weights []u
 		if err := budget.charge(1); err != nil {
 			return err
 		}
-		amountUnsigned := uint64(amountInt) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		amountUnsigned := uint64(amountInt)
 		weight := uint64(weights[index])
 		shareUnsigned := (amountUnsigned/total)*weight + (amountUnsigned%total)*weight/total
 		if shareUnsigned > uint64(MaxFixed) {
@@ -531,7 +531,7 @@ func gridSpanExtent(sizes []Fixed, gap Fixed, start, span uint32, budget *gridBu
 	if err := budget.charge(uint64(span)); err != nil {
 		return 0, err
 	}
-	extent, err := addFixed(sizes[start:uint32(end)]...) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	extent, err := addFixed(sizes[start:uint32(end)]...)
 	if err != nil || span == 1 {
 		return extent, err
 	}

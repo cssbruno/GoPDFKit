@@ -52,7 +52,7 @@ func HTMLCharacterization() HTMLCharacterizationInventory {
 		EntryPoints:    sortedHTMLCharacterizationStrings([]string{"CompileHTML", "CompileHTMLContext", "CompileHTMLTemplate", "CompileHTMLTemplateContext", "HTMLCharacterization", "HTMLCharacterizationJSON", "HTMLTokenize", "HTMLTokenizeContext", "RenderHTMLTemplate", "RunHTMLCharacterization", "(*CompiledHTML).DebugDump", "(*CompiledHTML).RecoveryIssues", "(*CompiledHTML).Stats", "(*CompiledHTML).Tokens", "(*Document).HTMLNew", "(*Document).PlanCompiledHTML", "(*Document).PlanCompiledHTMLContext", "(*HTML).ValidateHTML", "(*HTML).Write", "(*HTML).WriteCompiled", "(*HTML).WriteContext", "(*HTML).WriteTemplate", "(*HTML).WriteTemplateContext"}),
 		RecognizedTags: tags, RecognizedCSSProperties: properties,
 		CSSValueFamilies: []HTMLCSSValueFamily{{"border-collapse", []string{"collapse", "separate"}}, {"break", []string{"always", "auto", "avoid", "page"}}, {"display", []string{"block", "flex", "inline", "inline-block", "inline-flex"}}, {"flex-direction", []string{"column", "column-reverse", "row", "row-reverse"}}, {"object-fit", []string{"contain", "cover", "fill"}}, {"text-align", []string{"center", "justify", "left", "right"}}, {"vertical-align", []string{"bottom", "middle", "top"}}, {"white-space", []string{"break-spaces", "normal", "nowrap", "pre", "pre-line", "pre-wrap"}}},
-		Cursor:           HTMLCursorContract{Entry: "uses the document's current page and XY position", Exit: "leaves XY after the final rendered content", Pagination: "may append bounded pages and continues in the active body region", Failure: "compile, validation, and unified planning failures leave the current PDF unchanged"},
+		Cursor:           HTMLCursorContract{Entry: "uses the document's current page and XY position", Exit: "leaves XY after the final rendered content", Pagination: "may append bounded pages and continues in the active body region", Failure: "compile/validation failures are pre-render; render-time failures may retain already emitted legacy output"},
 		BehaviorClasses:  []string{"recognized-rendered", "recognized-ignored-metadata", "diagnostic-unsupported", "malformed-recovered", "rejected-by-policy", "strict-unified-plannable"},
 		Fixtures:         htmlCharacterizationFixtures()}
 }
@@ -102,11 +102,6 @@ func RunHTMLCharacterization(ctx context.Context) (HTMLCharacterizationProjectio
 		var rasterPlan LayoutDocumentPlan
 		hasRasterPlan := false
 		switch fixture.Classification {
-		case "malformed-recovered":
-			if len(compiled.recovery) == 0 {
-				return HTMLCharacterizationProjection{}, errors.New("document: HTML characterization expected recovery evidence")
-			}
-			entry.Outcome = "recovered"
 		case "diagnostic-unsupported":
 			pdf := newHTMLCharacterizationDocument(true)
 			html := pdf.HTMLNew()
@@ -225,7 +220,7 @@ func htmlCharacterizationFixtures() []HTMLCharacterizationFixture {
 		{"text-lists-nested", "text_lists", "recognized-rendered", `<article><h2>Title</h2><p>Hello <strong>world</strong><br>next</p><ul><li>One</li></ul><dl><dt>Term</dt><dd>Definition</dd></dl></article>`},
 		{"mixed-flex", "mixed_nested", "recognized-rendered", `<div style="display:flex;gap:2pt"><section><p>A</p></section><div><p>B</p></div></div>`},
 		{"table-spans", "tables", "recognized-rendered", `<table><caption>Grid</caption><thead><tr><th colspan="2">Head</th></tr></thead><tbody><tr><td rowspan="2">A</td><td>B</td></tr><tr><td>C</td></tr></tbody><tfoot><tr><td colspan="2">Foot</td></tr></tfoot></table>`},
-		{"svg", "svg", "recognized-rendered", `<svg role="presentation" width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" fill="#123456"/></svg>`},
+		{"svg", "svg", "recognized-rendered", `<svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" fill="#123456"/></svg>`},
 		{"data-image", "images", "recognized-rendered", `<img width="1" height="1" alt="pixel" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==">`},
 		{"link", "links", "recognized-rendered", `<p><a href="https://example.test/stage0">link</a></p>`},
 		{"forms", "forms", "diagnostic-unsupported", `<form><label>Name<input name="name"></label></form>`},

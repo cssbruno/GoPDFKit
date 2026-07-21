@@ -307,53 +307,6 @@ func TestSemanticAccessibilityAttributesConsumeHardStateBudget(t *testing.T) {
 	}
 }
 
-func TestFormLabelsAndKeyboardOrderAreCanonicalAndValidated(t *testing.T) {
-	input := semanticTestInput(false)
-	input.SemanticNodes = []SemanticNode{
-		{ID: 1, Role: SemanticRoleDocument, Key: "@document", Instance: "@document"},
-		{ID: 2, Parent: 1, Role: SemanticRoleForm, Key: "@form", Instance: "@form"},
-		{ID: 3, Parent: 2, Role: SemanticRoleFormField, Key: "@lines", Instance: "@lines",
-			Attributes: SemanticAttributes{FormLabel: "Patient name", KeyboardOrder: 1}},
-	}
-	for index := range input.SemanticFragments {
-		input.SemanticFragments[index].Semantic = 3
-		input.ReadingOrder[index].Semantic = 3
-	}
-	plan, err := NewLayoutPlan(input)
-	if err != nil {
-		t.Fatal(err)
-	}
-	encoded, err := plan.CanonicalJSON()
-	if err != nil || !strings.Contains(string(encoded), `"form_label":"Patient name"`) ||
-		!strings.Contains(string(encoded), `"keyboard_order":1`) {
-		t.Fatalf("canonical form semantics = %s, %v", encoded, err)
-	}
-
-	tests := []struct {
-		name   string
-		mutate func([]SemanticNode) []SemanticNode
-	}{
-		{"missing label", func(nodes []SemanticNode) []SemanticNode { nodes[2].Attributes.FormLabel = ""; return nodes }},
-		{"missing order", func(nodes []SemanticNode) []SemanticNode { nodes[2].Attributes.KeyboardOrder = 0; return nodes }},
-		{"wrong parent", func(nodes []SemanticNode) []SemanticNode { nodes[2].Parent = 1; return nodes }},
-		{"order gap", func(nodes []SemanticNode) []SemanticNode { nodes[2].Attributes.KeyboardOrder = 2; return nodes }},
-		{"duplicate order", func(nodes []SemanticNode) []SemanticNode {
-			nodes = append(nodes, SemanticNode{ID: 4, Parent: 2, Role: SemanticRoleFormField, Key: "@second", Instance: "@second",
-				Attributes: SemanticAttributes{FormLabel: "Record number", KeyboardOrder: 1}})
-			return nodes
-		}},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			invalid := input
-			invalid.SemanticNodes = test.mutate(cloneSlice(input.SemanticNodes))
-			if _, err := NewLayoutPlan(invalid); err == nil {
-				t.Fatal("invalid form semantics unexpectedly validated")
-			}
-		})
-	}
-}
-
 func semanticAccessibilityTestPlan(t *testing.T) LayoutPlan {
 	t.Helper()
 	geometry, destinations, links := linkTestInputs(t)

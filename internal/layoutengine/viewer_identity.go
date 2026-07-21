@@ -34,13 +34,13 @@ func (input ViewerRevisionIdentityInput) validate() error {
 		return fmt.Errorf("%w: revision tuple is partial", ErrViewerIdentityInvalid)
 	}
 	if _, err := ParseSourceRevisionID(input.SourceRevision); err != nil {
-		return fmt.Errorf("%w: source revision: %w", ErrViewerIdentityInvalid, err)
+		return fmt.Errorf("%w: source revision: %v", ErrViewerIdentityInvalid, err)
 	}
 	if _, err := ParseScenarioRevisionID(input.ScenarioRevision); err != nil {
-		return fmt.Errorf("%w: scenario revision: %w", ErrViewerIdentityInvalid, err)
+		return fmt.Errorf("%w: scenario revision: %v", ErrViewerIdentityInvalid, err)
 	}
 	if _, err := ParsePolicyRevisionID(input.PolicyRevision); err != nil {
-		return fmt.Errorf("%w: policy revision: %w", ErrViewerIdentityInvalid, err)
+		return fmt.Errorf("%w: policy revision: %v", ErrViewerIdentityInvalid, err)
 	}
 	return nil
 }

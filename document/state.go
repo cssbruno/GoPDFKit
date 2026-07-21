@@ -182,7 +182,6 @@ type Document struct {
 	outlineRoot        int                     // root of outlines
 	autoPageBreak      bool                    // automatic page breaking
 	acceptPageBreak    func() bool             // returns true to accept page break
-	acceptPageBreakSet bool                    // whether the application replaced the default callback
 	pageBreakTrigger   float64                 // threshold used to trigger page breaks
 	inHeader           bool                    // flag set when processing header
 	headerFnc          func()                  // function provided by app to write header

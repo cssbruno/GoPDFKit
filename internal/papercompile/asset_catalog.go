@@ -33,10 +33,6 @@ type AssetResource struct {
 	MediaType string
 	Digest    string
 	Data      []byte
-	Family    string
-	Style     string
-	Weight    uint16
-	License   string
 }
 
 // AssetCatalog is an immutable, canonical name-to-content boundary. Its zero
@@ -56,10 +52,8 @@ func NewAssetCatalog(resources []AssetResource) (AssetCatalog, error) {
 		if !validAssetName(resource.Name) {
 			return AssetCatalog{}, fmt.Errorf("%w: resources[%d].name is not a portable identifier", ErrAssetCatalog, index)
 		}
-		isImage := resource.MediaType == "image/png" || resource.MediaType == "image/jpeg"
-		isFont := resource.MediaType == "font/ttf" || resource.MediaType == "font/otf"
-		if !isImage && !isFont {
-			return AssetCatalog{}, fmt.Errorf("%w: resources[%d].media_type must be image/png, image/jpeg, font/ttf, or font/otf", ErrAssetCatalog, index)
+		if resource.MediaType != "image/png" && resource.MediaType != "image/jpeg" {
+			return AssetCatalog{}, fmt.Errorf("%w: resources[%d].media_type must be image/png or image/jpeg", ErrAssetCatalog, index)
 		}
 		if len(resource.Data) == 0 || len(resource.Data) > MaxAssetResourceBytes {
 			return AssetCatalog{}, fmt.Errorf("%w: resources[%d].data exceeds its bounded size", ErrAssetCatalog, index)
@@ -72,13 +66,6 @@ func NewAssetCatalog(resources []AssetResource) (AssetCatalog, error) {
 		actual := hex.EncodeToString(digest[:])
 		if len(resource.Digest) != 64 || strings.ToLower(resource.Digest) != resource.Digest || resource.Digest != actual {
 			return AssetCatalog{}, fmt.Errorf("%w: resources[%d].digest does not match its bytes", ErrAssetCatalog, index)
-		}
-		if isFont {
-			if !validFontResource(resource) {
-				return AssetCatalog{}, fmt.Errorf("%w: resources[%d] is not a bounded signed TrueType/OpenType font", ErrAssetCatalog, index)
-			}
-			assets[index] = AssetResource{Name: resource.Name, MediaType: resource.MediaType, Digest: actual, Data: append([]byte(nil), resource.Data...), Family: resource.Family, Style: resource.Style, Weight: resource.Weight, License: resource.License}
-			continue
 		}
 		if resource.MediaType == "image/png" && !bytes.HasPrefix(resource.Data, []byte("\x89PNG\r\n\x1a\n")) {
 			return AssetCatalog{}, fmt.Errorf("%w: resources[%d] does not have a PNG signature", ErrAssetCatalog, index)
@@ -98,7 +85,7 @@ func NewAssetCatalog(resources []AssetResource) (AssetCatalog, error) {
 		if pixels > MaxAssetDecodedPixels {
 			return AssetCatalog{}, fmt.Errorf("%w: resources[%d] decoded pixels exceed %d", ErrAssetCatalog, index, MaxAssetDecodedPixels)
 		}
-		assets[index] = AssetResource{Name: resource.Name, MediaType: resource.MediaType, Digest: actual, Data: append([]byte(nil), resource.Data...), Family: resource.Family, Style: resource.Style, Weight: resource.Weight, License: resource.License}
+		assets[index] = AssetResource{Name: resource.Name, MediaType: resource.MediaType, Digest: actual, Data: append([]byte(nil), resource.Data...)}
 	}
 	sort.Slice(assets, func(i, j int) bool { return assets[i].Name < assets[j].Name })
 	for index := 1; index < len(assets); index++ {
@@ -119,65 +106,7 @@ func (catalog AssetCatalog) Resolve(name string) (AssetResource, bool) {
 	return resource, true
 }
 
-// ResolveFont finds one explicit TrueType/OpenType resource by manifest name
-// or family. Family lookup is deterministic and rejects ambiguous families.
-func (catalog AssetCatalog) ResolveFont(name string) (AssetResource, bool) {
-	var exact, family AssetResource
-	for _, resource := range catalog.assets {
-		if resource.MediaType != "font/ttf" && resource.MediaType != "font/otf" {
-			continue
-		}
-		if resource.Name == name {
-			if exact.Name != "" {
-				return AssetResource{}, false
-			}
-			exact = resource
-			continue
-		}
-		if resource.Family != name || family.Name != "" && fontResourceRank(resource) >= fontResourceRank(family) {
-			continue
-		}
-		family = resource
-	}
-	match := exact
-	if match.Name == "" {
-		match = family
-	}
-	if match.Name == "" {
-		return AssetResource{}, false
-	}
-	match.Data = append([]byte(nil), match.Data...)
-	return match, true
-}
-
-func fontResourceRank(resource AssetResource) int {
-	rank := 0
-	weight := resource.Weight
-	if weight == 0 {
-		weight = 400
-	}
-	rank += int(weight)
-	if resource.Style != "" && resource.Style != "normal" {
-		rank += 10000
-	}
-	return rank
-}
-
 func (catalog AssetCatalog) Len() int { return len(catalog.assets) }
-
-// FontResources returns detached, deterministic font resources for the
-// document planner. Images are intentionally omitted from this projection.
-func (catalog AssetCatalog) FontResources() []AssetResource {
-	result := make([]AssetResource, 0)
-	for _, resource := range catalog.assets {
-		if resource.MediaType != "font/ttf" && resource.MediaType != "font/otf" {
-			continue
-		}
-		resource.Data = append([]byte(nil), resource.Data...)
-		result = append(result, resource)
-	}
-	return result
-}
 
 func validAssetName(name string) bool {
 	if len(name) == 0 || len(name) > 128 || name[0] < 'a' || name[0] > 'z' {
@@ -191,23 +120,4 @@ func validAssetName(name string) bool {
 		return false
 	}
 	return true
-}
-
-func validFontResource(resource AssetResource) bool {
-	if len(resource.Family) == 0 || len(resource.Family) > 128 || resource.Weight > 1000 {
-		return false
-	}
-	if resource.Weight == 0 {
-		resource.Weight = 400
-	}
-	if resource.Style == "" {
-		resource.Style = "normal"
-	}
-	if resource.Style != "normal" && resource.Style != "italic" && resource.Style != "oblique" {
-		return false
-	}
-	if resource.MediaType == "font/ttf" {
-		return bytes.HasPrefix(resource.Data, []byte{0, 1, 0, 0})
-	}
-	return bytes.HasPrefix(resource.Data, []byte("OTTO")) || bytes.HasPrefix(resource.Data, []byte("true")) || bytes.HasPrefix(resource.Data, []byte("typ1"))
 }

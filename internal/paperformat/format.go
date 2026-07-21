@@ -131,11 +131,11 @@ func FormatDecimal(input, locale string, precision Precision, limits Limits) (st
 	if err != nil {
 		return "", err
 	}
-	if uint32(len(number.fraction)) > precision.MaxFractionDigits { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if uint32(len(number.fraction)) > precision.MaxFractionDigits {
 		return "", formatError(operation, "precision", "input has more fractional digits than MaxFractionDigits; rounding is not implicit", ErrPrecision)
 	}
 	fraction := number.fraction
-	for uint32(len(fraction)) < precision.MinFractionDigits { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	for uint32(len(fraction)) < precision.MinFractionDigits {
 		fraction += "0"
 	}
 	formatted := localizeNumber(number.negative, number.integer, fraction, data)
@@ -162,11 +162,11 @@ func FormatCurrency(input, currency, locale string, limits Limits) (string, erro
 	if err != nil {
 		return "", err
 	}
-	if uint32(len(number.fraction)) > currencyPattern.fractionDigits { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if uint32(len(number.fraction)) > currencyPattern.fractionDigits {
 		return "", formatError(operation, "input", fmt.Sprintf("%s accepts at most %d fractional digits; rounding is not implicit", currency, currencyPattern.fractionDigits), ErrPrecision)
 	}
 	fraction := number.fraction
-	for uint32(len(fraction)) < currencyPattern.fractionDigits { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	for uint32(len(fraction)) < currencyPattern.fractionDigits {
 		fraction += "0"
 	}
 	numberText := localizeNumber(number.negative, number.integer, fraction, data)
@@ -241,7 +241,7 @@ func parseDecimal(operation, input string, limits Limits) (decimalValue, error) 
 	if !utf8.ValidString(input) {
 		return decimalValue{}, formatError(operation, "input", "input is not valid UTF-8", ErrInvalid)
 	}
-	if uint32(len(input)) > limits.MaxInputBytes { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if uint32(len(input)) > limits.MaxInputBytes {
 		return decimalValue{}, formatError(operation, "input", "input exceeds MaxInputBytes", ErrLimit)
 	}
 	value := decimalValue{}
@@ -281,7 +281,7 @@ func parseDecimal(operation, input string, limits Limits) (decimalValue, error) 
 	if uint64(len(value.integer))+uint64(len(value.fraction)) > uint64(limits.MaxDigits) {
 		return decimalValue{}, formatError(operation, "input", "decimal digit count exceeds MaxDigits", ErrLimit)
 	}
-	if uint32(len(value.fraction)) > limits.MaxFractionDigits { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if uint32(len(value.fraction)) > limits.MaxFractionDigits {
 		return decimalValue{}, formatError(operation, "input", "fraction exceeds the formatter MaxFractionDigits", ErrLimit)
 	}
 	if value.negative && allZero(value.integer) && allZero(value.fraction) {
@@ -374,7 +374,7 @@ func finish(operation, input, formatted string, data localeData, limits Limits) 
 	if uint64(len(output)) > uint64(limits.MaxOutputBytes) {
 		return "", formatError(operation, "output", "formatted output exceeds MaxOutputBytes", ErrLimit)
 	}
-	work := uint64(len(input)) + uint64(len(formatted)) + uint64(utf8.RuneCountInString(formatted)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	work := uint64(len(input)) + uint64(len(formatted)) + uint64(utf8.RuneCountInString(formatted))
 	if work > limits.MaxWork {
 		return "", formatError(operation, "work", "formatting exceeds MaxWork", ErrLimit)
 	}
@@ -444,15 +444,15 @@ func allZero(value string) bool {
 }
 
 func twoDigits(value int) string {
-	return string([]byte{'0' + byte(value/10), '0' + byte(value%10)}) // #nosec G115 -- low-width representation is explicitly normalized before packing
+	return string([]byte{'0' + byte(value/10), '0' + byte(value%10)})
 }
 
 func fourDigits(value int) string {
 	return string([]byte{
-		'0' + byte(value/1000%10), // #nosec G115 -- low-width representation is explicitly normalized before packing
-		'0' + byte(value/100%10),  // #nosec G115 -- low-width representation is explicitly normalized before packing
-		'0' + byte(value/10%10),   // #nosec G115 -- low-width representation is explicitly normalized before packing
-		'0' + byte(value%10),      // #nosec G115 -- low-width representation is explicitly normalized before packing
+		'0' + byte(value/1000%10),
+		'0' + byte(value/100%10),
+		'0' + byte(value/10%10),
+		'0' + byte(value%10),
 	})
 }
 

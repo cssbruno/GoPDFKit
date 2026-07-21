@@ -186,7 +186,7 @@ func Verify(ctx context.Context, request Request, rasterizer Rasterizer) (Report
 	if limits == (Limits{}) {
 		limits = DefaultLimits()
 	}
-	if !limits.valid() || len(request.PDF) == 0 || uint64(len(request.PDF)) > limits.MaxPDFBytes || len(request.ExpectedPages) == 0 || uint32(len(request.ExpectedPages)) > limits.MaxPages { // #nosec G115 -- request sizes are checked against bounded verifier limits.
+	if !limits.valid() || len(request.PDF) == 0 || uint64(len(request.PDF)) > limits.MaxPDFBytes || len(request.ExpectedPages) == 0 || uint32(len(request.ExpectedPages)) > limits.MaxPages {
 		return Report{}, ErrLimit
 	}
 	if err := ctx.Err(); err != nil {
@@ -199,13 +199,13 @@ func Verify(ctx context.Context, request Request, rasterizer Rasterizer) (Report
 	maxText := min(limits.MaxPDFBytes, characterizeDefaults.MaxTextBytes)
 	characterization, err := characterize.Build(ctx, []characterize.Artifact{{Name: "final.pdf", PDF: request.PDF}}, "pdfverify final serialized bytes", characterize.Fingerprint{GOOS: "detached", GOARCH: "detached", GoVersion: "detached", CPUs: 1}, characterize.Limits{MaxFixtures: 1, MaxPDFBytes: limits.MaxPDFBytes, MaxTotalBytes: limits.MaxPDFBytes, MaxTextBytes: maxText, MaxNameBytes: 4096, MaxJSONBytes: limits.MaxJSONBytes})
 	if err != nil || len(characterization.Fixtures) != 1 {
-		return Report{}, fmt.Errorf("%w: structural inspection: %w", ErrVerificationFailed, err)
+		return Report{}, fmt.Errorf("%w: structural inspection: %v", ErrVerificationFailed, err)
 	}
 	fixture := characterization.Fixtures[0]
 	report.PDFVersion, report.PageCount, report.Structure = fixture.PDFVersion, fixture.Pages, fixture.Structure
 	textHash := sha256.Sum256([]byte(fixture.Text))
 	report.TextSHA256 = hex.EncodeToString(textHash[:])
-	if report.PageCount != uint32(len(request.ExpectedPages)) { // #nosec G115 -- the expected-page slice is bounded by MaxPages above.
+	if report.PageCount != uint32(len(request.ExpectedPages)) {
 		report.Failures = append(report.Failures, "final PDF page count differs from expected plan raster pages")
 	}
 	dimensions := make([]image.Point, len(request.ExpectedPages))
@@ -223,7 +223,7 @@ func Verify(ctx context.Context, request Request, rasterizer Rasterizer) (Report
 		if err != nil || decoded.Bounds().Min != (image.Point{}) || decoded.Bounds().Empty() {
 			return Report{}, fmt.Errorf("%w: expected page %d PNG", ErrInvalid, expected.Page)
 		}
-		pixels := uint64(decoded.Bounds().Dx()) * uint64(decoded.Bounds().Dy()) // #nosec G115 -- decoded dimensions are bounded by MaxPixelsPerPage before use.
+		pixels := uint64(decoded.Bounds().Dx()) * uint64(decoded.Bounds().Dy())
 		if pixels == 0 || pixels > limits.MaxPixelsPerPage {
 			return Report{}, ErrLimit
 		}
@@ -232,7 +232,7 @@ func Verify(ctx context.Context, request Request, rasterizer Rasterizer) (Report
 	}
 	raster, err := rasterizer.Rasterize(ctx, append([]byte(nil), request.PDF...), request.DPI, dimensions, limits)
 	if err != nil {
-		return Report{}, fmt.Errorf("%w: %w", ErrRaster, err)
+		return Report{}, fmt.Errorf("%w: %v", ErrRaster, err)
 	}
 	if !validLabel(raster.Renderer) || !validLabel(raster.Version) || len(raster.Pages) != len(request.ExpectedPages) {
 		return Report{}, fmt.Errorf("%w: invalid renderer result", ErrRaster)
@@ -286,7 +286,7 @@ func comparePage(ctx context.Context, page uint32, expected ExpectedRasterPage, 
 	expectedHash := sha256.Sum256(expected.PNG)
 	actualHash := sha256.Sum256(actualPNG)
 	bounds := expectedImage.Bounds()
-	total := uint64(bounds.Dx()) * uint64(bounds.Dy()) // #nosec G115 -- the expected raster dimensions were validated against the pixel limit.
+	total := uint64(bounds.Dx()) * uint64(bounds.Dy())
 	var changed, channelSum uint64
 	var maximum uint8
 	diff := DiffBounds{MinX: bounds.Max.X, MinY: bounds.Max.Y, MaxX: -1, MaxY: -1}
@@ -327,8 +327,8 @@ func comparePage(ctx context.Context, page uint32, expected ExpectedRasterPage, 
 	ppm := uint32(0)
 	mean := uint32(0)
 	if total != 0 {
-		ppm = uint32((changed*1_000_000 + total/2) / total)      // #nosec G115 -- changed and total are bounded pixel counts, so the ratio is below one million.
-		mean = uint32((channelSum*1000 + total*2) / (total * 4)) // #nosec G115 -- channelSum and total are bounded by the verified raster dimensions.
+		ppm = uint32((changed*1_000_000 + total/2) / total)
+		mean = uint32((channelSum*1000 + total*2) / (total * 4))
 	}
 	var diffBounds *DiffBounds
 	if changed != 0 {

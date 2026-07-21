@@ -97,7 +97,7 @@ func (layout ShapedLineLayout) Validate() error {
 			return fmt.Errorf("%w: line %d cluster coverage", ErrShapedLineInvalid, index)
 		}
 		if index+1 == len(layout.Lines) {
-			if line.Break != ShapedLineEnd || line.TextEnd != uint32(len(layout.Text)) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			if line.Break != ShapedLineEnd || line.TextEnd != uint32(len(layout.Text)) {
 				return fmt.Errorf("%w: final line", ErrShapedLineInvalid)
 			}
 			continue
@@ -301,7 +301,7 @@ func collectShapedClusterUnits(shaped ShapedText, budget *shapedLineBudget) ([]s
 func splitShapedParagraphs(text string, units []shapedClusterUnit, budget *shapedLineBudget) ([]shapedParagraph, error) {
 	paragraphs := make([]shapedParagraph, 0, 1)
 	position, paragraphStart, unitIndex, paragraphUnitStart := uint32(0), uint32(0), 0, 0
-	for position < uint32(len(text)) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	for position < uint32(len(text)) {
 		if err := budget.charge(1); err != nil {
 			return nil, err
 		}
@@ -324,7 +324,7 @@ func splitShapedParagraphs(text string, units []shapedClusterUnit, budget *shape
 	if unitIndex != len(units) {
 		return nil, ErrShapedLineInvalid
 	}
-	paragraphs = append(paragraphs, shapedParagraph{paragraphStart, uint32(len(text)), paragraphUnitStart, unitIndex, false}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	paragraphs = append(paragraphs, shapedParagraph{paragraphStart, uint32(len(text)), paragraphUnitStart, unitIndex, false})
 	return paragraphs, nil
 }
 
@@ -405,7 +405,7 @@ func appendShapedLine(layout *ShapedLineLayout, line ShapedLine, limits ShapedLi
 	if uint64(len(layout.Lines)) >= limits.MaxLines {
 		return newPlanningError(ErrShapedLineLimit, Diagnostic{Code: DiagnosticResourceLimit, Severity: SeverityError, Stage: StageLayout, Message: "shaped line count exceeds its limit"})
 	}
-	line.Index = uint32(len(layout.Lines)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	line.Index = uint32(len(layout.Lines))
 	layout.Lines = append(layout.Lines, line)
 	return nil
 }

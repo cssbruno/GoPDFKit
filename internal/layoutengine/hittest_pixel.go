@@ -51,7 +51,7 @@ func (p LayoutPlan) HitTestRasterPixel(query RasterPixelQuery) (RasterPixelHitTe
 			query.PixelX, query.PixelY, query.PixelWidth, query.PixelHeight)
 	}
 	if err := query.CaptureBounds.Validate(); err != nil {
-		return RasterPixelHitTest{}, fmt.Errorf("%w: capture bounds: %w", ErrHitTestRasterInvalid, err)
+		return RasterPixelHitTest{}, fmt.Errorf("%w: capture bounds: %v", ErrHitTestRasterInvalid, err)
 	}
 	if query.CaptureBounds.IsEmpty() {
 		return RasterPixelHitTest{}, fmt.Errorf("%w: capture bounds must be non-empty", ErrHitTestRasterInvalid)
@@ -59,15 +59,15 @@ func (p LayoutPlan) HitTestRasterPixel(query RasterPixelQuery) (RasterPixelHitTe
 
 	xOffset, err := rasterPixelCenterOffset(query.CaptureBounds.Width, query.PixelX, query.PixelWidth)
 	if err != nil {
-		return RasterPixelHitTest{}, fmt.Errorf("%w: x coordinate: %w", ErrHitTestRasterInvalid, err)
+		return RasterPixelHitTest{}, fmt.Errorf("%w: x coordinate: %v", ErrHitTestRasterInvalid, err)
 	}
 	yOffset, err := rasterPixelCenterOffset(query.CaptureBounds.Height, query.PixelY, query.PixelHeight)
 	if err != nil {
-		return RasterPixelHitTest{}, fmt.Errorf("%w: y coordinate: %w", ErrHitTestRasterInvalid, err)
+		return RasterPixelHitTest{}, fmt.Errorf("%w: y coordinate: %v", ErrHitTestRasterInvalid, err)
 	}
 	point, err := (Point{X: query.CaptureBounds.X, Y: query.CaptureBounds.Y}).Translate(xOffset, yOffset)
 	if err != nil {
-		return RasterPixelHitTest{}, fmt.Errorf("%w: mapped point: %w", ErrHitTestRasterInvalid, err)
+		return RasterPixelHitTest{}, fmt.Errorf("%w: mapped point: %v", ErrHitTestRasterInvalid, err)
 	}
 	hit, err := p.HitTestPage(query.Page, point)
 	if err != nil {

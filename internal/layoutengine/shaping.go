@@ -109,12 +109,12 @@ func (result ShapedText) Validate() error {
 		return ErrShapingInvalid
 	}
 	if err := result.Source.Validate(); err != nil {
-		return fmt.Errorf("%w: source: %w", ErrShapingInvalid, err)
+		return fmt.Errorf("%w: source: %v", ErrShapingInvalid, err)
 	}
 	if len(result.Glyphs) == 0 || len(result.FontRuns) == 0 {
 		return fmt.Errorf("%w: empty glyph or font run output", ErrShapingInvalid)
 	}
-	textBytes := uint32(len(result.Text)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	textBytes := uint32(len(result.Text))
 	var expectedGlyphStart uint32
 	textRanges := make([]UTF8Cluster, len(result.FontRuns))
 	for index, run := range result.FontRuns {
@@ -125,7 +125,7 @@ func (result ShapedText) Validate() error {
 		expectedGlyphStart += run.GlyphCount
 		textRanges[index] = UTF8Cluster{Start: run.TextStart, End: run.TextEnd}
 	}
-	if expectedGlyphStart != uint32(len(result.Glyphs)) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if expectedGlyphStart != uint32(len(result.Glyphs)) {
 		return fmt.Errorf("%w: font runs do not cover every glyph", ErrShapingInvalid)
 	}
 	sort.Slice(textRanges, func(i, j int) bool { return textRanges[i].Start < textRanges[j].Start })
@@ -153,7 +153,7 @@ func (result ShapedText) Validate() error {
 	}
 	for _, diagnostic := range result.Diagnostics {
 		if err := diagnostic.Validate(); err != nil {
-			return fmt.Errorf("%w: diagnostic: %w", ErrShapingInvalid, err)
+			return fmt.Errorf("%w: diagnostic: %v", ErrShapingInvalid, err)
 		}
 	}
 	return nil
@@ -163,7 +163,7 @@ func utf8Boundary(text string, offset uint32) bool {
 	if uint64(offset) > uint64(len(text)) {
 		return false
 	}
-	return offset == 0 || offset == uint32(len(text)) || utf8.RuneStart(text[offset]) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	return offset == 0 || offset == uint32(len(text)) || utf8.RuneStart(text[offset])
 }
 
 type ShapingLimits struct {
@@ -254,7 +254,7 @@ func (shaper CoreASCIIShaper) Shape(ctx context.Context, input ShapingInput, bud
 	}
 	return ShapedText{
 		Text: input.Text, Language: input.Language, Direction: input.Direction, Glyphs: glyphs,
-		FontRuns: []ShapedFontRun{{Font: input.Font, GlyphCount: uint32(len(glyphs)), TextEnd: uint32(len(input.Text))}}, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		FontRuns: []ShapedFontRun{{Font: input.Font, GlyphCount: uint32(len(glyphs)), TextEnd: uint32(len(input.Text))}},
 		Source:   input.Source,
 	}, nil
 }

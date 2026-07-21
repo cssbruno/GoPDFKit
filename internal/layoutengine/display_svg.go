@@ -118,7 +118,7 @@ func CaptureDisplayPlanSVGWithLimitsContext(ctx context.Context, plan LayoutPlan
 
 	page := plan.pages[pageNumber-1]
 	commandEnd, _ := page.Commands.end(len(plan.commands))
-	writer := debugGeometrySVGWriter{limit: int(limits.MaxOutputBytes)} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	writer := debugGeometrySVGWriter{limit: int(limits.MaxOutputBytes)}
 	writer.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 	writer.write("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 ")
 	writer.write(fixedSVGDecimal(page.Size.Width))
@@ -300,7 +300,7 @@ func fixedSVGScalarDecimal(value Fixed) string {
 	negative := value < 0
 	var magnitude uint64
 	if negative {
-		magnitude = uint64(-(value + 1)) + 1 // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		magnitude = uint64(-(value + 1)) + 1
 	} else {
 		magnitude = uint64(value)
 	}
@@ -355,7 +355,7 @@ func preflightDisplaySVGSourcesContext(ctx context.Context, resources []ImageRes
 			return nil, fmt.Errorf("%w: digest mismatch for %s", ErrDisplaySVGResource, resource.Digest)
 		}
 		config, format, err := image.DecodeConfig(&displaySVGContextReader{ctx: ctx, reader: bytes.NewReader(value)})
-		if err != nil || uint32(config.Width) != resource.PixelWidth || uint32(config.Height) != resource.PixelHeight || // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		if err != nil || uint32(config.Width) != resource.PixelWidth || uint32(config.Height) != resource.PixelHeight ||
 			(format != "png" && format != "jpeg") {
 			return nil, fmt.Errorf("%w: intrinsic dimensions or format mismatch for %s", ErrDisplaySVGResource, resource.Digest)
 		}

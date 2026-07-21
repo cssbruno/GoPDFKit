@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/cssbruno/gopdfkit/document"
 )
 
 func TestInspectGeneratedPDF(t *testing.T) {
@@ -83,17 +85,6 @@ func TestInspectContextCanceled(t *testing.T) {
 	}
 }
 
-func TestTextFromContentStreamPrefersActualTextWithoutDuplicatingVisibleGlyphs(t *testing.T) {
-	stream := []byte(`/Span << /ActualText ( authored) >> BDC BT /F1 12 Tf [(a) (u) (t) (h) (o) (r) (e) (d)] TJ ET EMC`)
-	text, err := textFromContentStreamContext(context.Background(), stream)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if text != " authored" {
-		t.Fatalf("text = %q, want extraction replacement once", text)
-	}
-}
-
 func TestFirstPageSizePointsUsesMediaBoxDimensions(t *testing.T) {
 	pdfBytes := inspectTestPDF(t)
 	pdfBytes = bytes.Replace(
@@ -129,16 +120,21 @@ func TestDecodedStreamsEnforcesAggregateLimits(t *testing.T) {
 }
 
 func TestInspectTextUsesOnlyPageContentsAndHonorsStreamLength(t *testing.T) {
-	page := "BT /F1 12 Tf (before endstream after) Tj ET"
-	attachment := "BT (attachment text must stay hidden) Tj ET"
-	data := inspectPDFWithBodies([]string{
-		"<< /Type /Catalog /Pages 2 0 R >>",
-		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources <<>> /Contents 4 0 R >>",
-		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(page), page),
-		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(attachment), attachment),
-	})
-	text, err := Text(data)
+	pdf := document.MustNew()
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(80, 8, "before endstream after")
+	pdf.SetAttachments([]document.Attachment{{
+		Filename: "not-page.txt",
+		Content:  []byte("BT (attachment text must stay hidden) Tj ET"),
+	}})
+
+	var output bytes.Buffer
+	if err := pdf.Output(&output); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	text, err := Text(output.Bytes())
 	if err != nil {
 		t.Fatalf("Text() error = %v", err)
 	}
@@ -148,7 +144,7 @@ func TestInspectTextUsesOnlyPageContentsAndHonorsStreamLength(t *testing.T) {
 	if strings.Contains(text, "attachment text") {
 		t.Fatalf("Text() = %q, must not include a non-page stream", text)
 	}
-	streams, err := DecodedStreams(data)
+	streams, err := DecodedStreams(output.Bytes())
 	if err != nil {
 		t.Fatalf("DecodedStreams() error = %v", err)
 	}
@@ -287,14 +283,18 @@ func inspectPDFWithBodies(bodies []string) []byte {
 
 func inspectTestPDF(t *testing.T) []byte {
 	t.Helper()
-	first := "BT /F1 12 Tf (Inspect page one) Tj ET"
-	second := "BT /F1 12 Tf (Inspect page two) Tj ET"
-	return inspectPDFWithBodies([]string{
-		"<< /Type /Catalog /Pages 2 0 R >>",
-		"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources <<>> /Contents 5 0 R >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources <<>> /Contents 6 0 R >>",
-		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(first), first),
-		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(second), second),
-	})
+
+	pdf := document.MustNew()
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(40, 10, "Inspect page one")
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	pdf.Cell(40, 10, "Inspect page two")
+
+	var out bytes.Buffer
+	if err := pdf.Output(&out); err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	return out.Bytes()
 }

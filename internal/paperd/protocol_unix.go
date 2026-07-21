@@ -51,16 +51,14 @@ type unixProtocolPeer struct {
 // UnixProtocolListener owns one restricted local socket and its bounded
 // connection dispatcher.
 type UnixProtocolListener struct {
-	listener  *net.UnixListener
-	path      string
-	file      os.FileInfo
-	server    *ProtocolServer
-	allowed   map[uint32]struct{}
-	limit     chan struct{}
-	timeout   time.Duration
-	peer      func(*net.UnixConn) (unixProtocolPeer, error)
-	closeOnce sync.Once
-	closeErr  error
+	listener *net.UnixListener
+	path     string
+	file     os.FileInfo
+	server   *ProtocolServer
+	allowed  map[uint32]struct{}
+	limit    chan struct{}
+	timeout  time.Duration
+	peer     func(*net.UnixConn) (unixProtocolPeer, error)
 }
 
 // ListenUnixProtocol creates a fail-closed local socket adapter. Authentication,
@@ -109,7 +107,7 @@ func ListenUnixProtocol(path string, server *ProtocolServer, options UnixProtoco
 	}
 	allowed := make(map[uint32]struct{}, len(options.AllowedUIDs)+1)
 	if len(options.AllowedUIDs) == 0 {
-		allowed[uint32(os.Geteuid())] = struct{}{} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		allowed[uint32(os.Geteuid())] = struct{}{}
 	} else {
 		for _, uid := range options.AllowedUIDs {
 			allowed[uid] = struct{}{}
@@ -153,10 +151,10 @@ func RoundTripUnixProtocolContext(ctx context.Context, path string, request []by
 		_ = connection.Close()
 		return ProtocolResponse{}, workspaceError("PROTOCOL_SOCKET_CONNECT", "protocol socket returned an invalid connection", ErrProtocolSocket)
 	}
-	defer func() { _ = unixConnection.Close() }()
+	defer unixConnection.Close()
 	allowed := make(map[uint32]struct{}, len(options.AllowedServerUIDs)+1)
 	if len(options.AllowedServerUIDs) == 0 {
-		allowed[uint32(os.Geteuid())] = struct{}{} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		allowed[uint32(os.Geteuid())] = struct{}{}
 	} else {
 		for _, uid := range options.AllowedServerUIDs {
 			allowed[uid] = struct{}{}
@@ -200,15 +198,13 @@ func (listener *UnixProtocolListener) Close() error {
 	if listener == nil || listener.listener == nil {
 		return nil
 	}
-	listener.closeOnce.Do(func() {
-		listener.closeErr = listener.listener.Close()
-		if info, statErr := os.Lstat(listener.path); statErr == nil && info.Mode()&os.ModeSocket != 0 && os.SameFile(listener.file, info) {
-			if removeErr := os.Remove(listener.path); listener.closeErr == nil {
-				listener.closeErr = removeErr
-			}
+	err := listener.listener.Close()
+	if info, statErr := os.Lstat(listener.path); statErr == nil && info.Mode()&os.ModeSocket != 0 && os.SameFile(listener.file, info) {
+		if removeErr := os.Remove(listener.path); err == nil {
+			err = removeErr
 		}
-	})
-	return listener.closeErr
+	}
+	return err
 }
 
 // Serve accepts bounded one-request connections until ctx is cancelled. Each
@@ -251,7 +247,7 @@ func (listener *UnixProtocolListener) Serve(ctx context.Context) error {
 }
 
 func (listener *UnixProtocolListener) serveConnection(ctx context.Context, connection *net.UnixConn) error {
-	defer func() { _ = connection.Close() }()
+	defer connection.Close()
 	closed := make(chan struct{})
 	go func() {
 		select {
@@ -303,7 +299,7 @@ func readProtocolFrame(reader io.Reader, limit int) ([]byte, error) {
 		return nil, workspaceError("PROTOCOL_SOCKET_FRAME", "protocol frame header is incomplete", errors.Join(ErrProtocolSocket, err))
 	}
 	size := binary.BigEndian.Uint32(header[:])
-	if size == 0 || uint64(size) > uint64(limit) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	if size == 0 || uint64(size) > uint64(limit) {
 		return nil, workspaceError("PROTOCOL_SOCKET_LIMIT", "protocol frame exceeds its byte bound", ErrLimit)
 	}
 	payload := make([]byte, int(size))
@@ -318,7 +314,7 @@ func writeProtocolFrame(writer io.Writer, payload []byte, limit int) error {
 		return workspaceError("PROTOCOL_SOCKET_LIMIT", "protocol response frame exceeds its byte bound", ErrLimit)
 	}
 	var header [4]byte
-	binary.BigEndian.PutUint32(header[:], uint32(len(payload))) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	binary.BigEndian.PutUint32(header[:], uint32(len(payload)))
 	if err := writeProtocolBytes(writer, header[:]); err != nil {
 		return workspaceError("PROTOCOL_SOCKET_FRAME", "protocol response header could not be written", errors.Join(ErrProtocolSocket, err))
 	}

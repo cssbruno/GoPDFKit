@@ -105,7 +105,10 @@ func TypedLayoutInventory() TypedCharacterizationInventory {
 		{Package: "layout", Receiver: "*LayoutDocument", Name: "AddBlock", Signature: "func(Block)", Status: TypedBehaviorDocumented},
 		{Package: "layout", Name: "NormalizeBlock", Signature: "func(Block) (Block, bool)", Status: TypedBehaviorDocumented},
 		{Package: "layout", Name: "NormalizeBlocks", Signature: "func([]Block) []Block", Status: TypedBehaviorDocumented},
-		{Package: "document", Receiver: "*Document", Name: "WriteDocument", Signature: "func(*layout.LayoutDocument)", Status: TypedBehaviorDocumented, Notes: "unified immutable-plan lowering adapter; unsupported receiver/model contracts fail without a legacy renderer"},
+		{Package: "layout", Name: "NewMeasureContext", Signature: "func(float64, TextStyle) MeasureContext", Status: TypedBehaviorDocumented},
+		{Package: "layout", Name: "MeasureBlocks", Signature: "func(MeasureContext, []Block) []BlockMeasurement", Status: TypedBehaviorDocumented},
+		{Package: "layout", Name: "MeasureBlock", Signature: "func(MeasureContext, Block) BlockMeasurement", Status: TypedBehaviorDocumented},
+		{Package: "document", Receiver: "*Document", Name: "WriteDocument", Signature: "func(*layout.LayoutDocument)", Status: TypedBehaviorDocumented, Notes: "unified immutable-plan default with private observable whole-document compatibility fallback"},
 		{Package: "document", Receiver: "*Document", Name: "PlanLayoutDocument", Signature: "func(*layout.LayoutDocument) (LayoutDocumentPlan, error)", Status: TypedBehaviorDocumented},
 		{Package: "document", Receiver: "*Document", Name: "PlanLayoutDocumentContext", Signature: "func(context.Context, *layout.LayoutDocument) (LayoutDocumentPlan, error)", Status: TypedBehaviorDocumented},
 		{Package: "document", Receiver: "*Document", Name: "WriteLayoutDocumentPlan", Signature: "func(LayoutDocumentPlan) (int, error)", Status: TypedBehaviorDocumented},
@@ -136,13 +139,13 @@ func TypedLayoutInventory() TypedCharacterizationInventory {
 		{Scope: "TextSegment.Link", Name: "canonical external http, https, and mailto links", Status: TypedBehaviorDocumented},
 		{Scope: "TextSegment.Destination", Name: "canonical named internal destinations and #name links resolved from finalized glyph geometry", Status: TypedBehaviorDocumented},
 		{Scope: "ImageBlock", Name: "bounded content-addressed inline PNG and JPEG", Status: TypedBehaviorDocumented},
-		{Scope: "HTML.SVG", Name: "HTML inline SVG uses bounded unified display-plan lowering; unsupported SVG contracts are rejected", Status: TypedBehaviorDocumented},
+		{Scope: "HTML.SVG", Name: "legacy HTML renders a bounded SVG subset; strict unified lowering is pending", Status: TypedBehaviorDeprecated},
 		{Scope: "HTML.Forms", Name: "HTML form controls are rejected by strict unified planning", Status: TypedBehaviorUnsupported},
 		{Scope: "QRVerificationBlock", Name: "bounded content-addressed QR image plus verification text and link", Status: TypedBehaviorDocumented},
 		{Scope: "HeadingBlock.Level", Name: "out-of-range levels are currently accepted by exact planning", Status: TypedBehaviorAccidental},
-		{Scope: "ParagraphBlock", Name: "an indivisible line over an empty body is emitted once with oversized-line evidence", Status: TypedBehaviorDocumented},
-		{Scope: "TableBlock", Name: "sparse rows materialize deterministic empty cells while bounded colspan and rowspan occupancy remains exact", Status: TypedBehaviorDocumented},
-		{Scope: "WriteDocument", Name: "supported fresh documents use immutable unified planning; unsupported receiver or model contracts store an error without a legacy renderer", Status: TypedBehaviorDocumented},
+		{Scope: "ParagraphBlock", Name: "an indivisible line one fixed unit over an empty body is unsupported by the typed adapter", Status: TypedBehaviorUnsupported},
+		{Scope: "TableBlock", Name: "irregular wide/rowspan cohorts outside the represented contract are rejected", Status: TypedBehaviorUnsupported},
+		{Scope: "WriteDocument", Name: "supported fresh documents use immutable unified planning; compatibility fallback remains whole-document and stores errors on the receiver", Status: TypedBehaviorDocumented},
 	}
 	return TypedCharacterizationInventory{SchemaVersion: TypedCharacterizationSchemaVersion,
 		EntryPoints: entries, Blocks: blocks, Behaviors: behaviors, Fixtures: typedFixtureInventory()}
@@ -344,7 +347,7 @@ func characterizationPDFOutputEvidence(pdf []byte, pages int) (CharacterizationP
 		text.WriteString(value)
 	}
 	digest := sha256.Sum256(pdf)
-	count := func(token string) uint32 { return uint32(bytes.Count(pdf, []byte(token))) } // #nosec G115 -- low-width representation is explicitly normalized before packing
+	count := func(token string) uint32 { return uint32(bytes.Count(pdf, []byte(token))) }
 	return CharacterizationPDFEvidence{SHA256: hex.EncodeToString(digest[:]), Bytes: uint64(len(pdf)), Text: text.String(), PageText: pageText,
 		Links: count("/Subtype /Link"), Destinations: count("/Dest "), Widgets: count("/Subtype /Widget"),
 		Attachments: count("/Filespec"), StructureTrees: count("/StructTreeRoot"), MarkedContent: count(" BDC"),

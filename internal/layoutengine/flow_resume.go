@@ -153,14 +153,14 @@ func ResumeVerticalFlowContext(ctx context.Context, input VerticalFlowInput, tok
 			paginator.input.Breaks = append(paginator.input.Breaks, *decision)
 		}
 	}
-	nextBlock := uint32(end)                       // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-	done := nextBlock == uint32(len(input.Blocks)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	nextBlock := uint32(end)
+	done := nextBlock == uint32(len(input.Blocks))
 	next := tokenFromPaginator(owner, nextBlock, done, &paginator)
 	snapshot := cloneVerticalFlowPlanInput(paginator.input)
 	snapshot.Pages = append(snapshot.Pages, PlannedPage{
 		Number: paginator.pageNumber, Size: paginator.pageSize,
-		Fragments: IndexRange{Start: uint32(paginator.pageFragmentStart), Count: uint32(len(snapshot.Fragments) - paginator.pageFragmentStart)}, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-		Commands:  IndexRange{Start: uint32(paginator.pageCommandStart), Count: uint32(len(snapshot.Commands) - paginator.pageCommandStart)},    // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		Fragments: IndexRange{Start: uint32(paginator.pageFragmentStart), Count: uint32(len(snapshot.Fragments) - paginator.pageFragmentStart)},
+		Commands:  IndexRange{Start: uint32(paginator.pageCommandStart), Count: uint32(len(snapshot.Commands) - paginator.pageCommandStart)},
 	})
 	plan, err := NewLayoutPlan(snapshot)
 	if err != nil {
@@ -192,7 +192,7 @@ func paginatorFromToken(input VerticalFlowInput, limits VerticalFlowLimits, budg
 }
 
 func validateVerticalFlowToken(token VerticalFlowBreakToken, owner [sha256.Size]byte, input VerticalFlowInput, limits VerticalFlowLimits) error {
-	if !token.valid || token.complete || token.owner != owner || token.next > uint32(len(input.Blocks)) || // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if !token.valid || token.complete || token.owner != owner || token.next > uint32(len(input.Blocks)) ||
 		token.workUsed > limits.MaxWork || token.state.pageNumber == 0 || token.state.pageNumber > limits.MaxPages ||
 		token.state.pageFragmentStart < 0 || token.state.pageFragmentStart > len(token.state.input.Fragments) ||
 		token.state.pageCommandStart < 0 || token.state.pageCommandStart > len(token.state.input.Commands) ||

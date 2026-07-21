@@ -151,17 +151,17 @@ func (p LayoutPlan) QueryStructure(query StructuralQuery) (StructuralQueryResult
 	}
 	if query.Key != "" {
 		if err := validateTextIdentity("structural query node key", string(query.Key)); err != nil {
-			return StructuralQueryResult{}, fmt.Errorf("%w: %w", ErrStructuralQueryInvalidSelector, err)
+			return StructuralQueryResult{}, fmt.Errorf("%w: %v", ErrStructuralQueryInvalidSelector, err)
 		}
 	}
 	if query.DiagnosticCode != "" {
 		if err := query.DiagnosticCode.validate(); err != nil {
-			return StructuralQueryResult{}, fmt.Errorf("%w: %w", ErrStructuralQueryInvalidSelector, err)
+			return StructuralQueryResult{}, fmt.Errorf("%w: %v", ErrStructuralQueryInvalidSelector, err)
 		}
 	}
 	if query.Instance != "" {
 		if err := validateTextIdentity("structural query instance ID", string(query.Instance)); err != nil {
-			return StructuralQueryResult{}, fmt.Errorf("%w: %w", ErrStructuralQueryInvalidSelector, err)
+			return StructuralQueryResult{}, fmt.Errorf("%w: %v", ErrStructuralQueryInvalidSelector, err)
 		}
 	}
 	if query.Role != "" && !query.Role.valid() {
@@ -169,7 +169,7 @@ func (p LayoutPlan) QueryStructure(query StructuralQuery) (StructuralQueryResult
 	}
 	if query.Language != "" {
 		if err := validateSemanticLanguage(query.Language); err != nil {
-			return StructuralQueryResult{}, fmt.Errorf("%w: %w", ErrStructuralQueryInvalidSelector, err)
+			return StructuralQueryResult{}, fmt.Errorf("%w: %v", ErrStructuralQueryInvalidSelector, err)
 		}
 	}
 	if query.HeadingLevel > 6 {
@@ -261,17 +261,17 @@ func (p LayoutPlan) QueryStructure(query StructuralQuery) (StructuralQueryResult
 	for _, page := range p.pages {
 		fragmentEnd, _ := page.Fragments.end(len(p.fragments))
 		for index := int(page.Fragments.Start); index < fragmentEnd; index++ {
-			fragmentPageIndexes[p.fragments[index].ID] = uint32(index - int(page.Fragments.Start)) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+			fragmentPageIndexes[p.fragments[index].ID] = uint32(index - int(page.Fragments.Start))
 		}
 		lineEnd, _ := page.Lines.end(len(p.lines))
 		for index := int(page.Lines.Start); index < lineEnd; index++ {
 			linePages[index] = page.Number
-			linePageIndexes[index] = uint32(index - int(page.Lines.Start)) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+			linePageIndexes[index] = uint32(index - int(page.Lines.Start))
 		}
 		commandEnd, _ := page.Commands.end(len(p.commands))
 		for index := int(page.Commands.Start); index < commandEnd; index++ {
 			commandPages[index] = page.Number
-			commandPageIndexes[index] = uint32(index - int(page.Commands.Start)) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+			commandPageIndexes[index] = uint32(index - int(page.Commands.Start))
 		}
 	}
 
@@ -301,7 +301,7 @@ func (p LayoutPlan) QueryStructure(query StructuralQuery) (StructuralQueryResult
 		}
 		matchedPages[fragment.Page] = struct{}{}
 		result.Summary.Fragments.Matches++
-		if uint32(len(result.Fragments)) < query.MaxResults { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(result.Fragments)) < query.MaxResults {
 			result.Fragments = append(result.Fragments, StructuralFragment{
 				Index: uint64(index), PageIndex: fragmentPageIndexes[fragment.ID], Provenance: p.fragmentProvenance[index], Fragment: fragment,
 			})
@@ -313,7 +313,7 @@ func (p LayoutPlan) QueryStructure(query StructuralQuery) (StructuralQueryResult
 			continue
 		}
 		result.Summary.Lines.Matches++
-		if uint32(len(result.Lines)) < query.MaxResults { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(result.Lines)) < query.MaxResults {
 			result.Lines = append(result.Lines, StructuralLine{
 				Index: uint64(index), Page: linePages[index], PageIndex: linePageIndexes[index],
 				Node: fragment.Node, Key: fragment.Key, Instance: fragment.Instance, Region: fragment.Region, Provenance: p.lineProvenance[index], Line: line,
@@ -335,7 +335,7 @@ func (p LayoutPlan) QueryStructure(query StructuralQuery) (StructuralQueryResult
 			continue
 		}
 		result.Summary.Commands.Matches++
-		if uint32(len(result.Commands)) < query.MaxResults { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(result.Commands)) < query.MaxResults {
 			projection := StructuralCommand{
 				Index: uint64(index), Page: page, PageIndex: commandPageIndexes[index], Command: command,
 			}
@@ -357,7 +357,7 @@ func (p LayoutPlan) QueryStructure(query StructuralQuery) (StructuralQueryResult
 			continue
 		}
 		result.Summary.Breaks.Matches++
-		if uint32(len(result.Breaks)) < query.MaxResults { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(result.Breaks)) < query.MaxResults {
 			result.Breaks = append(result.Breaks, StructuralBreak{Index: uint64(index), Decision: decision})
 		}
 	}
@@ -382,7 +382,7 @@ func (p LayoutPlan) QueryStructure(query StructuralQuery) (StructuralQueryResult
 			continue
 		}
 		result.Summary.Diagnostics.Matches++
-		if uint32(len(result.Diagnostics)) < query.MaxResults { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(result.Diagnostics)) < query.MaxResults {
 			result.Diagnostics = append(result.Diagnostics, StructuralDiagnostic{
 				Index: uint64(index), Diagnostic: cloneDiagnostic(diagnostic),
 			})
@@ -401,7 +401,7 @@ func (p LayoutPlan) QueryStructure(query StructuralQuery) (StructuralQueryResult
 			continue
 		}
 		result.Summary.Semantics.Matches++
-		if uint32(len(result.Semantics)) < query.MaxResults { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(result.Semantics)) < query.MaxResults {
 			result.Semantics = append(result.Semantics, StructuralSemantic{Index: uint64(index), Node: node})
 		}
 	}
@@ -411,12 +411,12 @@ func (p LayoutPlan) QueryStructure(query StructuralQuery) (StructuralQueryResult
 			continue
 		}
 		result.Summary.ReadingOrder.Matches++
-		if uint32(len(result.ReadingOrder)) < query.MaxResults { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(result.ReadingOrder)) < query.MaxResults {
 			result.ReadingOrder = append(result.ReadingOrder, StructuralReadingOccurrence{Index: uint64(index), Occurrence: occurrence})
 		}
 	}
 
-	result.Summary.Pages = uint32(len(matchedPages)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	result.Summary.Pages = uint32(len(matchedPages))
 	finalizeStructuralCount(&result.Summary.Fragments, len(result.Fragments))
 	finalizeStructuralCount(&result.Summary.Lines, len(result.Lines))
 	finalizeStructuralCount(&result.Summary.Commands, len(result.Commands))
@@ -467,14 +467,14 @@ func (p LayoutPlan) QueryBreakDetailsContext(ctx context.Context, query Structur
 		if work > limits.MaxWork {
 			return StructuralBreakDetailResult{}, ErrBreakDetailLimit
 		}
-		result.Details = append(result.Details, detailForBreak(uint32(selected.Index), selected.Decision)) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		result.Details = append(result.Details, detailForBreak(uint32(selected.Index), selected.Decision))
 	}
 	return result, nil
 }
 
 func finalizeStructuralCount(count *StructuralQueryCount, returned int) {
-	count.Returned = uint32(returned)                  // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-	count.Truncated = uint64(returned) < count.Matches // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	count.Returned = uint32(returned)
+	count.Truncated = uint64(returned) < count.Matches
 }
 
 func diagnosticMatchesStructuralQuery(diagnostic Diagnostic, query StructuralQuery, selected Fragment,

@@ -1,8 +1,7 @@
 # Display raster v5 performance evidence
 
 Date: 2026-07-18  
-Candidate source: `ed1ee08` plus `27eba1c` (`darwin/arm64`, Apple M2,
-Go 1.26.5)  
+Candidate: `c2b1ba9` (`darwin/arm64`, Apple M2, Go 1.26.5)
 Workload: deterministic 480×320 mostly-white document page with text-like
 rules, using zlib BestSpeed in both cohorts.
 
@@ -44,17 +43,16 @@ Raw evidence hashes:
 | candidate benchmark | `9f3625e5d169bd15ee8a51184118feb88503be739d4e23741207d7e057e701e6` |
 | legacy allocation profile | `b0200221271fb02faeb5c90751abb5ab5cbf2e2a2ce32593640deddd0837a410` |
 | candidate allocation profile | `657f0bb1f1b52047ceb63dd7f6ee8b35ed2e4c4460846ffd59d29e7f1f1b279a` |
-| passing WASM latency report | `c87e6da658706e2ae3770d17192125ef4eb8e9a93fa9cf6d49fda3616e8f7f` |
+| passing WASM latency report | `cc8e7b8ec84982be3466bae69f5ed72ef59077b4b0968679a21164690c9044d5` |
 
-The final ten-sample Paper Studio browser/WASM budget also passes on renderer
-`layoutengine/go-display-raster@5`. The candidate serves one deterministic
-gzip module, initializes and paints in a Worker, transfers the resulting
-`ImageBitmap`, debounces zoom rendering, uses device-pixel-ratio-aware fit-page
-and fit-width projection, and retains at most six decoded page bitmaps. Cold
-workspace is 24.264 ms, WASM initialization is 60.924 ms, first visible page is
-59.066 ms, and warm visible-update p95 is 17.066 ms against the 100 ms budget.
-Change notification is 253.807 ms and incremental workspace refresh is 0.992
-ms. Two attempted shared paint-state caches had
-produced reproducible 109–121 ms p95 failures and remain removed; the native
-zlib pool and digest-validated display-resource cache are retained. The
-generated report is `artifacts/paper-studio-wasm-latency.json`.
+The ten-sample Paper Studio Node/WASM budget also passes on renderer
+`layoutengine/go-display-raster@5`. Relative to the pinned v2 baseline, first
+visible page time remains within budget at 143.810 ms. Warm visible-update p95
+is 86.744 ms: slower than the old 58.642 ms sample but below the calibrated
+100 ms budget. A preceding run under host contention missed at 106.622 ms, so
+the evidence does not claim a WASM speedup. Two attempted shared paint-state
+caches produced reproducible 109–121 ms p95 failures and were removed. The
+retained cache reuses only digest-validated decoded resources for the same plan
+identity. All cold, initialization, notification, and incremental-workspace
+budgets pass. The generated report is
+`artifacts/paper-studio-wasm-latency.json`.

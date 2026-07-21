@@ -138,7 +138,7 @@ func (diff LayoutPlanDiff) CanonicalJSON() ([]byte, error) {
 }
 
 func countPair(before, after int) PlanDiffCount {
-	return PlanDiffCount{Before: uint64(before), After: uint64(after)} // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	return PlanDiffCount{Before: uint64(before), After: uint64(after)}
 }
 
 func diffPages(diff *LayoutPlanDiff, before, after []PlannedPage, limit uint64) {
@@ -244,7 +244,7 @@ func fragmentDiffKeyLess(left, right FragmentDiffKey) bool {
 }
 
 func jsonEqual(left, right any) bool {
-	leftJSON, leftErr := json.Marshal(left)
-	rightJSON, rightErr := json.Marshal(right)
-	return leftErr == nil && rightErr == nil && string(leftJSON) == string(rightJSON)
+	leftJSON, _ := json.Marshal(left)
+	rightJSON, _ := json.Marshal(right)
+	return string(leftJSON) == string(rightJSON)
 }

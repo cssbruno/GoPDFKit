@@ -447,20 +447,18 @@ func (p *paperParser) validateNode(node *Node, depth int) {
 	if node.Kind == NodeText || node.Kind == NodeValue || node.Kind == NodeArg {
 		if node.Value == nil {
 			code, subject, hint := "PAPER_TEXT_VALUE", "text", "write text: \"Your content\""
-			switch node.Kind {
-			case NodeValue:
+			if node.Kind == NodeValue {
 				code, subject, hint = "PAPER_SCENARIO_VALUE", "scenario value", "write value @name: \"content\""
-			case NodeArg:
+			} else if node.Kind == NodeArg {
 				code, subject, hint = "PAPER_COMPONENT_ARG_VALUE", "component argument", "write arg @name: value"
 			}
 			p.add(code, subject+" requires an inline scalar value", hint, node.HeaderSpan)
 		}
 		if len(node.Members) != 0 {
 			code, subject, hint := "PAPER_TEXT_BLOCK", "text", "move properties to paragraph or heading"
-			switch node.Kind {
-			case NodeValue:
+			if node.Kind == NodeValue {
 				code, subject, hint = "PAPER_SCENARIO_VALUE_BLOCK", "scenario value", "use object or keyed-list for nested fixture data"
-			case NodeArg:
+			} else if node.Kind == NodeArg {
 				code, subject, hint = "PAPER_COMPONENT_ARG_BLOCK", "component argument", "arguments are scalar leaves"
 			}
 			p.add(code, subject+" cannot contain an indented block", hint, node.Span)

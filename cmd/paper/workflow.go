@@ -136,7 +136,7 @@ func readWorkflowFile(name string, stdin io.Reader, limit int) ([]byte, error) {
 	if info.Size() < 0 || info.Size() > int64(limit) {
 		return nil, errors.New("input exceeds limit")
 	}
-	return os.ReadFile(name) // #nosec G304 -- name is the explicit CLI input path after size/type validation.
+	return os.ReadFile(name)
 }
 
 func workflowHash(value []byte) string {

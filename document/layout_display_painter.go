@@ -88,14 +88,8 @@ type preparedDisplayCommand struct {
 }
 
 type preparedDisplaySemantic struct {
-	id               layoutengine.SemanticNodeID
-	role             string
-	alt              string
-	actual           string
-	lang             string
-	header           bool
-	scope            string
-	rowSpan, colSpan uint32
+	role string
+	alt  string
 }
 
 type preparedDisplayImageCrop struct {
@@ -110,13 +104,12 @@ type preparedDisplayPage struct {
 }
 
 type preparedDisplayPlanPDF struct {
-	fonts            map[layoutengine.FontResourceID]preparedCorePlanFont
-	fontOrder        []layoutengine.FontResourceID
-	images           map[layoutengine.ImageResourceID]preparedDisplayImage
-	imageOrder       []layoutengine.ImageResourceID
-	pages            []preparedDisplayPage
-	destinations     []layoutengine.PlannedDestination
-	documentLanguage string
+	fonts        map[layoutengine.FontResourceID]preparedCorePlanFont
+	fontOrder    []layoutengine.FontResourceID
+	images       map[layoutengine.ImageResourceID]preparedDisplayImage
+	imageOrder   []layoutengine.ImageResourceID
+	pages        []preparedDisplayPage
+	destinations []layoutengine.PlannedDestination
 }
 
 // paintDisplayLayoutPlanPDF is the initial mixed text/image production sink.
@@ -170,36 +163,7 @@ func typedPDFSemanticRole(node layoutengine.SemanticNode) string {
 	}
 }
 
-// ensureTaggedListBody adds the PDF/UA list-item children that are implicit in
-// the renderer-neutral semantic tree. The planned text remains owned by the
-// existing list item content, but the tagged PDF gets the required Lbl/LBody
-// siblings without changing layout geometry or plan identity.
-func (f *Document) ensureTaggedListBody(item *taggedElement) *taggedElement {
-	if item == nil || item.Role != taggedRoleLI {
-		return item
-	}
-	var body *taggedElement
-	for _, child := range item.Children {
-		if child == nil {
-			continue
-		}
-		switch child.Role {
-		case taggedRoleLbl:
-		case taggedRoleLBody:
-			body = child
-		}
-	}
-	if body != nil {
-		return body
-	}
-	label := &taggedElement{Role: taggedRoleLbl, MCID: -1, Parent: item}
-	body = &taggedElement{Role: taggedRoleLBody, MCID: -1, Parent: item}
-	item.Children = append(item.Children, label, body)
-	f.tagged.elems = append(f.tagged.elems, label, body)
-	return body
-}
-
-func (f *Document) beginPreparedSemantic(path []preparedDisplaySemantic, elements map[layoutengine.SemanticNodeID]*taggedElement) func() {
+func (f *Document) beginPreparedSemantic(path []preparedDisplaySemantic) func() {
 	if !f.tagged.enabled || len(path) == 0 {
 		return func() {}
 	}
@@ -208,46 +172,10 @@ func (f *Document) beginPreparedSemantic(path []preparedDisplaySemantic, element
 		f.BeginArtifact()
 		return f.EndArtifact
 	}
-	var parent *taggedElement
-	for _, semantic := range path {
-		var elem *taggedElement
-		if semantic.id.Valid() {
-			elem = elements[semantic.id]
-		}
-		if elem == nil {
-			elem = &taggedElement{Role: semantic.role, MCID: -1, Alt: semantic.alt,
-				ActualText: semantic.actual, Lang: semantic.lang}
-			if semantic.header || semantic.scope != "" || semantic.rowSpan > 1 || semantic.colSpan > 1 {
-				elem.Table = normalizeTaggedTableAttributes(semantic.role, taggedTableAttributes{
-					Scope: semantic.scope, RowSpan: semantic.rowSpan, ColSpan: semantic.colSpan,
-				})
-			}
-			if parent != nil {
-				elem.Parent = parent
-				parent.Children = append(parent.Children, elem)
-			}
-			f.tagged.elems = append(f.tagged.elems, elem)
-			if semantic.id.Valid() {
-				elements[semantic.id] = elem
-			}
-		}
-		if semantic.role == taggedRoleLI {
-			parent = f.ensureTaggedListBody(elem)
-			continue
-		}
-		parent = elem
+	for _, semantic := range path[:len(path)-1] {
+		f.BeginStructure(semantic.role)
 	}
-	if parent == nil {
-		return func() {}
-	}
-	mcid := f.registerPreparedSemanticElement(parent)
-	if mcid < 0 {
-		return func() {}
-	}
-	if leaf.role == taggedRoleLink {
-		f.tagged.pendingLinkElem = parent
-	}
-	begin := f.beginPreparedTaggedContent(parent.Role, mcid)
+	begin := f.beginTaggedContent(taggedContentOptions{Role: leaf.role, AltText: leaf.alt})
 	if len(begin) != 0 {
 		f.outbytes(begin)
 	}
@@ -255,15 +183,18 @@ func (f *Document) beginPreparedSemantic(path []preparedDisplaySemantic, element
 		if len(begin) != 0 {
 			f.outbytes(taggedEndMarkedContent)
 		}
+		for range path[:len(path)-1] {
+			f.EndStructure()
+		}
 	}
 }
 
-func (f *Document) paintPreparedSemanticContent(path []preparedDisplaySemantic, elements map[layoutengine.SemanticNodeID]*taggedElement, content []byte) {
+func (f *Document) paintPreparedSemanticContent(path []preparedDisplaySemantic, content []byte) {
 	if len(path) == 0 || !f.tagged.enabled {
 		f.outbytes(content)
 		return
 	}
-	closeSemantic := f.beginPreparedSemantic(path, elements)
+	closeSemantic := f.beginPreparedSemantic(path)
 	f.outbytes(content)
 	closeSemantic()
 }
@@ -280,8 +211,6 @@ func (f *Document) paintPreparedDisplayLayoutPlanPDFAtCurrentPage(prepared prepa
 		f.requirePDFVersion(image.minVersion)
 	}
 	destinationLinks := make(map[layoutengine.DestinationID]int, len(prepared.destinations))
-	semanticElements := make(map[layoutengine.SemanticNodeID]*taggedElement)
-	f.tagged.documentLanguage = prepared.documentLanguage
 	for _, destination := range prepared.destinations {
 		destinationLinks[destination.ID] = f.AddLink()
 	}
@@ -330,13 +259,13 @@ func (f *Document) paintPreparedDisplayLayoutPlanPDFAtCurrentPage(prepared prepa
 					f.out("q")
 					f.SetAlpha(run.Opacity.Points(), "Normal")
 				}
-				f.paintPreparedSemanticContent(command.semantic, semanticElements, content)
+				f.paintPreparedSemanticContent(command.semantic, content)
 				if run.Opacity != 0 {
 					f.out("Q")
 				}
 				previousRun, previousRunSet = command.run, true
 			case layoutengine.CommandImage:
-				closeSemantic := f.beginPreparedSemantic(command.semantic, semanticElements)
+				closeSemantic := f.beginPreparedSemantic(command.semantic)
 				if command.image.Opacity != 0 {
 					f.out("q")
 					f.SetAlpha(command.image.Opacity.Points(), "Normal")
@@ -357,7 +286,7 @@ func (f *Document) paintPreparedDisplayLayoutPlanPDFAtCurrentPage(prepared prepa
 				}
 				closeSemantic()
 			case layoutengine.CommandLink:
-				closeSemantic := f.beginPreparedSemantic(append(command.semantic, preparedDisplaySemantic{role: "Link"}), semanticElements)
+				closeSemantic := f.beginPreparedSemantic(append(command.semantic, preparedDisplaySemantic{role: "Link"}))
 				bounds := command.link.Bounds
 				x := f.PointConvert(bounds.X.Points())
 				y := f.PointConvert(bounds.Y.Points())
@@ -413,16 +342,12 @@ func (f *Document) preflightDisplayLayoutPlanPDFResourcesContextForTarget(ctx co
 	projection := plan.Projection()
 	semanticByFragment := make(map[layoutengine.FragmentID][]preparedDisplaySemantic, len(projection.SemanticFragments))
 	semanticNodes := make(map[layoutengine.SemanticNodeID]layoutengine.SemanticNode, len(projection.SemanticNodes))
-	documentLanguage := ""
 	for _, node := range projection.SemanticNodes {
 		semanticNodes[node.ID] = node
-		if node.Role == layoutengine.SemanticRoleDocument {
-			documentLanguage = node.Attributes.Language
-		}
 	}
 	for _, association := range projection.SemanticFragments {
 		if semanticNodes[association.Semantic].Role == layoutengine.SemanticRoleArtifact {
-			semanticByFragment[association.Fragment] = []preparedDisplaySemantic{{id: association.Semantic, role: "Artifact"}}
+			semanticByFragment[association.Fragment] = []preparedDisplaySemantic{{role: "Artifact"}}
 			continue
 		}
 		var reversed []preparedDisplaySemantic
@@ -431,11 +356,7 @@ func (f *Document) preflightDisplayLayoutPlanPDFResourcesContextForTarget(ctx co
 			if node.Role != layoutengine.SemanticRoleDocument && node.Role != layoutengine.SemanticRoleArtifact {
 				role := typedPDFSemanticRole(node)
 				if role != "" {
-					reversed = append(reversed, preparedDisplaySemantic{id: node.ID, role: role,
-						alt: node.Attributes.AlternateText, actual: node.Attributes.ActualText,
-						lang: node.Attributes.Language, header: node.Attributes.TableHeader,
-						scope: node.Attributes.TableScope, rowSpan: node.Attributes.TableRowSpan,
-						colSpan: node.Attributes.TableColumnSpan})
+					reversed = append(reversed, preparedDisplaySemantic{role: role, alt: node.Attributes.AlternateText})
 				}
 			}
 			id = node.Parent
@@ -450,13 +371,12 @@ func (f *Document) preflightDisplayLayoutPlanPDFResourcesContextForTarget(ctx co
 		return preparedDisplayPlanPDF{}, fmt.Errorf("%w: %d > %d", ErrPageLimitExceeded, len(projection.Pages), f.limits.MaxPages)
 	}
 	prepared := preparedDisplayPlanPDF{
-		fonts:            make(map[layoutengine.FontResourceID]preparedCorePlanFont, len(projection.Fonts)),
-		fontOrder:        make([]layoutengine.FontResourceID, 0, len(projection.Fonts)),
-		images:           make(map[layoutengine.ImageResourceID]preparedDisplayImage, len(projection.ImageResources)),
-		imageOrder:       make([]layoutengine.ImageResourceID, 0, len(projection.ImageResources)),
-		pages:            make([]preparedDisplayPage, 0, len(projection.Pages)),
-		destinations:     append([]layoutengine.PlannedDestination(nil), projection.Destinations...),
-		documentLanguage: documentLanguage,
+		fonts:        make(map[layoutengine.FontResourceID]preparedCorePlanFont, len(projection.Fonts)),
+		fontOrder:    make([]layoutengine.FontResourceID, 0, len(projection.Fonts)),
+		images:       make(map[layoutengine.ImageResourceID]preparedDisplayImage, len(projection.ImageResources)),
+		imageOrder:   make([]layoutengine.ImageResourceID, 0, len(projection.ImageResources)),
+		pages:        make([]preparedDisplayPage, 0, len(projection.Pages)),
+		destinations: append([]layoutengine.PlannedDestination(nil), projection.Destinations...),
 	}
 	var fontSourceBytes uint64
 	seenFontSources := make(map[layoutengine.CoreFontMetricsDigest]bool, len(projection.Fonts))
@@ -499,7 +419,7 @@ func (f *Document) preflightDisplayLayoutPlanPDFResourcesContextForTarget(ctx co
 			return preparedDisplayPlanPDF{}, fmt.Errorf("%w: planned image decoded size overflows", errCoreLayoutPlanPaintUnsupported)
 		}
 		decoded := pixels * 4
-		if decoded > uint64(f.imageDecodedLimit())-decodedTotal { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		if decoded > uint64(f.imageDecodedLimit())-decodedTotal {
 			return preparedDisplayPlanPDF{}, fmt.Errorf("%w: cumulative planned image decoded bytes exceed limit", errCoreLayoutPlanPaintUnsupported)
 		}
 		decodedTotal += decoded

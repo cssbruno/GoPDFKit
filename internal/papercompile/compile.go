@@ -58,11 +58,7 @@ type NodeMapping struct {
 }
 
 type CompileMapping struct {
-	// SourceRevision is populated by the document adapter before planning. The
-	// syntax compiler deliberately does not hash ambient source bytes itself.
-	SourceRevision  string                 `json:"source_revision,omitempty"`
 	Nodes           []NodeMapping          `json:"nodes,omitempty"`
-	AnonymousNodes  []NodeMapping          `json:"anonymous_nodes,omitempty"`
 	ThemeProperties []ThemePropertyMapping `json:"theme_properties,omitempty"`
 	ComputedStyles  []ComputedStyleMapping `json:"computed_styles,omitempty"`
 }
@@ -100,13 +96,10 @@ type Result struct {
 	// Locale is the explicit resolved scenario locale. It is empty when no
 	// scenario locale was declared; adapters must then select an explicit
 	// locale rather than consulting the host environment.
-	Locale string
-	// ScenarioDigest identifies the exact normalized fixture selected for this
-	// compile. It is empty for template-only compilation.
-	ScenarioDigest string
-	Mapping        CompileMapping
-	Schemas        []SchemaDescriptor
-	Diagnostics    []paperlang.Diagnostic
+	Locale      string
+	Mapping     CompileMapping
+	Schemas     []SchemaDescriptor
+	Diagnostics []paperlang.Diagnostic
 }
 
 func (r Result) OK() bool {
@@ -169,9 +162,6 @@ func compileWithLimitsAndResolver(ast paperlang.AST, expansionLimits ExpansionLi
 func compilePipeline(ast paperlang.AST, expansionLimits ExpansionLimits, schemaLimits SchemaLimits, scenario *scenarioCompileRequest, assets AssetCatalog, resolver ImportResolver) Result {
 	imports := resolveImports(ast, resolver, ImportLimits{})
 	ast = imports.ast
-	if scenario != nil && scenario.dataSet && strings.TrimSpace(scenario.dataOptions.Locale) == "" {
-		scenario.dataOptions.Locale = paperDocumentLanguage(ast)
-	}
 	schemas := analyzeSchemas(ast, schemaLimits)
 	themes := ExtractThemes(ast)
 	selectedScenario := ""
@@ -181,8 +171,6 @@ func compilePipeline(ast paperlang.AST, expansionLimits ExpansionLimits, schemaL
 	expanded := expandComponents(ast, expansionLimits, selectedScenario)
 	if scenario != nil {
 		expanded = expandSelectedScenario(ast, schemas, expanded, scenario)
-	} else {
-		expanded = deferDynamicFlow(expanded)
 	}
 	bindings := validateBindings(expanded.ast, expanded.provenance, schemas, schemaLimits)
 	c := compiler{
@@ -195,7 +183,6 @@ func compilePipeline(ast paperlang.AST, expansionLimits ExpansionLimits, schemaL
 		c.fixture = scenario.fixture
 		if scenario.fixture != nil {
 			c.result.Locale = scenario.fixture.Locale
-			c.result.ScenarioDigest = scenario.fixture.Digest
 		}
 	}
 	c.result.Diagnostics = append(c.result.Diagnostics, schemas.diagnostics...)
@@ -240,44 +227,6 @@ func compilePipeline(ast paperlang.AST, expansionLimits ExpansionLimits, schemaL
 		c.result.Tree = tree
 	}
 	return c.result
-}
-
-func paperDocumentLanguage(ast paperlang.AST) string {
-	if ast.Root == nil {
-		return ""
-	}
-	for _, member := range ast.Root.Members {
-		property := member.Property
-		if property != nil && property.Name == "language" && property.Value.Kind == paperlang.ScalarString && property.Value.StringValue != nil {
-			return strings.TrimSpace(*property.Value.StringValue)
-		}
-	}
-	return ""
-}
-
-// deferDynamicFlow gives the scenario-neutral compiler a stable empty-state
-// projection. Repeat and loop nodes are validated and expanded by
-// CompileScenario; without a selected fixture they contribute no flow, but do
-// not make the authored source revision invalid or uneditable.
-func deferDynamicFlow(input componentExpansionResult) componentExpansionResult {
-	var prune func(*paperlang.Node)
-	prune = func(node *paperlang.Node) {
-		if node == nil {
-			return
-		}
-		members := node.Members[:0]
-		for _, member := range node.Members {
-			if member.Node != nil && (member.Node.Kind == paperlang.NodeRepeat || member.Node.Kind == paperlang.NodeLoop) {
-				input.diagnostics = append(input.diagnostics, paperlang.Diagnostic{Code: "PAPER_COMPILE_DYNAMIC_DEFERRED", Severity: paperlang.SeverityWarning, Message: fmt.Sprintf("%s is deferred until a scenario is selected", member.Node.Kind), Hint: "compile with one declared scenario to render dynamic content", Span: member.Node.HeaderSpan})
-				continue
-			}
-			prune(member.Node)
-			members = append(members, member)
-		}
-		node.Members = members
-	}
-	prune(input.ast.Root)
-	return input
 }
 
 type compiler struct {
@@ -606,13 +555,6 @@ func (c *compiler) compileFlowChildren(children []*paperlang.Node, hint string) 
 			c.compileTable(child)
 		case paperlang.NodeCanvas:
 			c.compileCanvas(child)
-		case paperlang.NodeRepeat, paperlang.NodeLoop:
-			// Dynamic authoring remains a valid base document even when no
-			// scenario is selected. Scenario compilation expands these nodes
-			// before flow lowering; the neutral base projection intentionally
-			// omits them instead of making the source revision uneditable.
-			c.mapNode(child, -1, -1)
-			c.warn("PAPER_COMPILE_DYNAMIC_DEFERRED", fmt.Sprintf("%s is deferred until a scenario is selected", child.Kind), "compile with one declared scenario to render dynamic content", child.HeaderSpan)
 		default:
 			c.unsupportedNode(child, hint)
 		}
@@ -755,7 +697,7 @@ func parseCanvasOffset(source string) (float64, bool) {
 		case "in":
 			value *= 72
 		case "px":
-			value *= 72.0 / 96.0
+			value *= 72 / 96
 		case "pc":
 			value *= 12
 		}
@@ -1083,7 +1025,7 @@ func (c *compiler) compileImageDimensions(properties map[string]paperlang.Proper
 }
 
 func decodePaperImageSource(source string) ([]byte, string, string) {
-	var format, encoded string
+	format, encoded := "", ""
 	switch {
 	case strings.HasPrefix(source, "data:image/png;base64,"):
 		format, encoded = "png", strings.TrimPrefix(source, "data:image/png;base64,")
@@ -1642,15 +1584,7 @@ func (c *compiler) compileTextStyle(node *paperlang.Node, properties map[string]
 		if value, valid := c.stringProperty(property); valid {
 			canonical, supported := canonicalCoreFont(value)
 			if !supported {
-				resource, custom := c.assets.ResolveFont(value)
-				if !custom {
-					c.add("PAPER_COMPILE_FONT", fmt.Sprintf("font %q is not an admitted core or project font", value), "use a declared core font or an explicit manifest font family/name", property.Value.Span)
-				} else {
-					// The portable manifest name is the PDF resource key. Human
-					// family metadata remains lookup-only so spaces cannot create
-					// unstable PDF name fragments.
-					style.FontFamily = resource.Name
-				}
+				c.add("PAPER_COMPILE_FONT", fmt.Sprintf("font %q is not an initial core font", value), "use Courier, Helvetica, Times, Symbol, or ZapfDingbats", property.Value.Span)
 			} else {
 				style.FontFamily = canonical
 			}
@@ -2192,25 +2126,7 @@ func computedBlockStyle(block layout.Block) (*layout.TextStyle, *layout.BoxStyle
 }
 
 func (c *compiler) mapNestedNode(node *paperlang.Node, bodyIndex, segmentIndex, nestedBlockIndex int) {
-	if node == nil {
-		return
-	}
-	mapping := NodeMapping{
-		ID: node.ID, Kind: node.Kind, BodyIndex: bodyIndex, SegmentIndex: segmentIndex,
-		NestedBlockIndex: nestedBlockIndex, Span: node.Span,
-		DefinitionSpan: c.provenance[node].definition, InvocationSpan: c.provenance[node].invocation,
-		InstancePath: c.provenance[node].instancePath,
-		BindingPath:  c.bindings[node].path, BindingSpan: c.bindings[node].span,
-		BindingNullable: c.bindings[node].nullable, BindingCollection: c.bindings[node].collection,
-	}
-	if node.ID == "" {
-		for _, existing := range c.result.Mapping.AnonymousNodes {
-			if existing.Kind == mapping.Kind && existing.BodyIndex == bodyIndex && existing.SegmentIndex == segmentIndex &&
-				existing.NestedBlockIndex == nestedBlockIndex && existing.Span == mapping.Span {
-				return
-			}
-		}
-		c.result.Mapping.AnonymousNodes = append(c.result.Mapping.AnonymousNodes, mapping)
+	if node == nil || node.ID == "" {
 		return
 	}
 	if _, duplicate := c.ids[node.ID]; duplicate {
@@ -2218,7 +2134,14 @@ func (c *compiler) mapNestedNode(node *paperlang.Node, bodyIndex, segmentIndex, 
 		return
 	}
 	c.ids[node.ID] = node.HeaderSpan
-	c.result.Mapping.Nodes = append(c.result.Mapping.Nodes, mapping)
+	c.result.Mapping.Nodes = append(c.result.Mapping.Nodes, NodeMapping{
+		ID: node.ID, Kind: node.Kind, BodyIndex: bodyIndex, SegmentIndex: segmentIndex,
+		NestedBlockIndex: nestedBlockIndex, Span: node.Span,
+		DefinitionSpan: c.provenance[node].definition, InvocationSpan: c.provenance[node].invocation,
+		InstancePath: c.provenance[node].instancePath,
+		BindingPath:  c.bindings[node].path, BindingSpan: c.bindings[node].span,
+		BindingNullable: c.bindings[node].nullable, BindingCollection: c.bindings[node].collection,
+	})
 }
 
 func (c *compiler) unsupportedNode(node *paperlang.Node, hint string) {

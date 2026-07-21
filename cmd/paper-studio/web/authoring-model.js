@@ -21,7 +21,6 @@
       scenarios: Object.freeze([...(payload.scenarios || [])]),
       scenarioValues: Object.freeze((payload.scenario_values || []).map(Object.freeze)),
       presets: Object.freeze([...(payload.stress_presets || [])]),
-      components: Object.freeze([...(payload.components || [])]),
     });
   }
 
@@ -32,16 +31,9 @@
     const base = {source_revision: workspace.source_revision, plan_revision: workspace.revision, scenario: workspace.scenario || '', operation: draft.operation, property: ''};
     if (draft.operation === 'template') {
       const target = metadata.templateTargets.find(item => item.id === draft.target);
-      const flowTemplates = ['paragraph', 'heading', 'list', 'row', 'column', 'page-break', 'image', 'table', 'canvas', 'note-box', 'metadata-grid', 'signature-row', 'qr-verification', 'clause', 'styled-container', 'repeat', 'loop', 'component', 'section'];
-      const validTemplate = ['page', 'document-preset'].includes(draft.template) ? target?.kind === 'document' :
-        ['header', 'footer'].includes(draft.template) ? target?.kind === 'page' :
-        flowTemplates.includes(draft.template) &&
-        ['body', 'header', 'footer', 'row', 'column'].includes(target?.kind) &&
-        (draft.template !== 'component' || metadata.components.includes(draft.component)) &&
-        (draft.template !== 'repeat' || metadata.schemas.some(schema => schema.fields.some(field => field.path === draft.path && field.kind === 'list'))) &&
-        (draft.template !== 'loop' || Boolean(workspace.scenario));
+      const validTemplate = draft.template === 'page' ? target?.kind === 'document' : ['paragraph', 'section'].includes(draft.template) && ['body', 'row', 'column'].includes(target?.kind);
       if (!target || !validTemplate || !readableID(draft.id)) throw new Error('Choose a compatible template target, shape, and readable @id');
-      return {...base, target: draft.target, template: draft.template, id: draft.id, ...(draft.template === 'component' ? {component: draft.component} : {}), ...(draft.template === 'document-preset' ? {preset: draft.preset} : {}), ...(draft.template === 'repeat' ? {path: draft.path} : {})};
+      return {...base, target: draft.target, template: draft.template, id: draft.id};
     }
     if (draft.operation === 'schema') {
       if (draft.target !== metadata.documentTarget || !readableID(draft.id)) throw new Error('Choose the document and a readable schema @id');

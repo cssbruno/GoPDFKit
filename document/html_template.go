@@ -172,16 +172,12 @@ func CompileHTMLTemplateContext(ctx context.Context, templateHTML string) (*Comp
 // unsupported. For image sources, place the slot inside a static img tag, for
 // example <img src="{{logo}}" alt="{{alt}}">.
 func (html *HTML) WriteTemplate(lineHt float64, template *CompiledHTMLTemplate, values HTMLTemplateValues) {
-	_ = html.writeTemplateContextEntry(context.Background(), lineHt, template, values, "HTML.WriteTemplate")
+	_ = html.WriteTemplateContext(context.Background(), lineHt, template, values)
 }
 
 // WriteTemplateContext fills a compiled HTML template with values, renders it,
 // and checks ctx before render. See WriteTemplate for value handling.
 func (html *HTML) WriteTemplateContext(ctx context.Context, lineHt float64, template *CompiledHTMLTemplate, values HTMLTemplateValues) error {
-	return html.writeTemplateContextEntry(ctx, lineHt, template, values, "HTML.WriteTemplateContext")
-}
-
-func (html *HTML) writeTemplateContextEntry(ctx context.Context, lineHt float64, template *CompiledHTMLTemplate, values HTMLTemplateValues, entryPoint string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -198,7 +194,7 @@ func (html *HTML) writeTemplateContextEntry(ctx context.Context, lineHt float64,
 		html.pdf.SetError(err)
 		return err
 	}
-	html.writeCompiledContext(ctx, lineHt, compiled, entryPoint)
+	html.WriteCompiled(lineHt, compiled)
 	return html.pdf.Error()
 }
 
@@ -377,19 +373,6 @@ func (template *CompiledHTMLTemplate) render(values HTMLTemplateValues, maxBytes
 	rendered.sourceBytes = renderedBytes
 	rendered.elementText = nil
 	rendered.tables = compiledHTMLTemplateTables(rendered.tokens)
-	rendered.dataImages = make(map[int]compiledHTMLDataImage)
-	for index, token := range rendered.tokens {
-		if token.Cat != 'O' || token.Str != "img" {
-			continue
-		}
-		image, ok, err := compileHTMLDataImageSource(token.Attr["src"], htmlDefaultMaxDataImageBytes)
-		if err != nil {
-			return nil, fmt.Errorf("compile HTML template image %s: %w", token.Attr["src"], err)
-		}
-		if ok {
-			rendered.dataImages[index] = image
-		}
-	}
 	return rendered, nil
 }
 

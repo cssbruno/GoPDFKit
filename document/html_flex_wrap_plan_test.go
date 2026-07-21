@@ -19,7 +19,6 @@ const htmlUnifiedFlexWrapFixture = `<div style="display:flex;flex-wrap:wrap;heig
 	`<p style="flex:0 0 80pt">One</p><h2 style="flex:0 0 80pt">Two</h2><p style="flex:0 0 80pt">Three</p></div>`
 
 func TestHTMLUnifiedFlexWrapExactPlanSemanticsRasterPDFAndCursor(t *testing.T) {
-	requireDarwinRasterBaseline(t)
 	compiled, err := CompileHTML(htmlUnifiedFlexWrapFixture)
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +63,7 @@ func TestHTMLUnifiedFlexWrapExactPlanSemanticsRasterPDFAndCursor(t *testing.T) {
 	if err != nil || status != "captured" || raster == nil || len(raster.Pages) != 1 {
 		t.Fatalf("raster=%+v status=%q err=%v", raster, status, err)
 	}
-	if got := raster.Pages[0].PNGSHA256; got != "31da3bf2b6301ec43d047e18a2fc38caae7582eab8230fe9f4de4c6e03026ae2" {
+	if got := raster.Pages[0].PNGSHA256; got != "de1251c55ea0d692d6ebd200319fe84b6fe320d216c835824da9850e78dd3199" {
 		t.Fatalf("wrap raster drift: %s", got)
 	}
 

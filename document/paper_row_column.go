@@ -454,7 +454,7 @@ func (f *Document) measurePaperRowColumnTable(ctx context.Context, doc *layout.L
 			}
 		}
 		selected.Width = width
-		for uint32(len(selectedBodies)) < page { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		for uint32(len(selectedBodies)) < page {
 			selectedBodies = append(selectedBodies, layoutengine.Rect{})
 		}
 		selectedBodies[page-1] = selected
@@ -570,8 +570,8 @@ func (f *Document) measurePaperRowColumnTextIntrinsic(ctx context.Context, parag
 	scratch.cMargin, scratch.ws = f.cMargin, f.ws
 	scratch.fontFamily, scratch.fontStyle = f.fontFamily, f.fontStyle
 	scratch.fontSizePt, scratch.fontSize = f.fontSizePt, f.fontSizePt/scratch.k
-	style := layout.MergedTextStyle(plannerDefaultTextStyle(scratch), paragraph.EffectiveStyle())
-	applyPlannerTextStyle(scratch, style)
+	style := layout.MergedTextStyle(newMeasureContext(scratch, f.w).DefaultStyle, paragraph.EffectiveStyle())
+	applyPDFTextStyle(scratch, style)
 	if scratch.err != nil || scratch.isCurrentUTF8 {
 		return 0, 0, newTypedShadowUnsupported(typedShadowGeometry, "core font metrics could not be resolved for intrinsic flex sizing")
 	}
@@ -645,7 +645,7 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 	items := make([]layoutengine.DisplayItem, 0)
 	nestedSemantics := make(map[int]paperNestedTableSemantics)
 	nestedOuterFragments := make(map[int][]layoutengine.FragmentID)
-	nextNestedNode := layoutengine.NodeID(len(measurements)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	nextNestedNode := layoutengine.NodeID(len(measurements))
 	compositionOrder := make([]int, 0, len(measurements))
 	for index := range measurements {
 		if index != paginatedTable {
@@ -698,7 +698,7 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 						continuation = layoutengine.ContinuationEnd
 					}
 					outer := fragment
-					outer.ID = layoutengine.FragmentID(len(projection.Fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+					outer.ID = layoutengine.FragmentID(len(projection.Fragments) + 1)
 					outer.Page = currentPage
 					outer.MarginBox, outer.BorderBox, outer.PaddingBox, outer.ContentBox = outerBox, outerBox, outerBox, outerBox
 					outer.Continuation = continuation
@@ -720,7 +720,7 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 					nextNestedNode++
 					nodeMap[oldNode] = nextNestedNode
 				}
-				childFragment.ID = layoutengine.FragmentID(len(projection.Fragments) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				childFragment.ID = layoutengine.FragmentID(len(projection.Fragments) + 1)
 				childFragment.Node = nodeMap[oldNode]
 				childFragment.Key = layoutengine.NodeKey(string(measurement.identity.key) + "/" + string(childFragment.Key))
 				childFragment.Instance = layoutengine.InstanceID(string(measurement.identity.instance) + "/" + string(childFragment.Instance))
@@ -762,7 +762,7 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 				identity := paperFontIdentity(font)
 				globalID, exists := fontIndex[identity]
 				if !exists {
-					globalID = layoutengine.FontResourceID(len(fonts) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+					globalID = layoutengine.FontResourceID(len(fonts) + 1)
 					font.ID = globalID
 					fonts = append(fonts, font)
 					fontIndex[identity] = globalID
@@ -784,7 +784,7 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 				if err != nil {
 					return layoutengine.LayoutPlan{}, err
 				}
-				lineMap[uint32(oldIndex)] = uint32(len(projection.Lines)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				lineMap[uint32(oldIndex)] = uint32(len(projection.Lines))
 				projection.Lines = append(projection.Lines, line)
 			}
 			pathPages := make(map[uint32]uint32)
@@ -794,7 +794,7 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 			for _, stroke := range nested.Strokes {
 				pathPages[stroke.Path] = fragmentPages[stroke.Fragment]
 			}
-			pathBase := uint32(len(paths)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			pathBase := uint32(len(paths))
 			for pathIndex, path := range nested.Paths {
 				dx, dy, offsetErr := offsetForPage(pathPages[uint32(pathIndex)])
 				if offsetErr != nil {
@@ -813,7 +813,7 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 					return layoutengine.LayoutPlan{}, offsetErr
 				}
 				oldID := destination.ID
-				destination.ID = layoutengine.DestinationID(len(destinations) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				destination.ID = layoutengine.DestinationID(len(destinations) + 1)
 				if destination.Fragment.Valid() {
 					destination.Fragment = fragmentMap[destination.Fragment]
 				}
@@ -842,19 +842,19 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 						return layoutengine.LayoutPlan{}, err
 					}
 					runs = append(runs, run)
-					items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(runs) - 1), Page: page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+					items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(runs) - 1), Page: page})
 				case layoutengine.CommandFillPath:
 					fill := nested.Fills[command.Payload]
 					fill.Path += pathBase
 					fill.Fragment = fragmentMap[fill.Fragment]
 					fills = append(fills, fill)
-					items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(fills) - 1), Page: page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+					items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(fills) - 1), Page: page})
 				case layoutengine.CommandStrokePath:
 					stroke := nested.Strokes[command.Payload]
 					stroke.Path += pathBase
 					stroke.Fragment = fragmentMap[stroke.Fragment]
 					strokes = append(strokes, stroke)
-					items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(strokes) - 1), Page: page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+					items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(strokes) - 1), Page: page})
 				case layoutengine.CommandLink:
 					link := nested.Links[command.Payload]
 					if link.Destination.Valid() {
@@ -869,7 +869,7 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 						return layoutengine.LayoutPlan{}, err
 					}
 					links = append(links, link)
-					items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(links) - 1), Page: page}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+					items = append(items, layoutengine.DisplayItem{Kind: command.Kind, Payload: uint32(len(links) - 1), Page: page})
 				default:
 					return layoutengine.LayoutPlan{}, newTypedShadowUnsupported(typedShadowBlockKind, fmt.Sprintf("nested table command %q is unsupported", command.Kind))
 				}
@@ -914,12 +914,12 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 			fragment = projection.Fragments[childIndex]
 			if image.background.Set {
 				paths = append(paths, typedTableRectPath(outer))
-				fills = append(fills, layoutengine.PlannedFill{Path: uint32(len(paths) - 1), Rule: layoutengine.FillNonZero, Color: image.background, Fragment: fragment.ID}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-				items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandFillPath, Payload: uint32(len(fills) - 1)})                                          // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				fills = append(fills, layoutengine.PlannedFill{Path: uint32(len(paths) - 1), Rule: layoutengine.FillNonZero, Color: image.background, Fragment: fragment.ID})
+				items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandFillPath, Payload: uint32(len(fills) - 1)})
 			}
 			resourceID, exists := imageIndex[image.resource.Digest]
 			if !exists {
-				resourceID = layoutengine.ImageResourceID(len(imageResources) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				resourceID = layoutengine.ImageResourceID(len(imageResources) + 1)
 				resource := image.resource
 				resource.ID = resourceID
 				imageResources = append(imageResources, resource)
@@ -932,7 +932,7 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 			}
 			placement.Source = measurement.identity.source
 			images = append(images, placement)
-			items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandImage, Payload: uint32(len(images) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandImage, Payload: uint32(len(images) - 1)})
 			for side, border := range image.borders {
 				if border.width <= 0 {
 					continue
@@ -942,8 +942,8 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 					return layoutengine.LayoutPlan{}, err
 				}
 				paths = append(paths, path)
-				strokes = append(strokes, layoutengine.PlannedStroke{Path: uint32(len(paths) - 1), Color: border.color, Width: border.width, Fragment: fragment.ID}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-				items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)})                             // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				strokes = append(strokes, layoutengine.PlannedStroke{Path: uint32(len(paths) - 1), Color: border.color, Width: border.width, Fragment: fragment.ID})
+				items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandStrokePath, Payload: uint32(len(strokes) - 1)})
 			}
 			if measurement.caption != nil {
 				caption := measurement.caption
@@ -1007,7 +1007,7 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 			identity := paperFontIdentity(font)
 			globalID, exists := fontIndex[identity]
 			if !exists {
-				globalID = layoutengine.FontResourceID(len(fonts) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				globalID = layoutengine.FontResourceID(len(fonts) + 1)
 				font.ID = globalID
 				fonts = append(fonts, font)
 				fontIndex[identity] = globalID
@@ -1044,7 +1044,7 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 			if err != nil {
 				return layoutengine.LayoutPlan{}, err
 			}
-			globalLine := uint32(len(projection.Lines)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			globalLine := uint32(len(projection.Lines))
 			projection.Lines = append(projection.Lines, layoutengine.PlannedLine{
 				Fragment: fragment.ID, Index: uint32(localIndex), Bounds: bounds,
 				Baseline: baseline, Source: measurement.identity.source,
@@ -1058,7 +1058,7 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 			run.Origin = layoutengine.Point{X: line.Bounds.X, Y: line.Baseline}
 			run.Source = measurement.identity.source
 			runs = append(runs, run)
-			items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(len(runs) - 1)}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+			items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(len(runs) - 1)})
 		}
 	}
 	pageCount := 1
@@ -1112,7 +1112,7 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 	reading := make([]layoutengine.ReadingOccurrence, 0, len(measurements))
 	readingByPage := make(map[uint32]uint32)
 	for index, measurement := range measurements {
-		semantic := layoutengine.SemanticNodeID(len(nodes) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		semantic := layoutengine.SemanticNodeID(len(nodes) + 1)
 		fragment := projection.Fragments[index]
 		nodes = append(nodes, layoutengine.SemanticNode{ID: semantic, Parent: 1, Role: measurement.role,
 			Key: measurement.identity.key, Instance: measurement.identity.instance, Source: measurement.identity.source,
@@ -1134,7 +1134,7 @@ func composePaperRowColumnPlan(base layoutengine.LayoutPlan, measurements []pape
 					continue
 				}
 				oldID, oldParent := childNode.ID, childNode.Parent
-				childNode.ID = layoutengine.SemanticNodeID(len(nodes) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				childNode.ID = layoutengine.SemanticNodeID(len(nodes) + 1)
 				childNode.Parent = semanticMap[oldParent]
 				if !childNode.Parent.Valid() {
 					childNode.Parent = 1

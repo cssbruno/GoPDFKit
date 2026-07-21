@@ -148,11 +148,8 @@ func TestPaperSourceMutationsEnforceModeRevocationAndAmbiguity(t *testing.T) {
 	readGuard, _, _ := mutationGuard(t, readWorkspace, workspaceFixture, "@intro", "read-denied", CapabilityRead)
 	if _, err := readWorkspace.PaperSetLiteral(PaperSetLiteralRequest{Guard: readGuard, Text: "denied"}); err == nil {
 		t.Fatal("PaperSetLiteral(read capability) succeeded")
-	} else {
-		var typed *Error
-		if !errors.As(err, &typed) || typed.Code != "CAPABILITY_DENIED" {
-			t.Fatalf("PaperSetLiteral(read capability) error = %v", err)
-		}
+	} else if typed, ok := err.(*Error); !ok || typed.Code != "CAPABILITY_DENIED" {
+		t.Fatalf("PaperSetLiteral(read capability) error = %v", err)
 	}
 
 	revokedWorkspace := mustWorkspace(t, Limits{})
@@ -168,21 +165,15 @@ func TestPaperSourceMutationsEnforceModeRevocationAndAmbiguity(t *testing.T) {
 	ambiguousGuard, _, _ := mutationGuard(t, ambiguousWorkspace, richMutationFixture, "@rich", "ambiguous", CapabilityEdit)
 	if _, err := ambiguousWorkspace.PaperSetLiteral(PaperSetLiteralRequest{Guard: ambiguousGuard, Text: "which run?"}); err == nil {
 		t.Fatal("PaperSetLiteral(ambiguous) succeeded")
-	} else {
-		var typed *Error
-		if !errors.As(err, &typed) || typed.Code != "AMBIGUOUS_TARGET" {
-			t.Fatalf("PaperSetLiteral(ambiguous) error = %v", err)
-		}
+	} else if typed, ok := err.(*Error); !ok || typed.Code != "AMBIGUOUS_TARGET" {
+		t.Fatalf("PaperSetLiteral(ambiguous) error = %v", err)
 	}
 	if _, err := ambiguousWorkspace.PaperSetRichText(PaperSetRichTextRequest{
 		Guard: ambiguousGuard, Runs: []PaperRichTextRun{{Target: "@outside", Text: "x"}},
 	}); err == nil {
 		t.Fatal("PaperSetRichText(non-child) succeeded")
-	} else {
-		var typed *Error
-		if !errors.As(err, &typed) || typed.Code != "AMBIGUOUS_TARGET" {
-			t.Fatalf("PaperSetRichText(non-child) error = %v", err)
-		}
+	} else if typed, ok := err.(*Error); !ok || typed.Code != "AMBIGUOUS_TARGET" {
+		t.Fatalf("PaperSetRichText(non-child) error = %v", err)
 	}
 }
 

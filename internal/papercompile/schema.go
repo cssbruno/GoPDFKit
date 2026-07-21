@@ -71,18 +71,6 @@ func ExtractSchemas(ast paperlang.AST) SchemaSourceResult {
 	}
 }
 
-// ExtractSchemasWithResolver includes schemas declared by explicit design
-// imports. The resolver remains the only source boundary; no ambient files or
-// network locations are consulted by the compiler.
-func ExtractSchemasWithResolver(ast paperlang.AST, resolver ImportResolver) SchemaSourceResult {
-	imports := resolveImports(ast, resolver, ImportLimits{})
-	analysis := analyzeSchemas(imports.ast, SchemaLimits{})
-	return SchemaSourceResult{
-		Schemas:     cloneSchemaDescriptors(analysis.descriptors),
-		Diagnostics: append(append([]paperlang.Diagnostic(nil), imports.diagnostics...), analysis.diagnostics...),
-	}
-}
-
 func cloneSchemaDescriptors(input []SchemaDescriptor) []SchemaDescriptor {
 	result := make([]SchemaDescriptor, len(input))
 	for index, schema := range input {
@@ -207,7 +195,7 @@ func analyzeSchemas(ast paperlang.AST, limits SchemaLimits) schemaAnalysis {
 			analysis.add("PAPER_SCHEMA_DUPLICATE", fmt.Sprintf("schema %s is declared more than once", strings.TrimPrefix(name, "@")), "keep one declaration per schema", node.HeaderSpan)
 			continue
 		}
-		if uint32(len(analysis.descriptors)) >= analysis.limits.MaxSchemas { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(analysis.descriptors)) >= analysis.limits.MaxSchemas {
 			analysis.add("PAPER_SCHEMA_LIMIT", "schema count exceeds the configured limit", "split declarations or raise the bounded limit", node.HeaderSpan)
 			continue
 		}
@@ -517,7 +505,7 @@ func resolveBindingPath(path string, schemas schemaAnalysis, limits SchemaLimits
 		return "", false, "", false, fmt.Errorf("binding path exceeds the byte limit")
 	}
 	parts := strings.Split(path, ".")
-	if len(parts) == 0 || uint64(len(parts)-1) > uint64(limits.MaxPathSegments) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if len(parts) == 0 || uint64(len(parts)-1) > uint64(limits.MaxPathSegments) {
 		return "", false, "", false, fmt.Errorf("binding path exceeds the segment limit")
 	}
 	schema := schemas.byName[parts[0]]
@@ -589,7 +577,7 @@ func findSchemaField(fields []FieldDescriptor, name string) *FieldDescriptor {
 }
 
 func validBindingName(name string) bool {
-	if name == "" || (name[0] < 'A' || name[0] > 'Z') && (name[0] < 'a' || name[0] > 'z') {
+	if name == "" || !((name[0] >= 'A' && name[0] <= 'Z') || (name[0] >= 'a' && name[0] <= 'z')) {
 		return false
 	}
 	for index := 1; index < len(name); index++ {

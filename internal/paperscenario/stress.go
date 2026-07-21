@@ -63,7 +63,7 @@ func GenerateStressFixtures(ctx context.Context, base Fixture, strategies []Stre
 	if limits == (StressLimits{}) {
 		limits = DefaultStressLimits()
 	}
-	if !validStressLimits(limits) || len(strategies) == 0 || uint32(len(strategies)) > limits.MaxCandidates || !validName(base.Name) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if !validStressLimits(limits) || len(strategies) == 0 || uint32(len(strategies)) > limits.MaxCandidates || !validName(base.Name) {
 		return nil, fmt.Errorf("%w: stress request", ErrLimit)
 	}
 	result := make([]GeneratedFixture, 0, len(strategies))
@@ -343,7 +343,7 @@ func findBoundary(ctx context.Context, request BoundaryRequest, build boundaryBu
 		observation, err := request.Evaluate(ctx, fixture)
 		return fixture, observation, err
 	}
-	_, baseline, err := evaluate(request.Minimum)
+	before, baseline, err := evaluate(request.Minimum)
 	if err != nil {
 		return BoundaryResult{}, err
 	}

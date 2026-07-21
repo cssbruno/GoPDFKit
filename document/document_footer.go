@@ -29,6 +29,7 @@ func ExtractHTMLFooterBlock(htmlStr string) (bodyHTML string, footer *layout.Foo
 				Style:    layout.TextStyle{FontFamily: "Helvetica", FontSize: 9, Align: "C"},
 			},
 		},
+		Height:          8,
 		ReservePageArea: true,
 	}
 }

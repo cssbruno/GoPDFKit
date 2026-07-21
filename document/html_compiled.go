@@ -33,10 +33,6 @@ type CompiledHTML struct {
 	inlineSVGs        map[int]compiledInlineSVG
 	dataImages        map[int]compiledHTMLDataImage
 	recovery          []CompiledHTMLRecoveryIssue
-	// unifiedResolved is populated only on the detached snapshot consumed by
-	// the HTML-to-IR adapter. Selector matching and cascade resolution happen
-	// while creating that snapshot; the planner never receives CSS rules.
-	unifiedResolved []htmlUnifiedResolvedElement
 }
 
 type compiledHTMLTable struct {

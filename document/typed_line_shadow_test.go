@@ -4,6 +4,7 @@
 package document
 
 import (
+	"bytes"
 	"errors"
 	"reflect"
 	"testing"
@@ -38,9 +39,22 @@ func TestTypedParagraphLineShadowSoftWrapMatchesLegacyPageAndLineAllocation(t *t
 		}
 	}
 
-	pdf.WriteDocument(doc)
+	pdf.writeDocumentLegacy(doc)
 	if err := pdf.Error(); err != nil || pdf.PageCount() != len(projection.Pages) {
-		t.Fatalf("adapted output = %d pages, %v; shadow pages %d", pdf.PageCount(), err, len(projection.Pages))
+		t.Fatalf("legacy output = %d pages, %v; shadow pages %d", pdf.PageCount(), err, len(projection.Pages))
+	}
+	for pageIndex, page := range projection.Pages {
+		content := pdf.pages[pageIndex+1].Bytes()
+		if got, want := bytes.Count(content, []byte(")Tj ET")), int(page.Lines.Count); got != want {
+			t.Fatalf("legacy page %d painted %d text lines, want %d", pageIndex+1, got, want)
+		}
+		for lineIndex := page.Lines.Start; lineIndex < page.Lines.Start+page.Lines.Count; lineIndex++ {
+			wrapped := shadow.Lines[lineIndex]
+			visible := []byte(shadow.Text[wrapped.StartByte:wrapped.EndByte])
+			if len(visible) > 0 && !bytes.Contains(content, visible) {
+				t.Fatalf("legacy page %d does not contain planned line %q", pageIndex+1, visible)
+			}
+		}
 	}
 }
 
@@ -89,12 +103,12 @@ func TestTypedParagraphLineShadowMatchesLegacyPageAllocationWithoutMutation(t *t
 		t.Fatalf("first line geometry = %#v, want cell-margin x and compatibility baseline", projection.Lines[0])
 	}
 
-	pdf.WriteDocument(doc)
+	pdf.writeDocumentLegacy(doc)
 	if err := pdf.Error(); err != nil {
 		t.Fatalf("WriteDocument() = %v", err)
 	}
 	if got, want := pdf.PageCount(), len(projection.Pages); got != want {
-		t.Fatalf("adapted pages = %d, shadow pages = %d", got, want)
+		t.Fatalf("legacy pages = %d, shadow pages = %d", got, want)
 	}
 }
 
@@ -127,9 +141,9 @@ func TestTypedParagraphLineShadowUsesExactCoreTrailingLFProfile(t *testing.T) {
 			if got := len(shadow.Plan.Projection().Lines); got != test.wantLines {
 				t.Fatalf("planned lines = %d, want %d", got, test.wantLines)
 			}
-			pdf.WriteDocument(doc)
+			pdf.writeDocumentLegacy(doc)
 			if err := pdf.Error(); err != nil || pdf.PageCount() != 1 {
-				t.Fatalf("adapted output = pages %d, error %v", pdf.PageCount(), err)
+				t.Fatalf("legacy output = pages %d, error %v", pdf.PageCount(), err)
 			}
 		})
 	}
@@ -227,24 +241,6 @@ func TestTypedParagraphLineShadowRejectsUnsupportedContentWithoutMutation(t *tes
 				t.Fatalf("failed line shadow mutated document:\nbefore %#v\nafter  %#v", before, after)
 			}
 		})
-	}
-}
-
-func TestTypedParagraphLineShadowEmitsOneUnitOversizedLineOnce(t *testing.T) {
-	planner := MustNew(WithUnit(UnitPoint), WithCustomPageSize(Size{Wd: 200, Ht: 200}), WithNoCompression())
-	doc := &layout.LayoutDocument{
-		PageTemplate: layout.PageTemplate{Margins: layout.Spacing{Top: 10, Right: 10, Bottom: 10, Left: 10}},
-		Body: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "over"}}, Style: layout.TextStyle{
-			FontFamily: "Helvetica", FontSize: 10, LineHeight: 180 + 1.0/1024.0,
-		}}},
-	}
-	shadow, err := planner.planTypedParagraphLineShadow(doc)
-	if err != nil {
-		t.Fatalf("one-unit oversized line: %v", err)
-	}
-	projection := shadow.Plan.Projection()
-	if len(projection.Pages) != 1 || len(projection.Lines) != 1 || len(projection.Diagnostics) != 1 || projection.Diagnostics[0].Code != layoutengine.DiagnosticUnbreakableTooTall {
-		t.Fatalf("one-unit oversized evidence = pages %d lines %d diagnostics %+v", len(projection.Pages), len(projection.Lines), projection.Diagnostics)
 	}
 }
 

@@ -18,20 +18,13 @@ BENCH ?= BenchmarkGenerationHTMLLargeTableCompiled$
 BENCH_PACKAGE ?= ./document
 BENCH_COUNT ?= 3
 BENCH_OUT ?= artifacts/benchmarks.txt
-PAPER_ENGINE_BENCH_OUT ?= artifacts/paper-engine-benchmarks.txt
-PAPER_ENGINE_BENCH_COUNT ?= 10
-PAPER_ENGINE_BENCHTIME ?= 250ms
-PAPER_ENGINE_CALIBRATION_PROFILE ?= docs/performance/calibrations/apple-m2-go1.26.json
 GENERATION_CORE_BENCH_OUT ?= artifacts/generation-core-benchmarks.txt
 PROFILE_DIR ?= artifacts/profiles
 PROFILE_BENCHTIME ?= 10s
 ALLOC_PROFILE_BENCHTIME ?= 20x
 TRACE_BENCHTIME ?= 1s
-PAPER_ENGINE_PROFILE_CPU_SECONDS ?= 2
-PAPER_ENGINE_PROFILE_ALLOC_ITERATIONS ?= 20
-PAPER_STUDIO_LATENCY_REPORT ?= artifacts/paper-studio-wasm-latency.json
 
-.PHONY: all documentation cov coverage-check test race vet fmt-check check modules tools tools-clean benchstat lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget bench-paper-engine bench-paper-engine-ci bench-paper-engine-budget bench-paper-studio bench-paper-studio-wasm-latency bench-paper-studio-wasm-latency-budget test-paper-studio-js test-paper-studio-wasm characterize-paper-engine verify-clean-checkout paper-studio-wasm paper-studio profile-paper-engine profile-paper-engine-check profile profile-cpu profile-alloc profile-block profile-mutex profile-trace compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate pdf-reader-smoke clean
+.PHONY: all documentation cov coverage-check test race vet fmt-check check modules tools tools-clean benchstat lint lin nilaway gosec gosev govulncheck quality release-version release-check release-notes release-tag release-push release build bench bench-ci bench-generation-core bench-generation-core-ci bench-generation-core-budget profile profile-cpu profile-alloc profile-block profile-mutex profile-trace compliance-fixtures compliance-validate compliance-baseline-check compliance-regenerate pdf-reader-smoke clean
 
 cov : all
 	go test $(GO_PACKAGES) -coverprofile=coverage && go tool cover -html=coverage -o=coverage.html
@@ -101,7 +94,7 @@ quality : check coverage-check lint nilaway gosec govulncheck
 
 release-version :
 	@test -n "$(VERSION)" || (echo "VERSION is required, for example VERSION=v0.1.0" && exit 1)
-	@printf '%s\n' "$(VERSION)" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?$$' || (echo "VERSION must look like vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-PRERELEASE, got $(VERSION)" && exit 1)
+	@printf '%s\n' "$(VERSION)" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$$' || (echo "VERSION must look like vMAJOR.MINOR.PATCH, got $(VERSION)" && exit 1)
 	@test "$$(sed -n '1p' VERSION)" = "$(VERSION)" || (echo "VERSION file does not match requested release $(VERSION)" && exit 1)
 	@grep -q "^## $(VERSION)" CHANGELOG.md || (echo "CHANGELOG.md is missing section $(VERSION)" && exit 1)
 
@@ -120,7 +113,7 @@ release-push :
 
 release : release-tag
 
-build : paper-studio-wasm
+build :
 	go build -v $(GO_PACKAGES)
 
 bench :
@@ -137,61 +130,6 @@ bench-generation-core-ci :
 
 bench-generation-core-budget : bench-generation-core-ci
 	sh tools/benchmark-budget-check.sh "$(GENERATION_CORE_BENCH_OUT)"
-
-bench-paper-engine :
-	go test ./document ./internal/layoutengine -run '^$$' -bench '^BenchmarkPaperEngine(Planner|Painter|ProductionDefault|EndToEnd|WarmCompiled|Concurrent|Table)' -benchmem
-
-bench-paper-engine-ci :
-	PAPER_ENGINE_BENCH_COUNT="$(PAPER_ENGINE_BENCH_COUNT)" PAPER_ENGINE_BENCHTIME="$(PAPER_ENGINE_BENCHTIME)" sh tools/run-paper-engine-benchmarks.sh "$(PAPER_ENGINE_BENCH_OUT)"
-
-bench-paper-engine-budget : bench-paper-engine-ci
-	PAPER_ENGINE_CALIBRATION_PROFILE="$(PAPER_ENGINE_CALIBRATION_PROFILE)" sh tools/check-paper-engine-benchmark-report.sh "$(PAPER_ENGINE_BENCH_OUT)"
-
-bench-paper-studio :
-	go test ./cmd/paper-studio -run '^$$' -bench BenchmarkPaperStudio -benchmem -benchtime=250ms -count=5
-
-bench-paper-studio-wasm-latency : paper-studio-wasm
-	PAPER_STUDIO_BENCH_SAMPLES="$${PAPER_STUDIO_BENCH_SAMPLES:-10}" PAPER_STUDIO_LATENCY_REPORT="$(PAPER_STUDIO_LATENCY_REPORT)" sh tools/benchmark-paper-studio-wasm.sh
-
-bench-paper-studio-wasm-latency-budget : bench-paper-studio-wasm-latency
-	node tools/check-paper-studio-latency-report.mjs "$(PAPER_STUDIO_LATENCY_REPORT)"
-
-test-paper-studio-js :
-	node --test cmd/paper-studio/js_test/*.cjs
-
-PAPER_STUDIO_WASM := cmd/paper-studio/web/paper-studio.wasm
-PAPER_STUDIO_WASM_GZIP := cmd/paper-studio/web/paper-studio.wasm.gz
-PAPER_STUDIO_WASM_EXEC := cmd/paper-studio/web/wasm_exec.js
-
-paper-studio-wasm :
-	GOOS=js GOARCH=wasm go build -trimpath -ldflags='-s -w' -o "$(PAPER_STUDIO_WASM)" ./cmd/paper-studio-wasm
-	gzip -1 -n -c "$(PAPER_STUDIO_WASM)" > "$(PAPER_STUDIO_WASM_GZIP)"
-	chmod u+w "$(PAPER_STUDIO_WASM_EXEC)" 2>/dev/null || true
-	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" "$(PAPER_STUDIO_WASM_EXEC)"
-	chmod 0644 "$(PAPER_STUDIO_WASM_EXEC)"
-
-test-paper-studio-wasm : paper-studio-wasm
-	sh tools/test-paper-studio-wasm.sh
-
-characterize-paper-engine :
-	mkdir -p artifacts/characterization
-	go run ./cmd/paper-characterize -builtin typed > artifacts/characterization/typed.json
-	go run ./cmd/paper-characterize -builtin html > artifacts/characterization/html.json
-
-verify-clean-checkout :
-	sh tools/verify-clean-checkout.sh
-
-PAPER_STUDIO_FILE ?= testdata/paper/studio-demo.paper
-PAPER_STUDIO_ADDR ?= 127.0.0.1:7331
-
-paper-studio : paper-studio-wasm
-	go run ./cmd/paper-studio -addr "$(PAPER_STUDIO_ADDR)" "$(PAPER_STUDIO_FILE)"
-
-profile-paper-engine :
-	PAPER_ENGINE_PROFILE_CPU_SECONDS="$(PAPER_ENGINE_PROFILE_CPU_SECONDS)" PAPER_ENGINE_PROFILE_ALLOC_ITERATIONS="$(PAPER_ENGINE_PROFILE_ALLOC_ITERATIONS)" sh tools/run-paper-engine-profiles.sh "$(PROFILE_DIR)/paper-engine"
-
-profile-paper-engine-check : profile-paper-engine
-	sh tools/check-paper-engine-profile-report.sh "$(PROFILE_DIR)/paper-engine"
 
 profile : profile-cpu profile-alloc profile-block profile-mutex profile-trace
 
@@ -216,7 +154,7 @@ profile-trace :
 	go test "$(BENCH_PACKAGE)" -run '^$$' -bench '$(value BENCH)' -benchtime="$(TRACE_BENCHTIME)" -count=1 -o="$(abspath $(PROFILE_DIR))/" -outputdir="$(abspath $(PROFILE_DIR))" -trace=trace.out
 
 compliance-fixtures :
-	go run ./cmd/compliance-fixtures -out "$(COMPLIANCE_OUT)" $(if $(SRGB_ICC),-icc "$(SRGB_ICC)") -report "$(COMPLIANCE_OUT)/characterization.json"
+	go run ./cmd/compliance-fixtures -out "$(COMPLIANCE_OUT)" $(if $(SRGB_ICC),-icc "$(SRGB_ICC)")
 
 compliance-validate :
 	COMPLIANCE_OUT="$(COMPLIANCE_OUT)" SRGB_ICC="$(SRGB_ICC)" VERAPDF="$(VERAPDF)" PDFUA_CHECKER="$(PDFUA_CHECKER)" ARLINGTON_CHECKER="$(ARLINGTON_CHECKER)" ARLINGTON_URL="$(ARLINGTON_URL)" ARLINGTON_PROFILE="$(ARLINGTON_PROFILE)" ARLINGTON_REPORT_DIR="$(ARLINGTON_REPORT_DIR)" REQUIRE_COMPLIANCE_TOOLS="$(REQUIRE_COMPLIANCE_TOOLS)" sh tools/compliance-validate.sh

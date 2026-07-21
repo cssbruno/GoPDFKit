@@ -95,7 +95,7 @@ func (f *Document) planTypedParagraphMixedCoreShadowContext(ctx context.Context,
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if err := layoutengine.ChargePlanningWork(ctx, "typed mixed paragraph measurement", uint64(maxInt(len(paragraph.Segments), 1))); err != nil { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if err := layoutengine.ChargePlanningWork(ctx, "typed mixed paragraph measurement", uint64(maxInt(len(paragraph.Segments), 1))); err != nil {
 		return typedLineShadowResult{}, err
 	}
 	if paragraph.BoxRef != nil || paragraph.Box != (layout.BoxStyle{}) || paragraph.StyleRef != nil {
@@ -149,13 +149,13 @@ func (f *Document) planTypedParagraphMixedCoreShadowContext(ctx context.Context,
 		if segment.Link != "" && strings.TrimSpace(segment.Link) != segment.Link {
 			return typedLineShadowResult{}, newTypedShadowUnsupported(typedShadowParagraphContract, "mixed link targets must be canonical")
 		}
-		_, exists := metricsByStyle[style]
+		metricIndex, exists := metricsByStyle[style]
 		if !exists {
 			metric, metricErr := f.mixedCoreFontMetrics(style)
 			if metricErr != nil {
 				return typedLineShadowResult{}, metricErr
 			}
-			metricIndex := len(metrics)
+			metricIndex = len(metrics)
 			metricsByStyle[style] = metricIndex
 			metrics = append(metrics, metric)
 		}
@@ -180,7 +180,7 @@ func (f *Document) planTypedParagraphMixedCoreShadowContext(ctx context.Context,
 				break
 			}
 			styles = append(styles, metricIndex)
-			width := metrics[metricIndex].charWidths[byte(character)] // #nosec G115 -- low-width representation is explicitly normalized before packing
+			width := metrics[metricIndex].charWidths[byte(character)]
 			if character == ' ' {
 				width += f.ws
 			}
@@ -333,7 +333,7 @@ func (f *Document) planTypedParagraphMixedCoreShadowContext(ctx context.Context,
 			resourceIdentity := paperFontIdentity(metric.resource)
 			fontID := fontIDs[resourceIdentity]
 			if !fontID.Valid() {
-				fontID = layoutengine.FontResourceID(len(fonts) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+				fontID = layoutengine.FontResourceID(len(fonts) + 1)
 				resource := metric.resource
 				resource.ID = fontID
 				fonts = append(fonts, resource)
@@ -362,7 +362,7 @@ func (f *Document) planTypedParagraphMixedCoreShadowContext(ctx context.Context,
 			runIndex := len(runs)
 			run := layoutengine.CoreGlyphRun{Line: uint32(lineIndex), Font: fontID, FontSize: metric.fontSize, Color: coreGlyphColor(metric.style.Color), Origin: layoutengine.Point{X: runOriginX, Y: plannedLine.Baseline}, Codes: text[cursor:end], Advances: advances, Source: plannedLine.Source}
 			runs = append(runs, run)
-			items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(runIndex)}) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+			items = append(items, layoutengine.DisplayItem{Kind: layoutengine.CommandGlyphRun, Payload: uint32(runIndex)})
 			if metric.style.Underline || metric.style.StrikeThrough {
 				decorationErr := appendMixedCoreDecorations(f, metric, runOriginX, runStartCursor, lineCursor, plannedLine, &paths, &strokes, &items)
 				if decorationErr != nil {
@@ -384,7 +384,7 @@ func (f *Document) mixedCoreFontMetrics(style layout.TextStyle) (*mixedCoreFontM
 	scratch.cMargin, scratch.ws = f.cMargin, f.ws
 	scratch.fontFamily, scratch.fontStyle = f.fontFamily, f.fontStyle
 	scratch.fontSizePt, scratch.fontSize = f.fontSizePt, f.fontSizePt/scratch.k
-	applyPlannerTextStyle(scratch, style)
+	applyPDFTextStyle(scratch, style)
 	if scratch.err != nil || scratch.isCurrentUTF8 {
 		return nil, newTypedShadowUnsupported(typedShadowFont, "mixed inline style requires a canonical core font")
 	}
@@ -482,12 +482,12 @@ func appendMixedTextDecorations(
 		if boundsErr != nil {
 			return boundsErr
 		}
-		pathIndex := uint32(len(*paths)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		pathIndex := uint32(len(*paths))
 		*paths = append(*paths, layoutengine.PlannedPath{Segments: []layoutengine.PathSegment{
 			{Kind: layoutengine.PathMoveTo, Point: start},
 			{Kind: layoutengine.PathLineTo, Point: end},
 		}, Bounds: bounds})
-		strokeIndex := uint32(len(*strokes)) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		strokeIndex := uint32(len(*strokes))
 		*strokes = append(*strokes, layoutengine.PlannedStroke{
 			Path: pathIndex, Color: color, Width: strokeWidth,
 			LineCap: layoutengine.StrokeCapButt, Fragment: line.Fragment,

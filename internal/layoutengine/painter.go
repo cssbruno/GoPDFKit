@@ -115,7 +115,7 @@ func validateCorePaintLimits(plan LayoutPlan, limits CorePaintLimits) error {
 	}
 	var glyphs uint64
 	for _, run := range plan.glyphRuns {
-		count := uint64(plan.fonts[run.Font-1].GlyphCount(run.Codes)) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		count := uint64(plan.fonts[run.Font-1].GlyphCount(run.Codes))
 		if count > limits.MaxGlyphs-glyphs {
 			return fmt.Errorf("%w: glyphs", ErrCorePaintLimit)
 		}

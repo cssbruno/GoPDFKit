@@ -586,7 +586,7 @@ func scenarioPaperValue(kind paperlang.ScalarKind, request PaperSetScenarioFixtu
 		}
 		return paperedit.BoolValue(parsed), nil
 	case paperlang.ScalarNumber:
-		var number float64
+		number := 0.0
 		if request.Number != nil {
 			number = *request.Number
 		} else {
@@ -717,10 +717,9 @@ func scenarioFieldSpecs(fields []papercompile.FieldDescriptor, preset string, de
 			result = append(result, paperedit.NodeSpec{Kind: paperlang.NodeObject, ID: id, Children: scenarioFieldSpecs(field.Fields, preset, depth+1)})
 		case papercompile.SchemaList:
 			items := 0
-			switch preset {
-			case "typical":
+			if preset == "typical" {
 				items = 1
-			case "stress":
+			} else if preset == "stress" {
 				items = 3
 			}
 			if field.MaxItems > 0 && items > int(field.MaxItems) {

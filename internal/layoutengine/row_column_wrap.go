@@ -47,7 +47,7 @@ func planWrappedRowColumn(input RowColumnPlanInput, wrap RowColumnWrap, alignCon
 	}
 
 	planInput := LayoutPlanInput{Pages: []PlannedPage{{
-		Number: 1, Size: input.PageSize, Fragments: IndexRange{Count: uint32(len(input.Children))}, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		Number: 1, Size: input.PageSize, Fragments: IndexRange{Count: uint32(len(input.Children))},
 	}}}
 	planInput.Fragments = make([]Fragment, 0, len(input.Children))
 	if err := budget.charge(uint64(len(input.Children)) + uint64(len(lines)) + 1); err != nil {
@@ -65,7 +65,7 @@ func planWrappedRowColumn(input RowColumnPlanInput, wrap RowColumnWrap, alignCon
 			return RowColumnPlanResult{}, err
 		}
 		lineProjection[lineIndex] = RowColumnLine{
-			Children:   IndexRange{Start: uint32(line.start), Count: uint32(line.count)}, // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+			Children:   IndexRange{Start: uint32(line.start), Count: uint32(line.count)},
 			CrossStart: line.crossStart, CrossSize: line.crossSize, UsedMain: line.usedMain,
 		}
 		for localIndex := 0; localIndex < line.count; localIndex++ {
@@ -94,7 +94,7 @@ func planWrappedRowColumn(input RowColumnPlanInput, wrap RowColumnWrap, alignCon
 				return RowColumnPlanResult{}, fmt.Errorf("layoutengine: wrapped row or column child %d bounds: %w", childIndex, err)
 			}
 			planInput.Fragments = append(planInput.Fragments, Fragment{
-				ID: FragmentID(childIndex + 1), Node: child.Node, Key: child.Key, Instance: child.Instance, // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+				ID: FragmentID(childIndex + 1), Node: child.Node, Key: child.Key, Instance: child.Instance,
 				Page: 1, Region: RegionBody, BorderBox: bounds, ContentBox: bounds,
 				Source: child.Source, Continuation: ContinuationWhole,
 			})
@@ -197,7 +197,7 @@ func rowColumnWrapBasis(child RowColumnChild, index int, available Fixed) (Fixed
 	case RowColumnTrackFlex:
 		basis, err := resolveRowColumnFlexBasis(child.Track, available, child.ContentMain)
 		if err != nil {
-			return 0, fmt.Errorf("%w: child %d: %w", ErrRowColumnTrack, index, err)
+			return 0, fmt.Errorf("%w: child %d: %v", ErrRowColumnTrack, index, err)
 		}
 		maximum, maxErr := resolveRowColumnMaximum(child.Track, available)
 		if maxErr != nil {
@@ -221,6 +221,7 @@ func placeRowColumnLines(lines []rowColumnLogicalLine, gap, available, origin Fi
 		for index := range lines {
 			lines[index].crossSize += growth[index]
 		}
+		free = 0
 	} else {
 		mainAlignment, err := contentMainAlignment(alignment)
 		if err != nil {

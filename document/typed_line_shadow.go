@@ -37,7 +37,7 @@ func (f *Document) planTypedParagraphLineShadowContext(ctx context.Context, doc 
 		return typedLineShadowResult{}, err
 	}
 	if f == nil || f.err != nil ||
-		(f.page != 0 || f.state != documentStateUnopened) && (f.page == 0 || f.state != documentStatePageOpen) ||
+		!((f.page == 0 && f.state == documentStateUnopened) || (f.page > 0 && f.state == documentStatePageOpen)) ||
 		f.clipNest != 0 || f.transformNest != 0 {
 		return typedLineShadowResult{}, newTypedShadowUnsupported(typedShadowDocumentState, "requires an error-free unopened document or active page")
 	}
@@ -97,7 +97,8 @@ func (f *Document) planTypedParagraphLineShadowContext(ctx context.Context, doc 
 	scratch.fontStyle = f.fontStyle
 	scratch.fontSizePt = f.fontSizePt
 	scratch.fontSize = f.fontSizePt / scratch.k
-	style := layout.MergedTextStyle(plannerDefaultTextStyle(scratch), paragraph.EffectiveStyle())
+	measureContext := newMeasureContext(scratch, contentWidth)
+	style := layout.MergedTextStyle(measureContext.DefaultStyle, paragraph.EffectiveStyle())
 	requestedFamily := strings.ToLower(fontFamilyEscape(firstNonEmpty(style.FontFamily, f.fontFamily, "Helvetica")))
 	requestedStyle := ""
 	if style.Bold {
@@ -120,7 +121,7 @@ func (f *Document) planTypedParagraphLineShadowContext(ctx context.Context, doc 
 			return typedLineShadowResult{}, newTypedShadowUnsupported(typedShadowFont, err.Error())
 		}
 	}
-	applyPlannerTextStyle(scratch, style)
+	applyPDFTextStyle(scratch, style)
 	if scratch.err != nil {
 		return typedLineShadowResult{}, newTypedShadowUnsupported(typedShadowFont, "font metrics could not be resolved")
 	}
@@ -188,9 +189,8 @@ func (f *Document) planTypedParagraphLineShadowContext(ctx context.Context, doc 
 		return fixedFromDocumentUnits(f, userUnits)
 	}
 	lineHeight, err := toFixed(lineHeightUser)
-	physicalCapacity, capacityErr := pageSize.Height.Sub(body.Y)
-	if err != nil || capacityErr != nil || lineHeight <= 0 || lineHeight > physicalCapacity {
-		return typedLineShadowResult{}, newTypedShadowUnsupported(typedShadowGeometry, "line height is invalid or exceeds the physical page")
+	if err != nil || lineHeight <= 0 || lineHeight > body.Height {
+		return typedLineShadowResult{}, newTypedShadowUnsupported(typedShadowGeometry, "line height is invalid or exceeds the page body")
 	}
 	baseline, err := toFixed(baselineUser)
 	if err != nil || baseline < 0 || baseline > lineHeight {
@@ -325,10 +325,7 @@ func typedLineShadowLegacyPageLineCounts(lineCount int, top, trigger, lineHeight
 	counts := []uint32{0}
 	y := top
 	for range lineCount {
-		// An indivisible line taller than an empty body must make progress on
-		// that page. The shared paragraph planner emits it once with explicit
-		// oversized evidence; matching that behavior avoids a leading blank page.
-		if y+lineHeight > trigger && counts[len(counts)-1] != 0 {
+		if y+lineHeight > trigger {
 			counts = append(counts, 0)
 			y = top
 		}
@@ -380,5 +377,5 @@ func coreGlyphColor(color layout.DocumentColor) layoutengine.CoreRGBColor {
 	if !color.Set {
 		return layoutengine.CoreRGBColor{}
 	}
-	return layoutengine.CoreRGBColor{R: uint8(color.R), G: uint8(color.G), B: uint8(color.B), Set: true} // #nosec G115 -- low-width representation is explicitly normalized before packing
+	return layoutengine.CoreRGBColor{R: uint8(color.R), G: uint8(color.G), B: uint8(color.B), Set: true}
 }

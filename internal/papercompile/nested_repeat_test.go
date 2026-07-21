@@ -198,6 +198,7 @@ func TestNestedRepeatEnforcesCombinedOutputDepthAndWorkLimits(t *testing.T) {
 		{name: "work", limits: func() paperrepeat.Limits { value := paperrepeat.DefaultLimits(); value.MaxWork = 30; return value }()},
 	}
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			compiled := CompileScenarioWithLimits(parsed.AST, "sample", ScenarioCompileLimits{Repeats: test.limits})

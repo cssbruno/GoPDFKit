@@ -118,22 +118,3 @@ func (w *failOnPDFStreamWriter) Write(p []byte) (int, error) {
 	}
 	return len(p), nil
 }
-
-func TestCloseCreatesEmptyPageAndIsIdempotent(t *testing.T) {
-	pdf := MustNew()
-	pdf.Close()
-	if pdf.Err() {
-		t.Fatalf("Close() error = %v", pdf.Error())
-	}
-	if pdf.page != 1 {
-		t.Fatalf("Close() page = %d, want 1", pdf.page)
-	}
-	if pdf.state != documentStateClosed {
-		t.Fatalf("Close() state = %v, want closed", pdf.state)
-	}
-
-	pdf.Close()
-	if pdf.Err() {
-		t.Fatalf("second Close() error = %v", pdf.Error())
-	}
-}

@@ -66,7 +66,7 @@ func FingerprintNode(file, source, target string) (NodeFingerprint, error) {
 	index := indexSource(parsed.AST.Root, nil)
 	node, err := targetNode(index, target)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", ErrInvalidOperation, err)
+		return "", fmt.Errorf("%w: %v", ErrInvalidOperation, err)
 	}
 	return fingerprintNodeSource(source, node)
 }
@@ -84,7 +84,7 @@ func SourceInstance(file, source, target string) (string, error) {
 	}
 	index := indexSource(parsed.AST.Root, nil)
 	if _, err := targetNode(index, target); err != nil {
-		return "", fmt.Errorf("%w: %w", ErrInvalidOperation, err)
+		return "", fmt.Errorf("%w: %v", ErrInvalidOperation, err)
 	}
 	return index.instances[target], nil
 }
@@ -175,17 +175,6 @@ type SetProperties struct {
 
 func (SetProperties) paperEditOperation() {}
 
-// SetNodeValue replaces one scalar fixture value below an exact authored
-// root. Root-relative paths keep repeated schema/scenario field IDs distinct
-// without exposing an ambient or fuzzy target lookup.
-type SetNodeValue struct {
-	Root  string
-	Path  string
-	Value Value
-}
-
-func (SetNodeValue) paperEditOperation() {}
-
 // AppendProperty emits one additional property declaration. It is reserved
 // for grammar properties that intentionally repeat, such as document imports.
 type AppendProperty struct {
@@ -209,16 +198,6 @@ type InsertNode struct {
 }
 
 func (InsertNode) paperEditOperation() {}
-
-// InsertNodes inserts a bounded authored group at one parent. It is used for
-// atomic scenario-matrix creation so all cases share one source patch and
-// one compile-before-publish decision.
-type InsertNodes struct {
-	Parent string
-	Nodes  []NodeSpec
-}
-
-func (InsertNodes) paperEditOperation() {}
 
 type DeleteNode struct {
 	Target string
@@ -421,7 +400,7 @@ func Apply(transaction Transaction) (Result, error) {
 				diagnostic.Target = target
 			}
 			unchanged.Diagnostics = []Diagnostic{diagnostic}
-			return unchanged, fmt.Errorf("%w: operation %d: %w", ErrInvalidOperation, operationIndex+1, err)
+			return unchanged, fmt.Errorf("%w: operation %d: %v", ErrInvalidOperation, operationIndex+1, err)
 		}
 		var replacementBytes int
 		for _, patch := range resolved {
@@ -436,7 +415,7 @@ func Apply(transaction Transaction) (Result, error) {
 		unchanged.Diagnostics = []Diagnostic{{
 			Code: "PAPER_EDIT_PATCH_CONFLICT", Severity: paperlang.SeverityError,
 			Message:   fmt.Sprintf("operations %d and %d target overlapping source spans", first.operation+1, second.operation+1),
-			Operation: uint32(second.operation + 1), Target: second.target, Span: paperlang.Span{File: transaction.File}, // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+			Operation: uint32(second.operation + 1), Target: second.target, Span: paperlang.Span{File: transaction.File},
 		}}
 		return unchanged, ErrPatchConflict
 	}
@@ -460,7 +439,7 @@ func Apply(transaction Transaction) (Result, error) {
 		Source:            candidate,
 		Revision:          SourceRevision(candidate),
 		Applied:           true,
-		AppliedOperations: uint32(len(transaction.Operations)), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		AppliedOperations: uint32(len(transaction.Operations)),
 	}
 	result.Diff = &SourceDiff{
 		BeforeRevision: actualRevision,
@@ -545,15 +524,11 @@ func operationTargetIDs(operation Operation) []string {
 		return []string{edit.Target}
 	case SetProperties:
 		return []string{edit.Target}
-	case SetNodeValue:
-		return []string{edit.Root}
 	case AppendProperty:
 		return []string{edit.Target}
 	case ReplaceText:
 		return []string{edit.Target}
 	case InsertNode:
-		return []string{edit.Parent}
-	case InsertNodes:
 		return []string{edit.Parent}
 	case DeleteNode:
 		return []string{edit.Target}
@@ -584,8 +559,8 @@ func fingerprintNodeSource(source string, node *paperlang.Node) (NodeFingerprint
 	if node == nil {
 		return "", errors.New("paperedit: fingerprint node is nil")
 	}
-	start := lineStart(source, int(node.HeaderSpan.Start.Offset))     // #nosec G115 -- source offset is bounded by validated input or parser state
-	end := lineEndIncludingNewline(source, int(node.Span.End.Offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
+	start := lineStart(source, int(node.HeaderSpan.Start.Offset))
+	end := lineEndIncludingNewline(source, int(node.Span.End.Offset))
 	if start < 0 || end < start || end > len(source) {
 		return "", errors.New("paperedit: node fingerprint span is outside source")
 	}
@@ -610,7 +585,7 @@ func validNodeFingerprint(fingerprint NodeFingerprint) bool {
 func failResult(result Result, cause error, code, message string, operation int, target string, span paperlang.Span) (Result, error) {
 	diagnostic := Diagnostic{Code: code, Severity: paperlang.SeverityError, Message: message, Target: target, Span: span}
 	if operation > 0 {
-		diagnostic.Operation = uint32(operation) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		diagnostic.Operation = uint32(operation)
 	}
 	result.Diagnostics = []Diagnostic{diagnostic}
 	return result, cause
@@ -699,12 +674,12 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 			found = member.Property
 		}
 		if found != nil {
-			patch.start, patch.end = int(found.Value.Span.Start.Offset), int(found.Value.Span.End.Offset) // #nosec G115 -- source offset is bounded by validated input or parser state
+			patch.start, patch.end = int(found.Value.Span.Start.Offset), int(found.Value.Span.End.Offset)
 			patch.replacement = value
 			return []sourcePatch{patch}, patch.target, nil
 		}
 		indent := childIndent(node)
-		point, prefix, newline := insertionPoint(source, int(node.Span.End.Offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
+		point, prefix, newline := insertionPoint(source, int(node.Span.End.Offset))
 		patch.start, patch.end = point, point
 		patch.replacement = prefix + strings.Repeat(" ", indent) + edit.Name + ": " + value + newline
 		return []sourcePatch{patch}, patch.target, nil
@@ -744,14 +719,14 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 				found = member.Property
 			}
 			if found != nil {
-				patches = append(patches, sourcePatch{start: int(found.Value.Span.Start.Offset), end: int(found.Value.Span.End.Offset), replacement: value, operation: patch.operation, target: patch.target}) // #nosec G115 -- source offset is bounded by validated input or parser state
+				patches = append(patches, sourcePatch{start: int(found.Value.Span.Start.Offset), end: int(found.Value.Span.End.Offset), replacement: value, operation: patch.operation, target: patch.target})
 				continue
 			}
 			missing = append(missing, PropertySpec{Name: property.Name, Value: property.Value})
 		}
 		if len(missing) != 0 {
 			indent := childIndent(node)
-			point, prefix, newline := insertionPoint(source, int(node.Span.End.Offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
+			point, prefix, newline := insertionPoint(source, int(node.Span.End.Offset))
 			var builder strings.Builder
 			builder.WriteString(prefix)
 			for _, property := range missing {
@@ -769,27 +744,6 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 		}
 		return patches, patch.target, nil
 
-	case SetNodeValue:
-		patch.target = edit.Root
-		root, err := targetNode(index, edit.Root)
-		if err != nil {
-			return nil, patch.target, err
-		}
-		node, err := relativeNode(root, edit.Path)
-		if err != nil {
-			return nil, patch.target, err
-		}
-		if node.Kind != paperlang.NodeValue || node.Value == nil {
-			return nil, patch.target, fmt.Errorf("fixture path %q does not resolve to a scalar value", edit.Path)
-		}
-		value, err := renderValue(edit.Value)
-		if err != nil {
-			return nil, patch.target, err
-		}
-		patch.start, patch.end = int(node.Value.Span.Start.Offset), int(node.Value.Span.End.Offset) // #nosec G115 -- source offset is bounded by validated input or parser state
-		patch.replacement = value
-		return []sourcePatch{patch}, patch.target, nil
-
 	case AppendProperty:
 		patch.target = edit.Target
 		node, err := targetNode(index, edit.Target)
@@ -804,7 +758,7 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 			return nil, patch.target, err
 		}
 		indent := childIndent(node)
-		point, prefix, newline := insertionPoint(source, int(node.Span.End.Offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
+		point, prefix, newline := insertionPoint(source, int(node.Span.End.Offset))
 		patch.start, patch.end = point, point
 		patch.replacement = prefix + strings.Repeat(" ", indent) + edit.Name + ": " + value + newline
 		return []sourcePatch{patch}, patch.target, nil
@@ -818,7 +772,7 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 		if node.Kind != paperlang.NodeText || node.Value == nil {
 			return nil, patch.target, fmt.Errorf("target %s is not a text node with an inline value", edit.Target)
 		}
-		patch.start, patch.end = int(node.Value.Span.Start.Offset), int(node.Value.Span.End.Offset) // #nosec G115 -- source offset is bounded by validated input or parser state
+		patch.start, patch.end = int(node.Value.Span.Start.Offset), int(node.Value.Span.End.Offset)
 		patch.replacement = strconv.Quote(edit.Text)
 		return []sourcePatch{patch}, patch.target, nil
 
@@ -829,41 +783,14 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 			return nil, patch.target, err
 		}
 		indent := childIndent(parent)
-		newline := newlineForOffset(source, int(parent.HeaderSpan.End.Offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
+		newline := newlineForOffset(source, int(parent.HeaderSpan.End.Offset))
 		rendered, err := renderNode(edit.Node, indent, newline)
 		if err != nil {
 			return nil, patch.target, err
 		}
-		point, prefix, _ := insertionPoint(source, int(parent.Span.End.Offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
+		point, prefix, _ := insertionPoint(source, int(parent.Span.End.Offset))
 		patch.start, patch.end = point, point
 		patch.replacement = prefix + rendered
-		return []sourcePatch{patch}, patch.target, nil
-
-	case InsertNodes:
-		patch.target = edit.Parent
-		parent, err := targetNode(index, edit.Parent)
-		if err != nil {
-			return nil, patch.target, err
-		}
-		if len(edit.Nodes) == 0 || len(edit.Nodes) > MaxOperations {
-			return nil, patch.target, errors.New("node group must contain a bounded non-empty list")
-		}
-		indent := childIndent(parent)
-		newline := newlineForOffset(source, int(parent.HeaderSpan.End.Offset))  // #nosec G115 -- source offset is bounded by validated input or parser state
-		point, prefix, _ := insertionPoint(source, int(parent.Span.End.Offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
-		var builder strings.Builder
-		builder.WriteString(prefix)
-		for _, node := range edit.Nodes {
-			if !editorAllowedChild(parent.Kind, node.Kind) {
-				return nil, patch.target, fmt.Errorf("%s cannot contain inserted %s", parent.Kind, node.Kind)
-			}
-			rendered, renderErr := renderNode(node, indent, newline)
-			if renderErr != nil {
-				return nil, patch.target, renderErr
-			}
-			builder.WriteString(rendered)
-		}
-		patch.start, patch.end, patch.replacement = point, point, builder.String()
 		return []sourcePatch{patch}, patch.target, nil
 
 	case DeleteNode:
@@ -872,8 +799,8 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 		if err != nil {
 			return nil, patch.target, err
 		}
-		patch.start = lineStart(source, int(node.HeaderSpan.Start.Offset))     // #nosec G115 -- source offset is bounded by validated input or parser state
-		patch.end = lineEndIncludingNewline(source, int(node.Span.End.Offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
+		patch.start = lineStart(source, int(node.HeaderSpan.Start.Offset))
+		patch.end = lineEndIncludingNewline(source, int(node.Span.End.Offset))
 		return []sourcePatch{patch}, patch.target, nil
 
 	case RenameID:
@@ -888,7 +815,7 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 		if !exists {
 			return nil, patch.target, fmt.Errorf("target %s has no readable ID declaration span", edit.Target)
 		}
-		patch.start, patch.end = int(span.Start.Offset), int(span.End.Offset) // #nosec G115 -- source offset is bounded by validated input or parser state
+		patch.start, patch.end = int(span.Start.Offset), int(span.End.Offset)
 		patch.replacement = edit.NewID
 		return []sourcePatch{patch}, patch.target, nil
 
@@ -905,14 +832,14 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 		if edit.Target == edit.NewParent {
 			return nil, patch.target, errors.New("a node cannot be moved beneath itself")
 		}
-		deleteStart := lineStart(source, int(node.HeaderSpan.Start.Offset))     // #nosec G115 -- source offset is bounded by validated input or parser state
-		deleteEnd := lineEndIncludingNewline(source, int(node.Span.End.Offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
-		parentOffset := int(parent.HeaderSpan.Start.Offset)                     // #nosec G115 -- source offset is bounded by validated input or parser state
+		deleteStart := lineStart(source, int(node.HeaderSpan.Start.Offset))
+		deleteEnd := lineEndIncludingNewline(source, int(node.Span.End.Offset))
+		parentOffset := int(parent.HeaderSpan.Start.Offset)
 		if parentOffset >= deleteStart && parentOffset < deleteEnd {
 			return nil, patch.target, errors.New("a node cannot be moved beneath its descendant")
 		}
 		block := source[deleteStart:deleteEnd]
-		newline := newlineForOffset(source, int(parent.HeaderSpan.End.Offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
+		newline := newlineForOffset(source, int(parent.HeaderSpan.End.Offset))
 		adjusted := reindentNodeBlock(block, int(node.HeaderSpan.Start.Column-1), childIndent(parent))
 		if adjusted == "" {
 			return nil, patch.target, errors.New("node source block is empty")
@@ -920,7 +847,7 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 		if !strings.HasSuffix(adjusted, "\n") {
 			adjusted += newline
 		}
-		point, prefix, _ := insertionPoint(source, int(parent.Span.End.Offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
+		point, prefix, _ := insertionPoint(source, int(parent.Span.End.Offset))
 		// When the destination is immediately followed by the moving block,
 		// the insertion point is the removal boundary. Treat the move as one
 		// replacement so the transactional overlap detector does not reject a
@@ -962,13 +889,13 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 		if !editorAllowedChild(edit.Wrapper.Kind, node.Kind) {
 			return nil, patch.target, fmt.Errorf("wrapper %s cannot contain %s", edit.Wrapper.Kind, node.Kind)
 		}
-		start := lineStart(source, int(node.HeaderSpan.Start.Offset))     // #nosec G115 -- source offset is bounded by validated input or parser state
-		end := lineEndIncludingNewline(source, int(node.Span.End.Offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
+		start := lineStart(source, int(node.HeaderSpan.Start.Offset))
+		end := lineEndIncludingNewline(source, int(node.Span.End.Offset))
 		if start < 0 || end < start || end > len(source) {
 			return nil, patch.target, errors.New("target node source block is outside the source revision")
 		}
 		oldIndent := int(node.HeaderSpan.Start.Column - 1)
-		newline := newlineForOffset(source, int(node.HeaderSpan.End.Offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
+		newline := newlineForOffset(source, int(node.HeaderSpan.End.Offset))
 		wrapper, err := renderNode(edit.Wrapper, oldIndent, newline)
 		if err != nil {
 			return nil, patch.target, err
@@ -1008,9 +935,9 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 				return nil, patch.target, fmt.Errorf("%s cannot contain promoted %s child", parent.Kind, child.Kind)
 			}
 		}
-		start := lineStart(source, int(node.HeaderSpan.Start.Offset))                 // #nosec G115 -- source offset is bounded by validated input or parser state
-		bodyStart := lineEndIncludingNewline(source, int(node.HeaderSpan.End.Offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
-		end := lineEndIncludingNewline(source, int(node.Span.End.Offset))             // #nosec G115 -- source offset is bounded by validated input or parser state
+		start := lineStart(source, int(node.HeaderSpan.Start.Offset))
+		bodyStart := lineEndIncludingNewline(source, int(node.HeaderSpan.End.Offset))
+		end := lineEndIncludingNewline(source, int(node.Span.End.Offset))
 		if bodyStart < start || end < bodyStart || end > len(source) {
 			return nil, patch.target, errors.New("wrapper source block is outside the source revision")
 		}
@@ -1038,9 +965,9 @@ func resolveOperation(source string, index sourceIndex, operationIndex int, oper
 		if parent != nil && !editorAllowedChild(parent.Kind, edit.Node.Kind) {
 			return nil, patch.target, fmt.Errorf("%s cannot contain replacement %s", parent.Kind, edit.Node.Kind)
 		}
-		start := lineStart(source, int(node.HeaderSpan.Start.Offset))        // #nosec G115 -- source offset is bounded by validated input or parser state
-		end := lineEndIncludingNewline(source, int(node.Span.End.Offset))    // #nosec G115 -- source offset is bounded by validated input or parser state
-		newline := newlineForOffset(source, int(node.HeaderSpan.End.Offset)) // #nosec G115 -- source offset is bounded by validated input or parser state
+		start := lineStart(source, int(node.HeaderSpan.Start.Offset))
+		end := lineEndIncludingNewline(source, int(node.Span.End.Offset))
+		newline := newlineForOffset(source, int(node.HeaderSpan.End.Offset))
 		rendered, err := renderNode(edit.Node, int(node.HeaderSpan.Start.Column-1), newline)
 		if err != nil {
 			return nil, patch.target, err
@@ -1104,8 +1031,6 @@ func editorAllowedChild(parent, child paperlang.NodeKind) bool {
 		return child == paperlang.NodeValue || child == paperlang.NodeObject || child == paperlang.NodeKeyedList
 	case paperlang.NodeSchema, paperlang.NodeObjectType:
 		return child == paperlang.NodeField
-	case paperlang.NodeField:
-		return child == paperlang.NodeField
 	default:
 		return false
 	}
@@ -1127,37 +1052,6 @@ func targetNode(index sourceIndex, target string) (*paperlang.Node, error) {
 		return nil, fmt.Errorf("target %s was not found in the source revision", target)
 	}
 	return node, nil
-}
-
-func relativeNode(root *paperlang.Node, path string) (*paperlang.Node, error) {
-	if root == nil || path == "" {
-		return nil, errors.New("fixture path must be non-empty")
-	}
-	current := root
-	for _, part := range strings.Split(path, ".") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			return nil, fmt.Errorf("fixture path %q contains an empty segment", path)
-		}
-		if part[0] != '@' {
-			part = "@" + part
-		}
-		var found *paperlang.Node
-		for _, member := range current.Members {
-			if member.Node == nil || member.Node.ID != part {
-				continue
-			}
-			if found != nil {
-				return nil, fmt.Errorf("fixture path %q is ambiguous below %s", path, root.ID)
-			}
-			found = member.Node
-		}
-		if found == nil {
-			return nil, fmt.Errorf("fixture path %q was not found below %s", path, root.ID)
-		}
-		current = found
-	}
-	return current, nil
 }
 
 func renderValue(value Value) (string, error) {
@@ -1548,8 +1442,8 @@ func exportPatches(source string, patches []sourcePatch) []SourcePatch {
 			removed = source[patch.start:patch.end]
 		}
 		result[index] = SourcePatch{
-			Start: uint32(patch.start), End: uint32(patch.end), Removed: removed, // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
-			Replacement: patch.replacement, Operation: uint32(patch.operation + 1), Target: patch.target, // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+			Start: uint32(patch.start), End: uint32(patch.end), Removed: removed,
+			Replacement: patch.replacement, Operation: uint32(patch.operation + 1), Target: patch.target,
 		}
 	}
 	return result
@@ -1606,8 +1500,6 @@ func invalidationScope(index sourceIndex, operations []Operation) *InvalidationS
 			addNodeAndAncestors(edit.Target)
 		case SetProperties:
 			addNodeAndAncestors(edit.Target)
-		case SetNodeValue:
-			addNodeAndAncestors(edit.Root)
 		case AppendProperty:
 			addNodeAndAncestors(edit.Target)
 		case ReplaceText:
@@ -1615,11 +1507,6 @@ func invalidationScope(index sourceIndex, operations []Operation) *InvalidationS
 		case InsertNode:
 			addNodeAndAncestors(edit.Parent)
 			addSpec(edit.Node)
-		case InsertNodes:
-			addNodeAndAncestors(edit.Parent)
-			for _, node := range edit.Nodes {
-				addSpec(node)
-			}
 		case DeleteNode:
 			addNodeAndAncestors(edit.Target)
 			addSubtree(edit.Target)

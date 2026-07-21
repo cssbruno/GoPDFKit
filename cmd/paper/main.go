@@ -57,7 +57,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	command, ok := commands[args[0]]
 	if !ok {
-		_, _ = fmt.Fprintf(stderr, "paper: unknown command %q\n", args[0])
+		fmt.Fprintf(stderr, "paper: unknown command %q\n", args[0])
 		printUsage(stderr)
 		return exitUsage
 	}
@@ -65,7 +65,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 func printUsage(w io.Writer) {
-	_, _ = fmt.Fprintln(w, "usage: paper <fmt|check|render|capture|explain|scenario|workflow> [options] FILE")
+	fmt.Fprintln(w, "usage: paper <fmt|check|render|capture|explain|scenario|workflow> [options] FILE")
 }
 
 func flags(name string, stderr io.Writer) *flag.FlagSet {
@@ -82,7 +82,7 @@ func parseOneFile(set *flag.FlagSet, args []string) (string, int) {
 		return "", exitUsage
 	}
 	if set.NArg() != 1 {
-		_, _ = fmt.Fprintf(set.Output(), "paper %s: expected exactly one FILE (use - for stdin)\n", set.Name()[len("paper "):])
+		fmt.Fprintf(set.Output(), "paper %s: expected exactly one FILE (use - for stdin)\n", set.Name()[len("paper "):])
 		return "", exitUsage
 	}
 	return set.Arg(0), -1
@@ -131,7 +131,7 @@ func (options assetOptions) load() (document.PaperAssetCatalog, error) {
 	if *options.manifest == "" {
 		return document.NewPaperAssetCatalog(nil)
 	}
-	loaded, err := paperassets.LoadManifestResources(*options.manifest, *options.root)
+	loaded, err := paperassets.LoadManifest(*options.manifest, *options.root)
 	if err != nil {
 		return document.PaperAssetCatalog{}, err
 	}
@@ -191,7 +191,7 @@ func runFmt(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	if !*write {
 		if _, err := stdout.Write(formatted); err != nil {
-			_, _ = fmt.Fprintf(stderr, "paper fmt: %v\n", err)
+			fmt.Fprintf(stderr, "paper fmt: %v\n", err)
 			return exitFailure
 		}
 	}
@@ -284,7 +284,7 @@ func runCheck(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if planErr != nil {
 		return exitFailure
 	}
-	_, _ = fmt.Fprintf(stdout, "ok pages=%d hash=%s\n", result.Pages, result.Hash)
+	fmt.Fprintf(stdout, "ok pages=%d hash=%s\n", result.Pages, result.Hash)
 	return exitOK
 }
 
@@ -345,7 +345,7 @@ func runRender(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return commandError(*jsonMode, stdout, stderr, "render", err)
 		}
 	} else if _, err := stdout.Write(encoded.Bytes()); err != nil {
-		_, _ = fmt.Fprintf(stderr, "paper render: %v\n", err)
+		fmt.Fprintf(stderr, "paper render: %v\n", err)
 		return exitFailure
 	}
 	if *jsonMode {
@@ -399,7 +399,7 @@ func runExplain(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return commandError(*jsonMode, stdout, stderr, "explain", err)
 	}
 	if _, err := stdout.Write(append(explanation.JSON(), '\n')); err != nil {
-		_, _ = fmt.Fprintf(stderr, "paper explain: %v\n", err)
+		fmt.Fprintf(stderr, "paper explain: %v\n", err)
 		return exitFailure
 	}
 	return exitOK
@@ -512,7 +512,7 @@ func runCapture(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return commandError(*jsonMode, stdout, stderr, "capture", err)
 		}
 	} else if _, err := stdout.Write(payload); err != nil {
-		_, _ = fmt.Fprintf(stderr, "paper capture: %v\n", err)
+		fmt.Fprintf(stderr, "paper capture: %v\n", err)
 		return exitFailure
 	}
 	return exitOK
@@ -544,7 +544,7 @@ func runScenario(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				if *jsonMode {
 					return writeJSON(stdout, stderr, fixture)
 				}
-				_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\n", fixture.Name, fixture.Digest, fixture.Locale)
+				fmt.Fprintf(stdout, "%s\t%s\t%s\n", fixture.Name, fixture.Digest, fixture.Locale)
 				return exitOK
 			}
 		}
@@ -554,7 +554,7 @@ func runScenario(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return writeJSON(stdout, stderr, fixtures)
 	}
 	for _, fixture := range fixtures {
-		_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\n", fixture.Name, fixture.Digest, fixture.Locale)
+		fmt.Fprintf(stdout, "%s\t%s\t%s\n", fixture.Name, fixture.Digest, fixture.Locale)
 	}
 	return exitOK
 }
@@ -599,15 +599,15 @@ func displayFile(file string) string {
 }
 
 func readSource(file string, stdin io.Reader) ([]byte, error) {
-	reader := stdin
+	var reader io.Reader = stdin
 	var opened *os.File
 	if file != "-" {
 		var err error
-		opened, err = os.Open(file) // #nosec G304 -- file is the explicit CLI input path; no shell is involved.
+		opened, err = os.Open(file)
 		if err != nil {
 			return nil, err
 		}
-		defer func() { _ = opened.Close() }()
+		defer opened.Close()
 		reader = opened
 	}
 	data, err := io.ReadAll(io.LimitReader(reader, maxSourceBytes+1))
@@ -692,7 +692,7 @@ func writeJSON(stdout, stderr io.Writer, value any) int {
 	encoder := json.NewEncoder(stdout)
 	encoder.SetEscapeHTML(false)
 	if err := encoder.Encode(value); err != nil {
-		_, _ = fmt.Fprintf(stderr, "paper: encode JSON: %v\n", err)
+		fmt.Fprintf(stderr, "paper: encode JSON: %v\n", err)
 		return exitFailure
 	}
 	return exitOK
@@ -705,7 +705,7 @@ func commandError(jsonMode bool, stdout, stderr io.Writer, command string, err e
 			Error string `json:"error"`
 		}{false, err.Error()})
 	} else {
-		_, _ = fmt.Fprintf(stderr, "paper %s: %v\n", command, err)
+		fmt.Fprintf(stderr, "paper %s: %v\n", command, err)
 	}
 	return exitFailure
 }
@@ -718,7 +718,7 @@ func languageDiagnostics(jsonMode bool, stdout, stderr io.Writer, command string
 		}{false, diagnostics})
 	} else {
 		for _, diagnostic := range diagnostics {
-			_, _ = fmt.Fprintf(stderr, "%s:%d:%d: %s %s: %s\n", diagnostic.Span.File, diagnostic.Span.Start.Line, diagnostic.Span.Start.Column, diagnostic.Severity, diagnostic.Code, diagnostic.Message)
+			fmt.Fprintf(stderr, "%s:%d:%d: %s %s: %s\n", diagnostic.Span.File, diagnostic.Span.Start.Line, diagnostic.Span.Start.Column, diagnostic.Severity, diagnostic.Code, diagnostic.Message)
 		}
 	}
 	return exitFailure
@@ -733,7 +733,7 @@ func paperDiagnostics(jsonMode bool, stdout, stderr io.Writer, command string, d
 	} else {
 		writePaperDiagnostics(stderr, diagnostics)
 		if len(diagnostics) == 0 {
-			_, _ = fmt.Fprintf(stderr, "paper %s: operation failed\n", command)
+			fmt.Fprintf(stderr, "paper %s: operation failed\n", command)
 		}
 	}
 	return exitFailure
@@ -741,6 +741,6 @@ func paperDiagnostics(jsonMode bool, stdout, stderr io.Writer, command string, d
 
 func writePaperDiagnostics(w io.Writer, diagnostics []document.PaperDiagnostic) {
 	for _, diagnostic := range diagnostics {
-		_, _ = fmt.Fprintf(w, "%s:%d:%d: %s %s/%s: %s\n", diagnostic.File, diagnostic.StartLine, diagnostic.StartColumn, diagnostic.Severity, diagnostic.Stage, diagnostic.Code, diagnostic.Message)
+		fmt.Fprintf(w, "%s:%d:%d: %s %s/%s: %s\n", diagnostic.File, diagnostic.StartLine, diagnostic.StartColumn, diagnostic.Severity, diagnostic.Stage, diagnostic.Code, diagnostic.Message)
 	}
 }

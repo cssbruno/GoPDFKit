@@ -345,7 +345,7 @@ func NewFileSegmentedPlanStore(directory string, limits SegmentedPlanStoreLimits
 		return nil, errors.New("layoutengine: segmented plan store directory is empty")
 	}
 	clean := filepath.Clean(directory)
-	if err := os.MkdirAll(clean, 0o700); err != nil {
+	if err := os.MkdirAll(clean, 0o755); err != nil {
 		return nil, err
 	}
 	entries, err := os.ReadDir(clean)
@@ -358,7 +358,7 @@ func NewFileSegmentedPlanStore(directory string, limits SegmentedPlanStoreLimits
 		}
 	}
 	segmentDirectory := filepath.Join(clean, "segments")
-	if err := os.MkdirAll(segmentDirectory, 0o700); err != nil {
+	if err := os.MkdirAll(segmentDirectory, 0o755); err != nil {
 		return nil, err
 	}
 	store := &FileSegmentedPlanStore{directory: clean, segmentDirectory: segmentDirectory, limits: limits}
@@ -575,7 +575,7 @@ func encodeSegmentedPlan(ctx context.Context, plan LayoutPlan, limits SegmentedP
 		if end > pageCount {
 			end = pageCount
 		}
-		pageStart := uint32(start + 1) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		pageStart := uint32(start + 1)
 		if pageCount == 0 {
 			pageStart = 0
 		}
@@ -632,7 +632,7 @@ func encodeSegmentedPlan(ctx context.Context, plan LayoutPlan, limits SegmentedP
 	for pageIndex, page := range projection.Pages {
 		end, _ := page.Commands.end(len(projection.Commands))
 		for index := int(page.Commands.Start); index < end; index++ {
-			segments[segmentForPage(uint32(pageIndex+1))].Commands = append(segments[segmentForPage(uint32(pageIndex+1))].Commands, indexedCommand{uint32(index), projection.Commands[index]}) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+			segments[segmentForPage(uint32(pageIndex+1))].Commands = append(segments[segmentForPage(uint32(pageIndex+1))].Commands, indexedCommand{uint32(index), projection.Commands[index]})
 		}
 	}
 	for index, value := range projection.Breaks {
@@ -658,11 +658,11 @@ func encodeSegmentedPlan(ctx context.Context, plan LayoutPlan, limits SegmentedP
 	manifest := segmentedPlanManifest{FormatVersion: SegmentedPlanManifestFormatVersion, PlanSchemaVersion: LayoutPlanSchemaVersion,
 		PlannerVersion: PlannerVersion, PainterContractVersion: PainterContractVersion, PlanHash: hash,
 		DeterministicInputs: projection.DeterministicInputs,
-		Counts: segmentedPlanCounts{Pages: uint32(len(projection.Pages)), Fragments: uint32(len(projection.Fragments)), Lines: uint32(len(projection.Lines)), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-			PageRegions: uint32(len(projection.PageRegions)), GridTracks: uint32(len(projection.GridTracks)), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-			GlyphRuns: uint32(len(projection.GlyphRuns)), Images: uint32(len(projection.Images)), Links: uint32(len(projection.Links)), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-			Commands: uint32(len(projection.Commands)), Breaks: uint32(len(projection.Breaks)), Diagnostics: uint32(len(projection.Diagnostics)), // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
-			SemanticNodes: uint32(len(projection.SemanticNodes)), SemanticFragments: uint32(len(projection.SemanticFragments)), ReadingOrder: uint32(len(projection.ReadingOrder))}, // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		Counts: segmentedPlanCounts{Pages: uint32(len(projection.Pages)), Fragments: uint32(len(projection.Fragments)), Lines: uint32(len(projection.Lines)),
+			PageRegions: uint32(len(projection.PageRegions)), GridTracks: uint32(len(projection.GridTracks)),
+			GlyphRuns: uint32(len(projection.GlyphRuns)), Images: uint32(len(projection.Images)), Links: uint32(len(projection.Links)),
+			Commands: uint32(len(projection.Commands)), Breaks: uint32(len(projection.Breaks)), Diagnostics: uint32(len(projection.Diagnostics)),
+			SemanticNodes: uint32(len(projection.SemanticNodes)), SemanticFragments: uint32(len(projection.SemanticFragments)), ReadingOrder: uint32(len(projection.ReadingOrder))},
 		Pages: cloneSlice(projection.Pages), Fonts: cloneSlice(projection.Fonts), ImageResources: cloneSlice(projection.ImageResources),
 		Destinations: cloneSlice(projection.Destinations), Paths: clonePlannedPaths(projection.Paths), Transforms: cloneSlice(projection.Transforms),
 		Clips: cloneSlice(projection.Clips), Fills: cloneSlice(projection.Fills), Strokes: clonePlannedStrokes(projection.Strokes), SemanticNodes: cloneSlice(projection.SemanticNodes)}
@@ -678,7 +678,7 @@ func encodeSegmentedPlan(ctx context.Context, plan LayoutPlan, limits SegmentedP
 		}
 		sh := SegmentHash(sha256.Sum256(encoded))
 		payloads[sh] = encoded
-		manifest.Segments = append(manifest.Segments, segmentedPlanReference{uint32(index), segment.PageStart, uint32(len(segment.Pages)), uint64(len(encoded)), sh}) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		manifest.Segments = append(manifest.Segments, segmentedPlanReference{uint32(index), segment.PageStart, uint32(len(segment.Pages)), uint64(len(encoded)), sh})
 		total += uint64(len(encoded))
 	}
 	manifestJSON, err := json.Marshal(manifest)
@@ -908,7 +908,7 @@ func decodeSegmentedPayload(encoded []byte, reference segmentedPlanReference, pl
 	if err := decodeCanonicalSegmented(encoded, &value); err != nil {
 		return value, err
 	}
-	if value.FormatVersion != SegmentedPlanSegmentFormatVersion || value.PlanHash != planHash || value.Index != reference.Index || value.PageStart != reference.PageStart || uint32(len(value.Pages)) != reference.PageCount { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if value.FormatVersion != SegmentedPlanSegmentFormatVersion || value.PlanHash != planHash || value.Index != reference.Index || value.PageStart != reference.PageStart || uint32(len(value.Pages)) != reference.PageCount {
 		return value, corruptionError(ErrPlanStoreSchema, "segment envelope mismatch")
 	}
 	return value, nil
@@ -955,12 +955,12 @@ func segmentedPageMetadata(ctx context.Context, encoded []byte, hash PlanHash, p
 }
 
 func readSegmentedFile(path string, limit uint64) ([]byte, error) {
-	file, err := os.Open(path) // #nosec G304 -- path is a validated content-addressed segment under the store root.
+	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = file.Close() }()
-	reader := io.LimitReader(file, int64(limit)+1) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	defer file.Close()
+	reader := io.LimitReader(file, int64(limit)+1)
 	encoded, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, err

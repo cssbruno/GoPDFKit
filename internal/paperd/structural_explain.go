@@ -115,7 +115,7 @@ func (w *Workspace) ExplainLayoutIssue(ctx context.Context, request LayoutIssueE
 	}
 	if request.MaxItems == 0 || int(request.MaxItems) > w.limits.MaxSearchResults ||
 		request.MaxBytes == 0 || int(request.MaxBytes) > w.limits.MaxContextBytes ||
-		request.MaxWork == 0 || request.MaxWork > uint64(w.limits.MaxScenarioWork) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		request.MaxWork == 0 || request.MaxWork > uint64(w.limits.MaxScenarioWork) {
 		return LayoutIssueExplainResult{}, workspaceError("LAYOUT_EXPLAIN_LIMIT", "layout explanation bounds are outside configured limits", ErrLimit)
 	}
 	selector := request.Selector
@@ -375,7 +375,7 @@ func sourceCauses(mapping papercompile.CompileMapping, keys map[string]struct{},
 			DefinitionSpan: node.DefinitionSpan, InvocationSpan: node.InvocationSpan, InstancePath: node.InstancePath,
 			BindingPath: node.BindingPath, BindingSpan: node.BindingSpan, BindingNullable: node.BindingNullable,
 			BindingCollection: node.BindingCollection})
-		if uint32(len(result)) == max { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(result)) == max {
 			break
 		}
 	}
@@ -390,7 +390,7 @@ func styleCauses(mapping papercompile.CompileMapping, keys map[string]struct{}, 
 		}
 		result = append(result, LayoutStyleCause{Property: style.Property, ConsumerSpan: style.ConsumerSpan, Theme: style.Theme,
 			Token: style.Token, Value: style.Value, Provenance: style.Provenance})
-		if uint32(len(result)) == max { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		if uint32(len(result)) == max {
 			break
 		}
 	}
@@ -400,25 +400,16 @@ func styleCauses(mapping papercompile.CompileMapping, keys map[string]struct{}, 
 func finalizeLayoutIssueResult(result *LayoutIssueExplainResult, maxBytes int) error {
 	result.CanonicalHash = ""
 	result.EncodedBytes = 0
-	encoded, err := json.Marshal(result)
-	if err != nil {
-		return err
-	}
+	encoded, _ := json.Marshal(result)
 	digest := sha256.Sum256(encoded)
 	result.CanonicalHash = hex.EncodeToString(digest[:])
 	previous := -1
 	for previous != result.EncodedBytes {
 		previous = result.EncodedBytes
-		encoded, err = json.Marshal(result)
-		if err != nil {
-			return err
-		}
+		encoded, _ = json.Marshal(result)
 		result.EncodedBytes = len(encoded)
 	}
-	encoded, err = json.Marshal(result)
-	if err != nil {
-		return err
-	}
+	encoded, _ = json.Marshal(result)
 	if len(encoded) > maxBytes {
 		return workspaceError("LAYOUT_EXPLAIN_LIMIT", "layout explanation exceeds its response byte budget", ErrLimit)
 	}

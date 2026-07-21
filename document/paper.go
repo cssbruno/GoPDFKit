@@ -56,10 +56,6 @@ type PaperAssetResource struct {
 	MediaType string
 	Digest    string
 	Data      []byte
-	Family    string
-	Style     string
-	Weight    uint16
-	License   string
 }
 
 // PaperAssetCatalog is an opaque, immutable content-addressed input. Construct
@@ -73,20 +69,10 @@ type PaperAssetCatalog struct {
 // returns the imported file's stable name plus source bytes.
 type PaperImportResolver func(importerFile, importPath string) (file, source string, err error)
 
-// PaperJSONOptions selects the declared schema and locale for strict external
-// JSON data. Schema may include or omit its leading @. Name is a stable,
-// human-readable fixture identity used in diagnostics and deterministic input
-// manifests; it defaults to external-data.
-type PaperJSONOptions struct {
-	Name   string
-	Schema string
-	Locale string
-}
-
 func NewPaperAssetCatalog(resources []PaperAssetResource) (PaperAssetCatalog, error) {
 	compiled := make([]papercompile.AssetResource, len(resources))
 	for index, resource := range resources {
-		compiled[index] = papercompile.AssetResource{Name: resource.Name, MediaType: resource.MediaType, Digest: resource.Digest, Data: resource.Data, Family: resource.Family, Style: resource.Style, Weight: resource.Weight, License: resource.License}
+		compiled[index] = papercompile.AssetResource{Name: resource.Name, MediaType: resource.MediaType, Digest: resource.Digest, Data: resource.Data}
 	}
 	catalog, err := papercompile.NewAssetCatalog(compiled)
 	if err != nil {
@@ -266,37 +252,6 @@ func (f *Document) WritePaperScenarioWithAssetsAndImports(file, source, scenario
 	return rendered, err
 }
 
-// WritePaperJSON validates one external JSON object against a declared schema,
-// expands bounded repeats, and paints the resulting plan. It is the concise
-// data-driven path for application-generated documents.
-func (f *Document) WritePaperJSON(file, source string, data []byte) (PaperRenderResult, error) {
-	return f.WritePaperJSONWithOptions(file, source, data, PaperJSONOptions{})
-}
-
-// WritePaperJSONWithOptions is WritePaperJSON with explicit schema, locale,
-// and fixture identity selection.
-func (f *Document) WritePaperJSONWithOptions(file, source string, data []byte, options PaperJSONOptions) (PaperRenderResult, error) {
-	plan, planned, err := PlanPaperJSONWithOptions(file, source, data, options)
-	if err != nil {
-		return PaperRenderResult{Diagnostics: planned.Diagnostics}, err
-	}
-	rendered, err := f.WritePaperPlan(plan)
-	rendered.Diagnostics = append(append([]PaperDiagnostic(nil), planned.Diagnostics...), rendered.Diagnostics...)
-	return rendered, err
-}
-
-// WritePaperJSONWithAssetsAndImports combines the concise external JSON path
-// with explicit immutable assets and reusable source imports.
-func (f *Document) WritePaperJSONWithAssetsAndImports(file, source string, data []byte, options PaperJSONOptions, assets PaperAssetCatalog, resolver PaperImportResolver) (PaperRenderResult, error) {
-	plan, planned, err := PlanPaperJSONWithAssetsAndImports(file, source, data, options, assets, resolver)
-	if err != nil {
-		return PaperRenderResult{Diagnostics: planned.Diagnostics}, err
-	}
-	rendered, err := f.WritePaperPlan(plan)
-	rendered.Diagnostics = append(append([]PaperDiagnostic(nil), planned.Diagnostics...), rendered.Diagnostics...)
-	return rendered, err
-}
-
 // PlanPaper performs the complete read-only .paper pipeline. It never paints
 // and cannot mutate a caller-owned Document.
 func PlanPaper(file, source string) (PaperPlan, PaperPlanResult, error) {
@@ -375,38 +330,7 @@ func PlanPaperScenarioWithAssetsAndImportsContext(ctx context.Context, file, sou
 	return planPaperSource(ctx, file, source, scenario, true, assets.compile, papercompile.ImportResolver(resolver))
 }
 
-// PlanPaperJSON plans strict external JSON data using the document's only
-// declared schema. It performs no I/O and does not mutate a Document.
-func PlanPaperJSON(file, source string, data []byte) (PaperPlan, PaperPlanResult, error) {
-	return PlanPaperJSONWithOptions(file, source, data, PaperJSONOptions{})
-}
-
-// PlanPaperJSONWithOptions is PlanPaperJSON with explicit schema, locale, and
-// fixture identity selection.
-func PlanPaperJSONWithOptions(file, source string, data []byte, options PaperJSONOptions) (PaperPlan, PaperPlanResult, error) {
-	return planPaperJSONSource(context.Background(), file, source, data, options, papercompile.AssetCatalog{}, nil)
-}
-
-// PlanPaperJSONWithAssetsAndImports combines strict external JSON data with
-// explicit immutable asset and source-import boundaries.
-func PlanPaperJSONWithAssetsAndImports(file, source string, data []byte, options PaperJSONOptions, assets PaperAssetCatalog, resolver PaperImportResolver) (PaperPlan, PaperPlanResult, error) {
-	return planPaperJSONSource(context.Background(), file, source, data, options, assets.compile, papercompile.ImportResolver(resolver))
-}
-
-type paperJSONSelection struct {
-	data    []byte
-	options PaperJSONOptions
-}
-
 func planPaperSource(ctx context.Context, file, source, scenario string, selectScenario bool, assets papercompile.AssetCatalog, resolver papercompile.ImportResolver) (PaperPlan, PaperPlanResult, error) {
-	return planPaperSourceSelection(ctx, file, source, scenario, selectScenario, nil, assets, resolver)
-}
-
-func planPaperJSONSource(ctx context.Context, file, source string, data []byte, options PaperJSONOptions, assets papercompile.AssetCatalog, resolver papercompile.ImportResolver) (PaperPlan, PaperPlanResult, error) {
-	return planPaperSourceSelection(ctx, file, source, "", true, &paperJSONSelection{data: data, options: options}, assets, resolver)
-}
-
-func planPaperSourceSelection(ctx context.Context, file, source, scenario string, selectScenario bool, data *paperJSONSelection, assets papercompile.AssetCatalog, resolver papercompile.ImportResolver) (PaperPlan, PaperPlanResult, error) {
 	var budgetErr error
 	ctx, budgetErr = ensureDocumentPlanningBudget(ctx)
 	if budgetErr != nil {
@@ -422,25 +346,17 @@ func planPaperSourceSelection(ctx context.Context, file, source, scenario string
 	}
 
 	compiled := papercompile.CompileWithAssetsAndResolver(parsed.AST, assets, resolver)
-	if data != nil {
-		compiled = papercompile.CompileJSONDataWithAssetsAndResolver(parsed.AST, data.data, papercompile.JSONDataOptions{
-			Name: data.options.Name, Schema: data.options.Schema, Locale: data.options.Locale,
-		}, assets, resolver)
-	} else if selectScenario {
+	if selectScenario {
 		compiled = papercompile.CompileScenarioWithAssetsAndResolver(parsed.AST, scenario, assets, resolver)
 	}
 	result.Diagnostics = append(result.Diagnostics, paperDiagnostics(PaperStageCompile, compiled.Diagnostics)...)
 	if !compiled.OK() {
 		return paperPlanFailure(result, PaperStageCompile, errors.New("semantic compilation failed"))
 	}
-	compiled.Mapping.SourceRevision = string(paperedit.SourceRevision(source))
 
 	planner, err := newPaperPlanner(compiled.Page)
 	if err != nil {
 		return paperPlanStageFailure(result, PaperStagePlan, "PAPER_PLAN_PAGE", err, file, parsed.AST.Root)
-	}
-	if err := installPaperCatalogFonts(planner, assets); err != nil {
-		return paperPlanStageFailure(result, PaperStagePlan, "PAPER_PLAN_FONT_RESOURCES", err, file, parsed.AST.Root)
 	}
 	var planned layoutengine.LayoutPlan
 	blocks := layout.NormalizeBlocks(compiled.Document.Body)
@@ -467,11 +383,7 @@ func planPaperSourceSelection(ctx context.Context, file, source, scenario string
 		}
 		return paperPlanStageFailureWithHint(result, PaperStagePlan, code, err, hint, file, parsed.AST.Root)
 	}
-	selectionIdentity := scenario
-	if data != nil {
-		selectionIdentity = "data:" + compiled.ScenarioDigest
-	}
-	planned, err = bindPaperDeterministicInputs(planned, compiled, source, selectionIdentity, selectScenario)
+	planned, err = bindPaperDeterministicInputs(planned, compiled, source, scenario, selectScenario)
 	if err != nil {
 		return paperPlanStageFailure(result, PaperStagePlan, "PAPER_PLAN_INPUT_IDENTITY", err, file, parsed.AST.Root)
 	}
@@ -493,35 +405,11 @@ func planPaperSourceSelection(ctx context.Context, file, source, scenario string
 	}
 	plan := PaperPlan{plan: planned, file: file, title: compiled.Document.Title,
 		language: strings.TrimSpace(compiled.Document.Language), root: root, hash: hash.String(),
-		pages: len(planned.Projection().Pages), revisions: paperViewerRevisions(source, selectionIdentity, selectScenario),
+		pages: len(planned.Projection().Pages), revisions: paperViewerRevisions(source, scenario, selectScenario),
 		mapping:      clonePaperCompileMapping(compiled.Mapping),
 		imageSources: imageSources, fontSources: fontSources}
 	result.Pages, result.Hash = plan.PageCount(), plan.Hash()
 	return plan, result, nil
-}
-
-func installPaperCatalogFonts(planner *Document, assets papercompile.AssetCatalog) error {
-	if planner == nil {
-		return errors.New("paper font planner is nil")
-	}
-	for _, resource := range assets.FontResources() {
-		family := resource.Name
-		style := ""
-		if resource.Weight >= 600 {
-			style = "B"
-		}
-		if resource.Style == "italic" || resource.Style == "oblique" {
-			if style == "B" {
-				style = "BI"
-			} else {
-				style = "I"
-			}
-		}
-		if err := planner.AddUTF8FontFromBytesError(family, style, resource.Data); err != nil {
-			return fmt.Errorf("install project font %q: %w", resource.Name, err)
-		}
-	}
-	return nil
 }
 
 func bindPaperDeterministicInputs(plan layoutengine.LayoutPlan, compiled papercompile.Result, source, scenario string, selected bool) (layoutengine.LayoutPlan, error) {
@@ -596,12 +484,6 @@ func (f *Document) WritePaperPlan(plan PaperPlan) (PaperRenderResult, error) {
 	}
 	projection := plan.plan.Projection()
 	needsDisplayPainter := f.tagged.enabled || len(projection.ImageResources) != 0 || layoutPlanHasMultipleGlyphRunsPerLine(projection)
-	for _, font := range projection.Fonts {
-		if font.EmbeddedUTF8 != nil {
-			needsDisplayPainter = true
-			break
-		}
-	}
 	for _, command := range projection.Commands {
 		if command.Kind != layoutengine.CommandGlyphRun {
 			needsDisplayPainter = true
@@ -609,7 +491,7 @@ func (f *Document) WritePaperPlan(plan PaperPlan) (PaperRenderResult, error) {
 		}
 	}
 	if needsDisplayPainter {
-		prepared, err := f.preflightDisplayLayoutPlanPDFResourcesContextForTarget(context.Background(), plan.plan, plan.imageSources, plan.fontSources, false)
+		prepared, err := f.preflightDisplayLayoutPlanPDFResourcesContextForTarget(context.Background(), plan.plan, plan.imageSources, nil, false)
 		if err != nil {
 			return paperStageFailureWithSpan(result, PaperStagePaint, "PAPER_PAINT_PREFLIGHT", err,
 				"render into a fresh document with compatible image limits", plan.root)
@@ -883,7 +765,7 @@ func (f *Document) planPaperTextBlocksMappedBodiesContext(ctx context.Context, d
 			dx, dxErr := line.Bounds.X.Sub(decoration.sourceLine.Bounds.X)
 			dy, dyErr := line.Bounds.Y.Sub(decoration.sourceLine.Bounds.Y)
 			if dxErr != nil || dyErr != nil {
-				return fmt.Errorf("decoration translation offset: %w %w", dxErr, dyErr)
+				return fmt.Errorf("decoration translation offset: %v %v", dxErr, dyErr)
 			}
 			path, pathErr := translatePaperNestedPath(decoration.path, dx, dy)
 			if pathErr != nil {
@@ -2730,28 +2612,7 @@ func paperBlockIdentity(mapping papercompile.CompileMapping, bodyIndex, segmentI
 		}
 	}
 	if selected == nil {
-		for index := range mapping.AnonymousNodes {
-			candidate := &mapping.AnonymousNodes[index]
-			if candidate.BodyIndex != bodyIndex {
-				continue
-			}
-			if candidate.SegmentIndex == segmentIndex && candidate.NestedBlockIndex == nestedIndex {
-				selected = candidate
-				break
-			}
-			if selected == nil && candidate.SegmentIndex == segmentIndex && candidate.NestedBlockIndex == -1 {
-				selected = candidate
-			}
-			if selected == nil && candidate.SegmentIndex == -1 && candidate.NestedBlockIndex == -1 {
-				selected = candidate
-			}
-		}
-	}
-	if selected == nil {
-		return paperRevisionScopedFallbackIdentity(mapping.SourceRevision, identity, bodyIndex, segmentIndex, nestedIndex, fallback, paperlang.NodeKind("block"), paperlang.Span{})
-	}
-	if selected.ID == "" {
-		return paperRevisionScopedFallbackIdentity(mapping.SourceRevision, identity, bodyIndex, segmentIndex, nestedIndex, fallback, selected.Kind, selected.Span)
+		return identity
 	}
 	readableID := selected.ID
 	if segmentIndex >= 0 && selected.SegmentIndex != segmentIndex {
@@ -2766,29 +2627,6 @@ func paperBlockIdentity(mapping papercompile.CompileMapping, bodyIndex, segmentI
 		identity.instance = layoutengine.InstanceID(selected.InstancePath + "/" + readableID)
 	}
 	identity.source = paperLayoutSourceSpan(selected.Span)
-	return identity
-}
-
-func paperRevisionScopedFallbackIdentity(revision string, fallback paperSourceIdentity, bodyIndex, segmentIndex, nestedIndex, ordinal int, kind paperlang.NodeKind, span paperlang.Span) paperSourceIdentity {
-	sourceRevision, err := layoutengine.ParseSourceRevisionID(revision)
-	if err != nil {
-		return fallback
-	}
-	if ordinal < 0 {
-		ordinal = 0
-	}
-	if uint64(ordinal) > uint64(^uint32(0)) {
-		return fallback
-	}
-	fingerprintInput := fmt.Sprintf("%s\x00%d\x00%d\x00%d\x00%d\x00%d\x00%d", kind, bodyIndex, segmentIndex, nestedIndex, span.Start.Offset, span.End.Offset, ordinal)
-	fingerprint := sha256.Sum256([]byte(fingerprintInput))
-	key, err := layoutengine.DeriveAnonymousStructuralKey(layoutengine.AnonymousStructuralKeyInput{
-		Revision: sourceRevision, Kind: "paper-block", Ordinal: uint32(ordinal), Fingerprint: hex.EncodeToString(fingerprint[:]),
-	})
-	if err != nil {
-		return fallback
-	}
-	identity := paperSourceIdentity{key: key, instance: layoutengine.InstanceID(key), source: paperLayoutSourceSpan(span)}
 	return identity
 }
 

@@ -64,7 +64,7 @@ func (w *Workspace) FinalPDFVerificationInputHash(request FinalPDFVerificationRe
 	}
 	binding := finalPDFVerificationBinding{PlanHash: record.plan.Hash(), Tolerance: request.Tolerance, Structure: request.Structure,
 		RequiredCompliance: append([]string(nil), request.RequiredCompliance...), Compliance: append([]pdfverify.ComplianceEvidence(nil), request.Compliance...), Limits: limits}
-	binding.Structure.Pages = uint32(record.plan.PageCount()) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	binding.Structure.Pages = uint32(record.plan.PageCount())
 	binding.Raster.PageProfile, binding.Raster.DPI, binding.Raster.MaxPixels, binding.Raster.MaxSourceBytes, binding.Raster.MaxPNGBytes = raster.PageProfile, raster.DPI, raster.MaxPixels, raster.MaxSourceBytes, raster.MaxPNGBytes
 	binding.Raster.CoreFontSHA256 = digestBytes(raster.CoreFontProgram)
 	for id, value := range raster.FontPrograms {
@@ -122,7 +122,7 @@ func (w *Workspace) VerifyFinalPlanPDF(ctx context.Context, request FinalPDFVeri
 		return FinalPDFVerificationResult{}, err
 	}
 	request.Raster = rasterRequest
-	request.Structure.Pages = uint32(record.plan.PageCount()) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	request.Structure.Pages = uint32(record.plan.PageCount())
 	inputHash, err := w.FinalPDFVerificationInputHash(request)
 	if err != nil {
 		return FinalPDFVerificationResult{}, err
@@ -182,18 +182,18 @@ func (w *Workspace) normalizeFinalPDFVerification(request FinalPDFVerificationRe
 	if raster.PageProfile == "" && raster.DPI == 0 && raster.MaxPixels == 0 && raster.MaxSourceBytes == 0 && raster.MaxPNGBytes == 0 && len(raster.CoreFontProgram) == 0 && len(raster.FontPrograms) == 0 && len(raster.Images) == 0 {
 		raster = document.DefaultPaperPlanRasterRequest()
 	}
-	if raster.DPI == 0 || raster.MaxPixels == 0 || raster.MaxSourceBytes == 0 || raster.MaxPNGBytes == 0 || raster.MaxPNGBytes > uint64(w.limits.MaxRenderBytes) || raster.MaxSourceBytes > uint64(w.limits.MaxRenderBytes) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	if raster.DPI == 0 || raster.MaxPixels == 0 || raster.MaxSourceBytes == 0 || raster.MaxPNGBytes == 0 || raster.MaxPNGBytes > uint64(w.limits.MaxRenderBytes) || raster.MaxSourceBytes > uint64(w.limits.MaxRenderBytes) {
 		return nil, document.PaperPlanRasterRequest{}, pdfverify.Limits{}, workspaceError("FINAL_PDF_VERIFICATION_LIMIT", "plan raster limits are incomplete or exceed workspace bounds", ErrLimit)
 	}
 	limits := request.Limits
 	if limits == (pdfverify.Limits{}) {
 		limits = pdfverify.DefaultLimits()
-		workspaceBytes := uint64(w.limits.MaxRenderBytes) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+		workspaceBytes := uint64(w.limits.MaxRenderBytes)
 		limits.MaxPDFBytes = min(limits.MaxPDFBytes, workspaceBytes)
 		limits.MaxRasterBytesPage = min(limits.MaxRasterBytesPage, workspaceBytes)
 		limits.MaxTotalRasterBytes = min(limits.MaxTotalRasterBytes, workspaceBytes)
 	}
-	if request.Structure.Pages != 0 && request.Structure.Pages != uint32(record.plan.PageCount()) { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	if request.Structure.Pages != 0 && request.Structure.Pages != uint32(record.plan.PageCount()) {
 		return nil, document.PaperPlanRasterRequest{}, pdfverify.Limits{}, workspaceError("FINAL_PDF_PLAN_MISMATCH", "structural page expectation differs from retained plan", ErrInvalidQuery)
 	}
 	if err := pdfverify.ValidateConfiguration(raster.DPI, request.Tolerance, limits, request.Structure, request.RequiredCompliance, request.Compliance); err != nil {

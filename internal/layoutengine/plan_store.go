@@ -163,7 +163,7 @@ func NewFilePlanStore(directory string, limits PlanStoreLimits) (*FilePlanStore,
 		return nil, errors.New("layoutengine: plan store directory is empty")
 	}
 	clean := filepath.Clean(directory)
-	if err := os.MkdirAll(clean, 0o700); err != nil {
+	if err := os.MkdirAll(clean, 0o755); err != nil {
 		return nil, fmt.Errorf("layoutengine: create plan store directory: %w", err)
 	}
 	info, err := os.Stat(clean)
@@ -239,14 +239,14 @@ func (store *FilePlanStore) path(hash PlanHash) string {
 }
 
 func (store *FilePlanStore) readLocked(path string) ([]byte, error) {
-	file, err := os.Open(path) // #nosec G304 -- path is a content-addressed child of the validated store directory.
+	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("%w: %s", ErrPlanStoreNotFound, filepath.Base(path))
 	}
 	if err != nil {
 		return nil, fmt.Errorf("layoutengine: open plan store item: %w", err)
 	}
-	defer func() { _ = file.Close() }()
+	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
 		return nil, fmt.Errorf("layoutengine: stat plan store item: %w", err)
@@ -254,10 +254,10 @@ func (store *FilePlanStore) readLocked(path string) ([]byte, error) {
 	if !info.Mode().IsRegular() {
 		return nil, corruptionError(nil, "stored item is not a regular file")
 	}
-	if info.Size() < 0 || uint64(info.Size()) > store.limits.MaxPlanBytes { // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	if info.Size() < 0 || uint64(info.Size()) > store.limits.MaxPlanBytes {
 		return nil, fmt.Errorf("%w: stored plan exceeds %d bytes", ErrPlanStoreLimit, store.limits.MaxPlanBytes)
 	}
-	reader := io.LimitReader(file, int64(store.limits.MaxPlanBytes)+1) // #nosec G115 -- fixed-width conversion is bounded by the surrounding parser, planner, or resource invariant
+	reader := io.LimitReader(file, int64(store.limits.MaxPlanBytes)+1)
 	encoded, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, fmt.Errorf("layoutengine: read plan store item: %w", err)

@@ -183,9 +183,9 @@ func (w *Workspace) sensitiveAuditRootStatement(limit int) (SensitiveAuditRootSt
 	}
 	partition := sha256.Sum256([]byte(projectID + "\x00" + policyRevision + "\x00" + string(disclosure)))
 	statement := SensitiveAuditRootStatement{Version: 1, PartitionHash: hex.EncodeToString(partition[:]), FirstSequence: entries[0].Sequence, LastSequence: entries[len(entries)-1].Sequence,
-		Count: uint32(len(entries)), PreviousHash: entries[0].PreviousHash, RootHash: entries[len(entries)-1].EventHash, EntriesHash: digestBytes(encodedEntries)} // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		Count: uint32(len(entries)), PreviousHash: entries[0].PreviousHash, RootHash: entries[len(entries)-1].EventHash, EntriesHash: digestBytes(encodedEntries)}
 	payload, err := json.Marshal(statement)
-	if err != nil || uint64(len(payload)) > uint64(w.limits.MaxContextBytes) { // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+	if err != nil || uint64(len(payload)) > uint64(w.limits.MaxContextBytes) {
 		return SensitiveAuditRootStatement{}, nil, workspaceError("AUDIT_ANCHOR_LIMIT", "audit root statement exceeds configured bounds", ErrLimit)
 	}
 	return statement, payload, nil

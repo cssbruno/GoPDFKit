@@ -23,7 +23,7 @@ func buildCompactProvenance(fragments []Fragment, lines []PlannedLine) ([]Proven
 		if id := ids[entry]; id.Valid() {
 			return id
 		}
-		id := ProvenanceID(len(table) + 1) // #nosec G115 -- collection length is bounded by the surrounding limit or container invariant
+		id := ProvenanceID(len(table) + 1)
 		table = append(table, entry)
 		ids[entry] = id
 		return id

@@ -29,10 +29,8 @@ func TestSemanticMutationRequiresExactSourceInstanceWithoutAdvancingCandidate(t 
 	if !errors.Is(firstErr, ErrRevisionConflict) || errorCode(firstErr) != "INSTANCE_CONFLICT" || errorCode(secondErr) != "INSTANCE_CONFLICT" {
 		t.Fatalf("wrong instance errors = %v / %v", firstErr, secondErr)
 	}
-	var first *Error
-	var second *Error
-	ok := errors.As(firstErr, &first)
-	secondOK := errors.As(secondErr, &second)
+	first, ok := firstErr.(*Error)
+	second, secondOK := secondErr.(*Error)
 	if !ok || !secondOK || len(first.Candidates) != 1 || len(first.Candidates) > paperedit.MaxDiagnosticCandidates || !reflect.DeepEqual(first.Candidates, second.Candidates) {
 		t.Fatalf("instance candidates are unstable or unbounded: %+v / %+v", firstErr, secondErr)
 	}

@@ -10,13 +10,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/cssbruno/paperrune/internal/layoutengine"
 )
@@ -52,8 +50,6 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		!bytes.Contains(response.Body, []byte(`id="inspection-layer"`)) ||
 		!bytes.Contains(response.Body, []byte(`class="inspector-disclosure overlay-disclosure"`)) ||
 		!bytes.Contains(response.Body, []byte(`class="inspector-disclosure authoring-disclosure"`)) ||
-		bytes.Contains(response.Body, []byte(`review-contract-disclosure`)) ||
-		bytes.Contains(response.Body, []byte(`review-notes-disclosure`)) ||
 		!bytes.Contains(response.Body, []byte(`id="baseline-state"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/rail-model.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`data-overlay="reading"`)) ||
@@ -64,9 +60,6 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		!bytes.Contains(response.Body, []byte(`src="/instance-model.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/inspection-model.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/provenance-model.js"`)) ||
-		bytes.Contains(response.Body, []byte(`experiments-disclosure`)) ||
-		bytes.Contains(response.Body, []byte(`src="/typed-experiment-model.js"`)) ||
-		bytes.Contains(response.Body, []byte(`src="/review-model.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/tag-model.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/syntax-model.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/page-setup-model.js"`)) ||
@@ -84,12 +77,10 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		!bytes.Contains(response.Body, []byte(`id="page-image" role="img"`)) ||
 		!bytes.Contains(response.Body, []byte(`<footer class="statusbar">`)) ||
 		!bytes.Contains(response.Body, []byte(`id="verification-state"`)) ||
-		!bytes.Contains(response.Body, []byte(`id="delivery-panel"`)) ||
 		!bytes.Contains(response.Body, []byte(`id="page-label" class="page-label"`)) ||
 		!bytes.Contains(response.Body, []byte(`id="zoom-out" aria-label="Zoom out"`)) ||
-		bytes.Contains(response.Body, []byte(`src="/wasm_exec.js"`)) ||
+		!bytes.Contains(response.Body, []byte(`src="/wasm_exec.js"`)) ||
 		!bytes.Contains(response.Body, []byte(`src="/wasm-renderer.js"`)) ||
-		!bytes.Contains(response.Body, []byte(`src="/viewport-model.js"`)) ||
 		bytes.Contains(response.Body, []byte(`id="preview-status"`)) ||
 		bytes.Contains(response.Body, []byte(`class="canvas-toolbar"`)) ||
 		bytes.Contains(response.Body, []byte(`status-dot`)) ||
@@ -126,32 +117,22 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		!bytes.Contains(javascript.Body, []byte("visualMutationsLocked")) ||
 		!bytes.Contains(javascript.Body, []byte("previewRevisionLocked")) ||
 		!bytes.Contains(javascript.Body, []byte("loadWASMPage")) ||
-		!bytes.Contains(javascript.Body, []byte("PaperStudioViewportModel.fitZoom")) ||
-		!bytes.Contains(javascript.Body, []byte("window.devicePixelRatio")) ||
 		!bytes.Contains(javascript.Body, []byte("paintWASMCanvas")) ||
 		!bytes.Contains(javascript.Body, []byte("PaperStudioSyntaxModel.highlight")) ||
 		!bytes.Contains(javascript.Body, []byte("PaperStudioIssueModel.sourceAnnotations")) ||
 		!bytes.Contains(javascript.Body, []byte("source-diagnostic")) ||
 		!bytes.Contains(javascript.Body, []byte("commitPageSetup")) ||
-		!bytes.Contains(javascript.Body, []byte("refreshPromise")) ||
-		!bytes.Contains(javascript.Body, []byte("loadDeliveryStatus")) ||
-		bytes.Contains(javascript.Body, []byte("loadReview(")) || bytes.Contains(javascript.Body, []byte("submitReview(")) ||
-		!bytes.Contains(javascript.Body, []byte("EventSource")) ||
-		bytes.Contains(javascript.Body, []byte("draft.orientation = 'portrait'")) ||
 		bytes.Contains(javascript.Body, []byte("Apply page size")) ||
 		!bytes.Contains(javascript.Body, []byte(".render?revision=")) ||
 		bytes.Contains(javascript.Body, []byte("preview-status")) ||
 		bytes.Contains(javascript.Body, []byte("WASM plan preview")) ||
 		bytes.Contains(javascript.Body, []byte("loadSVG(page, 'display')")) ||
-		bytes.Contains(javascript.Body, []byte("loadReviewOverlay")) ||
 		!bytes.Contains(javascript.Body, []byte("await showPage(fragment.page)")) ||
-		!bytes.Contains(javascript.Body, []byte("markOutlineKey(fragment.Key)")) ||
-		!bytes.Contains(javascript.Body, []byte("/api/component-preview.svg")) ||
-		!bytes.Contains(javascript.Body, []byte("exact current-theme preview")) {
+		!bytes.Contains(javascript.Body, []byte("markOutlineKey(fragment.Key)")) {
 		t.Fatalf("studio synchronization script = %d / %s", javascript.StatusCode, javascript.Body)
 	}
 	stylesheetVerification := studioRequest(t, handler, http.MethodGet, "/studio.css", nil, "")
-	if stylesheetVerification.StatusCode != http.StatusOK || !bytes.Contains(stylesheetVerification.Body, []byte("verification-state.is-verified")) || !bytes.Contains(stylesheetVerification.Body, []byte("verification-state.is-stale")) || !bytes.Contains(stylesheetVerification.Body, []byte("delivery-export")) || !bytes.Contains(stylesheetVerification.Body, []byte("component-gallery-preview")) {
+	if stylesheetVerification.StatusCode != http.StatusOK || !bytes.Contains(stylesheetVerification.Body, []byte("verification-state.is-verified")) || !bytes.Contains(stylesheetVerification.Body, []byte("verification-state.is-stale")) {
 		t.Fatalf("verification status styles = %d / %s", stylesheetVerification.StatusCode, stylesheetVerification.Body)
 	}
 	editModel := studioRequest(t, handler, http.MethodGet, "/edit-model.js", nil, "")
@@ -180,10 +161,6 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 	if provenanceModel.StatusCode != http.StatusOK || !bytes.Contains(provenanceModel.Body, []byte("forFragments")) || !bytes.Contains(provenanceModel.Body, []byte("tokenLabel")) {
 		t.Fatalf("provenance model = %d / %s", provenanceModel.StatusCode, provenanceModel.Body)
 	}
-	typedModel := studioRequest(t, handler, http.MethodGet, "/typed-experiment-model.js", nil, "")
-	if typedModel.StatusCode != http.StatusOK || !bytes.Contains(typedModel.Body, []byte("function normalize")) || !bytes.Contains(typedModel.Body, []byte("breakLabel")) {
-		t.Fatalf("typed experiment model = %d / %s", typedModel.StatusCode, typedModel.Body)
-	}
 	tagModel := studioRequest(t, handler, http.MethodGet, "/tag-model.js", nil, "")
 	if tagModel.StatusCode != http.StatusOK || !bytes.Contains(tagModel.Body, []byte("final_serialized_pdf")) ||
 		!bytes.Contains(tagModel.Body, []byte("content_marked")) || !bytes.Contains(tagModel.Body, []byte("normalize")) {
@@ -203,14 +180,9 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		t.Fatalf("issue model = %d / %s", issueModel.StatusCode, issueModel.Body)
 	}
 	wasmBootstrap := studioRequest(t, handler, http.MethodGet, "/wasm-renderer.js", nil, "")
-	if wasmBootstrap.StatusCode != http.StatusOK || !bytes.Contains(wasmBootstrap.Body, []byte("new Worker('/wasm-renderer-worker.js')")) ||
+	if wasmBootstrap.StatusCode != http.StatusOK || !bytes.Contains(wasmBootstrap.Body, []byte("WebAssembly.instantiateStreaming")) ||
 		!bytes.Contains(wasmBootstrap.Body, []byte("PaperStudioWASMRenderer")) || !bytes.Contains(wasmBootstrap.Body, []byte("renderResponse")) {
 		t.Fatalf("wasm bootstrap = %d / %s", wasmBootstrap.StatusCode, wasmBootstrap.Body)
-	}
-	wasmWorker := studioRequest(t, handler, http.MethodGet, "/wasm-renderer-worker.js", nil, "")
-	if wasmWorker.StatusCode != http.StatusOK || !bytes.Contains(wasmWorker.Body, []byte("WebAssembly.instantiateStreaming")) ||
-		!bytes.Contains(wasmWorker.Body, []byte("importScripts('/wasm_exec.js')")) || !bytes.Contains(wasmWorker.Body, []byte("createImageBitmap")) {
-		t.Fatalf("wasm worker = %d / %s", wasmWorker.StatusCode, wasmWorker.Body)
 	}
 	wasmRuntime := studioRequest(t, handler, http.MethodGet, "/wasm_exec.js", nil, "")
 	if wasmRuntime.StatusCode != http.StatusOK || !bytes.Contains(wasmRuntime.Body, []byte("globalThis.Go")) {
@@ -220,22 +192,8 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 	if wasmModule.StatusCode != http.StatusOK || len(wasmModule.Body) < 8 || !bytes.Equal(wasmModule.Body[:4], []byte{'\x00', 'a', 's', 'm'}) {
 		t.Fatalf("wasm module = %d / %d bytes", wasmModule.StatusCode, len(wasmModule.Body))
 	}
-	gzipRequest, err := http.NewRequest(http.MethodGet, "http://paper-studio.local/paper-studio.wasm", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	gzipRequest.Header.Set("Accept-Encoding", "gzip")
-	gzipRecorder := &memoryResponseWriter{header: make(http.Header)}
-	handler.ServeHTTP(gzipRecorder, gzipRequest)
-	if gzipRecorder.status != http.StatusOK || gzipRecorder.header.Get("Content-Encoding") != "gzip" ||
-		gzipRecorder.body.Len() >= len(wasmModule.Body) {
-		t.Fatalf("compressed wasm = %d / %q / %d bytes", gzipRecorder.status, gzipRecorder.header, gzipRecorder.body.Len())
-	}
-	if acceptsGzip("br, gzip;q=0") || !acceptsGzip("br, gzip") {
-		t.Fatal("WASM gzip negotiation ignored an explicit client preference")
-	}
 	stylesheet := studioRequest(t, handler, http.MethodGet, "/studio.css", nil, "")
-	if stylesheet.StatusCode != http.StatusOK || !bytes.Contains(stylesheet.Body, []byte("preview-loading-progress")) ||
+	if stylesheet.StatusCode != http.StatusOK || !bytes.Contains(stylesheet.Body, []byte("STALE PREVIEW")) ||
 		!bytes.Contains(stylesheet.Body, []byte(".inspection-mark.is-reading")) ||
 		!bytes.Contains(stylesheet.Body, []byte(".inspection-mark.is-instance-repeated")) ||
 		!bytes.Contains(stylesheet.Body, []byte(".inspection-mark.is-baseline")) ||
@@ -297,44 +255,17 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 	if hit.StatusCode != http.StatusOK || !strings.Contains(hit.Body, `"Page":1`) {
 		t.Fatalf("hit = %d %s", hit.StatusCode, hit.Body)
 	}
-	var hitEvidence struct {
-		Commands  []struct{ HasFragmentProvenance bool }
-		Fragments []struct{ Key string }
-	}
-	if err := json.Unmarshal([]byte(hit.Body), &hitEvidence); err != nil || len(hitEvidence.Fragments) == 0 || hitEvidence.Fragments[0].Key != "@message" {
-		t.Fatalf("visible pixel hit evidence = %s / %v", hit.Body, err)
-	}
-	explain := postStudioJSON(t, handler, "/api/explain", map[string]any{"revision": workspace.Revision, "selector": map[string]any{"key": hitEvidence.Fragments[0].Key}})
+	explain := postStudioJSON(t, handler, "/api/explain", map[string]any{"revision": workspace.Revision, "selector": map[string]any{"key": "@message"}})
 	if explain.StatusCode != http.StatusOK || !strings.Contains(explain.Body, `"key":"@message"`) ||
-		!strings.Contains(explain.Body, `"fragments":[`) || !strings.Contains(explain.Body, `"commands":[`) || !strings.Contains(explain.Body, `"page":1`) {
+		!strings.Contains(explain.Body, `"fragments":[`) || !strings.Contains(explain.Body, `"page":1`) {
 		t.Fatalf("explain = %d %s", explain.StatusCode, explain.Body)
 	}
 	inspection := postStudioJSON(t, handler, "/api/inspect", map[string]any{"revision": workspace.Revision, "page": 1})
 	if inspection.StatusCode != http.StatusOK || !strings.Contains(inspection.Body, `"plan_hash":"`+workspace.Revision+`"`) ||
 		!strings.Contains(inspection.Body, `"selector":{"page":1,"max_results":128}`) ||
 		!strings.Contains(inspection.Body, `"border_box"`) || !strings.Contains(inspection.Body, `"content_box"`) ||
-		!strings.Contains(inspection.Body, `"reading_order"`) || !strings.Contains(inspection.Body, `"semantics"`) || !strings.Contains(inspection.Body, `"provenance":`) || !strings.Contains(inspection.Body, `"computed_styles"`) {
+		!strings.Contains(inspection.Body, `"reading_order"`) || !strings.Contains(inspection.Body, `"semantics"`) || !strings.Contains(inspection.Body, `"provenance":`) {
 		t.Fatalf("inspection = %d %s", inspection.StatusCode, inspection.Body)
-	}
-	typed := studioRequest(t, handler, http.MethodGet, "/api/typed-experiments?revision="+workspace.Revision, nil, "")
-	if typed.StatusCode != http.StatusOK || !bytes.Contains(typed.Body, []byte(`"projection"`)) || !bytes.Contains(typed.Body, []byte(`"fixtures"`)) || !bytes.Contains(typed.Body, []byte(`"break_ledger"`)) {
-		t.Fatalf("typed experiments = %d %s", typed.StatusCode, typed.Body)
-	}
-	staleTyped := studioRequest(t, handler, http.MethodGet, "/api/typed-experiments?revision=wrong", nil, "")
-	if staleTyped.StatusCode != http.StatusConflict {
-		t.Fatalf("stale typed experiment status = %d", staleTyped.StatusCode)
-	}
-	delivery := studioRequest(t, handler, http.MethodGet, "/api/delivery?revision="+workspace.Revision, nil, "")
-	if delivery.StatusCode != http.StatusOK || !bytes.Contains(delivery.Body, []byte(`"preflight":{"status":"ready"`)) || !bytes.Contains(delivery.Body, []byte(`"pdf_verification":{"status":"verified"`)) || !bytes.Contains(delivery.Body, []byte(`"export":{"status":"ready"`)) || !bytes.Contains(delivery.Body, []byte(`"publish":{"status":"separate_authorized_capability"`)) {
-		t.Fatalf("delivery status = %d %s", delivery.StatusCode, delivery.Body)
-	}
-	export := studioRequest(t, handler, http.MethodGet, "/api/export.pdf?revision="+workspace.Revision, nil, "")
-	if export.StatusCode != http.StatusOK || export.Header.Get("Content-Type") != "application/pdf" || !bytes.HasPrefix(export.Body, []byte("%PDF-")) {
-		t.Fatalf("export = %d %q %d", export.StatusCode, export.Header, len(export.Body))
-	}
-	staleDelivery := studioRequest(t, handler, http.MethodGet, "/api/delivery?revision=wrong", nil, "")
-	if staleDelivery.StatusCode != http.StatusConflict {
-		t.Fatalf("stale delivery status = %d", staleDelivery.StatusCode)
 	}
 	staleInspection := postStudioJSON(t, handler, "/api/inspect", map[string]any{"revision": "wrong", "page": 1})
 	if staleInspection.StatusCode != http.StatusConflict {
@@ -353,101 +284,6 @@ func TestPaperStudioServesRevisionBoundWorkspacePagesAndReadTools(t *testing.T) 
 		t.Fatalf("stale web render status = %d", staleRender.StatusCode)
 	}
 }
-
-func TestPaperStudioChangeStreamSignalsSourceRevision(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "fixture.paper")
-	if err := os.WriteFile(file, []byte(studioFixture), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	studio, err := newStudioServer(file, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	workspace := fetchStudioWorkspace(t, studio.routes())
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	request := httptest.NewRequest(http.MethodGet, "/api/changes?source_revision="+workspace.SourceRevision, nil).WithContext(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	stream := &studioStreamRecorder{header: make(http.Header), chunks: make(chan string, 16), ready: make(chan struct{})}
-	done := make(chan struct{})
-	go func() {
-		studio.routes().ServeHTTP(stream, request)
-		close(done)
-	}()
-	select {
-	case <-stream.ready:
-	case <-time.After(2 * time.Second):
-		t.Fatal("change stream did not become ready")
-	}
-	if status := stream.Status(); status != 0 && status != http.StatusOK {
-		t.Fatalf("change stream = %d %q", status, stream.header)
-	}
-	readStream := func(marker string) string {
-		var content strings.Builder
-		timer := time.NewTimer(2 * time.Second)
-		defer timer.Stop()
-		for {
-			select {
-			case chunk := <-stream.chunks:
-				content.WriteString(chunk)
-				if strings.Contains(content.String(), marker) {
-					return content.String()
-				}
-			case <-timer.C:
-				t.Fatalf("timed out waiting for %q; stream=%q", marker, content.String())
-				return content.String()
-			}
-		}
-	}
-	readStream(": connected")
-
-	changedSource := strings.Replace(studioFixture, "Studio fixture", "Studio fixture changed", 1)
-	if err := os.WriteFile(file, []byte(changedSource), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	event := readStream("event: changed")
-	if !strings.Contains(event, "\"source_revision\":\""+studioSourceRevision(changedSource)+"\"") {
-		t.Fatalf("change event = %q", event)
-	}
-	cancel()
-	<-done
-}
-
-type studioStreamRecorder struct {
-	header http.Header
-	chunks chan string
-	ready  chan struct{}
-	mu     sync.Mutex
-	once   sync.Once
-	status int
-}
-
-func (w *studioStreamRecorder) Header() http.Header { return w.header }
-func (w *studioStreamRecorder) WriteHeader(status int) {
-	w.mu.Lock()
-	w.status = status
-	w.mu.Unlock()
-	w.once.Do(func() { close(w.ready) })
-}
-func (w *studioStreamRecorder) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	if w.status == 0 {
-		w.status = http.StatusOK
-	}
-	w.mu.Unlock()
-	w.once.Do(func() { close(w.ready) })
-	w.chunks <- string(p)
-	return len(p), nil
-}
-func (w *studioStreamRecorder) Status() int {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.status
-}
-func (w *studioStreamRecorder) Flush() {}
 
 func TestPaperStudioInspectionRetainsRepeatedFragmentEvidence(t *testing.T) {
 	var source strings.Builder
@@ -513,23 +349,6 @@ func TestPaperStudioInspectionShowsBindingAndTokenProvenance(t *testing.T) {
 	}
 }
 
-func TestPaperStudioInspectionShowsBreakLedger(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "breaks.paper")
-	source := "document @report:\n  page @sheet:\n    width: 120pt\n    height: 56pt\n    margin: 6pt\n    body @body:\n      paragraph @first:\n        line-height: 30pt\n        text: \"first\"\n      paragraph @second:\n        text: \"second\"\n"
-	if err := os.WriteFile(file, []byte(source), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	studio, err := newStudioServer(file, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	workspace := fetchStudioWorkspace(t, studio.routes())
-	inspection := postStudioJSON(t, studio.routes(), "/api/inspect", map[string]any{"revision": workspace.Revision, "page": 1})
-	if inspection.StatusCode != http.StatusOK || !strings.Contains(inspection.Body, `"breaks":[`) || !strings.Contains(inspection.Body, `"from_page":1`) {
-		t.Fatalf("break ledger inspection = %d %s", inspection.StatusCode, inspection.Body)
-	}
-}
-
 func TestPaperStudioListenAddressIsLoopbackOnly(t *testing.T) {
 	for _, address := range []string{"127.0.0.1:7331", "localhost:7331", "[::1]:7331"} {
 		if err := validateStudioListenAddress(address); err != nil {
@@ -572,7 +391,7 @@ func TestPaperStudioReloadsAtomicallyAndRejectsMalformedOrConcurrentRequests(t *
 			defer wait.Done()
 			workspace, fetchErr := fetchStudioWorkspaceResult(handler)
 			if fetchErr != nil || workspace.Revision != first.Revision || workspace.Pages != first.Pages {
-				errorsFound <- fmt.Errorf("workspace=%+v error=%w", workspace, fetchErr)
+				errorsFound <- fmt.Errorf("workspace=%+v error=%v", workspace, fetchErr)
 			}
 		}()
 	}

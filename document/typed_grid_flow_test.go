@@ -6,7 +6,6 @@ package document
 import (
 	"bytes"
 	"context"
-	"errors"
 	"math"
 	"strings"
 	"testing"
@@ -217,7 +216,7 @@ func TestTypedMultiColumnGeometryRejectsInvalidAndHonorsCancellation(t *testing.
 	cancel()
 	planner := paginationTestDocument(t, 100)
 	fields := make([]layout.MetadataField, 10_000)
-	if _, err := planner.PlanLayoutDocumentContext(canceled, &layout.LayoutDocument{Body: []layout.Block{layout.MetadataGridBlock{Columns: 4, Fields: fields}}}); !errors.Is(err, context.Canceled) {
+	if _, err := planner.PlanLayoutDocumentContext(canceled, &layout.LayoutDocument{Body: []layout.Block{layout.MetadataGridBlock{Columns: 4, Fields: fields}}}); err != context.Canceled {
 		t.Fatalf("canceled error = %v", err)
 	}
 }
