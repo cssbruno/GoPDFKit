@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package document_test
@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/gopdfkit/document"
 )
 
 type nilOutputWriter struct{}

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -14,9 +14,9 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/cssbruno/paperrune/document"
-	"github.com/cssbruno/paperrune/examples/internal/outpath"
-	"github.com/cssbruno/paperrune/sign"
+	"github.com/cssbruno/gopdfkit/document"
+	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
+	"github.com/cssbruno/gopdfkit/sign"
 )
 
 func main() {
@@ -50,7 +50,7 @@ func selfSignedSigner() (*x509.Certificate, crypto.Signer) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	template := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "PaperRune Example Signer"},
+		Subject:               pkix.Name{CommonName: "GoPDFKit Example Signer"},
 		NotBefore:             now.Add(-time.Hour),
 		NotAfter:              now.Add(24 * time.Hour),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageContentCommitment,

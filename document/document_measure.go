@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package document
 
-import "github.com/cssbruno/paperrune/layout"
+import "github.com/cssbruno/gopdfkit/layout"
 
 // newMeasureContext creates a measurement context for the given content width.
 func newMeasureContext(pdf *Document, width float64) layout.MeasureContext {

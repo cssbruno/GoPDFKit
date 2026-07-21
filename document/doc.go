@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
-// Package document contains PaperRune's canonical high-level PDF API.
+// Package document contains GoPDFKit's canonical high-level PDF API.
 //
 // Applications construct PDFs with NewDocument or MustNew and configure them
 // with typed functional options. Renderer-independent document model types and

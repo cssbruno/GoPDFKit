@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -11,8 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/paperrune/inspect"
-	"github.com/cssbruno/paperrune/layout"
+	"github.com/cssbruno/gopdfkit/layout"
 )
 
 func TestWriteDocumentRendersSharedBlocks(t *testing.T) {
@@ -152,9 +151,8 @@ func TestWriteDocumentAcceptsBuiltInBlockPointersAndSkipsTypedNil(t *testing.T) 
 	if err := pdf.Output(&output); err != nil {
 		t.Fatalf("Output() error = %v", err)
 	}
-	text := extractedDocumentText(t, output.Bytes())
 	for _, want := range []string{"pointer heading", "pointer paragraph"} {
-		if !strings.Contains(text, want) {
+		if !strings.Contains(output.String(), want) {
 			t.Fatalf("PDF output missing %q", want)
 		}
 	}
@@ -415,7 +413,7 @@ func TestWriteDocumentRendersSignatureMetadata(t *testing.T) {
 	if err := pdf.Output(&out); err != nil {
 		t.Fatalf("Output() error = %v", err)
 	}
-	content := extractedDocumentText(t, out.Bytes())
+	content := out.String()
 	for _, want := range []string{"Signed by", "Alex Example", "Reviewer", "ID: 123"} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("PDF output missing signature metadata %q", want)
@@ -585,28 +583,10 @@ func TestWriteDocumentInlineImagesUseContentHashAndFit(t *testing.T) {
 		t.Fatalf("registered images = %d, want deterministic reuse of identical inline data", got)
 	}
 	for name := range resources.images {
-		if !strings.HasPrefix(name, "plan-image-") {
+		if !strings.HasPrefix(name, "document-image-") {
 			t.Fatalf("registered image name = %q, want hash-based document image name", name)
 		}
 	}
-}
-
-func extractedDocumentText(t *testing.T, pdf []byte) string {
-	t.Helper()
-	pages, err := inspect.PageCount(pdf)
-	if err != nil {
-		t.Fatalf("PageCount() error = %v", err)
-	}
-	var text strings.Builder
-	for page := 1; page <= pages; page++ {
-		value, err := inspect.PageText(pdf, page)
-		if err != nil {
-			t.Fatalf("PageText(%d) error = %v", page, err)
-		}
-		text.WriteString(value)
-		text.WriteByte('\n')
-	}
-	return text.String()
 }
 
 func decodeDocumentRenderTestPNG(t *testing.T) []byte {

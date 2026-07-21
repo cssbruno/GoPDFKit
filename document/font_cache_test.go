@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package document_test
@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cssbruno/paperrune/document"
-	"github.com/cssbruno/paperrune/internal/testsupport/example"
+	"github.com/cssbruno/gopdfkit/document"
+	"github.com/cssbruno/gopdfkit/internal/testsupport/example"
 )
 
 func TestFontCacheMatchesUTF8FontFromBytes(t *testing.T) {

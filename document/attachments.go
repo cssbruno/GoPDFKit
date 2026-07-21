@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -34,7 +34,7 @@ type AttachmentOptions struct {
 }
 
 // AttachmentLoader opens attachment content for output. The returned size may
-// be -1 when unknown. PaperRune still reads the stream into memory before
+// be -1 when unknown. GoPDFKit still reads the stream into memory before
 // embedding in v0.9.x, so loader implementations must be bounded by policy.
 type AttachmentLoader interface {
 	OpenAttachment(ctx context.Context) (io.ReadCloser, int64, error)
@@ -358,7 +358,7 @@ func compressAttachmentWithChecksumFile(content []byte, level int) (attachmentSt
 	if !validCompressionLevel(level) {
 		level = zlib.BestSpeed
 	}
-	file, err := os.CreateTemp("", "paperrune-attachment-*.z")
+	file, err := os.CreateTemp("", "gopdfkit-attachment-*.z")
 	if err != nil {
 		return attachmentStream{}, "", err
 	}

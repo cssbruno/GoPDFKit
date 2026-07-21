@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -8,9 +8,9 @@ import (
 	"log"
 	"path/filepath"
 
-	"github.com/cssbruno/paperrune/document"
-	"github.com/cssbruno/paperrune/examples/internal/assets"
-	"github.com/cssbruno/paperrune/examples/internal/outpath"
+	"github.com/cssbruno/gopdfkit/document"
+	"github.com/cssbruno/gopdfkit/examples/internal/assets"
+	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
 
 func main() {
@@ -44,7 +44,7 @@ func main() {
 		<h1>HTML Images and SVG</h1>
 		<p>This example enables local image rendering for trusted file paths, keeps images with captions, and renders a small inline SVG directly from the HTML fragment.</p>
 		<figure>
-			<img src="%s" alt="PaperRune logo" width="72mm" height="28mm" style="object-fit: contain; text-align: center">
+			<img src="%s" alt="GoPDFKit logo" width="72mm" height="28mm" style="object-fit: contain; text-align: center">
 			<figcaption>Local PNG loaded through HTMLNew with AllowLocalImages enabled.</figcaption>
 		</figure>
 		<figure>

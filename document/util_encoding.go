@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -136,7 +136,7 @@ func repClosure(m map[rune]byte) func(string) string {
 // followed by two hexadecimal digits that identify the glyph position in the
 // code page of interest. The second field begins with "U+" and is followed by
 // the Unicode code point value. The third is the glyph name. A number of these
-// code page map files are packaged with paperrune in the font directory.
+// code page map files are packaged with gopdfkit in the font directory.
 //
 // An error occurs only if a line is read that does not conform to the expected
 // format. In this case, the returned function is valid but does not perform
@@ -193,7 +193,7 @@ func UnicodeTranslatorFromFile(fileStr string) (f func(string) string, err error
 // cpStr identifies a code page. A descriptor file in the font directory, set
 // with the fontDirStr argument in the call to New(), should have this name
 // plus the extension ".map". If cpStr is empty, it will be replaced with
-// "cp1252", the paperrune code page default.
+// "cp1252", the gopdfkit code page default.
 //
 // If an error occurs reading the descriptor, the returned function is valid
 // but does not perform any rune translation.

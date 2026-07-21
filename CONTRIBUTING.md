@@ -1,6 +1,6 @@
 # Contributing
 
-PaperRune uses the Go version declared in `go.mod`; tool dependencies are pinned
+GoPDFKit uses the Go version declared in `go.mod`; tool dependencies are pinned
 separately in `tools/go.mod`.
 
 Before submitting a change, run:

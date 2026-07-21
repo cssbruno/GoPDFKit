@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -6,13 +6,11 @@ package document
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/paperrune/internal/layoutengine"
-	"github.com/cssbruno/paperrune/layout"
-	"github.com/cssbruno/paperrune/sign"
+	"github.com/cssbruno/gopdfkit/layout"
+	"github.com/cssbruno/gopdfkit/sign"
 )
 
 func TestWriteDocumentAppliesLanguageToCatalog(t *testing.T) {
@@ -103,46 +101,6 @@ func TestTypedTableRepeatsHeaderAcrossPages(t *testing.T) {
 	}
 }
 
-func TestTypedTableFixedColumnsRetainAuthoredWidthOnWiderPage(t *testing.T) {
-	pdf := MustNew(WithCustomPageSize(Size{Wd: 595.275590551, Ht: 841.88976378}))
-	doc := layout.NewLayoutDocument()
-	doc.PageTemplate.Margins = layout.Spacing{Top: 12, Right: 12, Bottom: 12, Left: 12}
-	doc.Body = []layout.Block{layout.TableBlock{
-		Columns: []layout.TableColumn{{Width: 84}, {Width: 84}},
-		Body: []layout.TableRow{{Cells: []layout.TableCell{
-			{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "left"}}}}},
-			{Blocks: []layout.Block{layout.ParagraphBlock{Segments: []layout.TextSegment{{Text: "right"}}}}},
-		}}},
-	}}
-
-	plan, err := pdf.PlanLayoutDocument(doc)
-	if err != nil {
-		t.Fatalf("PlanLayoutDocument() error = %v", err)
-	}
-	if plan.PageCount() == 0 {
-		t.Fatal("PlanLayoutDocument() returned no pages")
-	}
-	want, err := layoutengine.FixedFromPoints(168)
-	if err != nil {
-		t.Fatal(err)
-	}
-	bodyWidth, err := layoutengine.FixedFromPoints(571.275590551)
-	if err != nil {
-		t.Fatal(err)
-	}
-	columnWidth, err := layoutengine.FixedFromPoints(84)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tableWidth := typedTablePlanWidth(bodyWidth, []layoutengine.TableColumn{
-		{Kind: layoutengine.TableTrackFixed, Width: columnWidth},
-		{Kind: layoutengine.TableTrackFixed, Width: columnWidth},
-	})
-	if tableWidth != want {
-		t.Fatalf("typedTablePlanWidth() = %v, want authored fixed width %v", tableWidth, want)
-	}
-}
-
 func TestTypedTableLayoutPlacesRowSpanAndHonorsColumnBounds(t *testing.T) {
 	pdf := MustNew()
 	pdf.AddPage()
@@ -227,24 +185,9 @@ func TestTypedBoxBackgroundUsesMeasuredContentHeight(t *testing.T) {
 			BackgroundColor: layout.DocumentColor{R: 240, G: 240, B: 240, Set: true},
 		},
 	}}
-	plan, err := pdf.PlanLayoutDocument(doc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	projection := plan.plan.Projection()
-	if len(projection.Fills) != 1 {
-		t.Fatalf("planned fills = %#v, want one background", projection.Fills)
-	}
-	fill := projection.Fills[0]
-	if int(fill.Path) >= len(projection.Paths) {
-		t.Fatalf("background fill path = %d, paths = %d", fill.Path, len(projection.Paths))
-	}
-	want := pdf.UnitToPointConvert(12)
-	if got := projection.Paths[fill.Path].Bounds.Height.Points(); math.Abs(got-want) > 1.0/float64(layoutengine.FixedScale) {
-		t.Fatalf("planned background height = %.6f, want %.6f", got, want)
-	}
 	pdf.WriteDocument(doc)
-	if pdf.Error() != nil || !strings.Contains(pdf.pages[pdf.page].String(), " h f") {
-		t.Fatalf("unified background was not painted: %v\n%s", pdf.Error(), pdf.pages[pdf.page].String())
+	content := pdf.pages[pdf.page].String()
+	if !strings.Contains(content, "-34.02 re f") {
+		t.Fatalf("background rectangle did not use measured block height:\n%s", content)
 	}
 }

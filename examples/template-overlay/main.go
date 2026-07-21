@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -7,9 +7,9 @@ import (
 	"bytes"
 	"log"
 
-	"github.com/cssbruno/paperrune/document"
-	"github.com/cssbruno/paperrune/examples/internal/outpath"
-	"github.com/cssbruno/paperrune/examples/internal/samplepdf"
+	"github.com/cssbruno/gopdfkit/document"
+	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
+	"github.com/cssbruno/gopdfkit/examples/internal/samplepdf"
 )
 
 func main() {
@@ -36,7 +36,7 @@ func drawOverlay(pdf *document.Document) {
 
 	pdf.SetTextColor(35, 45, 55)
 	pdf.SetFont("Helvetica", "B", 16)
-	pdf.Text(120, 572, "Template populated by PaperRune")
+	pdf.Text(120, 572, "Template populated by GoPDFKit")
 	pdf.SetFont("Helvetica", "", 11)
 	pdf.Text(120, 600, "Customer: Northwind Trading")
 	pdf.Text(120, 620, "Document ID: TMP-2026-0042")

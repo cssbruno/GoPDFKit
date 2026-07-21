@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -77,12 +77,6 @@ type Hooks struct {
 	OnAttachmentLoaded  func(filename string, bytes int64)
 	OnOutputObject      func(objectNumber int, kind string)
 	OnWarning           func(message string)
-	// OnLayoutEngineRoute reports which implementation served a public layout
-	// entry point. Automatic layout reports only successful unified routes;
-	// unsupported input fails before this hook is called. Values never contain
-	// authored content or source paths. Callers can audit that no legacy route
-	// was invoked without depending on private renderer types.
-	OnLayoutEngineRoute func(entryPoint, engine, reason string)
 }
 
 // ProductionPolicy groups operational controls for server and batch use.

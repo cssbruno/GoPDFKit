@@ -1,55 +1,7 @@
-# PaperRune Examples
+# GoPDFKit Examples
 
 Each directory is a runnable example. Generated PDFs are written under
 `assets/generated/pdf/examples`.
-
-## Brazilian Laboratory Report References
-
-The hemogram examples and the three-report laboratory suite synthesize public
-Brazilian conventions instead of copying one laboratory's brand or a patient's
-report:
-
-- [Anvisa RDC 978/2025 guidance](https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa/2025/anvisa-esclarece-duvidas-sobre-servicos-que-realizam-exames-de-analises-clinicas-eac)
-  informed the identification, CNES, collection, method, reference interval,
-  issue, and professional-signature fields.
-- [Hilab's public hemogram guide](https://hilab.com.br/exames/hemograma/)
-  informed the patient-friendly current-result, reference-range, and visual
-  status treatment.
-- [SES-GO's hemogram implementation guide](https://fhir-homolog.saude.go.gov.br/r4/exame/hemograma.html)
-  informed the structured observation, unit, specimen, and historical-result
-  model.
-- [Brazilian Diabetes Society 2025 diagnostic guideline](https://diretriz.diabetes.org.br/diagnostico-de-diabetes-mellitus/)
-  informed the demonstrative fasting-glucose and HbA1c interpretation note.
-- [Fleury's public urinalysis catalog](https://www.fleury.com.br/medicos/exames/urina-exame-de-varios-materiais)
-  informed the material, collection, physical-chemical, and sediment sections.
-- [Anvisa's clinical microbiology manuals](https://www.gov.br/anvisa/pt-br/centraisdeconteudo/publicacoes/servicosdesaude/manuais/manuais-de-microbiologia-clinica)
-  informed the culture, organism, and susceptibility-reporting structure.
-- [BrCAST's current documents](https://brcast.org.br/documentos/documentos-3/)
-  informed the labels for the S, I, and R antimicrobial susceptibility
-  categories. No real breakpoint table is reproduced.
-
-Every person, identifier, credential, address, result, verification code, and
-laboratory name in these examples is fictional. The prominent warning is
-intentional: generated files are product demos, not clinical documents.
-
-## Brazilian Clinical Document References
-
-The `medical-document-suite` and `paper-receituario-a5` examples use current
-public Brazilian structures without producing usable prescriptions:
-
-- [Anvisa's current physical receituary models](https://www.gov.br/anvisa/pt-br/assuntos/medicamentos/controlados/sncr/receituario-fisico/modelos-vigentes)
-  informed the field organization for the special-control, type A, and type B
-  demonstrations.
-- [Anvisa's physical receituary transition guidance](https://www.gov.br/anvisa/pt-br/assuntos/medicamentos/controlados/sncr/modelos-de-receituarios)
-  informed the 2026 version note and the distinction between official printing
-  and a software demonstration.
-- [Anvisa's SNCR overview](https://www.gov.br/anvisa/pt-br/assuntos/medicamentos/controlados/sncr)
-  informed the explicit absence of valid sanitary numbering in the examples.
-
-The controlled-prescription examples contain prominent invalidity watermarks,
-zeroed credentials, no valid SNCR number, and no real controlled medication.
-They demonstrate PDF layout only and must not be used for prescribing or
-dispensing.
 
 ## Run All Core Examples
 
@@ -73,9 +25,6 @@ go run ./examples/import-page
 go run ./examples/invoice
 go run ./examples/lab-hemograma-html
 go run ./examples/lab-hemograma-report
-go run ./examples/lab-report-suite
-go run ./examples/medical-document-suite
-# See examples/paper-lab-report and examples/paper-receituario-a5 for .paper CLI examples.
 go run ./examples/merge-pdf-pages
 go run ./examples/pagination-document
 go run ./examples/pagination-table
@@ -120,12 +69,8 @@ go run ./examples/watermark-pdf
 | Image from memory | `go run ./examples/image-from-memory` | `image-from-memory.pdf` |
 | Import page | `go run ./examples/import-page` | `import-page.pdf` |
 | Invoice | `go run ./examples/invoice` | `invoice.pdf` |
-| Modern Brazilian hemogram HTML template | `go run ./examples/lab-hemograma-html` | `lab-hemograma-html.pdf` |
-| Modern Brazilian hemogram drawn report | `go run ./examples/lab-hemograma-report` | `lab-hemograma-report.pdf` |
-| Brazilian laboratory report suite | `go run ./examples/lab-report-suite` | `lab-bioquimica-report.pdf`, `lab-urinalise-report.pdf`, `lab-microbiologia-report.pdf` |
-| Brazilian A5 exam request and prescription suite | `go run ./examples/medical-document-suite` | `pedido-exames-a5.pdf`, `receituario-a5.pdf`, monochrome A/B print files, and colored-stock A/B previews |
-| Data-driven Brazilian `.paper` lab report | See `examples/paper-lab-report/README.md` | `/tmp/lab-report.pdf` |
-| Data-driven A5 `.paper` prescriptions and themes | See `examples/paper-receituario-a5/README.md` | `output/pdf/receituario-a5-paper.pdf`, `output/pdf/receita-controle-especial-a5-demo.pdf`, and five variants under `output/pdf/controle-especial-temas/` |
+| Brazilian lab hemograma HTML template | `go run ./examples/lab-hemograma-html` | `lab-hemograma-html.pdf` |
+| Brazilian lab hemograma report | `go run ./examples/lab-hemograma-report` | `lab-hemograma-report.pdf` |
 | Merge pages | `go run ./examples/merge-pdf-pages` | `merged-pages.pdf` |
 | Document pagination | `go run ./examples/pagination-document` | `pagination-document.pdf` |
 | Manual table pagination | `go run ./examples/pagination-table` | `pagination-table.pdf` |
@@ -133,7 +78,7 @@ go run ./examples/watermark-pdf
 | Project status report | `go run ./examples/project-status-report` | `project-status-report.pdf` |
 | Password and attachments | `go run ./examples/protection-attachments` | `protection-attachments.pdf` |
 | Password protection | `go run ./examples/protect-pdf` | `protected-password.pdf` |
-| Report | `go run ./examples/report` | `paperrune-report.pdf` |
+| Report | `go run ./examples/report` | `gopdfkit-report.pdf` |
 | Rendering gallery | `go run ./examples/rendering-gallery` | many generated PDFs |
 | Rotate pages | `go run ./examples/rotate-pages` | `rotated-pages.pdf` |
 | Service invoice with flex cards | `go run ./examples/service-invoice-flex` | `service-invoice-flex.pdf` |
@@ -141,7 +86,7 @@ go run ./examples/watermark-pdf
 | Split and reorder pages | `go run ./examples/split-reorder-pages` | `split-page-2.pdf`, `reordered-pages.pdf` |
 | Styled paragraphs | `go run ./examples/styled-paragraphs` | `styled-paragraphs.pdf` |
 | Structured report | `go run ./examples/structured-report` | `structured-report.pdf` |
-| Table report | `go run ./examples/table-report` | `paperrune-tables.pdf` |
+| Table report | `go run ./examples/table-report` | `gopdfkit-tables.pdf` |
 | Template overlay | `go run ./examples/template-overlay` | `template-overlay.pdf` |
 | Reusable templates | `go run ./examples/templates` | `templates.pdf` |
 | Thumbnail | `go run ./examples/thumbnail` | `thumbnail.pdf` |
