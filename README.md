@@ -3,6 +3,13 @@
 [![CI][badge-ci]][ci]
 [![MIT licensed][badge-mit]][license]
 [![GoDoc][badge-doc]][godoc]
+
+> [!NOTE]
+> GoPDFKit will no longer be updated frequently. If you find a bug, please
+> [open an issue](https://github.com/cssbruno/GoPDFKit/issues); I will be happy
+> to help. For active development and new features, see
+> [PaperRune](https://github.com/cssbruno/paperrune).
+
 <img src="https://raw.githubusercontent.com/cssbruno/gopdfkit/main/assets/static/image/gopher_pdf.png" alt="GoPDFKit gopher" width="160">
 ## Benchmark Snapshot
 
