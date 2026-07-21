@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 // Package inspect provides lightweight PDF inspection helpers.
@@ -15,7 +15,7 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	"github.com/cssbruno/paperrune/importpdf"
+	"github.com/cssbruno/gopdfkit/importpdf"
 	"golang.org/x/text/encoding/charmap"
 )
 
@@ -47,12 +47,12 @@ func ValidateStructureContext(ctx context.Context, data []byte) error {
 	return nil
 }
 
-// PageCount returns the number of pages PaperRune can import from data.
+// PageCount returns the number of pages GoPDFKit can import from data.
 func PageCount(data []byte) (int, error) {
 	return PageCountContext(context.Background(), data)
 }
 
-// PageCountContext returns the number of pages PaperRune can import from data
+// PageCountContext returns the number of pages GoPDFKit can import from data
 // and honors ctx while importing the page tree.
 func PageCountContext(ctx context.Context, data []byte) (int, error) {
 	source, err := importpdf.OpenBytesWithOptionsContext(ctx, data, importpdf.ImportOptions{})

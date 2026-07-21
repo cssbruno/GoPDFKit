@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 // This file signs and verifies PDF CMS signatures.

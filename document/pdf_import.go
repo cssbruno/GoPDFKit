@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/cssbruno/paperrune/importpdf"
+	"github.com/cssbruno/gopdfkit/importpdf"
 )
 
 const (

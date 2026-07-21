@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 //go:build aix || darwin || dragonfly || freebsd || linux || netbsd || openbsd || solaris

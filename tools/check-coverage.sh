@@ -6,13 +6,13 @@ printf '%s\n' "$output"
 
 printf '%s\n' "$output" | awk '
 BEGIN {
-	minimum["github.com/cssbruno/paperrune/document"] = 80
-	minimum["github.com/cssbruno/paperrune/importpdf"] = 60
-	minimum["github.com/cssbruno/paperrune/inspect"] = 55
-	minimum["github.com/cssbruno/paperrune/sign"] = 70
-	minimum["github.com/cssbruno/paperrune/pdfcdr"] = 80
-	minimum["github.com/cssbruno/paperrune/layout"] = 45
-	minimum["github.com/cssbruno/paperrune/font"] = 65
+	minimum["github.com/cssbruno/gopdfkit/document"] = 80
+	minimum["github.com/cssbruno/gopdfkit/importpdf"] = 60
+	minimum["github.com/cssbruno/gopdfkit/inspect"] = 55
+	minimum["github.com/cssbruno/gopdfkit/sign"] = 70
+	minimum["github.com/cssbruno/gopdfkit/pdfcdr"] = 80
+	minimum["github.com/cssbruno/gopdfkit/layout"] = 45
+	minimum["github.com/cssbruno/gopdfkit/font"] = 65
 }
 $1 == "ok" {
 	pkg = $2

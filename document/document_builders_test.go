@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -8,8 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/paperrune/inspect"
-	"github.com/cssbruno/paperrune/layout"
+	"github.com/cssbruno/gopdfkit/layout"
 )
 
 func TestNewDocumentModel(t *testing.T) {
@@ -35,12 +34,8 @@ func TestNewDocumentModel(t *testing.T) {
 	if err := pdf.Output(&out); err != nil {
 		t.Fatalf("Output() error = %v", err)
 	}
-	text, err := inspect.PageText(out.Bytes(), 1)
-	if err != nil {
-		t.Fatalf("PageText() error = %v", err)
-	}
 	for _, want := range []string{"Custom Document", "Body text"} {
-		if !strings.Contains(text, want) {
+		if !strings.Contains(out.String(), want) {
 			t.Fatalf("PDF output missing %q", want)
 		}
 	}

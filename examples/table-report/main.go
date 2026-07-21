@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/cssbruno/paperrune/document"
-	"github.com/cssbruno/paperrune/examples/internal/outpath"
+	"github.com/cssbruno/gopdfkit/document"
+	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
 
 func main() {
@@ -33,7 +33,7 @@ func main() {
 		drawRow(pdf, i, fmt.Sprintf("Customer Account %02d", i), statuses[i%len(statuses)], fmt.Sprintf("Generated row %02d with wrapped notes.", i))
 	}
 
-	if err := pdf.OutputFileAndClose(outpath.File("paperrune-tables.pdf")); err != nil {
+	if err := pdf.OutputFileAndClose(outpath.File("gopdfkit-tables.pdf")); err != nil {
 		log.Fatal(err)
 	}
 }

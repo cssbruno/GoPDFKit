@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -177,10 +177,8 @@ func (f *Document) putcatalog() {
 	if strings.TrimSpace(f.compliance.Lang) != "" {
 		f.outf("/Lang %s", f.textstring(f.compliance.Lang))
 	}
-	if f.tagged.enabled {
-		f.out("/MarkInfo << /Marked true >>")
-	}
 	if f.compliance.PDFUA2 {
+		f.out("/MarkInfo << /Marked true >>")
 		f.out("/ViewerPreferences << /DisplayDocTitle true >>")
 	}
 	if f.tagged.structTreeRootObj > 0 {

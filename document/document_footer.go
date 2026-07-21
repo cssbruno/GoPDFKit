@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -6,7 +6,7 @@ package document
 import (
 	"strings"
 
-	"github.com/cssbruno/paperrune/layout"
+	"github.com/cssbruno/gopdfkit/layout"
 )
 
 // ExtractHTMLFooterBlock removes the first HTML footer element from an HTML

@@ -1,3 +1,3 @@
-Project home|https://github.com/cssbruno/paperrune|Open the fork repository.
+Project home|https://github.com/cssbruno/gopdfkit|Open the fork repository.
 Original FPDF reference|http://www.fpdf.org|Read the original PHP reference.
-Go package documentation|https://pkg.go.dev/github.com/cssbruno/paperrune|Read generated Go documentation.
+Go package documentation|https://pkg.go.dev/github.com/cssbruno/gopdfkit|Read generated Go documentation.

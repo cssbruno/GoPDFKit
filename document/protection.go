@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -116,7 +116,7 @@ func (p *protectType) setProtection(privFlag byte, userPassStr, ownerPassStr str
 // SetAESProtection reports that AES-based PDF standard-security encryption is
 // intentionally unsupported.
 //
-// This method exists to make the API boundary explicit: PaperRune does not
+// This method exists to make the API boundary explicit: GoPDFKit does not
 // half-implement AES document encryption. Use SetLegacyProtection only for the
 // legacy RC4 compatibility handler, or use external PDF security tooling when
 // AES-based document encryption is required.

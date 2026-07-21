@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package pdfcdr
@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cssbruno/paperrune/importpdf"
-	"github.com/cssbruno/paperrune/inspect"
+	"github.com/cssbruno/gopdfkit/importpdf"
+	"github.com/cssbruno/gopdfkit/inspect"
 )
 
 func TestSanitizeRemovesActiveDocumentStructures(t *testing.T) {

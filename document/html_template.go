@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package document
@@ -17,7 +17,7 @@ import (
 var htmlTemplatePlaceholderPattern = regexp.MustCompile(`\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}`)
 
 const (
-	htmlTemplateSlotPrefix = "\x1fpaperrune_html_template_slot_"
+	htmlTemplateSlotPrefix = "\x1fgopdfkit_html_template_slot_"
 	htmlTemplateSlotSuffix = "\x1f"
 )
 

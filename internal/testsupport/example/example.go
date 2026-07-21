@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 // Package example provides internal helpers for deterministic example PDF generation.
@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	paperruneDir string
-	pdfDir       string
+	gopdfkitDir string
+	pdfDir      string
 )
 
 const pdfDisplayDir = "assets/generated/pdf"
@@ -29,14 +29,14 @@ func init() {
 func setRoot() {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
-		panic("could not resolve PaperRune example helper source path")
+		panic("could not resolve GoPDFKit example helper source path")
 	}
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
 	if _, err := os.Stat(filepath.Join(root, "assets", "static")); err != nil {
-		panic(fmt.Errorf("could not find PaperRune static assets from %s: %w", root, err))
+		panic(fmt.Errorf("could not find GoPDFKit static assets from %s: %w", root, err))
 	}
-	paperruneDir = root
-	tmpDir, err := os.MkdirTemp("", "paperrune-generated-pdf-*")
+	gopdfkitDir = root
+	tmpDir, err := os.MkdirTemp("", "gopdfkit-generated-pdf-*")
 	if err != nil {
 		panic(err)
 	}
@@ -45,12 +45,12 @@ func setRoot() {
 
 // ImageFile returns the path to a file in the static image directory.
 func ImageFile(fileStr string) string {
-	return filepath.Join(paperruneDir, "assets", "static", "image", fileStr)
+	return filepath.Join(gopdfkitDir, "assets", "static", "image", fileStr)
 }
 
 // FontDir returns the path to the static font directory.
 func FontDir() string {
-	return filepath.Join(paperruneDir, "assets", "static", "font")
+	return filepath.Join(gopdfkitDir, "assets", "static", "font")
 }
 
 // FontFile returns the path to a file in the static font directory.
@@ -60,12 +60,12 @@ func FontFile(fileStr string) string {
 
 // TextFile returns the path to a file in the static text directory.
 func TextFile(fileStr string) string {
-	return filepath.Join(paperruneDir, "assets", "static", "text", fileStr)
+	return filepath.Join(gopdfkitDir, "assets", "static", "text", fileStr)
 }
 
 // RepoFile returns the path to a file at the repository root.
 func RepoFile(elems ...string) string {
-	parts := append([]string{paperruneDir}, elems...)
+	parts := append([]string{gopdfkitDir}, elems...)
 	return filepath.Join(parts...)
 }
 
@@ -106,7 +106,7 @@ func displayPath(fileStr string) string {
 	if rel, ok := relativeInside(pdfDir, fileStr); ok {
 		return filepath.Join(pdfDisplayDir, rel)
 	}
-	if rel, ok := relativeInside(paperruneDir, fileStr); ok {
+	if rel, ok := relativeInside(gopdfkitDir, fileStr); ok {
 		return rel
 	}
 	return fileStr

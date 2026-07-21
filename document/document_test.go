@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package document_test
@@ -19,9 +19,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cssbruno/paperrune/document"
-	"github.com/cssbruno/paperrune/font"
-	"github.com/cssbruno/paperrune/internal/testsupport/example"
+	"github.com/cssbruno/gopdfkit/document"
+	"github.com/cssbruno/gopdfkit/font"
+	"github.com/cssbruno/gopdfkit/internal/testsupport/example"
 )
 
 type closeErrorWriter struct {
@@ -807,7 +807,7 @@ func lorem() string {
 // Helvetica), an empty string can be specified for the font directory in the
 // call to New(). Note also that the example.Filename() and example.Summary()
 // functions belong to a separate, internal package and are not part of the
-// paperrune library. If an error occurs at some point during the construction of
+// gopdfkit library. If an error occurs at some point during the construction of
 // the document, subsequent method calls exit immediately and the error is
 // finally retrieved with the output call where it can be handled by the
 // application.
@@ -1581,7 +1581,7 @@ func ExampleDocument_SetAcceptPageBreakFunc() {
 		pdf.SetX(x)
 	}
 	pdf.SetHeaderFunc(func() {
-		titleStr := "paperrune"
+		titleStr := "gopdfkit"
 		pdf.SetFont("Helvetica", "B", 48)
 		wd := pdf.GetStringWidth(titleStr) + 6
 		pdf.SetX((pageWd - wd) / 2)
@@ -1607,7 +1607,7 @@ func ExampleDocument_SetAcceptPageBreakFunc() {
 	for j := range 20 {
 		switch j {
 		case 1:
-			pdf.ImageOptions(example.ImageFile("paperrune-kit.png"), -1, 0, colWd, 0, true, document.ImageOptions{}, 0, "")
+			pdf.ImageOptions(example.ImageFile("go_pdf_kit.png"), -1, 0, colWd, 0, true, document.ImageOptions{}, 0, "")
 		case 5:
 			pdf.ImageOptions(example.ImageFile("golang-gopher.png"),
 				-1, 0, colWd, 0, true, document.ImageOptions{}, 0, "")
@@ -2243,7 +2243,7 @@ func ExampleDocument_CellFormat_align() {
 				pdf.CellFormat(170, 257, rec.txt, borderStr, 0, rec.align, false, 0, linkStr)
 				borderStr = ""
 			}
-			linkStr = "https://github.com/cssbruno/paperrune"
+			linkStr = "https://github.com/cssbruno/gopdfkit"
 		}
 	}
 	pdf := document.MustNew() // A4 210.0 x 297.0
@@ -2452,7 +2452,7 @@ func ExampleDocument_RegisterImageOptionsReader_flow() {
 		wd       = 210
 		ht       = 297
 		fontSize = 15
-		imageStr = "paperrune-reader"
+		imageStr = "gopdfkit-reader"
 		msgStr   = `Images can be embedded from any reader when a PDF document is generated.`
 	)
 
@@ -2466,7 +2466,7 @@ func ExampleDocument_RegisterImageOptionsReader_flow() {
 	pdf.SetFont("Helvetica", "", fontSize)
 	ln := pdf.PointConvert(fontSize)
 	pdf.MultiCell(wd-margin-margin, ln, msgStr, "", "L", false)
-	fl, err = os.Open(example.ImageFile("paperrune-kit.png"))
+	fl, err = os.Open(example.ImageFile("go_pdf_kit.png"))
 	if err == nil {
 		defer func() { _ = fl.Close() }()
 		infoPtr := pdf.RegisterImageOptionsReader(imageStr, document.ImageOptions{ImageType: "png"}, fl)
@@ -3556,7 +3556,7 @@ func ExampleDocument_SetAttachments() {
 }
 
 func ExampleAttachmentFromFile() {
-	dir, err := os.MkdirTemp("", "paperrune-attachment-example")
+	dir, err := os.MkdirTemp("", "gopdfkit-attachment-example")
 	if err != nil {
 		fmt.Println(err)
 		return

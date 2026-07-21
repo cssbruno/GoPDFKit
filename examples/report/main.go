@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -6,13 +6,13 @@ package main
 import (
 	"log"
 
-	"github.com/cssbruno/paperrune/document"
-	"github.com/cssbruno/paperrune/examples/internal/outpath"
+	"github.com/cssbruno/gopdfkit/document"
+	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
 
 func main() {
 	pdf := document.MustNew(document.WithBestCompression())
-	pdf.SetTitle("PaperRune Operations Report", false)
+	pdf.SetTitle("GoPDFKit Operations Report", false)
 	pdf.SetCreator("examples/report", false)
 
 	pdf.AddPage()
@@ -22,7 +22,7 @@ func main() {
 	drawIncidents(pdf)
 	drawReportFooter(pdf)
 
-	if err := pdf.OutputFileAndClose(outpath.File("paperrune-report.pdf")); err != nil {
+	if err := pdf.OutputFileAndClose(outpath.File("gopdfkit-report.pdf")); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -34,7 +34,7 @@ func drawReportHeader(pdf *document.Document) {
 	pdf.SetFont("Helvetica", "B", 22)
 	pdf.Text(16, 19, "Operations Report")
 	pdf.SetFont("Helvetica", "", 10)
-	pdf.Text(16, 28, "Generated with PaperRune")
+	pdf.Text(16, 28, "Generated with GoPDFKit")
 
 	drawField(pdf, 16, 48, "Report ID", "OPS-2026-001")
 	drawField(pdf, 78, 48, "Status", "Ready")
@@ -88,7 +88,7 @@ func drawReportFooter(pdf *document.Document) {
 	pdf.Line(16, 282, 194, 282)
 	pdf.SetFont("Helvetica", "", 8)
 	pdf.SetTextColor(95, 95, 95)
-	pdf.Text(16, 288, "PaperRune example - assets/generated/pdf/examples/paperrune-report.pdf")
+	pdf.Text(16, 288, "GoPDFKit example - assets/generated/pdf/examples/gopdfkit-report.pdf")
 }
 
 func drawField(pdf *document.Document, x, y float64, label, value string) {

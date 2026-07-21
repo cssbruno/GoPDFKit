@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 package main
@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cssbruno/paperrune/document"
-	"github.com/cssbruno/paperrune/examples/internal/assets"
-	"github.com/cssbruno/paperrune/examples/internal/outpath"
+	"github.com/cssbruno/gopdfkit/document"
+	"github.com/cssbruno/gopdfkit/examples/internal/assets"
+	"github.com/cssbruno/gopdfkit/examples/internal/outpath"
 )
 
 func main() {
@@ -64,7 +64,7 @@ func newPDF(title string) *document.Document {
 	pdf := document.MustNew()
 	pdf.SetTitle(title, false)
 	pdf.SetCreator("examples/rendering-gallery", false)
-	pdf.SetAuthor("PaperRune", false)
+	pdf.SetAuthor("GoPDFKit", false)
 	return pdf
 }
 
@@ -270,7 +270,7 @@ func generateLinksBookmarks() {
 	pdf.SetTextColor(0, 0, 0)
 	pdf.SetDrawColor(30, 90, 170)
 	pdf.RoundedRect(16, 94, 82, 18, 3, "1234", "D")
-	pdf.LinkString(16, 94, 82, 18, "https://pkg.go.dev/github.com/cssbruno/paperrune/document")
+	pdf.LinkString(16, 94, 82, 18, "https://pkg.go.dev/github.com/cssbruno/gopdfkit/document")
 	pdf.SetFont("Helvetica", "", 10)
 	pdf.Text(22, 106, "Open Go package docs")
 
@@ -655,7 +655,7 @@ func generateMetadataXMP() {
 	pdf := newPDF("Metadata and XMP")
 	pdf.SetSubject("Generated metadata showcase", false)
 	pdf.SetKeywords("pdf,metadata,xmp,generated", false)
-	pdf.SetProducer("PaperRune metadata example", false)
+	pdf.SetProducer("GoPDFKit metadata example", false)
 	pdf.SetXmpMetadata([]byte(`<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
   <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -789,7 +789,7 @@ func generateCertificateAward() {
 	pdf.CellFormat(257, 15, "Alex Morgan", "", 1, "C", false, 0, "")
 	pdf.SetFont("Helvetica", "", 12)
 	pdf.SetXY(48, 122)
-	pdf.MultiCell(201, 7, "For successfully completing the PaperRune document generation course and demonstrating practical PDF rendering workflows.", "", "C", false)
+	pdf.MultiCell(201, 7, "For successfully completing the GoPDFKit document generation course and demonstrating practical PDF rendering workflows.", "", "C", false)
 	pdf.Line(58, 170, 118, 170)
 	pdf.Line(180, 170, 240, 170)
 	pdf.SetFont("Helvetica", "", 9)
@@ -818,7 +818,7 @@ func generateShippingLabel() {
 	pdf.Text(8, 70, "FROM")
 	pdf.SetFont("Helvetica", "", 9)
 	pdf.SetXY(8, 76)
-	pdf.MultiCell(86, 5, "PaperRune Fulfillment\n100 Example Avenue\nAustin, TX 73301", "", "L", false)
+	pdf.MultiCell(86, 5, "GoPDFKit Fulfillment\n100 Example Avenue\nAustin, TX 73301", "", "L", false)
 	pdf.SetFont("Courier", "B", 22)
 	for i := 0; i < 14; i++ {
 		x := 10 + float64(i)*6
@@ -842,7 +842,7 @@ func generateReceiptRoll() {
 	pdf.AddPage()
 	pdf.SetFont("Courier", "B", 12)
 	pdf.SetXY(5, 10)
-	pdf.CellFormat(70, 6, "PAPERRUNE STORE", "", 1, "C", false, 0, "")
+	pdf.CellFormat(70, 6, "GOPDFKIT STORE", "", 1, "C", false, 0, "")
 	pdf.SetFont("Courier", "", 8)
 	pdf.CellFormat(70, 5, "2026-01-01 10:30", "", 1, "C", false, 0, "")
 	pdf.Line(5, 25, 75, 25)
@@ -906,7 +906,7 @@ func generateResumeCV() {
 		"Coursework in graphics, document systems, and backend services.",
 	})
 	resumeSection(pdf, 74, 178, "Projects", []string{
-		"PaperRune examples gallery",
+		"GoPDFKit examples gallery",
 		"Generated assets covering typography, tables, images, SVG, and metadata.",
 	})
 
@@ -1090,7 +1090,7 @@ func generateEstimateQuote() {
 	title(pdf, "Estimate QUO-2026-101", "Scope, line items, terms, and signature")
 	drawField(pdf, 16, 44, "Client", "Atlas Manufacturing")
 	drawField(pdf, 84, 44, "Valid Until", "2026-02-01")
-	drawField(pdf, 152, 44, "Prepared By", "PaperRune")
+	drawField(pdf, 152, 44, "Prepared By", "GoPDFKit")
 
 	drawHeaderRow(pdf, 16, 88, []float64{84, 24, 30, 38}, []string{"Item", "Qty", "Unit", "Total"})
 	rows := [][]string{
@@ -1195,7 +1195,7 @@ func generateAcademicPaper() {
 	pdf.SetFont("Helvetica", "", 10)
 	pdf.SetTextColor(90, 100, 110)
 	pdf.SetXY(20, 43)
-	pdf.MultiCell(170, 5, "PaperRune Example Authors", "", "C", false)
+	pdf.MultiCell(170, 5, "GoPDFKit Example Authors", "", "C", false)
 	pdf.SetTextColor(35, 45, 55)
 	pdf.SetFont("Helvetica", "B", 11)
 	pdf.Text(20, 64, "Abstract")
@@ -1217,7 +1217,7 @@ func generateAcademicPaper() {
 	pdf.SetFont("Helvetica", "I", 8)
 	pdf.Text(68, 214, "Figure 1. Synthetic rendering fixture coverage")
 	pdf.SetFont("Helvetica", "", 8)
-	pdf.Text(20, 246, "[1] PaperRune generated PDF examples, 2026.")
+	pdf.Text(20, 246, "[1] GoPDFKit generated PDF examples, 2026.")
 
 	save(pdf, "academic-paper.pdf")
 }
@@ -1309,7 +1309,7 @@ func generateNewsletterLayout() {
 	pdf.Rect(0, 0, 210, 42, "F")
 	pdf.SetTextColor(255, 255, 255)
 	pdf.SetFont("Helvetica", "B", 22)
-	pdf.Text(16, 24, "PaperRune Monthly")
+	pdf.Text(16, 24, "GoPDFKit Monthly")
 	pdf.SetFont("Helvetica", "", 9)
 	pdf.Text(16, 34, "Rendering notes, examples, and release work")
 	pdf.SetTextColor(0, 0, 0)

@@ -1,60 +1,5 @@
 # Changelog
 
-## v0.16.0-rc.1 - 2026-07-20
-
-First release candidate under the independent PaperRune project identity.
-
-### Added
-
-- Added repeatable real-world JSON edge inputs, explicit page-issue, text, and
-  page-count thresholds, and deterministic baseline regression comparison to
-  `paper check`.
-- Added final-PDF visual evidence: Poppler rasterizes every written PDF page to
-  a hashed PNG and PaperRune assembles the results into a PDF review book.
-
-### Changed
-
-- Renamed the project, Go module, commands, package imports, documentation, and
-  release identity from GoPDFKit to PaperRune.
-- Made edge checks fail when generated PDFs contain positioned layout issues
-  above the configured threshold instead of merely recording those issues.
-- Removed the HTML/SVG edge gallery so visual review cannot be mistaken for
-  evidence from the final PDF artifact.
-
-### Verification
-
-- Edge reports now bind input, plan, PDF, extracted text, per-page raster, and
-  acceptance-policy evidence in report format 3.
-- Automated repository gates and the laboratory PDF visual review are required
-  before this candidate is published. Elapsed stabilization and named external
-  security acceptance remain external release gates and are not self-certified.
-
-## v0.15.0-rc.1 - 2026-07-18
-
-Release candidate for the breaking pre-1.0 unified automatic-layout engine and
-Paper Studio authoring foundation.
-
-### Changed
-
-- Made typed and supported HTML document entry points lower through the unified
-  planner and painter while retaining their public compatibility signatures.
-- Removed the legacy typed measurement and direct HTML automatic-layout
-  production engines. Unsupported contracts now fail atomically instead of
-  retrying through a hidden compatibility renderer.
-- Added the Stage 9 Paper Studio semantic editing, review, accessibility, and
-  exact-revision delivery foundations.
-- Added migration guides for typed callers, HTML callers, and legacy-engine
-  deletion, including the remaining stabilization-window release contract.
-
-### Verification
-
-- Full Go tests, vet, the full race suite, Paper Studio JavaScript tests,
-  generation budgets, and the calibrated Paper Engine benchmark gate pass on
-  the release candidate branch.
-- The stabilization-window record and formal rollback closure remain final
-  release prerequisites; the `v0.15.0-rc.1` prerelease tag starts the
-  stabilization window and does not itself close Stage 10.
-
 ## v0.14.0 - 2026-07-16
 
 ### Security
@@ -255,7 +200,7 @@ boundaries explicit. See `MIGRATION_v0.12.md` for exact replacements.
 
 ### Removed
 
-- Removed the root `paperrune` facade package and all mirrored declarations.
+- Removed the root `gopdfkit` facade package and all mirrored declarations.
 - Removed `document` aliases for `layout` types, constructors, and measurement
   helpers.
 - Removed legacy string constructors, the exported `document.Options` bridge,
@@ -464,8 +409,8 @@ breaking pre-v1 layout model cleanup.
 
 ### Removed
 
-- Removed PaperRune-owned `DocumentKind` values and the named document model
-  builders. This is a breaking pre-v1 API change: PaperRune now exposes layout
+- Removed GoPDFKit-owned `DocumentKind` values and the named document model
+  builders. This is a breaking pre-v1 API change: GoPDFKit now exposes layout
   primitives and model assembly tools; application-specific document categories
   should live in caller code.
 
@@ -514,7 +459,7 @@ Production-stability release for the pre-v1.0 API contract.
 - Enforced production limits for attachments, image source bytes, estimated
   decoded image bytes, HTML input/generated pages, page count, imported PDF
   source bytes, and imported page referenced objects.
-- Exposed output and production policy helpers through the root `paperrune`
+- Exposed output and production policy helpers through the root `gopdfkit`
   facade.
 - Documented v0.9 production usage, security posture, deterministic output,
   migration guidance, readiness gates, and benchmark budgets.
@@ -646,7 +591,7 @@ rollback.
 ### Changed
 
 - Reverted the experimental PDF hot-path formatting helper extraction while
-  keeping the benchmark suite focused on native PaperRune generation throughput.
+  keeping the benchmark suite focused on native GoPDFKit generation throughput.
 - Expanded fixed 40-worker generation benchmark coverage for text, UTF-8 text,
   compression levels, images, SVG, templates, imported pages, protection, and
   attachments.
@@ -663,7 +608,7 @@ Patch release for native generation throughput and benchmark cleanup.
   image placement, clipping, gradients, transforms, templates, tagged PDF
   references, and attachment output with scratch-buffer append helpers.
 - Kept core generation benchmark reporting focused on fixed 40-worker native
-  PaperRune workloads.
+  GoPDFKit workloads.
 
 ### Removed
 
@@ -820,7 +765,7 @@ Patch release with performance fixes and internal robustness updates.
 
 ## v0.1.0 - 2026-06-03
 
-Initial cssbruno/paperrune release.
+Initial cssbruno/gopdfkit release.
 
 ### Added
 
@@ -840,7 +785,7 @@ Initial cssbruno/paperrune release.
 - Removed barcode generation/rendering APIs and the `github.com/boombuler/barcode` dependency.
 - Added runnable examples for text, drawing, headers and footers, HTML fragments, in-memory images, imported pages, protection and attachments, structured reports, signing, templates, thumbnails, UTF-8 fonts, and external QR-code images.
 - Replaced `InitType`/`NewCustom` with `Options`/`NewWithOptions`.
-- Simplified the root `paperrune.New` facade to the default constructor only.
+- Simplified the root `gopdfkit.New` facade to the default constructor only.
 - Removed deprecated image and template compatibility wrappers from the public API.
 - Removed the oversized exported `document.Pdf` interface.
 - Migrated examples and benchmarks to `ImageOptions`, `RegisterImageOptions`, and `RegisterImageOptionsReader`.

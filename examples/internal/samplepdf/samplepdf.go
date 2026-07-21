@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PaperRune-Health-Sector-Restricted-1.0
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 cssBruno
 
 // Package samplepdf builds small in-memory PDFs used by page-processing
@@ -9,7 +9,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cssbruno/paperrune/document"
+	"github.com/cssbruno/gopdfkit/document"
 )
 
 // Build returns a deterministic multi-page source PDF in points.
